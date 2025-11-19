@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Proposal } from '../types/proposal';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import ppasLogo from '../../PPAS Logo.png';
 
@@ -12,6 +13,7 @@ function ProposalView() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
   const proposalRef = useRef<HTMLDivElement>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (proposalNumber) {
@@ -62,7 +64,7 @@ function ProposalView() {
       pdf.save(`Pool_Proposal_${proposal.proposalNumber}.pdf`);
     } catch (error) {
       console.error('Failed to export PDF:', error);
-      alert('Failed to export PDF. Please try again.');
+      showToast({ type: 'error', message: 'Failed to export PDF. Please try again.' });
     }
   };
 

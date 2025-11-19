@@ -14,6 +14,8 @@ import MasonrySection from '../components/MasonrySection';
 import InteriorFinishSection from '../components/InteriorFinishSection';
 import './ProposalForm.css';
 import ppasLogo from '../../PPAS Logo.png';
+import { useToast } from '../components/Toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const sections = [
   'Customer Information',
@@ -32,9 +34,11 @@ const sections = [
 function ProposalForm() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
+  const { showToast } = useToast();
   const [currentSection, setCurrentSection] = useState(0);
   const [isLoading, setIsLoading] = useState(!!proposalNumber);
   const loadRequestRef = useRef(0);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const getInitialProposal = (): Partial<Proposal> => ({
     proposalNumber: `PROP-${Date.now()}`,
@@ -147,7 +151,10 @@ function ProposalForm() {
       }
 
       await window.electron.saveProposal(finalProposal);
-      alert(submit ? 'Proposal submitted successfully!' : 'Proposal saved successfully!');
+      showToast({
+        type: 'success',
+        message: submit ? 'Proposal submitted successfully!' : 'Proposal saved successfully!',
+      });
 
       if (submit) {
         navigate(`/proposal/view/${finalProposal.proposalNumber}`);
@@ -156,14 +163,15 @@ function ProposalForm() {
       }
     } catch (error) {
       console.error('Failed to save proposal:', error);
-      alert('Failed to save proposal. Please try again.');
+      showToast({
+        type: 'error',
+        message: 'Failed to save proposal. Please try again.',
+      });
     }
   };
 
   const handleCancel = () => {
-    if (confirm('Are you sure you want to cancel? Unsaved changes will be lost.')) {
-      navigate('/');
-    }
+    setShowCancelConfirm(true);
   };
 
   // Memoize default proposal to prevent unnecessary recreations
@@ -283,6 +291,19 @@ function ProposalForm() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showCancelConfirm}
+        title="Cancel changes?"
+        message="Unsaved changes will be lost."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        onConfirm={() => {
+          setShowCancelConfirm(false);
+          navigate('/');
+        }}
+        onCancel={() => setShowCancelConfirm(false)}
+      />
     </div>
   );
 }

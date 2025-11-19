@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { useToast } from '../components/Toast';
 import './HomePage.css';
 import ppasLogo from '../../PPAS Logo.png';
 
@@ -8,6 +10,8 @@ function HomePage() {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [proposalToDelete, setProposalToDelete] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadProposals();
@@ -47,14 +51,25 @@ function HomePage() {
 
   const handleDeleteProposal = async (proposalNumber: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this proposal?')) {
-      try {
-        await window.electron.deleteProposal(proposalNumber);
-        loadProposals();
-      } catch (error) {
-        console.error('Failed to delete proposal:', error);
-      }
+    setProposalToDelete(proposalNumber);
+  };
+
+  const confirmDelete = async () => {
+    if (!proposalToDelete) return;
+    try {
+      await window.electron.deleteProposal(proposalToDelete);
+      showToast({ type: 'success', message: 'Proposal deleted.' });
+      loadProposals();
+    } catch (error) {
+      console.error('Failed to delete proposal:', error);
+      showToast({ type: 'error', message: 'Failed to delete proposal.' });
+    } finally {
+      setProposalToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setProposalToDelete(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -138,6 +153,20 @@ function HomePage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={proposalToDelete !== null}
+        title="Delete proposal?"
+        message={
+          proposalToDelete
+            ? `Delete proposal #${proposalToDelete.replace('PROP-', '')}? This action cannot be undone.`
+            : 'This action cannot be undone.'
+        }
+        confirmLabel="Delete"
+        cancelLabel="Keep proposal"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </div>
   );
 }

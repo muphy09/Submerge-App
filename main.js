@@ -19,7 +19,6 @@ const UPDATE_FEED = {
   provider: 'github',
   owner: 'muphy09',
   repo: 'Premier-Pools',
-  protocol: 'https:',
 };
 
 function getAutoUpdater() {

@@ -1,0 +1,38 @@
+.confirm-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10999;
+}
+
+.confirm-modal {
+  background: white;
+  border-radius: 10px;
+  padding: 20px 24px;
+  width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.confirm-header h3 {
+  margin: 0 0 10px 0;
+  color: #1f2937;
+}
+
+.confirm-body p {
+  margin: 0 0 16px 0;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

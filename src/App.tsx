@@ -5,6 +5,7 @@ import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
 import UpdateNotification from './components/UpdateNotification';
 import SettingsModal from './components/SettingsModal';
+import { ToastProvider } from './components/Toast';
 import './App.css';
 
 function AppContent() {
@@ -80,7 +81,9 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </Router>
   );
 }
