@@ -1,6 +1,6 @@
 {
   "name": "ppas-proposal-builder",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "PPAS Proposal Builder",
   "main": "main.js",
   "scripts": {
