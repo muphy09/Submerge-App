@@ -51,6 +51,7 @@
     "appId": "com.ppas.proposalbuilder",
     "productName": "PPAS Proposal Builder",
     "artifactName": "${productName} v${version}.${ext}",
+    "afterPack": "scripts/strip-signatures.js",
     "afterSign": "scripts/notarize.js",
     "publish": [
       {
