@@ -54,7 +54,8 @@
       {
         "provider": "github",
         "owner": "muphy09",
-        "repo": "Premier-Pools"
+        "repo": "Premier-Pools",
+        "releaseType": "release"
       }
     ],
     "directories": {
