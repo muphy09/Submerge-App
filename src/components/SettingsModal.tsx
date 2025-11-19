@@ -13,6 +13,94 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [changelogError, setChangelogError] = useState('');
   const [changelogLoading, setChangelogLoading] = useState(false);
 
+  const renderChangelog = (content: string) => {
+    const lines = content.split(/\r?\n/);
+    const elements: React.ReactNode[] = [];
+    let listItems: string[] = [];
+    let hasContent = false;
+    let lastWasDivider = false;
+
+    const flushList = (index: number) => {
+      if (!listItems.length) return;
+      elements.push(
+        <ul key={`list-${index}`} className="changelog-list">
+          {listItems.map((item, itemIndex) => (
+            <li key={`list-${index}-${itemIndex}`}>{item}</li>
+          ))}
+        </ul>
+      );
+      hasContent = true;
+      lastWasDivider = false;
+      listItems = [];
+    };
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        flushList(index);
+        return;
+      }
+
+      if (/^-{3,}$/.test(trimmed)) {
+        flushList(index);
+        if (hasContent) {
+          elements.push(<div key={`divider-${index}`} className="changelog-divider" />);
+          lastWasDivider = true;
+        }
+        return;
+      }
+
+      if (trimmed.startsWith('## ')) {
+        flushList(index);
+        elements.push(
+          <h3 key={`heading-${index}`} className="changelog-heading">
+            {trimmed.replace(/^##\s*/, '')}
+          </h3>
+        );
+        hasContent = true;
+        lastWasDivider = false;
+        return;
+      }
+
+      if (trimmed.startsWith('### ')) {
+        flushList(index);
+        elements.push(
+          <h4 key={`subheading-${index}`} className="changelog-subheading">
+            {trimmed.replace(/^###\s*/, '')}
+          </h4>
+        );
+        hasContent = true;
+        lastWasDivider = false;
+        return;
+      }
+
+      if (trimmed.startsWith('- ')) {
+        listItems.push(trimmed.replace(/^-+\s*/, ''));
+        hasContent = true;
+        lastWasDivider = false;
+        return;
+      }
+
+      flushList(index);
+      elements.push(
+        <p key={`paragraph-${index}`} className="changelog-paragraph">
+          {trimmed}
+        </p>
+      );
+      hasContent = true;
+      lastWasDivider = false;
+    });
+
+    flushList(lines.length);
+
+    if (lastWasDivider) {
+      elements.pop();
+    }
+
+    return elements;
+  };
+
   const handleCheckForUpdates = async () => {
     setChecking(true);
     setMessage('Checking for updates...');
@@ -139,7 +227,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 <p className="changelog-error">{changelogError}</p>
               )}
               {!changelogLoading && !changelogError && (
-                <pre className="changelog-content">{changelogContent}</pre>
+                <div className="changelog-content">
+                  {renderChangelog(changelogContent)}
+                </div>
               )}
             </div>
           </div>
