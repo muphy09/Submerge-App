@@ -5,6 +5,8 @@ const fs = require('fs');
 
 // Handle ASAR paths correctly
 const isDev = process.env.NODE_ENV === 'development';
+// Surface the app version to the preload script without requiring package.json there
+process.env.PPAS_APP_VERSION = app.getVersion();
 let appPath = __dirname;
 let iconPath = path.join(__dirname, 'icon.ico');
 

@@ -14,6 +14,11 @@ function HomePage() {
   }, []);
 
   const loadProposals = async () => {
+    if (!window.electron?.getAllProposals) {
+      console.error('Electron bridge unavailable: cannot load proposals.');
+      setLoading(false);
+      return;
+    }
     try {
       const data = await window.electron.getAllProposals();
       setProposals(data);
