@@ -1,7 +1,7 @@
 ---
 
-## [1.0.8]
+## [1.0.9]
 ### Fixed
-- Auto Update
+- When creating/editing a proposal after previously interacting with one, the text box would appear to be broken
 
 ---
