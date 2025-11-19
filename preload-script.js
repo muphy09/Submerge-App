@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const { version } = require('./package.json');
 
 contextBridge.exposeInMainWorld('electron', {
+  // App info
+  appVersion: version,
   // Proposal operations
   saveProposal: (proposal) => ipcRenderer.invoke('save-proposal', proposal),
   getProposal: (proposalNumber) => ipcRenderer.invoke('get-proposal', proposalNumber),
@@ -24,4 +27,23 @@ contextBridge.exposeInMainWorld('electron', {
   getWaterFeaturesCatalog: () => ipcRenderer.invoke('get-water-features-catalog'),
   getFinishRates: () => ipcRenderer.invoke('get-finish-rates'),
   getDrainageRates: () => ipcRenderer.invoke('get-drainage-rates'),
+
+  // Update operations
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.on('update-available', (_, info) => callback(info));
+  },
+  onUpdateNotAvailable: (callback) => {
+    ipcRenderer.on('update-not-available', (_, info) => callback(info));
+  },
+  onDownloadProgress: (callback) => {
+    ipcRenderer.on('download-progress', (_, progress) => callback(progress));
+  },
+  onUpdateDownloaded: (callback) => {
+    ipcRenderer.on('update-downloaded', (_, info) => callback(info));
+  },
+  onUpdateError: (callback) => {
+    ipcRenderer.on('update-error', (_, error) => callback(error));
+  },
 });

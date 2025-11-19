@@ -35,7 +35,16 @@
       "Bash(git push)",
       "Bash(powershell -Command:*)",
       "Bash(git tag:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(.node_modules.binelectron.cmd --version)",
+      "Bash(cmd /c \"node_modules\\electron\\dist\\electron.exe --version\")",
+      "Bash(echo:*)",
+      "Bash(test-electron.js)",
+      "Bash(npm uninstall:*)",
+      "Bash(cmd /c \"dir /b node_modules\\electron\\dist\\electron.exe 2>nul\")",
+      "Bash(test2.js)",
+      "Bash(git stash:*)",
+      "Bash(./node_modules/electron/dist/electron.exe:*)"
     ],
     "deny": [],
     "ask": []

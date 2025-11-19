@@ -71,7 +71,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <div className="settings-section">
             <h3>About</h3>
             <p className="about-text">PPAS Proposal Builder</p>
-            <p className="about-text">Version 1.0.0</p>
+            <p className="about-text">Version {window.electron?.appVersion || '1.0.5'}</p>
             <p className="about-text">© {new Date().getFullYear()} Premier Pools and Spas</p>
           </div>
         </div>

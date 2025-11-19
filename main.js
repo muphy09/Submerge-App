@@ -58,6 +58,70 @@ function initializeDatabase() {
   console.log('Database initialized successfully');
 }
 
+// Auto-updater configuration
+function setupAutoUpdater() {
+  // Don't check for updates in development
+  if (isDev) {
+    console.log('Skipping auto-updater in development mode');
+    return;
+  }
+
+  // Lazy-load autoUpdater only when needed and after app is ready
+  const { autoUpdater } = require('electron-updater');
+
+  // Configure auto-updater
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for update...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', info);
+    }
+    // Auto-download the update
+    autoUpdater.downloadUpdate();
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('Update not available:', info);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-not-available', info);
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('Error in auto-updater:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', err.message);
+    }
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    console.log('Download progress:', progressObj);
+    if (mainWindow) {
+      mainWindow.webContents.send('download-progress', progressObj);
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', info);
+    }
+  });
+
+  // Check for updates when app starts (after a delay to let the window load)
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(err => {
+      console.error('Failed to check for updates:', err);
+    });
+  }, 3000);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -139,6 +203,7 @@ app.whenReady().then(() => {
   initializeDatabase();
   initializeProposalsDirectory();
   createWindow();
+  setupAutoUpdater();
 
   // If a file was specified on launch, open it
   if (fileToOpen) {
@@ -394,4 +459,26 @@ ipcMain.handle('get-finish-rates', async () => {
 ipcMain.handle('get-drainage-rates', async () => {
   if (!db) throw new Error('Database not initialized');
   return db.prepare('SELECT * FROM drainage_rates').all();
+});
+
+// Auto-updater IPC handlers
+ipcMain.handle('check-for-updates', async () => {
+  if (isDev) {
+    return { message: 'Updates are disabled in development mode' };
+  }
+  try {
+    const { autoUpdater } = require('electron-updater');
+    return await autoUpdater.checkForUpdates();
+  } catch (error) {
+    console.error('Error checking for updates:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('install-update', async () => {
+  if (isDev) {
+    return;
+  }
+  const { autoUpdater } = require('electron-updater');
+  autoUpdater.quitAndInstall();
 });

@@ -3,6 +3,9 @@ export {};
 declare global {
   interface Window {
     electron: {
+      // App info
+      appVersion: string;
+
       // Proposal operations
       saveProposal: (proposal: any) => Promise<number>;
       getProposal: (proposalNumber: string) => Promise<any | null>;

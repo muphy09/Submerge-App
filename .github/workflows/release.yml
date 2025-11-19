@@ -30,7 +30,7 @@ jobs:
       - name: Build and release (Windows)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish onTagOrDraft
+        run: npx electron-builder --win nsis --publish always
 
   release-mac:
     runs-on: macos-latest
@@ -53,4 +53,4 @@ jobs:
       - name: Build and release (Mac)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --mac dmg --publish onTagOrDraft
+        run: npx electron-builder --mac dmg --publish always

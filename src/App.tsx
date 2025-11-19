@@ -7,8 +7,6 @@ import UpdateNotification from './components/UpdateNotification';
 import SettingsModal from './components/SettingsModal';
 import './App.css';
 
-const APP_VERSION = '1.0.0';
-
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,7 +63,7 @@ function AppContent() {
         <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm key={location.pathname} />} />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
       </Routes>
-      <div className="app-version">v{APP_VERSION}</div>
+      <div className="app-version">v{window.electron?.appVersion || '1.0.5'}</div>
       <UpdateNotification
         status={updateStatus}
         onInstall={handleInstallUpdate}
