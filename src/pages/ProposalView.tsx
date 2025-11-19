@@ -111,39 +111,108 @@ function ProposalView() {
         {/* Header */}
         <div className="doc-header">
           <div className="doc-header-title">
-            <img src="../../PPAS Logo.png" alt="PPAS Logo" className="doc-logo" />
+            <img src="/PPAS Logo.png" alt="PPAS Logo" className="doc-logo" />
             <h1>Pool Proposal & Specifications</h1>
           </div>
           <div className="header-info">
+            <p><strong>Prepared for:</strong> {proposal.customerInfo.customerName} &nbsp;&nbsp;&nbsp;&nbsp; <strong>City:</strong> {proposal.customerInfo.city}</p>
             <p><strong>Proposal #:</strong> {proposal.proposalNumber.replace('PROP-', '')}</p>
             <p><strong>Date:</strong> {new Date(proposal.createdDate).toLocaleDateString()}</p>
-            <p><strong>Status:</strong> <span className={`status-${proposal.status}`}>{proposal.status.toUpperCase()}</span></p>
           </div>
         </div>
 
         {/* Customer Information */}
-        <section className="doc-section">
-          <h2>Customer Information</h2>
-          <div className="info-grid">
-            <div><strong>Name:</strong> {proposal.customerInfo.customerName}</div>
-            <div><strong>City:</strong> {proposal.customerInfo.city}</div>
-            {proposal.customerInfo.address && <div><strong>Address:</strong> {proposal.customerInfo.address}</div>}
-            {proposal.customerInfo.phone && <div><strong>Phone:</strong> {proposal.customerInfo.phone}</div>}
-            {proposal.customerInfo.email && <div><strong>Email:</strong> {proposal.customerInfo.email}</div>}
-          </div>
-        </section>
+        {(proposal.customerInfo.address || proposal.customerInfo.phone || proposal.customerInfo.email) && (
+          <section className="doc-section">
+            <h2>Customer Information</h2>
+            <div className="info-grid">
+              {proposal.customerInfo.address && <div><strong>Address:</strong> {proposal.customerInfo.address}</div>}
+              {proposal.customerInfo.phone && <div><strong>Phone:</strong> {proposal.customerInfo.phone}</div>}
+              {proposal.customerInfo.email && <div><strong>Email:</strong> {proposal.customerInfo.email}</div>}
+            </div>
+          </section>
+        )}
 
         {/* Pool Specifications */}
         <section className="doc-section">
           <h2>Pool Specifications</h2>
           <div className="info-grid">
-            <div><strong>Type:</strong> {proposal.poolSpecs.poolType}</div>
+            <div><strong>Type:</strong> {proposal.poolSpecs.poolType.charAt(0).toUpperCase() + proposal.poolSpecs.poolType.slice(1)}</div>
             {proposal.poolSpecs.poolModel && <div><strong>Model:</strong> {proposal.poolSpecs.poolModel}</div>}
             <div><strong>Dimensions:</strong> {proposal.poolSpecs.length}' L × {proposal.poolSpecs.width}' W × {proposal.poolSpecs.depth}' D</div>
             {proposal.poolSpecs.shape && <div><strong>Shape:</strong> {proposal.poolSpecs.shape}</div>}
             <div><strong>Base Price:</strong> ${proposal.poolSpecs.basePrice.toLocaleString()}</div>
           </div>
         </section>
+
+        {/* Equipment Details */}
+        {proposal.equipment.items.length > 0 && (
+          <section className="doc-section">
+            <h2>Equipment Details</h2>
+            <table className="detail-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Item</th>
+                  <th>Model</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposal.equipment.items.map((item, index) => (
+                  <tr key={index}>
+                    <td>{item.category.charAt(0).toUpperCase() + item.category.slice(1)}</td>
+                    <td>{item.name}</td>
+                    <td>{item.model}</td>
+                    <td>{item.quantity}</td>
+                    <td>${item.totalPrice.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* Water Features */}
+        {proposal.waterFeatures.features.length > 0 && (
+          <section className="doc-section">
+            <h2>Water Features</h2>
+            <table className="detail-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Name</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposal.waterFeatures.features.map((feature, index) => (
+                  <tr key={index}>
+                    <td>{feature.type.charAt(0).toUpperCase() + feature.type.slice(1)}</td>
+                    <td>{feature.name}</td>
+                    <td>{feature.quantity}</td>
+                    <td>${feature.totalPrice.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* Custom Features */}
+        {proposal.customFeatures.features.length > 0 && (
+          <section className="doc-section">
+            <h2>Custom Features</h2>
+            {proposal.customFeatures.features.map((feature, index) => (
+              <div key={index} className="custom-feature-item">
+                <h3>{feature.name} - ${feature.cost.toLocaleString()}</h3>
+                <p>{feature.description}</p>
+              </div>
+            ))}
+          </section>
+        )}
 
         {/* Cost Breakdown */}
         <section className="doc-section">
@@ -152,7 +221,7 @@ function ProposalView() {
             <thead>
               <tr>
                 <th>Item</th>
-                <th>Cost</th>
+                <th style={{ textAlign: 'right' }}>Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -212,75 +281,6 @@ function ProposalView() {
           </table>
         </section>
 
-        {/* Equipment Details */}
-        {proposal.equipment.items.length > 0 && (
-          <section className="doc-section">
-            <h2>Equipment Details</h2>
-            <table className="detail-table">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th>Item</th>
-                  <th>Model</th>
-                  <th>Qty</th>
-                  <th>Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {proposal.equipment.items.map((item, index) => (
-                  <tr key={index}>
-                    <td>{item.category}</td>
-                    <td>{item.name}</td>
-                    <td>{item.model}</td>
-                    <td>{item.quantity}</td>
-                    <td>${item.totalPrice.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-
-        {/* Water Features */}
-        {proposal.waterFeatures.features.length > 0 && (
-          <section className="doc-section">
-            <h2>Water Features</h2>
-            <table className="detail-table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Name</th>
-                  <th>Qty</th>
-                  <th>Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {proposal.waterFeatures.features.map((feature, index) => (
-                  <tr key={index}>
-                    <td>{feature.type}</td>
-                    <td>{feature.name}</td>
-                    <td>{feature.quantity}</td>
-                    <td>${feature.totalPrice.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-
-        {/* Custom Features */}
-        {proposal.customFeatures.features.length > 0 && (
-          <section className="doc-section">
-            <h2>Custom Features</h2>
-            {proposal.customFeatures.features.map((feature, index) => (
-              <div key={index} className="custom-feature-item">
-                <h3>{feature.name} - ${feature.cost.toLocaleString()}</h3>
-                <p>{feature.description}</p>
-              </div>
-            ))}
-          </section>
-        )}
-
         {/* Notes */}
         {proposal.notes && (
           <section className="doc-section">
@@ -291,8 +291,7 @@ function ProposalView() {
 
         {/* Footer */}
         <div className="doc-footer">
-          <p>This proposal is valid for 30 days from the date of issue.</p>
-          <p>Thank you for considering our services!</p>
+          <p style={{ fontStyle: 'italic' }}>*Proposal valid for ___*</p>
         </div>
       </div>
     </div>

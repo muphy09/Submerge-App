@@ -3,6 +3,10 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const fs = require('fs');
 
+// Handle ASAR paths correctly
+const isDev = process.env.NODE_ENV === 'development';
+const appPath = isDev ? __dirname : app.getAppPath();
+
 let mainWindow = null;
 let db = null;
 
@@ -18,14 +22,14 @@ function initializeDatabase() {
   db.pragma('journal_mode = WAL');
 
   // Read and execute schema
-  const schemaPath = path.join(__dirname, 'src/database/schema.sql');
+  const schemaPath = path.join(appPath, 'src/database/schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf-8');
   db.exec(schema);
 
   // Load sample data if this is a new database
   if (isNewDatabase) {
     try {
-      const sampleDataPath = path.join(__dirname, 'src/database/sampleData.sql');
+      const sampleDataPath = path.join(appPath, 'src/database/sampleData.sql');
       const sampleData = fs.readFileSync(sampleDataPath, 'utf-8');
       db.exec(sampleData);
       console.log('Sample data loaded successfully');
@@ -41,6 +45,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    title: 'PPAS Proposal Builder',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -49,12 +54,27 @@ function createWindow() {
   });
 
   // Load the app
-  if (process.env.NODE_ENV === 'development') {
+  if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'dist/renderer/index.html'));
+    // Use URL-based loading for proper asset resolution in ASAR
+    const indexPath = `file://${path.join(appPath, 'dist/renderer/index.html').replace(/\\/g, '/')}`;
+    console.log('Loading production app from:', indexPath);
+    console.log('__dirname:', __dirname);
+    console.log('appPath:', appPath);
+
+    mainWindow.loadURL(indexPath).catch(err => {
+      console.error('Failed to load index.html:', err);
+    });
+
+    // Open dev tools in production to debug
+    // mainWindow.webContents.openDevTools();
   }
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('Page failed to load:', errorCode, errorDescription);
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;

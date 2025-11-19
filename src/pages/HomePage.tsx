@@ -45,8 +45,8 @@ function HomePage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'draft': return '#fbbf24';
-      case 'submitted': return '#3b82f6';
+      case 'draft': return '#cc2321ff';
+      case 'submitted': return '#04bc17ff';
       case 'approved': return '#10b981';
       case 'rejected': return '#ef4444';
       default: return '#6b7280';
@@ -58,7 +58,7 @@ function HomePage() {
       <div className="home-container">
         <header className="home-header">
           <div className="header-title-container">
-            <img src="../../PPAS Logo.png" alt="PPAS Logo" className="header-logo" />
+            <img src="/PPAS Logo.png" alt="PPAS Logo" className="header-logo" />
             <h1>Premier Pools and Spas Proposal Builder</h1>
           </div>
           <p className="header-tagline">A passion for splashin'</p>

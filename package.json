@@ -1,7 +1,7 @@
 {
-  "name": "pool-proposal-app",
+  "name": "ppas-proposal-builder",
   "version": "1.0.0",
-  "description": "Pool Design Proposal Management System",
+  "description": "PPAS Proposal Builder",
   "main": "main.js",
   "scripts": {
     "dev": "node dev-start.js",
@@ -11,6 +11,7 @@
     "test:electron": "cross-env NODE_ENV=production npx electron .",
     "build": "tsc && vite build && electron-builder",
     "build:win": "npm run build -- --win",
+    "build:exe": "vite build && electron-builder --win portable",
     "build:mac": "npm run build -- --mac",
     "build:linux": "npm run build -- --linux",
     "postinstall": "electron-builder install-app-deps"
@@ -44,17 +45,38 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.poolproposal.app",
-    "productName": "Pool Proposal Manager",
+    "appId": "com.ppas.proposalbuilder",
+    "productName": "PPAS Proposal Builder",
+    "artifactName": "${productName} v${version}.${ext}",
     "directories": {
-      "output": "release"
+      "output": "portable builds"
     },
     "files": [
       "dist/**/*",
-      "node_modules/**/*"
+      "main.js",
+      "preload-script.js",
+      "src/database/**/*",
+      "*.png",
+      "package.json",
+      "!**/*.ts",
+      "!*.ts"
     ],
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "asar": true,
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        },
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "assets/icon.ico"
     }
   }

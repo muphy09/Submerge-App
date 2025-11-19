@@ -70,7 +70,7 @@ function WaterFeaturesSection({ data, onChange }: Props) {
               <option value="">Select water feature</option>
               {catalog.map(feature => (
                 <option key={feature.id} value={feature.id}>
-                  {feature.name} - {feature.type} (${feature.price})
+                  {feature.name} - {feature.type.charAt(0).toUpperCase() + feature.type.slice(1)} (${feature.price})
                 </option>
               ))}
             </select>
@@ -101,7 +101,7 @@ function WaterFeaturesSection({ data, onChange }: Props) {
             <tbody>
               {data.features.map((feature, index) => (
                 <tr key={index}>
-                  <td>{feature.type}</td>
+                  <td>{feature.type.charAt(0).toUpperCase() + feature.type.slice(1)}</td>
                   <td>{feature.name}</td>
                   <td>
                     <input

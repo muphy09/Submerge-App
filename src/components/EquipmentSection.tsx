@@ -76,7 +76,7 @@ function EquipmentSection({ data, onChange }: Props) {
             >
               <option value="">All Categories</option>
               {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
               ))}
             </select>
           </div>
@@ -123,7 +123,7 @@ function EquipmentSection({ data, onChange }: Props) {
             <tbody>
               {data.items.map((item, index) => (
                 <tr key={index}>
-                  <td>{item.category}</td>
+                  <td>{item.category.charAt(0).toUpperCase() + item.category.slice(1)}</td>
                   <td>{item.name}</td>
                   <td>{item.model}</td>
                   <td>

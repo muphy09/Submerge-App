@@ -129,6 +129,8 @@ function ProposalForm() {
 
       if (submit) {
         navigate(`/proposal/view/${finalProposal.proposalNumber}`);
+      } else {
+        navigate('/');
       }
     } catch (error) {
       console.error('Failed to save proposal:', error);
@@ -176,7 +178,7 @@ function ProposalForm() {
       <div className="form-container">
         <header className="form-header">
           <div className="form-header-title">
-            <img src="../../PPAS Logo.png" alt="PPAS Logo" className="form-logo" />
+            <img src="/PPAS Logo.png" alt="PPAS Logo" className="form-logo" />
             <h1>Pool Proposal Builder</h1>
           </div>
           <p className="proposal-number">Proposal #{proposal.proposalNumber?.replace('PROP-', '')}</p>

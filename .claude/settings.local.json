@@ -16,7 +16,11 @@
       "Bash(taskkill:*)",
       "Bash(dir node_modules.binelectron.cmd 2)",
       "Bash(node_modules.binelectron.cmd --version)",
-      "Bash(node_modules/electron/dist/electron.exe:*)"
+      "Bash(node_modules/electron/dist/electron.exe:*)",
+      "Bash(dir:*)",
+      "Bash(npm run test:electron:*)",
+      "Bash(npm run build:renderer:*)",
+      "Bash(./node_modules/.bin/electron:*)"
     ],
     "deny": [],
     "ask": []

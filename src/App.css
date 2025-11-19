@@ -1,6 +1,18 @@
 .app {
   min-height: 100vh;
   background: linear-gradient(135deg, #3b82f6 0%, #ffffff 100%);
+  position: relative;
+}
+
+.app-version {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  color: rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  font-family: monospace;
+  z-index: 1000;
+  pointer-events: none;
 }
 
 * {

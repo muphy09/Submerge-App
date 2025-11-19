@@ -4,6 +4,8 @@ import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
 import './App.css';
 
+const APP_VERSION = '1.0.0';
+
 function App() {
   return (
     <Router>
@@ -14,6 +16,7 @@ function App() {
           <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm />} />
           <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
         </Routes>
+        <div className="app-version">v{APP_VERSION}</div>
       </div>
     </Router>
   );

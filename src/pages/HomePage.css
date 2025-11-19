@@ -51,7 +51,7 @@
 
 .btn-primary {
   background: white;
-  color: #0047AB;
+  color: #041e42;
   border: none;
   padding: 16px 32px;
   font-size: 1.1rem;
@@ -113,7 +113,7 @@
 .proposal-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  border-color: #3b82f6;
+  border-color: #073071;
 }
 
 .proposal-header {
