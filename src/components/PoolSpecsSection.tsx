@@ -65,9 +65,9 @@ function PoolSpecsSection({ data, onChange }: Props) {
           value={data.poolType}
           onChange={(e) => handleChange('poolType', e.target.value as any)}
         >
-          <option value="fiberglass">Fiberglass</option>
-          <option value="concrete">Concrete</option>
-          <option value="vinyl">Vinyl</option>
+          <option value="Fiberglass">Fiberglass</option>
+          <option value="Concrete">Concrete</option>
+          <option value="Vinyl">Vinyl</option>
         </select>
       </div>
 

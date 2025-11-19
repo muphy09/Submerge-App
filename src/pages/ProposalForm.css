@@ -17,10 +17,24 @@
   margin-bottom: 30px;
 }
 
+.form-header-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 10px;
+}
+
+.form-logo {
+  height: 50px;
+  width: auto;
+  object-fit: contain;
+}
+
 .form-header h1 {
   color: #1f2937;
   font-size: 2rem;
-  margin-bottom: 10px;
+  margin: 0;
 }
 
 .proposal-number {
@@ -38,7 +52,7 @@
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%);
   transition: width 0.3s ease;
 }
 
@@ -63,12 +77,12 @@
 }
 
 .nav-item:hover {
-  border-color: #667eea;
+  border-color: #3b82f6;
 }
 
 .nav-item.active {
-  background: #667eea;
-  border-color: #667eea;
+  background: #3b82f6;
+  border-color: #3b82f6;
   color: white;
 }
 
@@ -134,12 +148,12 @@
 }
 
 .btn-primary {
-  background: #667eea;
+  background: #3b82f6;
   color: white;
 }
 
 .btn-primary:hover {
-  background: #5568d3;
+  background: #2563eb;
 }
 
 .btn-secondary {

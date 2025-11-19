@@ -110,9 +110,12 @@ function ProposalView() {
       <div className="proposal-document" ref={proposalRef}>
         {/* Header */}
         <div className="doc-header">
-          <h1>Pool Construction Proposal</h1>
+          <div className="doc-header-title">
+            <img src="../../PPAS Logo.png" alt="PPAS Logo" className="doc-logo" />
+            <h1>Pool Proposal & Specifications</h1>
+          </div>
           <div className="header-info">
-            <p><strong>Proposal #:</strong> {proposal.proposalNumber}</p>
+            <p><strong>Proposal #:</strong> {proposal.proposalNumber.replace('PROP-', '')}</p>
             <p><strong>Date:</strong> {new Date(proposal.createdDate).toLocaleDateString()}</p>
             <p><strong>Status:</strong> <span className={`status-${proposal.status}`}>{proposal.status.toUpperCase()}</span></p>
           </div>

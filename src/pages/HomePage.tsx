@@ -57,8 +57,11 @@ function HomePage() {
     <div className="home-page">
       <div className="home-container">
         <header className="home-header">
-          <h1>Pool Proposal Manager</h1>
-          <p>Create and manage professional pool proposals</p>
+          <div className="header-title-container">
+            <img src="../../PPAS Logo.png" alt="PPAS Logo" className="header-logo" />
+            <h1>Premier Pools and Spas Proposal Builder</h1>
+          </div>
+          <p className="header-tagline">A passion for splashin'</p>
         </header>
 
         <div className="action-section">
@@ -94,7 +97,7 @@ function HomePage() {
                     </span>
                   </div>
                   <div className="proposal-details">
-                    <p className="proposal-number">#{proposal.proposalNumber}</p>
+                    <p className="proposal-number">#{proposal.proposalNumber.replace('PROP-', '')}</p>
                     <p className="proposal-location">{proposal.customerInfo.city}</p>
                     <p className="proposal-date">
                       {new Date(proposal.createdDate).toLocaleDateString()}

@@ -1,7 +1,7 @@
 .proposal-view {
   min-height: 100vh;
   padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #ffffff 100%);
 }
 
 .view-actions {
@@ -30,13 +30,27 @@
   text-align: center;
   margin-bottom: 40px;
   padding-bottom: 30px;
-  border-bottom: 3px solid #667eea;
+  border-bottom: 3px solid #3b82f6;
+}
+
+.doc-header-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.doc-logo {
+  height: 60px;
+  width: auto;
+  object-fit: contain;
 }
 
 .doc-header h1 {
   color: #1f2937;
   font-size: 2.5rem;
-  margin-bottom: 20px;
+  margin: 0;
 }
 
 .header-info {
@@ -113,7 +127,7 @@
 }
 
 .total-row {
-  background: #667eea;
+  background: #3b82f6;
   color: white;
   font-size: 1.3rem;
 }
@@ -128,11 +142,11 @@
   padding: 15px;
   border-radius: 6px;
   margin-bottom: 15px;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid #3b82f6;
 }
 
 .custom-feature-item h3 {
-  color: #667eea;
+  color: #3b82f6;
   margin-bottom: 8px;
 }
 

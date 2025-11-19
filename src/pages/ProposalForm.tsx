@@ -38,8 +38,8 @@ function ProposalForm() {
     lastModified: new Date().toISOString(),
     status: 'draft',
     customerInfo: { customerName: '', city: '' },
-    poolSpecs: { poolType: 'fiberglass', length: 0, width: 0, depth: 0, basePrice: 0 },
-    excavation: { excavationType: '', difficulty: 'medium', accessConcerns: [], cost: 0 },
+    poolSpecs: { poolType: 'Fiberglass', length: 0, width: 0, depth: 0, basePrice: 0 },
+    excavation: { excavationType: '', difficulty: 'Medium', accessConcerns: [], cost: 0 },
     plumbing: { pipeType: '', pipeLength: 0, fittings: [], laborHours: 0, cost: 0 },
     tileCopingDecking: { copingType: '', copingLength: 0, deckingType: '', deckingArea: 0, cost: 0 },
     drainage: { drainType: '', drainCount: 0, pipingLength: 0, cost: 0 },
@@ -175,8 +175,11 @@ function ProposalForm() {
     <div className="proposal-form">
       <div className="form-container">
         <header className="form-header">
-          <h1>Pool Proposal Builder</h1>
-          <p className="proposal-number">Proposal #{proposal.proposalNumber}</p>
+          <div className="form-header-title">
+            <img src="../../PPAS Logo.png" alt="PPAS Logo" className="form-logo" />
+            <h1>Pool Proposal Builder</h1>
+          </div>
+          <p className="proposal-number">Proposal #{proposal.proposalNumber?.replace('PROP-', '')}</p>
         </header>
 
         <div className="progress-bar">
