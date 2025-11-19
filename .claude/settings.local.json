@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(timeout:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run postinstall:*)",
+      "Bash(ping:*)",
+      "Bash(nul)",
+      "Bash(npm ls:*)",
+      "Bash(node -e:*)",
+      "Bash(where:*)",
+      "Bash(move:*)",
+      "Bash(ren:*)",
+      "Bash(ren preload.ts preload-src.ts)",
+      "Bash(taskkill:*)",
+      "Bash(dir node_modules.binelectron.cmd 2)",
+      "Bash(node_modules.binelectron.cmd --version)",
+      "Bash(node_modules/electron/dist/electron.exe:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

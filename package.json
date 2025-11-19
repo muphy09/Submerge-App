@@ -1,0 +1,61 @@
+{
+  "name": "pool-proposal-app",
+  "version": "1.0.0",
+  "description": "Pool Design Proposal Management System",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node dev-start.js",
+    "dev:react": "vite",
+    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development npx electron .",
+    "build:renderer": "vite build",
+    "test:electron": "cross-env NODE_ENV=production npx electron .",
+    "build": "tsc && vite build && electron-builder",
+    "build:win": "npm run build -- --win",
+    "build:mac": "npm run build -- --mac",
+    "build:linux": "npm run build -- --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [
+    "pool",
+    "proposal",
+    "design"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.22.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^29.0.0",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.6",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.poolproposal.app",
+    "productName": "Pool Proposal Manager",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    }
+  }
+}
