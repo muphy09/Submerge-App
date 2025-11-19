@@ -34,8 +34,9 @@ function AppContent() {
       });
 
       window.electron.onUpdateError((error: string) => {
+        console.error('Auto-update error:', error);
         setUpdateStatus('error');
-        setUpdateError(error);
+        setUpdateError('Error checking for updates');
         // Clear error after 10 seconds
         setTimeout(() => setUpdateStatus(null), 10000);
       });

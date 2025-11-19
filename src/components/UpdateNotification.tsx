@@ -10,6 +10,8 @@ interface UpdateNotificationProps {
 const UpdateNotification: React.FC<UpdateNotificationProps> = ({ status, onInstall, errorMessage }) => {
   if (!status) return null;
 
+  const displayError = errorMessage || 'Error checking for updates';
+
   return (
     <div className="update-notification">
       {status === 'downloading' && (
@@ -26,9 +28,9 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ status, onInsta
           </button>
         </div>
       )}
-      {status === 'error' && errorMessage && (
+      {status === 'error' && (
         <div className="update-message update-error">
-          <span>Update Error: {errorMessage}</span>
+          <span>Update Error: {displayError}</span>
         </div>
       )}
     </div>

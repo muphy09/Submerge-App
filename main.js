@@ -13,6 +13,47 @@ let iconPath = path.join(__dirname, 'icon.ico');
 let mainWindow = null;
 let db = null;
 let proposalsDir = null;
+let updateClient = null;
+
+const UPDATE_FEED = {
+  provider: 'github',
+  owner: 'muphy09',
+  repo: 'Premier-Pools',
+  protocol: 'https:',
+};
+
+function getAutoUpdater() {
+  if (isDev) {
+    return null;
+  }
+
+  if (!updateClient) {
+    const { autoUpdater } = require('electron-updater');
+    updateClient = autoUpdater;
+
+    try {
+      const feedConfig = { ...UPDATE_FEED };
+      if (process.env.GH_TOKEN) {
+        feedConfig.token = process.env.GH_TOKEN;
+      }
+      updateClient.setFeedURL(feedConfig);
+      console.log('Auto-update feed configured for GitHub releases');
+    } catch (error) {
+      console.error('Failed to configure auto-updater feed:', error);
+    }
+
+    updateClient.autoDownload = false;
+    updateClient.autoInstallOnAppQuit = true;
+  }
+
+  return updateClient;
+}
+
+function sendUpdateError(message = 'Error checking for updates') {
+  if (mainWindow) {
+    mainWindow.webContents.send('update-error', message);
+  }
+}
 
 // Initialize proposals directory
 function initializeProposalsDirectory() {
@@ -68,13 +109,12 @@ function setupAutoUpdater() {
     return;
   }
 
-  // Lazy-load autoUpdater only when needed and after app is ready
-  const { autoUpdater } = require('electron-updater');
+  const autoUpdater = getAutoUpdater();
+  if (!autoUpdater) {
+    return;
+  }
 
-  // Configure auto-updater
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-
+  autoUpdater.removeAllListeners();
   autoUpdater.on('checking-for-update', () => {
     console.log('Checking for update...');
   });
@@ -85,7 +125,10 @@ function setupAutoUpdater() {
       mainWindow.webContents.send('update-available', info);
     }
     // Auto-download the update
-    autoUpdater.downloadUpdate();
+    autoUpdater.downloadUpdate().catch((error) => {
+      console.error('Failed to download update:', error);
+      sendUpdateError();
+    });
   });
 
   autoUpdater.on('update-not-available', (info) => {
@@ -97,9 +140,7 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('Error in auto-updater:', err);
-    if (mainWindow) {
-      mainWindow.webContents.send('update-error', err.message);
-    }
+    sendUpdateError();
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
@@ -120,6 +161,7 @@ function setupAutoUpdater() {
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(err => {
       console.error('Failed to check for updates:', err);
+      sendUpdateError();
     });
   }, 3000);
 }
@@ -469,11 +511,20 @@ ipcMain.handle('check-for-updates', async () => {
     return { message: 'Updates are disabled in development mode' };
   }
   try {
-    const { autoUpdater } = require('electron-updater');
-    return await autoUpdater.checkForUpdates();
+    const autoUpdater = getAutoUpdater();
+    if (!autoUpdater) {
+      return { message: 'Error checking for updates' };
+    }
+
+    const result = await autoUpdater.checkForUpdates();
+    const updateInfo = result?.updateInfo;
+    const available = Boolean(updateInfo && updateInfo.version && updateInfo.version !== app.getVersion());
+
+    return { available, updateInfo };
   } catch (error) {
     console.error('Error checking for updates:', error);
-    throw error;
+    sendUpdateError();
+    return { message: 'Error checking for updates' };
   }
 });
 
@@ -481,6 +532,8 @@ ipcMain.handle('install-update', async () => {
   if (isDev) {
     return;
   }
-  const { autoUpdater } = require('electron-updater');
-  autoUpdater.quitAndInstall();
+  const autoUpdater = getAutoUpdater();
+  if (autoUpdater) {
+    autoUpdater.quitAndInstall();
+  }
 });
