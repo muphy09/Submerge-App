@@ -1,6 +1,6 @@
 ---
 
-## [1.1.1]
+## [1.1.2]
 ### Changed
 - Fixed MacOS DMG download
 
