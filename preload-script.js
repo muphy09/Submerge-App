@@ -6,6 +6,12 @@ contextBridge.exposeInMainWorld('electron', {
   getProposal: (proposalNumber) => ipcRenderer.invoke('get-proposal', proposalNumber),
   getAllProposals: () => ipcRenderer.invoke('get-all-proposals'),
   deleteProposal: (proposalNumber) => ipcRenderer.invoke('delete-proposal', proposalNumber),
+  openProposalsFolder: () => ipcRenderer.invoke('open-proposals-folder'),
+
+  // Listen for opening proposals from file system
+  onOpenProposal: (callback) => {
+    ipcRenderer.on('open-proposal', (_, proposal) => callback(proposal));
+  },
 
   // Reference data
   getPoolModels: () => ipcRenderer.invoke('get-pool-models'),

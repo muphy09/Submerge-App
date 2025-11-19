@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { InteriorFinish } from '../types/proposal';
 import './SectionStyles.css';
 
@@ -7,8 +8,16 @@ interface Props {
 }
 
 function InteriorFinishSection({ data, onChange }: Props) {
+  const [formData, setFormData] = useState<InteriorFinish>(data);
+
+  useEffect(() => {
+    setFormData(data);
+  }, [data]);
+
   const handleChange = (field: keyof InteriorFinish, value: any) => {
-    onChange({ ...data, [field]: value });
+    const updated = { ...formData, [field]: value };
+    setFormData(updated);
+    onChange(updated);
   };
 
   return (
@@ -17,7 +26,7 @@ function InteriorFinishSection({ data, onChange }: Props) {
         <label className="form-label required">Finish Type</label>
         <select
           className="form-input"
-          value={data.finishType}
+          value={formData.finishType}
           onChange={(e) => handleChange('finishType', e.target.value)}
         >
           <option value="">Select finish type</option>
@@ -36,7 +45,7 @@ function InteriorFinishSection({ data, onChange }: Props) {
         <input
           type="text"
           className="form-input"
-          value={data.color}
+          value={formData.color}
           onChange={(e) => handleChange('color', e.target.value)}
           placeholder="e.g., Caribbean Blue, White"
         />
@@ -47,7 +56,7 @@ function InteriorFinishSection({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.area}
+          value={formData.area}
           onChange={(e) => handleChange('area', parseFloat(e.target.value))}
           min="0"
           step="1"
@@ -59,7 +68,7 @@ function InteriorFinishSection({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.cost}
+          value={formData.cost}
           onChange={(e) => handleChange('cost', parseFloat(e.target.value))}
           min="0"
           step="100"

@@ -13,6 +13,7 @@ import CustomFeaturesSection from '../components/CustomFeaturesSection';
 import MasonrySection from '../components/MasonrySection';
 import InteriorFinishSection from '../components/InteriorFinishSection';
 import './ProposalForm.css';
+import ppasLogo from '../../PPAS Logo.png';
 
 const sections = [
   'Customer Information',
@@ -32,7 +33,9 @@ function ProposalForm() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const [currentSection, setCurrentSection] = useState(0);
-  const [proposal, setProposal] = useState<Partial<Proposal>>({
+  const [componentKey, setComponentKey] = useState(Date.now());
+
+  const getInitialProposal = (): Partial<Proposal> => ({
     proposalNumber: `PROP-${Date.now()}`,
     createdDate: new Date().toISOString(),
     lastModified: new Date().toISOString(),
@@ -54,17 +57,28 @@ function ProposalForm() {
     totalCost: 0,
   });
 
+  const [proposal, setProposal] = useState<Partial<Proposal>>(getInitialProposal());
+
   useEffect(() => {
+    // Reset component key and proposal when route changes
+    setComponentKey(Date.now());
     if (proposalNumber) {
       loadProposal(proposalNumber);
+    } else {
+      setProposal(getInitialProposal());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalNumber]);
 
   const loadProposal = async (num: string) => {
     try {
       const data = await window.electron.getProposal(num);
       if (data) {
-        setProposal(data);
+        // Deep clone to ensure fresh object references
+        const freshData = JSON.parse(JSON.stringify(data));
+        setProposal(freshData);
+        // Force component remount with fresh data
+        setComponentKey(Date.now());
       }
     } catch (error) {
       console.error('Failed to load proposal:', error);
@@ -145,29 +159,31 @@ function ProposalForm() {
   };
 
   const renderSection = () => {
+    const defaultProposal = getInitialProposal();
+
     switch (currentSection) {
       case 0:
-        return <CustomerInfoSection data={proposal.customerInfo!} onChange={(data) => updateProposal('customerInfo', data)} />;
+        return <CustomerInfoSection key={componentKey} data={proposal.customerInfo || defaultProposal.customerInfo!} onChange={(data) => updateProposal('customerInfo', data)} />;
       case 1:
-        return <PoolSpecsSection data={proposal.poolSpecs!} onChange={(data) => updateProposal('poolSpecs', data)} />;
+        return <PoolSpecsSection key={componentKey} data={proposal.poolSpecs || defaultProposal.poolSpecs!} onChange={(data) => updateProposal('poolSpecs', data)} />;
       case 2:
-        return <ExcavationSection data={proposal.excavation!} onChange={(data) => updateProposal('excavation', data)} />;
+        return <ExcavationSection key={componentKey} data={proposal.excavation || defaultProposal.excavation!} onChange={(data) => updateProposal('excavation', data)} />;
       case 3:
-        return <PlumbingSection data={proposal.plumbing!} onChange={(data) => updateProposal('plumbing', data)} />;
+        return <PlumbingSection key={componentKey} data={proposal.plumbing || defaultProposal.plumbing!} onChange={(data) => updateProposal('plumbing', data)} />;
       case 4:
-        return <TileCopingDeckingSection data={proposal.tileCopingDecking!} onChange={(data) => updateProposal('tileCopingDecking', data)} />;
+        return <TileCopingDeckingSection key={componentKey} data={proposal.tileCopingDecking || defaultProposal.tileCopingDecking!} onChange={(data) => updateProposal('tileCopingDecking', data)} />;
       case 5:
-        return <DrainageSection data={proposal.drainage!} onChange={(data) => updateProposal('drainage', data)} />;
+        return <DrainageSection key={componentKey} data={proposal.drainage || defaultProposal.drainage!} onChange={(data) => updateProposal('drainage', data)} />;
       case 6:
-        return <EquipmentSection data={proposal.equipment!} onChange={(data) => updateProposal('equipment', data)} />;
+        return <EquipmentSection key={componentKey} data={proposal.equipment || defaultProposal.equipment!} onChange={(data) => updateProposal('equipment', data)} />;
       case 7:
-        return <WaterFeaturesSection data={proposal.waterFeatures!} onChange={(data) => updateProposal('waterFeatures', data)} />;
+        return <WaterFeaturesSection key={componentKey} data={proposal.waterFeatures || defaultProposal.waterFeatures!} onChange={(data) => updateProposal('waterFeatures', data)} />;
       case 8:
-        return <CustomFeaturesSection data={proposal.customFeatures!} onChange={(data) => updateProposal('customFeatures', data)} />;
+        return <CustomFeaturesSection key={componentKey} data={proposal.customFeatures || defaultProposal.customFeatures!} onChange={(data) => updateProposal('customFeatures', data)} />;
       case 9:
-        return <MasonrySection data={proposal.masonry!} onChange={(data) => updateProposal('masonry', data)} />;
+        return <MasonrySection key={componentKey} data={proposal.masonry || defaultProposal.masonry!} onChange={(data) => updateProposal('masonry', data)} />;
       case 10:
-        return <InteriorFinishSection data={proposal.interiorFinish!} onChange={(data) => updateProposal('interiorFinish', data)} />;
+        return <InteriorFinishSection key={componentKey} data={proposal.interiorFinish || defaultProposal.interiorFinish!} onChange={(data) => updateProposal('interiorFinish', data)} />;
       default:
         return null;
     }
@@ -178,7 +194,7 @@ function ProposalForm() {
       <div className="form-container">
         <header className="form-header">
           <div className="form-header-title">
-            <img src="/PPAS Logo.png" alt="PPAS Logo" className="form-logo" />
+            <img src={ppasLogo} alt="PPAS Logo" className="form-logo" />
             <h1>Pool Proposal Builder</h1>
           </div>
           <p className="proposal-number">Proposal #{proposal.proposalNumber?.replace('PROP-', '')}</p>

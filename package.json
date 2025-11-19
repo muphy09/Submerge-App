@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node dev-start.js",
     "dev:react": "vite",
-    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development npx electron .",
+    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development node_modules/electron/dist/electron.exe .",
     "build:renderer": "vite build",
     "test:electron": "cross-env NODE_ENV=production npx electron .",
     "build": "tsc && vite build && electron-builder",
@@ -38,8 +38,9 @@
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
-    "electron": "^29.0.0",
+    "electron": "^29.4.6",
     "electron-builder": "^24.13.3",
+    "png-to-ico": "^3.0.1",
     "typescript": "^5.4.2",
     "vite": "^5.1.6",
     "wait-on": "^7.2.0"
@@ -56,6 +57,7 @@
       "main.js",
       "preload-script.js",
       "src/database/**/*",
+      "icon.ico",
       "*.png",
       "package.json",
       "!**/*.ts",
@@ -66,18 +68,31 @@
       "node_modules/better-sqlite3/**/*"
     ],
     "asar": true,
+    "fileAssociations": [
+      {
+        "ext": "ppas",
+        "name": "PPAS Proposal File",
+        "description": "PPAS Pool Proposal",
+        "icon": "icon.png",
+        "role": "Editor"
+      }
+    ],
     "win": {
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "icon.png"
     }
   }
 }

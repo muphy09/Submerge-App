@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal';
 import './HomePage.css';
+import ppasLogo from '../../PPAS Logo.png';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -25,6 +26,14 @@ function HomePage() {
 
   const handleNewProposal = () => {
     navigate('/proposal/new');
+  };
+
+  const handleOpenProposalsFolder = async () => {
+    try {
+      await window.electron.openProposalsFolder();
+    } catch (error) {
+      console.error('Failed to open proposals folder:', error);
+    }
   };
 
   const handleOpenProposal = (proposalNumber: string) => {
@@ -58,7 +67,7 @@ function HomePage() {
       <div className="home-container">
         <header className="home-header">
           <div className="header-title-container">
-            <img src="/PPAS Logo.png" alt="PPAS Logo" className="header-logo" />
+            <img src={ppasLogo} alt="PPAS Logo" className="header-logo" />
             <h1>Premier Pools and Spas Proposal Builder</h1>
           </div>
           <p className="header-tagline">A passion for splashin'</p>
@@ -68,6 +77,10 @@ function HomePage() {
           <button className="btn-primary" onClick={handleNewProposal}>
             <span className="btn-icon">+</span>
             Create New Proposal
+          </button>
+          <button className="btn-primary" onClick={handleOpenProposalsFolder}>
+            <span className="btn-icon">📁</span>
+            Open Proposals Folder
           </button>
         </div>
 

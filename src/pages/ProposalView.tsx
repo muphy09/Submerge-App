@@ -4,6 +4,7 @@ import { Proposal } from '../types/proposal';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import './ProposalView.css';
+import ppasLogo from '../../PPAS Logo.png';
 
 function ProposalView() {
   const navigate = useNavigate();
@@ -111,7 +112,7 @@ function ProposalView() {
         {/* Header */}
         <div className="doc-header">
           <div className="doc-header-title">
-            <img src="/PPAS Logo.png" alt="PPAS Logo" className="doc-logo" />
+            <img src={ppasLogo} alt="PPAS Logo" className="doc-logo" />
             <h1>Pool Proposal & Specifications</h1>
           </div>
           <div className="header-info">

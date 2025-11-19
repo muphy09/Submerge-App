@@ -1,0 +1,1 @@
+- Editing a draft, then saving again as a draft and going back to edit (while in the same instance of the app) makes the text box fields not typeable

@@ -9,10 +9,15 @@ interface Props {
 
 function ExcavationSection({ data, onChange }: Props) {
   const [rates, setRates] = useState<any[]>([]);
+  const [formData, setFormData] = useState<Excavation>(data);
 
   useEffect(() => {
     loadRates();
   }, []);
+
+  useEffect(() => {
+    setFormData(data);
+  }, [data]);
 
   const loadRates = async () => {
     try {
@@ -24,7 +29,7 @@ function ExcavationSection({ data, onChange }: Props) {
   };
 
   const handleChange = (field: keyof Excavation, value: any) => {
-    const updated = { ...data, [field]: value };
+    const updated = { ...formData, [field]: value };
 
     // Auto-calculate cost based on difficulty
     if (field === 'difficulty') {
@@ -34,6 +39,7 @@ function ExcavationSection({ data, onChange }: Props) {
       }
     }
 
+    setFormData(updated);
     onChange(updated);
   };
 
@@ -44,7 +50,7 @@ function ExcavationSection({ data, onChange }: Props) {
         <input
           type="text"
           className="form-input"
-          value={data.excavationType}
+          value={formData.excavationType}
           onChange={(e) => handleChange('excavationType', e.target.value)}
           placeholder="e.g., Standard dig, Rock removal"
         />
@@ -54,7 +60,7 @@ function ExcavationSection({ data, onChange }: Props) {
         <label className="form-label required">Difficulty Level</label>
         <select
           className="form-input"
-          value={data.difficulty}
+          value={formData.difficulty}
           onChange={(e) => handleChange('difficulty', e.target.value as any)}
         >
           <option value="Easy">Easy</option>
@@ -86,7 +92,7 @@ function ExcavationSection({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.cost}
+          value={formData.cost}
           onChange={(e) => handleChange('cost', parseFloat(e.target.value))}
           min="0"
           step="100"

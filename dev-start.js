@@ -151,7 +151,7 @@ setTimeout(() => {
   waitOn(opts)
     .then(() => {
       console.log('Vite is ready! Starting Electron...');
-      electron = spawn('run-electron.bat', [], {
+      electron = spawn('npm', ['run', 'dev:electron'], {
         shell: true,
         stdio: 'inherit',
         cwd: __dirname,

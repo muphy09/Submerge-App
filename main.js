@@ -1,16 +1,33 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const Database = require('better-sqlite3');
 const fs = require('fs');
 
 // Handle ASAR paths correctly
 const isDev = process.env.NODE_ENV === 'development';
-const appPath = isDev ? __dirname : app.getAppPath();
+let appPath = __dirname;
+let iconPath = path.join(__dirname, 'icon.ico');
 
 let mainWindow = null;
 let db = null;
+let proposalsDir = null;
 
-// Database initialization
+// Initialize proposals directory
+function initializeProposalsDirectory() {
+  const documentsPath = app.getPath('documents');
+  proposalsDir = path.join(documentsPath, 'PPAS Proposal Builder');
+
+  // Create directory if it doesn't exist
+  if (!fs.existsSync(proposalsDir)) {
+    fs.mkdirSync(proposalsDir, { recursive: true });
+    console.log('Created proposals directory:', proposalsDir);
+  }
+
+  console.log('Proposals directory:', proposalsDir);
+  return proposalsDir;
+}
+
+// Database initialization (for reference data only)
 function initializeDatabase() {
   const userDataPath = app.getPath('userData');
   const dbPath = path.join(userDataPath, 'pool-proposals.db');
@@ -46,6 +63,7 @@ function createWindow() {
     width: 1400,
     height: 900,
     title: 'PPAS Proposal Builder',
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -81,15 +99,69 @@ function createWindow() {
   });
 }
 
+// Handle file opening on Windows
+let fileToOpen = null;
+
+// Function to open a proposal file
+function openProposalFile(filePath) {
+  try {
+    const data = fs.readFileSync(filePath, 'utf-8');
+    const proposal = JSON.parse(data);
+
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('open-proposal', proposal);
+    }
+  } catch (error) {
+    console.error('Failed to open proposal file:', error);
+  }
+}
+
+// Get file path from command line args on Windows (only when running in Electron context)
+function checkForFileArgument() {
+  if (process.platform === 'win32' && process.argv.length >= 2) {
+    const filePath = process.argv.find(arg => arg.endsWith('.ppas'));
+    if (filePath) {
+      fileToOpen = filePath;
+    }
+  }
+}
+
 app.whenReady().then(() => {
+  // Set app path correctly after app is ready
+  if (!isDev) {
+    appPath = app.getAppPath();
+    iconPath = path.join(appPath, 'icon.ico');
+  }
+
+  // Check for file argument
+  checkForFileArgument();
+
   initializeDatabase();
+  initializeProposalsDirectory();
   createWindow();
+
+  // If a file was specified on launch, open it
+  if (fileToOpen) {
+    openProposalFile(fileToOpen);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
+});
+
+// Handle opening files on Windows
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (filePath.endsWith('.ppas')) {
+    if (mainWindow) {
+      openProposalFile(filePath);
+    } else {
+      fileToOpen = filePath;
+    }
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -105,54 +177,161 @@ app.on('before-quit', () => {
 
 // IPC Handlers - Proposals
 ipcMain.handle('save-proposal', async (_, proposal) => {
-  if (!db) throw new Error('Database not initialized');
+  if (!proposalsDir) throw new Error('Proposals directory not initialized');
 
-  const stmt = db.prepare(`
-    INSERT OR REPLACE INTO proposals
-    (proposal_number, created_date, last_modified, status, data, subtotal, tax_rate, tax_amount, total_cost)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  try {
+    // Check if this proposal already exists (editing existing proposal)
+    const files = fs.readdirSync(proposalsDir);
+    let existingFilePath = null;
 
-  const result = stmt.run(
-    proposal.proposalNumber,
-    proposal.createdDate,
-    proposal.lastModified,
-    proposal.status,
-    JSON.stringify(proposal),
-    proposal.subtotal,
-    proposal.taxRate,
-    proposal.taxAmount,
-    proposal.totalCost
-  );
+    // Look for existing file by proposal number
+    for (const file of files) {
+      if (file.endsWith('.ppas')) {
+        try {
+          const filePath = path.join(proposalsDir, file);
+          const data = fs.readFileSync(filePath, 'utf-8');
+          const existingProposal = JSON.parse(data);
+          if (existingProposal.proposalNumber === proposal.proposalNumber) {
+            existingFilePath = filePath;
+            break;
+          }
+        } catch (error) {
+          // Skip files that can't be read
+        }
+      }
+    }
 
-  return result.lastInsertRowid;
+    let filePath;
+    if (existingFilePath) {
+      // Reuse existing file path
+      filePath = existingFilePath;
+    } else {
+      // Create new filename using customer name or proposal number
+      let fileName;
+      if (proposal.customerInfo && proposal.customerInfo.customerName && proposal.customerInfo.customerName.trim()) {
+        // Use customer name, remove special characters, limit length
+        const safeName = proposal.customerInfo.customerName.trim().replace(/[^a-zA-Z0-9]/g, '-').substring(0, 50);
+        fileName = `${safeName}.ppas`;
+      } else {
+        // Fallback to proposal number
+        fileName = `${proposal.proposalNumber}.ppas`;
+      }
+      filePath = path.join(proposalsDir, fileName);
+    }
+
+    // Write the proposal to a JSON file
+    fs.writeFileSync(filePath, JSON.stringify(proposal, null, 2), 'utf-8');
+
+    console.log('Proposal saved:', filePath);
+    return filePath;
+  } catch (error) {
+    console.error('Failed to save proposal:', error);
+    throw error;
+  }
 });
 
 ipcMain.handle('get-proposal', async (_, proposalNumber) => {
-  if (!db) throw new Error('Database not initialized');
+  if (!proposalsDir) throw new Error('Proposals directory not initialized');
 
-  const stmt = db.prepare('SELECT data FROM proposals WHERE proposal_number = ?');
-  const row = stmt.get(proposalNumber);
+  try {
+    // Find the file by proposal number
+    const files = fs.readdirSync(proposalsDir);
 
-  if (!row) return null;
+    for (const file of files) {
+      if (file.endsWith('.ppas')) {
+        try {
+          const filePath = path.join(proposalsDir, file);
+          const data = fs.readFileSync(filePath, 'utf-8');
+          const proposal = JSON.parse(data);
 
-  return JSON.parse(row.data);
+          if (proposal.proposalNumber === proposalNumber) {
+            return proposal;
+          }
+        } catch (error) {
+          console.error(`Failed to read proposal file ${file}:`, error);
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Failed to load proposal:', error);
+    return null;
+  }
 });
 
 ipcMain.handle('get-all-proposals', async () => {
-  if (!db) throw new Error('Database not initialized');
+  if (!proposalsDir) throw new Error('Proposals directory not initialized');
 
-  const stmt = db.prepare('SELECT data FROM proposals ORDER BY last_modified DESC');
-  const rows = stmt.all();
+  try {
+    const files = fs.readdirSync(proposalsDir);
+    const proposals = [];
 
-  return rows.map(row => JSON.parse(row.data));
+    for (const file of files) {
+      if (file.endsWith('.ppas')) {
+        const filePath = path.join(proposalsDir, file);
+        try {
+          const data = fs.readFileSync(filePath, 'utf-8');
+          const proposal = JSON.parse(data);
+          proposals.push(proposal);
+        } catch (error) {
+          console.error(`Failed to read proposal file ${file}:`, error);
+        }
+      }
+    }
+
+    // Sort by last modified date (most recent first)
+    proposals.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+
+    return proposals;
+  } catch (error) {
+    console.error('Failed to load proposals:', error);
+    return [];
+  }
 });
 
 ipcMain.handle('delete-proposal', async (_, proposalNumber) => {
-  if (!db) throw new Error('Database not initialized');
+  if (!proposalsDir) throw new Error('Proposals directory not initialized');
 
-  const stmt = db.prepare('DELETE FROM proposals WHERE proposal_number = ?');
-  stmt.run(proposalNumber);
+  try {
+    // Find the file by proposal number
+    const files = fs.readdirSync(proposalsDir);
+
+    for (const file of files) {
+      if (file.endsWith('.ppas')) {
+        try {
+          const filePath = path.join(proposalsDir, file);
+          const data = fs.readFileSync(filePath, 'utf-8');
+          const proposal = JSON.parse(data);
+
+          if (proposal.proposalNumber === proposalNumber) {
+            fs.unlinkSync(filePath);
+            console.log('Proposal deleted:', filePath);
+            return;
+          }
+        } catch (error) {
+          console.error(`Failed to read/delete proposal file ${file}:`, error);
+        }
+      }
+    }
+
+    console.log('Proposal not found:', proposalNumber);
+  } catch (error) {
+    console.error('Failed to delete proposal:', error);
+    throw error;
+  }
+});
+
+// New handler to open proposals folder
+ipcMain.handle('open-proposals-folder', async () => {
+  if (!proposalsDir) throw new Error('Proposals directory not initialized');
+
+  try {
+    await shell.openPath(proposalsDir);
+  } catch (error) {
+    console.error('Failed to open proposals folder:', error);
+    throw error;
+  }
 });
 
 // Reference data handlers

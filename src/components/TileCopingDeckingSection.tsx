@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { TileCopingDecking } from '../types/proposal';
 import './SectionStyles.css';
 
@@ -7,8 +8,16 @@ interface Props {
 }
 
 function TileCopingDeckingSection({ data, onChange }: Props) {
+  const [formData, setFormData] = useState<TileCopingDecking>(data);
+
+  useEffect(() => {
+    setFormData(data);
+  }, [data]);
+
   const handleChange = (field: keyof TileCopingDecking, value: any) => {
-    onChange({ ...data, [field]: value });
+    const updated = { ...formData, [field]: value };
+    setFormData(updated);
+    onChange(updated);
   };
 
   return (
@@ -21,7 +30,7 @@ function TileCopingDeckingSection({ data, onChange }: Props) {
           <input
             type="text"
             className="form-input"
-            value={data.tileType || ''}
+            value={formData.tileType || ''}
             onChange={(e) => handleChange('tileType', e.target.value)}
             placeholder="e.g., Glass mosaic, Ceramic"
           />
@@ -32,7 +41,7 @@ function TileCopingDeckingSection({ data, onChange }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.tileArea || 0}
+            value={formData.tileArea || 0}
             onChange={(e) => handleChange('tileArea', parseFloat(e.target.value))}
             min="0"
             step="1"
@@ -47,7 +56,7 @@ function TileCopingDeckingSection({ data, onChange }: Props) {
           <label className="form-label required">Coping Type</label>
           <select
             className="form-input"
-            value={data.copingType}
+            value={formData.copingType}
             onChange={(e) => handleChange('copingType', e.target.value)}
           >
             <option value="">Select coping type</option>
@@ -64,7 +73,7 @@ function TileCopingDeckingSection({ data, onChange }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.copingLength}
+            value={formData.copingLength}
             onChange={(e) => handleChange('copingLength', parseFloat(e.target.value))}
             min="0"
             step="1"
@@ -79,7 +88,7 @@ function TileCopingDeckingSection({ data, onChange }: Props) {
           <label className="form-label required">Decking Type</label>
           <select
             className="form-input"
-            value={data.deckingType}
+            value={formData.deckingType}
             onChange={(e) => handleChange('deckingType', e.target.value)}
           >
             <option value="">Select decking type</option>
@@ -97,7 +106,7 @@ function TileCopingDeckingSection({ data, onChange }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.deckingArea}
+            value={formData.deckingArea}
             onChange={(e) => handleChange('deckingArea', parseFloat(e.target.value))}
             min="0"
             step="1"
@@ -110,7 +119,7 @@ function TileCopingDeckingSection({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.cost}
+          value={formData.cost}
           onChange={(e) => handleChange('cost', parseFloat(e.target.value))}
           min="0"
           step="100"

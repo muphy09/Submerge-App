@@ -20,7 +20,14 @@
       "Bash(dir:*)",
       "Bash(npm run test:electron:*)",
       "Bash(npm run build:renderer:*)",
-      "Bash(./node_modules/.bin/electron:*)"
+      "Bash(./node_modules/.bin/electron:*)",
+      "Bash(npx electron .)",
+      "Bash(node:*)",
+      "Bash(node_moduleselectrondistelectron.exe --version)",
+      "Bash(npx electron:*)",
+      "Bash(cmd /c \"node_modules\\electron\\dist\\electron.exe test-electron.js\")",
+      "Bash(set NODE_ENV=development)",
+      "Bash(npm run dev:electron:*)"
     ],
     "deny": [],
     "ask": []

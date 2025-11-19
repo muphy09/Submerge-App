@@ -9,10 +9,15 @@ interface Props {
 
 function PoolSpecsSection({ data, onChange }: Props) {
   const [poolModels, setPoolModels] = useState<any[]>([]);
+  const [formData, setFormData] = useState<PoolSpecs>(data);
 
   useEffect(() => {
     loadPoolModels();
   }, []);
+
+  useEffect(() => {
+    setFormData(data);
+  }, [data]);
 
   const loadPoolModels = async () => {
     try {
@@ -24,7 +29,9 @@ function PoolSpecsSection({ data, onChange }: Props) {
   };
 
   const handleChange = (field: keyof PoolSpecs, value: any) => {
-    onChange({ ...data, [field]: value });
+    const updated = { ...formData, [field]: value };
+    setFormData(updated);
+    onChange(updated);
   };
 
   const handleModelSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -32,15 +39,17 @@ function PoolSpecsSection({ data, onChange }: Props) {
     const model = poolModels.find(m => m.id === modelId);
 
     if (model) {
-      onChange({
-        ...data,
+      const updated = {
+        ...formData,
         poolModel: model.model,
         poolType: model.type,
         length: model.length,
         width: model.width,
         depth: model.depth,
         basePrice: model.base_price,
-      });
+      };
+      setFormData(updated);
+      onChange(updated);
     }
   };
 
@@ -62,7 +71,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
         <label className="form-label required">Pool Type</label>
         <select
           className="form-input"
-          value={data.poolType}
+          value={formData.poolType}
           onChange={(e) => handleChange('poolType', e.target.value as any)}
         >
           <option value="Fiberglass">Fiberglass</option>
@@ -76,7 +85,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
         <input
           type="text"
           className="form-input"
-          value={data.poolModel || ''}
+          value={formData.poolModel || ''}
           onChange={(e) => handleChange('poolModel', e.target.value)}
           placeholder="e.g., Small Fiberglass Caesar"
         />
@@ -88,7 +97,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.length}
+            value={formData.length}
             onChange={(e) => handleChange('length', parseFloat(e.target.value))}
             min="0"
             step="0.5"
@@ -100,7 +109,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.width}
+            value={formData.width}
             onChange={(e) => handleChange('width', parseFloat(e.target.value))}
             min="0"
             step="0.5"
@@ -112,7 +121,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.depth}
+            value={formData.depth}
             onChange={(e) => handleChange('depth', parseFloat(e.target.value))}
             min="0"
             step="0.5"
@@ -125,7 +134,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
         <input
           type="text"
           className="form-input"
-          value={data.shape || ''}
+          value={formData.shape || ''}
           onChange={(e) => handleChange('shape', e.target.value)}
           placeholder="e.g., Rectangle, Kidney, Freeform"
         />
@@ -136,7 +145,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.basePrice}
+          value={formData.basePrice}
           onChange={(e) => handleChange('basePrice', parseFloat(e.target.value))}
           min="0"
           step="100"
@@ -144,7 +153,7 @@ function PoolSpecsSection({ data, onChange }: Props) {
       </div>
 
       <div className="info-box">
-        <strong>Pool Volume:</strong> {(data.length * data.width * data.depth * 7.48).toFixed(2)} gallons
+        <strong>Pool Volume:</strong> {(formData.length * formData.width * formData.depth * 7.48).toFixed(2)} gallons
       </div>
     </div>
   );
