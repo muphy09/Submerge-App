@@ -19,6 +19,25 @@ contextBridge.exposeInMainWorld('electron', {
   getWaterFeaturesCatalog: () => ipcRenderer.invoke('get-water-features-catalog'),
   getFinishRates: () => ipcRenderer.invoke('get-finish-rates'),
   getDrainageRates: () => ipcRenderer.invoke('get-drainage-rates'),
+
+  // Update operations
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateAvailable: (callback: (info: any) => void) => {
+    ipcRenderer.on('update-available', (_, info) => callback(info));
+  },
+  onUpdateNotAvailable: (callback: (info: any) => void) => {
+    ipcRenderer.on('update-not-available', (_, info) => callback(info));
+  },
+  onDownloadProgress: (callback: (progress: any) => void) => {
+    ipcRenderer.on('download-progress', (_, progress) => callback(progress));
+  },
+  onUpdateDownloaded: (callback: (info: any) => void) => {
+    ipcRenderer.on('update-downloaded', (_, info) => callback(info));
+  },
+  onUpdateError: (callback: (error: string) => void) => {
+    ipcRenderer.on('update-error', (_, error) => callback(error));
+  },
 });
 
 declare global {
@@ -38,6 +57,13 @@ declare global {
       getWaterFeaturesCatalog: () => Promise<any[]>;
       getFinishRates: () => Promise<any[]>;
       getDrainageRates: () => Promise<any[]>;
+      checkForUpdates: () => Promise<any>;
+      installUpdate: () => Promise<void>;
+      onUpdateAvailable: (callback: (info: any) => void) => void;
+      onUpdateNotAvailable: (callback: (info: any) => void) => void;
+      onDownloadProgress: (callback: (progress: any) => void) => void;
+      onUpdateDownloaded: (callback: (info: any) => void) => void;
+      onUpdateError: (callback: (error: string) => void) => void;
     };
   }
 }

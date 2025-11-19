@@ -1,8 +1,13 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import { dbService } from './src/services/database';
 
 let mainWindow: BrowserWindow | null = null;
+
+// Configure auto-updater
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -28,11 +33,58 @@ function createWindow() {
   });
 }
 
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for update...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info);
+  if (mainWindow) {
+    mainWindow.webContents.send('update-available', info);
+  }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available:', info);
+  if (mainWindow) {
+    mainWindow.webContents.send('update-not-available', info);
+  }
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  console.log('Download progress:', progressObj);
+  if (mainWindow) {
+    mainWindow.webContents.send('download-progress', progressObj);
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info);
+  if (mainWindow) {
+    mainWindow.webContents.send('update-downloaded', info);
+  }
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('Update error:', err);
+  if (mainWindow) {
+    mainWindow.webContents.send('update-error', err.message);
+  }
+});
+
 app.whenReady().then(() => {
   // Initialize database
   dbService.initialize();
 
   createWindow();
+
+  // Check for updates on startup (only in production)
+  if (process.env.NODE_ENV !== 'development') {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates();
+    }, 3000); // Wait 3 seconds after app starts
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -108,4 +160,22 @@ ipcMain.handle('get-finish-rates', async () => {
 
 ipcMain.handle('get-drainage-rates', async () => {
   return dbService.getDrainageRates();
+});
+
+// Update handlers
+ipcMain.handle('check-for-updates', async () => {
+  if (process.env.NODE_ENV === 'development') {
+    return { available: false, message: 'Updates disabled in development' };
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { available: true, updateInfo: result?.updateInfo };
+  } catch (error) {
+    console.error('Error checking for updates:', error);
+    return { available: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+});
+
+ipcMain.handle('install-update', async () => {
+  autoUpdater.quitAndInstall(false, true);
 });
