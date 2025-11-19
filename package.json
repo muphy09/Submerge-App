@@ -53,8 +53,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "YOUR_GITHUB_USERNAME",
-        "repo": "PPAS"
+        "owner": "muphy09",
+        "repo": "Premier-Pools"
       }
     ],
     "directories": {
@@ -101,6 +101,19 @@
         }
       ],
       "icon": "icon.png"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "icon.png",
+      "category": "public.app-category.productivity"
     }
   }
 }
