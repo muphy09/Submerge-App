@@ -5,32 +5,12 @@ on:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
+permissions:
+  contents: write
+
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-
-  build:
-    needs: create-release
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
+  release-windows:
+    runs-on: windows-latest
 
     steps:
       - name: Check out Git repository
@@ -48,13 +28,29 @@ jobs:
         run: npm run build:renderer
 
       - name: Build and release (Windows)
-        if: matrix.os == 'windows-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish always
+        run: npx electron-builder --win nsis --publish onTagOrDraft
+
+  release-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build renderer
+        run: npm run build:renderer
 
       - name: Build and release (Mac)
-        if: matrix.os == 'macos-latest'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --mac dmg --publish always
+        run: npx electron-builder --mac dmg --publish onTagOrDraft
