@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal';
+import { calculateFinancials } from '../utils/financials';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
@@ -74,7 +75,7 @@ function HomePage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'draft': return '#cc2321ff';
+      case 'draft': return '#ddc720ff';
       case 'submitted': return '#04bc17ff';
       case 'approved': return '#10b981';
       case 'rejected': return '#ef4444';
@@ -138,7 +139,7 @@ function HomePage() {
                   </div>
                   <div className="proposal-footer">
                     <p className="proposal-total">
-                      ${proposal.totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ${calculateFinancials(proposal).totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </p>
                     <button
                       className="btn-delete"

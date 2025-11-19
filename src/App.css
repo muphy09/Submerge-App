@@ -1,6 +1,6 @@
 .app {
   min-height: 100vh;
-  background: linear-gradient(135deg, #3b82f6 0%, #ffffff 100%);
+  background: linear-gradient(165deg, #2267d6da 0%, #ffffff 100%);
   position: relative;
 }
 
@@ -23,7 +23,7 @@
   height: 40px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.9);
-  border: 2px solid rgba(102, 126, 234, 0.3);
+  border: 1px solid rgba(102, 126, 234, 0.3);
   font-size: 20px;
   cursor: pointer;
   display: flex;

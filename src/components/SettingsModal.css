@@ -156,6 +156,127 @@
   color: #065f46;
 }
 
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: linear-gradient(120deg, #f8fafc 0%, #eef2ff 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.section-row h4 {
+  margin: 0;
+  color: #111827;
+}
+
+.section-row .settings-description {
+  margin: 4px 0 0;
+}
+
+.view-changelog-button {
+  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.view-changelog-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+.view-changelog-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.view-changelog-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.changelog-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(17, 24, 39, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10002;
+  backdrop-filter: blur(2px);
+}
+
+.changelog-modal {
+  background: white;
+  border-radius: 12px;
+  width: 720px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+
+.changelog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.changelog-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #111827;
+}
+
+.changelog-body {
+  padding: 16px 20px 20px;
+  overflow: hidden;
+}
+
+.changelog-content {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: #111827;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.changelog-status {
+  color: #4b5563;
+  margin: 0;
+}
+
+.changelog-error {
+  background: #fef2f2;
+  border: 1px solid #fecdd3;
+  color: #b91c1c;
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin: 0;
+}
+
 .about-text {
   color: #6b7280;
   font-size: 14px;

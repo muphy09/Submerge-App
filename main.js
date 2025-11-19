@@ -453,6 +453,23 @@ ipcMain.handle('open-proposals-folder', async () => {
   }
 });
 
+// Changelog handler
+ipcMain.handle('read-changelog', () => {
+  const possiblePaths = [
+    path.join(appPath, 'CHANGELOG.md'),
+    path.join(__dirname, 'CHANGELOG.md'),
+    path.join(process.cwd(), 'CHANGELOG.md'),
+  ];
+
+  for (const changelogPath of possiblePaths) {
+    if (fs.existsSync(changelogPath)) {
+      return fs.readFileSync(changelogPath, 'utf-8');
+    }
+  }
+
+  throw new Error('CHANGELOG.md not found');
+});
+
 // Reference data handlers
 ipcMain.handle('get-pool-models', async () => {
   if (!db) throw new Error('Database not initialized');

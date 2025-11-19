@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
+import fs from 'fs';
 import { dbService } from './src/services/database';
 
 let mainWindow: BrowserWindow | null = null;
@@ -160,6 +161,21 @@ ipcMain.handle('get-finish-rates', async () => {
 
 ipcMain.handle('get-drainage-rates', async () => {
   return dbService.getDrainageRates();
+});
+
+ipcMain.handle('read-changelog', async () => {
+  const possiblePaths = [
+    path.join(app.getAppPath(), 'CHANGELOG.md'),
+    path.join(__dirname, 'CHANGELOG.md'),
+  ];
+
+  for (const changelogPath of possiblePaths) {
+    if (fs.existsSync(changelogPath)) {
+      return fs.readFileSync(changelogPath, 'utf-8');
+    }
+  }
+
+  throw new Error('CHANGELOG.md not found');
 });
 
 // Update handlers

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electron', {
   getAllProposals: () => ipcRenderer.invoke('get-all-proposals'),
   deleteProposal: (proposalNumber) => ipcRenderer.invoke('delete-proposal', proposalNumber),
   openProposalsFolder: () => ipcRenderer.invoke('open-proposals-folder'),
+  readChangelog: () => ipcRenderer.invoke('read-changelog'),
 
   // Listen for opening proposals from file system
   onOpenProposal: (callback) => {

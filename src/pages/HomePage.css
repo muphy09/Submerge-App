@@ -51,7 +51,7 @@
 }
 
 .btn-primary {
-  background: white;
+  background: rgb(243, 243, 243);
   color: #041e42;
   border: none;
   padding: 16px 32px;
@@ -172,7 +172,7 @@
 }
 
 .btn-delete {
-  background: #ef4444;
+  background: #bf0e0e;
   color: white;
   border: none;
   padding: 8px 16px;

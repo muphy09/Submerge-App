@@ -12,6 +12,7 @@ declare global {
       getAllProposals: () => Promise<any[]>;
       deleteProposal: (proposalNumber: string) => Promise<void>;
       openProposalsFolder: () => Promise<void>;
+      readChangelog: () => Promise<string>;
       onOpenProposal?: (callback: (proposal: any) => void) => void;
 
       // Reference data

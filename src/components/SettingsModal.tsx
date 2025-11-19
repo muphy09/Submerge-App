@@ -8,6 +8,10 @@ interface SettingsModalProps {
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [changelogContent, setChangelogContent] = useState('');
+  const [changelogError, setChangelogError] = useState('');
+  const [changelogLoading, setChangelogLoading] = useState(false);
 
   const handleCheckForUpdates = async () => {
     setChecking(true);
@@ -40,6 +44,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     }
   };
 
+  const openChangelog = async () => {
+    setShowChangelog(true);
+    setChangelogLoading(true);
+    setChangelogError('');
+
+    if (!window.electron?.readChangelog) {
+      setChangelogError('Changelog is unavailable in this environment.');
+      setChangelogLoading(false);
+      return;
+    }
+
+    try {
+      const content = await window.electron.readChangelog();
+      setChangelogContent(content);
+    } catch (error) {
+      console.error('Failed to load changelog:', error);
+      setChangelogError('Unable to load the changelog right now.');
+      setChangelogContent('');
+    } finally {
+      setChangelogLoading(false);
+    }
+  };
+
+  const closeChangelog = () => {
+    setShowChangelog(false);
+  };
+
+  const handleChangelogBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      closeChangelog();
+    }
+  };
+
   return (
     <div className="settings-modal-backdrop" onClick={handleBackdropClick}>
       <div className="settings-modal">
@@ -66,16 +103,48 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 {message}
               </div>
             )}
+            <div className="section-row">
+              <div>
+                <h4>Changelog</h4>
+                <p className="settings-description">See what changed in the latest builds.</p>
+              </div>
+              <button
+                className="view-changelog-button"
+                onClick={openChangelog}
+                disabled={changelogLoading}
+              >
+                {changelogLoading ? 'Loading...' : 'View Changelog'}
+              </button>
+            </div>
           </div>
 
           <div className="settings-section">
             <h3>About</h3>
             <p className="about-text">PPAS Proposal Builder</p>
             <p className="about-text">Version {window.electron?.appVersion || '1.0.5'}</p>
-            <p className="about-text">© {new Date().getFullYear()} Premier Pools and Spas</p>
+            <p className="about-text">© {new Date().getFullYear()} Designed by Brian Kummer for Premier Pools and Spas</p>
           </div>
         </div>
       </div>
+      {showChangelog && (
+        <div className="changelog-modal-backdrop" onClick={handleChangelogBackdropClick}>
+          <div className="changelog-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="changelog-header">
+              <h3>Changelog</h3>
+              <button className="close-button" onClick={closeChangelog}>X</button>
+            </div>
+            <div className="changelog-body">
+              {changelogLoading && <p className="changelog-status">Loading changelog...</p>}
+              {!changelogLoading && changelogError && (
+                <p className="changelog-error">{changelogError}</p>
+              )}
+              {!changelogLoading && !changelogError && (
+                <pre className="changelog-content">{changelogContent}</pre>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

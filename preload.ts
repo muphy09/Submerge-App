@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electron', {
   getProposal: (proposalNumber: string) => ipcRenderer.invoke('get-proposal', proposalNumber),
   getAllProposals: () => ipcRenderer.invoke('get-all-proposals'),
   deleteProposal: (proposalNumber: string) => ipcRenderer.invoke('delete-proposal', proposalNumber),
+  readChangelog: () => ipcRenderer.invoke('read-changelog'),
 
   // Reference data
   getPoolModels: () => ipcRenderer.invoke('get-pool-models'),
@@ -47,6 +48,7 @@ declare global {
       getProposal: (proposalNumber: string) => Promise<Proposal | null>;
       getAllProposals: () => Promise<Proposal[]>;
       deleteProposal: (proposalNumber: string) => Promise<void>;
+      readChangelog: () => Promise<string>;
       getPoolModels: () => Promise<any[]>;
       getExcavationRates: () => Promise<any[]>;
       getPlumbingRates: () => Promise<any[]>;

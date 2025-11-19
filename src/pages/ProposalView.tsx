@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Proposal } from '../types/proposal';
+import { calculateFinancials } from '../utils/financials';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useToast } from '../components/Toast';
@@ -88,6 +89,8 @@ function ProposalView() {
       </div>
     );
   }
+
+  const { subtotal, totalCost } = calculateFinancials(proposal);
 
   return (
     <div className="proposal-view">
@@ -270,15 +273,11 @@ function ProposalView() {
               </tr>
               <tr className="subtotal-row">
                 <td><strong>Subtotal</strong></td>
-                <td><strong>${proposal.subtotal.toLocaleString()}</strong></td>
-              </tr>
-              <tr>
-                <td>Tax ({(proposal.taxRate * 100).toFixed(1)}%)</td>
-                <td>${proposal.taxAmount.toLocaleString()}</td>
+                <td><strong>${subtotal.toLocaleString()}</strong></td>
               </tr>
               <tr className="total-row">
                 <td><strong>TOTAL</strong></td>
-                <td><strong>${proposal.totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
+                <td><strong>${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
               </tr>
             </tbody>
           </table>

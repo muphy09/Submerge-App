@@ -1,7 +1,15 @@
 ---
 
+## [1.0.10]
+### Changed
+- Various colors across the app to better match the Logo colors
+- Removed Tax from being included in the proposal sheet
+- Added a Changelog button in settings
+
+---
+
 ## [1.0.9]
-### Fixed
-- When creating/editing a proposal after previously interacting with one, the text box would appear to be broken
+### Changes
+- Fixed when creating/editing a proposal after previously interacting with one, the text box would appear to be broken
 
 ---

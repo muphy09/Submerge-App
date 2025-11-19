@@ -30,7 +30,7 @@
   text-align: center;
   margin-bottom: 40px;
   padding-bottom: 30px;
-  border-bottom: 3px solid #3b82f6;
+  border-bottom: 3px solid #0a254f;
 }
 
 .doc-header-title {
@@ -127,7 +127,7 @@
 }
 
 .total-row {
-  background: #3b82f6;
+  background: #2a6edb92;
   color: white;
   font-size: 1.3rem;
 }

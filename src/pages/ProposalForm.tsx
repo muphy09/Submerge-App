@@ -12,6 +12,7 @@ import WaterFeaturesSection from '../components/WaterFeaturesSection';
 import CustomFeaturesSection from '../components/CustomFeaturesSection';
 import MasonrySection from '../components/MasonrySection';
 import InteriorFinishSection from '../components/InteriorFinishSection';
+import { calculateFinancials } from '../utils/financials';
 import './ProposalForm.css';
 import ppasLogo from '../../PPAS Logo.png';
 import { useToast } from '../components/Toast';
@@ -57,7 +58,7 @@ function ProposalForm() {
     masonry: { fireplaceIncluded: false, outdoorKitchen: false, cost: 0 },
     interiorFinish: { finishType: '', color: '', area: 0, cost: 0 },
     subtotal: 0,
-    taxRate: 0.08,
+    taxRate: 0,
     taxAmount: 0,
     totalCost: 0,
   });
@@ -106,21 +107,7 @@ function ProposalForm() {
   };
 
   const calculateTotals = (): Proposal => {
-    const subtotal =
-      (proposal.poolSpecs?.basePrice || 0) +
-      (proposal.excavation?.cost || 0) +
-      (proposal.plumbing?.cost || 0) +
-      (proposal.tileCopingDecking?.cost || 0) +
-      (proposal.drainage?.cost || 0) +
-      (proposal.equipment?.totalCost || 0) +
-      (proposal.waterFeatures?.totalCost || 0) +
-      (proposal.customFeatures?.totalCost || 0) +
-      (proposal.masonry?.cost || 0) +
-      (proposal.interiorFinish?.cost || 0);
-
-    const taxRate = proposal.taxRate || 0.08;
-    const taxAmount = subtotal * taxRate;
-    const totalCost = subtotal + taxAmount;
+    const { subtotal, taxRate, taxAmount, totalCost } = calculateFinancials(proposal);
 
     return {
       ...proposal,
