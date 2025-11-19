@@ -1,11 +1,16 @@
 ---
 
+## [1.1.1]
+### Changed
+- Fixed MacOS DMG download
+
+---
+
 ## [1.1.0]
 ### Changed
 - Various colors across the app to better match the Logo colors
 - Removed Tax from being included in the proposal sheet
 - Added a Changelog button in settings
-- Fixed MacOS DMG
 
 ---
 
