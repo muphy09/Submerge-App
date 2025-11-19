@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { CustomerInfo } from '../types/proposal';
 import './SectionStyles.css';
 
@@ -8,15 +8,14 @@ interface Props {
 }
 
 function CustomerInfoSection({ data, onChange }: Props) {
-  const [formData, setFormData] = useState<CustomerInfo>(data);
-
   useEffect(() => {
-    setFormData(data);
-  }, [data]);
+    console.log('CustomerInfoSection mounted', { data });
+    return () => console.log('CustomerInfoSection unmounted');
+  }, []);
 
   const handleChange = (field: keyof CustomerInfo, value: string) => {
-    const updated = { ...formData, [field]: value };
-    setFormData(updated);
+    console.log('handleChange called', { field, value });
+    const updated = { ...data, [field]: value };
     onChange(updated);
   };
 
@@ -27,8 +26,10 @@ function CustomerInfoSection({ data, onChange }: Props) {
         <input
           type="text"
           className="form-input"
-          value={formData.customerName}
+          value={data.customerName}
           onChange={(e) => handleChange('customerName', e.target.value)}
+          onFocus={() => console.log('Input focused: customerName')}
+          onKeyDown={(e) => console.log('Key down:', e.key)}
           placeholder="Enter customer name"
         />
       </div>
@@ -38,7 +39,7 @@ function CustomerInfoSection({ data, onChange }: Props) {
         <input
           type="text"
           className="form-input"
-          value={formData.city}
+          value={data.city}
           onChange={(e) => handleChange('city', e.target.value)}
           placeholder="Enter city"
         />
@@ -49,7 +50,7 @@ function CustomerInfoSection({ data, onChange }: Props) {
         <input
           type="text"
           className="form-input"
-          value={formData.address || ''}
+          value={data.address || ''}
           onChange={(e) => handleChange('address', e.target.value)}
           placeholder="Enter full address (optional)"
         />
@@ -61,7 +62,7 @@ function CustomerInfoSection({ data, onChange }: Props) {
           <input
             type="tel"
             className="form-input"
-            value={formData.phone || ''}
+            value={data.phone || ''}
             onChange={(e) => handleChange('phone', e.target.value)}
             placeholder="(123) 456-7890"
           />
@@ -72,7 +73,7 @@ function CustomerInfoSection({ data, onChange }: Props) {
           <input
             type="email"
             className="form-input"
-            value={formData.email || ''}
+            value={data.email || ''}
             onChange={(e) => handleChange('email', e.target.value)}
             placeholder="customer@email.com"
           />

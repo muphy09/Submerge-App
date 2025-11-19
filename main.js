@@ -179,6 +179,8 @@ app.on('before-quit', () => {
 ipcMain.handle('save-proposal', async (_, proposal) => {
   if (!proposalsDir) throw new Error('Proposals directory not initialized');
 
+  console.log('save-proposal called with:', JSON.stringify(proposal, null, 2));
+
   try {
     // Check if this proposal already exists (editing existing proposal)
     const files = fs.readdirSync(proposalsDir);
@@ -193,6 +195,7 @@ ipcMain.handle('save-proposal', async (_, proposal) => {
           const existingProposal = JSON.parse(data);
           if (existingProposal.proposalNumber === proposal.proposalNumber) {
             existingFilePath = filePath;
+            console.log('Found existing file:', filePath);
             break;
           }
         } catch (error) {
@@ -217,12 +220,13 @@ ipcMain.handle('save-proposal', async (_, proposal) => {
         fileName = `${proposal.proposalNumber}.ppas`;
       }
       filePath = path.join(proposalsDir, fileName);
+      console.log('Creating new file:', filePath);
     }
 
     // Write the proposal to a JSON file
     fs.writeFileSync(filePath, JSON.stringify(proposal, null, 2), 'utf-8');
 
-    console.log('Proposal saved:', filePath);
+    console.log('Proposal saved successfully:', filePath);
     return filePath;
   } catch (error) {
     console.error('Failed to save proposal:', error);
@@ -233,9 +237,12 @@ ipcMain.handle('save-proposal', async (_, proposal) => {
 ipcMain.handle('get-proposal', async (_, proposalNumber) => {
   if (!proposalsDir) throw new Error('Proposals directory not initialized');
 
+  console.log('get-proposal called with:', proposalNumber);
+
   try {
     // Find the file by proposal number
     const files = fs.readdirSync(proposalsDir);
+    console.log('Files in proposals dir:', files);
 
     for (const file of files) {
       if (file.endsWith('.ppas')) {
@@ -244,7 +251,10 @@ ipcMain.handle('get-proposal', async (_, proposalNumber) => {
           const data = fs.readFileSync(filePath, 'utf-8');
           const proposal = JSON.parse(data);
 
+          console.log('Checking file:', file, 'proposalNumber:', proposal.proposalNumber);
+
           if (proposal.proposalNumber === proposalNumber) {
+            console.log('FOUND proposal, returning:', JSON.stringify(proposal, null, 2));
             return proposal;
           }
         } catch (error) {
@@ -253,6 +263,7 @@ ipcMain.handle('get-proposal', async (_, proposalNumber) => {
       }
     }
 
+    console.log('Proposal not found:', proposalNumber);
     return null;
   } catch (error) {
     console.error('Failed to load proposal:', error);

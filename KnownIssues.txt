@@ -1,1 +1,1 @@
-- Editing a draft, then saving again as a draft and going back to edit (while in the same instance of the app) makes the text box fields not typeable
+- (Resolved) Editing or creating multiple proposals back-to-back could make text inputs appear frozen because a stale load request overwrote newly typed values. Each proposal load now uses a request token so outdated responses are ignored before the form becomes interactive again.

@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import HomePage from './pages/HomePage';
 import ProposalForm from './pages/ProposalForm';
@@ -9,6 +9,7 @@ const APP_VERSION = '1.0.0';
 
 function AppContent() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     // Listen for proposals opened from file system
@@ -24,8 +25,8 @@ function AppContent() {
     <div className="app">
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/proposal/new" element={<ProposalForm />} />
-        <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm />} />
+        <Route path="/proposal/new" element={<ProposalForm key="new" />} />
+        <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm key={location.pathname} />} />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
       </Routes>
       <div className="app-version">v{APP_VERSION}</div>

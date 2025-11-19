@@ -27,7 +27,8 @@
       "Bash(npx electron:*)",
       "Bash(cmd /c \"node_modules\\electron\\dist\\electron.exe test-electron.js\")",
       "Bash(set NODE_ENV=development)",
-      "Bash(npm run dev:electron:*)"
+      "Bash(npm run dev:electron:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []
