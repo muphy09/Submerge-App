@@ -33,7 +33,7 @@ jobs:
         run: npx electron-builder --win nsis --publish always
 
   release-mac:
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - name: Check out Git repository
@@ -46,6 +46,10 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Install Rosetta (for x64 slice in universal build)
+        run: |
+          /usr/sbin/softwareupdate --install-rosetta --agree-to-license || true
 
       - name: Build renderer
         run: npm run build:renderer
@@ -78,4 +82,4 @@ jobs:
             echo "No Apple notarization credentials provided; skipping notarization."
           fi
 
-          npx electron-builder --mac dmg --publish always
+          npx electron-builder --mac dmg --arch universal --publish always

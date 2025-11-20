@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
 const Database = require('better-sqlite3');
 const fs = require('fs');
@@ -183,6 +183,9 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
+    // Hide the default menu bar in production builds
+    Menu.setApplicationMenu(null);
+
     // Use URL-based loading for proper asset resolution in ASAR
     const indexPath = `file://${path.join(appPath, 'dist/renderer/index.html').replace(/\\/g, '/')}`;
     console.log('Loading production app from:', indexPath);
