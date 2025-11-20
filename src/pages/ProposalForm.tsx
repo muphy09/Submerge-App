@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Proposal } from '../types/proposal-new';
+import { Proposal, WaterFeatures } from '../types/proposal-new';
 import { getDefaultProposal } from '../utils/proposalDefaults';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { validateProposal } from '../utils/validation';
@@ -20,6 +20,20 @@ import './ProposalForm.css';
 import ppasLogo from '../../PPAS Logo.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+
+const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
+  if (waterFeatures && Array.isArray((waterFeatures as any).selections)) {
+    return {
+      selections: (waterFeatures as any).selections,
+      totalCost: (waterFeatures as any).totalCost ?? 0,
+    };
+  }
+
+  return {
+    selections: [],
+    totalCost: 0,
+  };
+};
 
 const sections = [
   'Customer Information',
@@ -69,6 +83,9 @@ function ProposalForm() {
       if (data) {
         // Deep clone to ensure fresh object references
         const freshData = JSON.parse(JSON.stringify(data));
+
+        // Normalize water features to the new catalog-driven shape
+        freshData.waterFeatures = normalizeWaterFeatures(freshData.waterFeatures);
 
         if (loadRequestRef.current === requestId) {
           setProposal(freshData);

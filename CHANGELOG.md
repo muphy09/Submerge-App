@@ -3,8 +3,11 @@
 ## [1.2.0]
 ### Changed
 - Integration of a Formula Engine, Math Engine & Pricing Engine
-- Began integration of data from the Pricing Excel Spreadsheet (rollout ongoing)
-    - 
+- Began integration of data from the Regular Pricing Excel Spreadsheet (rollout ongoing)
+    - Data in this release is rough - expect values to be inaccurate
+- Numerous backend changes to line up better with the Regular Pricing worksheet options
+- Introduced 'Pricing Data' button to display how each price is configured (editable)
+    - *Will be removed in a later release to be implemented into a database for an Admin*
 
 
 ---

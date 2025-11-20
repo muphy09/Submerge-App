@@ -31,6 +31,18 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
     { value: 'quartz-scapes', label: 'Quartz Scapes' },
     { value: 'hydrazzo', label: 'Hydrazzo' },
     { value: 'tile', label: 'Tile (Full)' },
+    { value: 'ivory-quartz', label: 'Ivory Quartz' },
+    { value: 'pebble-tec-l1', label: 'Pebble Tec - Level 1' },
+    { value: 'pebble-tec-l2', label: 'Pebble Tec - Level 2' },
+    { value: 'pebble-tec-l3', label: 'Pebble Tec - Level 3' },
+    { value: 'pebble-sheen-l1', label: 'Pebble Sheen - Level 1' },
+    { value: 'pebble-sheen-l2', label: 'Pebble Sheen - Level 2' },
+    { value: 'pebble-sheen-l3', label: 'Pebble Sheen - Level 3' },
+    { value: 'pebble-fina-l1', label: 'Pebble Fina - Level 1' },
+    { value: 'pebble-fina-l2', label: 'Pebble Fina - Level 2' },
+    { value: 'pebble-brilliance', label: 'Pebble Brilliance' },
+    { value: 'pebble-breeze', label: 'Pebble Breeze' },
+    { value: 'pebble-essence', label: 'Pebble Essence' },
   ];
 
   return (

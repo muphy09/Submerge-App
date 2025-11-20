@@ -2,7 +2,8 @@ import pricingData from './pricingData';
 
 type PricingData = typeof pricingData;
 
-const STORAGE_KEY = 'pricingDataOverrides';
+const STORAGE_VERSION = '2025-02-water-features-catalog';
+const STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
 
 let initialized = false;
 const defaultSnapshot: PricingData = deepClone(pricingData);
@@ -152,5 +153,7 @@ export function resetPricingData() {
 
 export function subscribeToPricingData(listener: (data: PricingData) => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

@@ -87,6 +87,7 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
       'Drainage',
       'Equipment Ordered',
       'Equipment Set',
+      'Water Features',
       'Cleanup',
       'Interior Finish',
       'Water Truck',
@@ -133,6 +134,7 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
         {renderLineItems(costBreakdown.drainage, 'Drainage')}
         {renderLineItems(costBreakdown.equipmentOrdered, 'Equipment Ordered')}
         {renderLineItems(costBreakdown.equipmentSet, 'Equipment Set')}
+        {renderLineItems(costBreakdown.waterFeatures, 'Water Features')}
         {renderLineItems(costBreakdown.cleanup, 'Cleanup')}
         {renderLineItems(costBreakdown.interiorFinish, 'Interior Finish')}
         {renderLineItems(costBreakdown.waterTruck, 'Water Truck')}
@@ -200,6 +202,10 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
           <div className="summary-row">
             <span>Equipment Set:</span>
             <span>${costBreakdown.totals.equipmentSet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="summary-row">
+            <span>Water Features:</span>
+            <span>${costBreakdown.totals.waterFeatures.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="summary-row">
             <span>Cleanup:</span>

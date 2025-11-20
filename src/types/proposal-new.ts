@@ -19,6 +19,7 @@ export type PoolType = 'gunite' | 'fiberglass';
 export type FiberglassSize = 'small' | 'medium' | 'large' | 'crystite';
 export type SpaType = 'none' | 'fiberglass-small' | 'fiberglass-medium' | 'fiberglass-large' | 'crystite' | 'gunite';
 export type SpaShape = 'round' | 'square';
+export type FiberglassModelSize = 'small' | 'medium' | 'large';
 
 export interface PoolSpecs {
   // Pool Type
@@ -26,6 +27,11 @@ export interface PoolSpecs {
 
   // Fiberglass specific
   fiberglassSize?: FiberglassSize;
+  fiberglassModelName?: string;
+  fiberglassModelPrice?: number;
+  fiberglassPerimeter?: number;
+  fiberglassSpaModelName?: string;
+  fiberglassSpaPrice?: number;
 
   // Gunite pool dimensions
   perimeter: number; // LNFT
@@ -270,38 +276,13 @@ export interface Equipment {
 // WATER FEATURES
 // ============================================================================
 
-export interface DeckJet {
+export interface WaterFeatureSelection {
+  featureId: string;
   quantity: number;
-  run: number; // LNFT
-}
-
-export interface Bubbler {
-  quantity: number;
-  run: number; // LNFT
-}
-
-export interface WokPot {
-  quantity: number;
-  type: '18-inch' | '24-inch';
-  run: number; // LNFT
 }
 
 export interface WaterFeatures {
-  // Deck jets (up to 6)
-  deckJets: DeckJet[];
-
-  // Bubblers (up to 3)
-  bubblers: Bubbler[];
-
-  // Wok pots (up to 2)
-  wokPots: WokPot[];
-
-  // Other features
-  hasInfinityEdge: boolean;
-  infinityEdgeLength: number; // LNFT
-
-  hasSpillway: boolean;
-  spillwayLength: number; // LNFT
+  selections: WaterFeatureSelection[];
 
   // Calculated
   totalCost: number;
@@ -355,7 +336,19 @@ export type InteriorFinishType =
   | 'beadcrete'
   | 'quartz-scapes'
   | 'hydrazzo'
-  | 'tile';
+  | 'tile'
+  | 'ivory-quartz'
+  | 'pebble-tec-l1'
+  | 'pebble-tec-l2'
+  | 'pebble-tec-l3'
+  | 'pebble-sheen-l1'
+  | 'pebble-sheen-l2'
+  | 'pebble-sheen-l3'
+  | 'pebble-fina-l1'
+  | 'pebble-fina-l2'
+  | 'pebble-brilliance'
+  | 'pebble-breeze'
+  | 'pebble-essence';
 
 export interface InteriorFinish {
   finishType: InteriorFinishType;
@@ -398,6 +391,7 @@ export interface CostBreakdown {
   drainage: CostLineItem[];
   equipmentOrdered: CostLineItem[];
   equipmentSet: CostLineItem[];
+  waterFeatures: CostLineItem[];
   cleanup: CostLineItem[];
   interiorFinish: CostLineItem[];
   waterTruck: CostLineItem[];
@@ -424,6 +418,7 @@ export interface CostBreakdown {
     drainage: number;
     equipmentOrdered: number;
     equipmentSet: number;
+    waterFeatures: number;
     cleanup: number;
     interiorFinish: number;
     waterTruck: number;

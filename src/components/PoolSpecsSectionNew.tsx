@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { PoolSpecs } from '../types/proposal-new';
 import { CalculationModules } from '../services/pricingEngineComplete';
+import pricingData from '../services/pricingData';
 import './SectionStyles.css';
 
 interface Props {
@@ -73,6 +74,47 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
             <option value="large">Large</option>
             <option value="crystite">Crystite</option>
           </select>
+        </div>
+      )}
+
+      {/* Fiberglass Model Selection */}
+      {isFiberglass && (
+        <div className="form-group">
+          <label className="form-label">Fiberglass Model</label>
+          <select
+            className="form-input"
+            value={data.fiberglassModelName || ''}
+            onChange={(e) => {
+              const model = pricingData.fiberglass.models.find(m => m.name === e.target.value);
+              if (model) {
+                onChange({
+                  ...data,
+                  fiberglassModelName: model.name,
+                  fiberglassModelPrice: model.price,
+                  fiberglassPerimeter: model.perimeter,
+                  fiberglassSize: model.size as any,
+                  perimeter: model.perimeter || data.perimeter,
+                });
+              } else {
+                onChange({
+                  ...data,
+                  fiberglassModelName: undefined,
+                  fiberglassModelPrice: undefined,
+                  fiberglassPerimeter: undefined,
+                });
+              }
+            }}
+          >
+            <option value="">Select model</option>
+            {pricingData.fiberglass.models
+              .filter(m => !data.fiberglassSize || m.size === data.fiberglassSize)
+              .map(model => (
+                <option key={model.name} value={model.name}>
+                  {model.name} ({model.size}) - ${model.price.toLocaleString()}
+                </option>
+              ))}
+          </select>
+          <small className="form-help">Selecting a model will also set the perimeter from the spreadsheet.</small>
         </div>
       )}
 
@@ -215,6 +257,31 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
           <option value="gunite">Gunite (Custom)</option>
         </select>
       </div>
+
+      {hasSpa && data.poolType === 'fiberglass' && (
+        <div className="form-group">
+          <label className="form-label">Fiberglass Spa Model</label>
+          <select
+            className="form-input"
+            value={data.fiberglassSpaModelName || ''}
+            onChange={(e) => {
+              const spa = pricingData.fiberglass.spas.find(s => s.name === e.target.value);
+              onChange({
+                ...data,
+                fiberglassSpaModelName: spa?.name,
+                fiberglassSpaPrice: spa?.price,
+              });
+            }}
+          >
+            <option value="">Select spa model</option>
+            {pricingData.fiberglass.spas.map(spa => (
+              <option key={spa.name} value={spa.name}>
+                {spa.name} - ${spa.price.toLocaleString()}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {hasSpa && data.spaType === 'gunite' && (
         <>

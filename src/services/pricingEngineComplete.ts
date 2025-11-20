@@ -2,22 +2,7 @@
 // COMPLETE PRICING ENGINE - Full Excel Formula Implementation
 // ============================================================================
 
-import {
-  Proposal,
-  PoolSpecs,
-  Excavation,
-  Plumbing,
-  Electrical,
-  TileCopingDecking,
-  Drainage,
-  Equipment,
-  WaterFeatures,
-  InteriorFinish,
-  Masonry,
-  CostBreakdown,
-  CostLineItem,
-  CustomFeatures,
-} from '../types/proposal-new';
+import { PoolSpecs, Excavation, TileCopingDecking, Drainage, Equipment, WaterFeatures, InteriorFinish, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
 
 // ============================================================================
@@ -40,7 +25,24 @@ export class PoolCalculations {
     const avgDepth = (poolSpecs.shallowDepth + poolSpecs.endDepth) / 2;
     const baseGallons = poolSpecs.surfaceArea * avgDepth * 7.6;
     const tanningShelfDeduction = poolSpecs.hasTanningShelf ? 850 : 0;
-    const gallons = Math.ceil(baseGallons / 10) * 10 - tanningShelfDeduction;
+
+    let spaGallons = 0;
+    if (this.hasSpa(poolSpecs)) {
+      if (poolSpecs.spaType === 'gunite') {
+        const spaAvgDepth = 3; // Excel sheet does not capture depth, assume 3ft working depth
+        spaGallons = poolSpecs.spaLength * poolSpecs.spaWidth * spaAvgDepth * 7.6;
+      } else {
+        const mapping: Record<string, number> = {
+          'fiberglass-small': 1000,
+          'fiberglass-medium': 1200,
+          'fiberglass-large': 1500,
+          crystite: 1200,
+        };
+        spaGallons = mapping[poolSpecs.spaType] || 1000;
+      }
+    }
+
+    const gallons = Math.ceil((baseGallons + spaGallons) / 10) * 10 - tanningShelfDeduction;
     return Math.max(0, gallons);
   }
 
@@ -291,6 +293,18 @@ export class EquipmentCalculations {
   static calculateEquipmentCost(equipment: Equipment, poolSpecs: PoolSpecs): CostLineItem[] {
     const items: CostLineItem[] = [];
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const prices = pricingData.equipment;
+
+    // Base white goods
+    if (prices.baseWhiteGoods) {
+      items.push({
+        category: 'Equipment',
+        description: 'Base White Goods',
+        unitPrice: prices.baseWhiteGoods,
+        quantity: 1,
+        total: prices.baseWhiteGoods,
+      });
+    }
 
     // Pump
     items.push({
@@ -356,15 +370,15 @@ export class EquipmentCalculations {
     }
 
     // Lights (2 included, charge for additional)
-    const baseLights = 2;
-    if (equipment.numberOfLights > baseLights) {
-      const additionalLights = equipment.numberOfLights - baseLights;
+    const lightCount = Math.max(0, equipment.numberOfLights);
+    if (lightCount > 0) {
+      const price = pricingData.equipment.lights.nicheLightPrice;
       items.push({
         category: 'Equipment',
-        description: 'Additional Lights',
-        unitPrice: pricingData.equipment.lights.additionalLightPrice,
-        quantity: additionalLights,
-        total: pricingData.equipment.lights.additionalLightPrice * additionalLights,
+        description: 'Pool Lights',
+        unitPrice: price,
+        quantity: lightCount,
+        total: price * lightCount,
       });
     }
 
@@ -518,84 +532,23 @@ export class EquipmentCalculations {
 export class WaterFeaturesCalculations {
   static calculateWaterFeaturesCost(waterFeatures: WaterFeatures): CostLineItem[] {
     const items: CostLineItem[] = [];
-    const prices = pricingData.plumbing;
+    const catalog = pricingData.waterFeatures?.catalog ?? [];
+    const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
+    const selections = waterFeatures.selections ?? [];
 
-    // Deck jets
-    waterFeatures.deckJets.forEach((deckJet, index) => {
-      if (deckJet.quantity > 0) {
-        const priceKey = `deckJet${index + 1}` as keyof typeof prices;
-        const unitPrice = prices[priceKey] as number;
-        items.push({
-          category: 'Water Features',
-          description: `Deck Jet ${index + 1}`,
-          unitPrice,
-          quantity: deckJet.run,
-          total: unitPrice * deckJet.run,
-        });
-      }
-    });
+    selections.forEach((selection) => {
+      const feature = lookup.get(selection.featureId);
+      if (!feature || selection.quantity <= 0) return;
 
-    // Bubblers
-    waterFeatures.bubblers.forEach((bubbler, index) => {
-      if (bubbler.quantity > 0) {
-        const priceKey = `bubbler${index + 1}` as keyof typeof prices;
-        const unitPrice = prices[priceKey] as number;
-        items.push({
-          category: 'Water Features',
-          description: `Bubbler ${index + 1}`,
-          unitPrice,
-          quantity: bubbler.run,
-          total: unitPrice * bubbler.run,
-        });
-      }
-    });
-
-    // Wok pots
-    waterFeatures.wokPots.forEach((wokPot, index) => {
-      if (wokPot.quantity > 0) {
-        const priceKey = `wokPot${index + 1}` as keyof typeof prices;
-        const unitPrice = prices[priceKey] as number;
-        items.push({
-          category: 'Water Features',
-          description: `${wokPot.type} Wok Pot`,
-          unitPrice,
-          quantity: wokPot.run,
-          total: unitPrice * wokPot.run,
-        });
-      }
-    });
-
-    // Infinity edge
-    if (waterFeatures.hasInfinityEdge) {
       items.push({
         category: 'Water Features',
-        description: 'Infinity Edge',
-        unitPrice: prices.infinityEdge,
-        quantity: waterFeatures.infinityEdgeLength,
-        total: prices.infinityEdge * waterFeatures.infinityEdgeLength,
+        description: feature.name,
+        unitPrice: feature.unitPrice,
+        quantity: selection.quantity,
+        total: feature.unitPrice * selection.quantity,
+        notes: feature.note,
       });
-    }
-
-    // Spillway
-    if (waterFeatures.hasSpillway) {
-      items.push({
-        category: 'Water Features',
-        description: 'Spillway Base',
-        unitPrice: prices.spillwayBase,
-        quantity: 1,
-        total: prices.spillwayBase,
-      });
-
-      if (waterFeatures.spillwayLength > 0) {
-        items.push({
-          category: 'Water Features',
-          description: 'Spillway',
-          unitPrice: prices.spillwayPerFt,
-          quantity: waterFeatures.spillwayLength,
-          total: prices.spillwayPerFt * waterFeatures.spillwayLength,
-        });
-      }
-    }
+    });
 
     return items;
   }
@@ -677,24 +630,15 @@ export class InteriorFinishCalculations {
 
     // WATER TRUCK
     const gallons = PoolCalculations.calculateGallons(poolSpecs);
+    const loadSizeGallons = 7000;
+    const loads = Math.max(1, Math.ceil(gallons / loadSizeGallons));
     waterTruckItems.push({
       category: 'Water Truck',
-      description: 'Water Truck Base',
+      description: 'Water Truck',
       unitPrice: prices.waterTruck.base,
-      quantity: 1,
-      total: prices.waterTruck.base,
+      quantity: loads,
+      total: prices.waterTruck.base * loads,
     });
-
-    const thousandsOfGallons = Math.ceil(gallons / 1000);
-    if (thousandsOfGallons > 0) {
-      waterTruckItems.push({
-        category: 'Water Truck',
-        description: 'Water',
-        unitPrice: prices.waterTruck.per1000Gallons,
-        quantity: thousandsOfGallons,
-        total: prices.waterTruck.per1000Gallons * thousandsOfGallons,
-      });
-    }
 
     return { labor: laborItems, material: materialItems, waterTruck: waterTruckItems };
   }
@@ -713,6 +657,18 @@ export class InteriorFinishCalculations {
       'quartz-scapes': { base: prices.labor.quartzBase, per100Over500: prices.labor.quartzPer100SqftOver500 },
       hydrazzo: { base: prices.labor.polishedBase, per100Over500: prices.labor.polishedPer100SqftOver500 },
       tile: { base: prices.labor.tileBase, per100Over500: prices.labor.tilePer100SqftOver500 },
+      'ivory-quartz': { base: 0, per100Over500: 0 },
+      'pebble-tec-l1': { base: 0, per100Over500: 0 },
+      'pebble-tec-l2': { base: 0, per100Over500: 0 },
+      'pebble-tec-l3': { base: 0, per100Over500: 0 },
+      'pebble-sheen-l1': { base: 0, per100Over500: 0 },
+      'pebble-sheen-l2': { base: 0, per100Over500: 0 },
+      'pebble-sheen-l3': { base: 0, per100Over500: 0 },
+      'pebble-fina-l1': { base: 0, per100Over500: 0 },
+      'pebble-fina-l2': { base: 0, per100Over500: 0 },
+      'pebble-brilliance': { base: 0, per100Over500: 0 },
+      'pebble-breeze': { base: 0, per100Over500: 0 },
+      'pebble-essence': { base: 0, per100Over500: 0 },
     };
     return mapping[finishType] || { base: 0, per100Over500: 0 };
   }
@@ -728,6 +684,18 @@ export class InteriorFinishCalculations {
       'quartz-scapes': prices.material.quartzScapes,
       hydrazzo: prices.material.hydrazzo,
       tile: prices.material.tile,
+      'ivory-quartz': prices.material.ivoryQuartz,
+      'pebble-tec-l1': prices.material.pebbleTecL1,
+      'pebble-tec-l2': prices.material.pebbleTecL2,
+      'pebble-tec-l3': prices.material.pebbleTecL3,
+      'pebble-sheen-l1': prices.material.pebbleSheenL1,
+      'pebble-sheen-l2': prices.material.pebbleSheenL2,
+      'pebble-sheen-l3': prices.material.pebbleSheenL3,
+      'pebble-fina-l1': prices.material.pebbleFinaL1,
+      'pebble-fina-l2': prices.material.pebbleFinaL2,
+      'pebble-brilliance': prices.material.pebbleBrilliance,
+      'pebble-breeze': prices.material.pebbleBreeze,
+      'pebble-essence': prices.material.pebbleEssence,
     };
     return mapping[finishType] || 0;
   }
@@ -762,13 +730,13 @@ export class CleanupCalculations {
     }
 
     if (poolSpecs.surfaceArea > 500) {
-      const hundredsOver = Math.floor((poolSpecs.surfaceArea - 500) / 100);
+      const sqftOver = Math.max(0, poolSpecs.surfaceArea - 500);
       items.push({
         category: 'Cleanup',
         description: 'Over 500 SQFT',
         unitPrice: prices.per100SqftOver500,
-        quantity: hundredsOver,
-        total: prices.per100SqftOver500 * hundredsOver,
+        quantity: sqftOver,
+        total: prices.per100SqftOver500 * sqftOver,
       });
     }
 
@@ -798,9 +766,17 @@ export class FiberglassCalculations {
     if (poolSpecs.poolType !== 'fiberglass') return items;
 
     // Pool shell
-    if (poolSpecs.fiberglassSize) {
+    if (poolSpecs.fiberglassModelPrice && poolSpecs.fiberglassModelName) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: poolSpecs.fiberglassModelName,
+        unitPrice: poolSpecs.fiberglassModelPrice,
+        quantity: 1,
+        total: poolSpecs.fiberglassModelPrice,
+      });
+    } else if (poolSpecs.fiberglassSize) {
       const priceKey = poolSpecs.fiberglassSize as keyof typeof prices;
-      const price = prices[priceKey];
+      const price = prices[priceKey] as number;
       items.push({
         category: 'Fiberglass Shell',
         description: `${poolSpecs.fiberglassSize} Fiberglass Pool`,
@@ -811,17 +787,27 @@ export class FiberglassCalculations {
     }
 
     // Spa shell (if fiberglass spa)
-    if (poolSpecs.spaType.startsWith('fiberglass-')) {
-      const spaSize = poolSpecs.spaType.replace('fiberglass-', '');
-      const spaKey = `spa${spaSize.charAt(0).toUpperCase() + spaSize.slice(1)}` as keyof typeof prices;
-      const spaPrice = prices[spaKey];
-      items.push({
-        category: 'Fiberglass Shell',
-        description: `${spaSize} Fiberglass Spa`,
-        unitPrice: spaPrice,
-        quantity: 1,
-        total: spaPrice,
-      });
+    if (poolSpecs.spaType.startsWith('fiberglass-') || poolSpecs.spaType === 'crystite') {
+      if (poolSpecs.fiberglassSpaPrice && poolSpecs.fiberglassSpaModelName) {
+        items.push({
+          category: 'Fiberglass Shell',
+          description: poolSpecs.fiberglassSpaModelName,
+          unitPrice: poolSpecs.fiberglassSpaPrice,
+          quantity: 1,
+          total: poolSpecs.fiberglassSpaPrice,
+        });
+      } else {
+        const spaSize = poolSpecs.spaType.replace('fiberglass-', '');
+        const spaKey = `spa${spaSize.charAt(0).toUpperCase() + spaSize.slice(1)}` as keyof typeof prices;
+        const spaPrice = prices[spaKey] as number;
+        items.push({
+          category: 'Fiberglass Shell',
+          description: `${spaSize} Fiberglass Spa`,
+          unitPrice: spaPrice,
+          quantity: 1,
+          total: spaPrice,
+        });
+      }
     }
 
     // Spillover

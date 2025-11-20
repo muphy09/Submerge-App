@@ -79,16 +79,16 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
         <label className="form-label required">Primary Pump</label>
         <select
           className="form-input"
-          value={data.pump.name}
-          onChange={(e) => handlePumpChange(e.target.value)}
-        >
-          {pricingData.equipment.pumps.map(pump => (
-            <option key={pump.name} value={pump.name}>
-              {pump.name} - ${pump.price.toLocaleString()}
-            </option>
-          ))}
-        </select>
-      </div>
+      value={data.pump.name}
+      onChange={(e) => handlePumpChange(e.target.value)}
+    >
+      {pricingData.equipment.pumps.map(pump => (
+        <option key={pump.name} value={pump.name}>
+          {pump.name} {pump.name.includes('(Included)') ? '(Included)' : ''} - ${pump.price.toLocaleString()}
+        </option>
+      ))}
+    </select>
+  </div>
 
       {/* Filter */}
       <h3 style={{ marginTop: '1.5rem' }}>Filter</h3>

@@ -67,18 +67,23 @@ INSERT INTO equipment_catalog (category, name, model, price) VALUES
 
 -- Sample Water Features Catalog
 INSERT INTO water_features_catalog (type, name, price) VALUES
-('Deck Jet', 'LED Deck Jet', 450),
-('Deck Jet', 'Laminar Deck Jet', 650),
-('Bubbler', 'Rock Bubbler', 350),
-('Bubbler', 'LED Bubbler', 500),
-('Wok Pot', 'Copper Wok Pot', 1200),
-('Wok Pot', 'Stone Wok Pot', 1500),
-('Waterfall', 'Rock Waterfall Small', 2500),
-('Waterfall', 'Rock Waterfall Medium', 4500),
-('Waterfall', 'Rock Waterfall Large', 7500),
-('Waterfall', 'Sheer Descent', 1800),
-('Fountain', 'Deck Fountain', 800),
-('Fountain', 'Spray Fountain', 1200);
+('Sheer Descents', '12" Sheer Descent', 760),
+('Sheer Descents', '18" Sheer Descent', 780),
+('Sheer Descents', '2'' Sheer Descent', 820),
+('Sheer Descents', '3'' Sheer Descent', 880),
+('Sheer Descents', '4'' Sheer Descent', 1000),
+('Sheer Descents', '5'' Sheer Descent (Requires 2nd Pump)', 1120),
+('Sheer Descents', '6'' Sheer Descent (Requires 2nd Pump)', 1300),
+('Jets', 'Deck Jet', 420),
+('Jets', 'Laminar Jet', 1760),
+('Precast Woks - Water Only', '30" Precast Wok - Water Only', 1920),
+('Precast Woks - Water Only', '32" Precast Wok - Water Only', 2060),
+('Precast Woks - Water Only', '36" Precast Wok - Water Only', 2260),
+('Precast Woks - Fire & Water', '30" Precast Wok - Fire & Water', 5060),
+('Precast Woks - Fire & Water', '36" Precast Wok - Fire & Water', 6020),
+('Precast Woks - Fire Only', '30" Precast Wok - Fire Only', 1760),
+('Precast Woks - Fire Only', '36" Precast Wok - Fire Only', 2100),
+('Bubblers & Lighting', 'LED Bubbler (with light)', 1380);
 
 -- Sample Interior Finish Rates
 INSERT INTO finish_rates (type, price_per_square_foot) VALUES

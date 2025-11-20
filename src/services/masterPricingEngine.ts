@@ -33,12 +33,12 @@ export class MasterPricingEngine {
     const tileCopingDecking = proposal.tileCopingDecking!;
     const drainage = proposal.drainage!;
     const equipment = proposal.equipment!;
-    const waterFeatures = proposal.waterFeatures!;
+    const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0 };
     const customFeatures = proposal.customFeatures!;
     const interiorFinish = proposal.interiorFinish!;
 
     // Calculate all sections
-    const plansItems = this.calculatePlansEngineering(poolSpecs);
+    const plansItems = this.calculatePlansEngineering(poolSpecs, excavation);
     const layoutItems = this.calculateLayout(poolSpecs);
     const permitItems = this.calculatePermit(poolSpecs);
     const excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
@@ -78,6 +78,7 @@ export class MasterPricingEngine {
       drainage: this.sumItems(drainageItems),
       equipmentOrdered: this.sumItems(equipmentItems),
       equipmentSet: this.sumItems(equipmentSetItems),
+      waterFeatures: this.sumItems(waterFeaturesItems),
       cleanup: this.sumItems(cleanupItems),
       interiorFinish: this.sumItems([...interior.labor, ...interior.material]),
       waterTruck: this.sumItems(interior.waterTruck),
@@ -111,6 +112,7 @@ export class MasterPricingEngine {
       drainage: drainageItems,
       equipmentOrdered: equipmentItems,
       equipmentSet: equipmentSetItems,
+      waterFeatures: waterFeaturesItems,
       cleanup: cleanupItems,
       interiorFinish: [...interior.labor, ...interior.material],
       waterTruck: interior.waterTruck,
@@ -127,7 +129,7 @@ export class MasterPricingEngine {
     };
   }
 
-  private static calculatePlansEngineering(poolSpecs: any): CostLineItem[] {
+  private static calculatePlansEngineering(poolSpecs: any, excavation: any): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.plans;
 
@@ -146,6 +148,16 @@ export class MasterPricingEngine {
         unitPrice: prices.spa,
         quantity: 1,
         total: prices.spa,
+      });
+    }
+
+    if (excavation?.needsSoilSampleEngineer) {
+      items.push({
+        category: 'Plans & Engineering',
+        description: 'Soil Sample / Engineer',
+        unitPrice: prices.soilSampleEngineer,
+        quantity: 1,
+        total: prices.soilSampleEngineer,
       });
     }
 

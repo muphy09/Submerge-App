@@ -1,4 +1,6 @@
-import { WaterFeatures, DeckJet, Bubbler, WokPot } from '../types/proposal-new';
+import { useMemo } from 'react';
+import { WaterFeatures, WaterFeatureSelection } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
 import './SectionStyles.css';
 
 interface Props {
@@ -7,248 +9,112 @@ interface Props {
 }
 
 function WaterFeaturesSectionNew({ data, onChange }: Props) {
-  const handleChange = (field: keyof WaterFeatures, value: any) => {
-    onChange({ ...data, [field]: value });
+  const catalog = pricingData.waterFeatures?.catalog ?? [];
+
+  const selectionMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (data?.selections ?? []).forEach((sel) => map.set(sel.featureId, sel.quantity));
+    return map;
+  }, [data?.selections]);
+
+  const calculateTotal = (selections: WaterFeatureSelection[]) => {
+    return catalog.reduce((sum, feature) => {
+      const qty = selections.find((sel) => sel.featureId === feature.id)?.quantity || 0;
+      return sum + feature.unitPrice * qty;
+    }, 0);
   };
 
-  const addDeckJet = () => {
-    const newJet: DeckJet = { quantity: 1, run: 0 };
-    handleChange('deckJets', [...data.deckJets, newJet]);
+  const handleQuantityChange = (featureId: string, quantity: number) => {
+    const sanitized = Math.max(0, quantity);
+    const baseSelections = (data?.selections ?? []).filter((sel) => sel.featureId !== featureId);
+    const nextSelections =
+      sanitized > 0 ? [...baseSelections, { featureId, quantity: sanitized }] : baseSelections;
+
+    const totalCost = calculateTotal(nextSelections);
+    onChange({ ...data, selections: nextSelections, totalCost });
   };
 
-  const updateDeckJet = (index: number, field: keyof DeckJet, value: number) => {
-    const updated = [...data.deckJets];
-    updated[index] = { ...updated[index], [field]: value };
-    handleChange('deckJets', updated);
-  };
+  const groupedCatalog = useMemo(() => {
+    return catalog.reduce<Record<string, typeof catalog>>((acc, item) => {
+      const group = item.category || 'Water Features';
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(item);
+      return acc;
+    }, {});
+  }, [catalog]);
 
-  const removeDeckJet = (index: number) => {
-    handleChange('deckJets', data.deckJets.filter((_, i) => i !== index));
-  };
+  const liveTotal = calculateTotal(data?.selections ?? []);
 
-  const addBubbler = () => {
-    const newBubbler: Bubbler = { quantity: 1, run: 0 };
-    handleChange('bubblers', [...data.bubblers, newBubbler]);
-  };
-
-  const updateBubbler = (index: number, field: keyof Bubbler, value: number) => {
-    const updated = [...data.bubblers];
-    updated[index] = { ...updated[index], [field]: value };
-    handleChange('bubblers', updated);
-  };
-
-  const removeBubbler = (index: number) => {
-    handleChange('bubblers', data.bubblers.filter((_, i) => i !== index));
-  };
-
-  const addWokPot = () => {
-    const newWokPot: WokPot = { quantity: 1, type: '18-inch', run: 0 };
-    handleChange('wokPots', [...data.wokPots, newWokPot]);
-  };
-
-  const updateWokPot = (index: number, field: keyof WokPot, value: any) => {
-    const updated = [...data.wokPots];
-    updated[index] = { ...updated[index], [field]: value };
-    handleChange('wokPots', updated);
-  };
-
-  const removeWokPot = (index: number) => {
-    handleChange('wokPots', data.wokPots.filter((_, i) => i !== index));
-  };
+  if (!catalog.length) {
+    return (
+      <div className="section-form">
+        <h2>Water Features</h2>
+        <div className="form-help">
+          No catalog data found. Verify pricing data is loaded from Regular pricing.xlsx (Equip tab, column S).
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section-form">
       <h2>Water Features</h2>
+      <p className="form-help" style={{ marginBottom: '1.5rem' }}>
+        Catalog mirrors the Regular pricing.xlsx Equip tab (column S). Enter a quantity for each feature you need.
+      </p>
 
-      {/* Deck Jets */}
-      <h3>Deck Jets</h3>
-      {data.deckJets.map((jet, index) => (
-        <div key={index} className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Quantity</label>
-              <input
-                type="number"
-                className="form-input"
-                value={jet.quantity}
-                onChange={(e) => updateDeckJet(index, 'quantity', parseInt(e.target.value) || 0)}
-                min="0"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Run (LNFT)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={jet.run}
-                onChange={(e) => updateDeckJet(index, 'run', parseFloat(e.target.value) || 0)}
-                min="0"
-              />
-            </div>
-            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => removeDeckJet(index)}
-              >
-                Remove
-              </button>
+      {Object.entries(groupedCatalog).map(([category, items]) => (
+        <div key={category} className="card" style={{ padding: '1rem', marginBottom: '1.25rem' }}>
+          <div className="form-row" style={{ marginBottom: '0.5rem' }}>
+            <h3 style={{ margin: 0 }}>{category}</h3>
+          </div>
+          {items.map((item) => {
+            const qty = selectionMap.get(item.id) || 0;
+            const lineTotal = qty * item.unitPrice;
+            return (
+              <div key={item.id} className="form-row" style={{ alignItems: 'flex-end', marginBottom: '0.75rem' }}>
+                <div className="form-group" style={{ flex: 2 }}>
+                  <label className="form-label">{item.name}</label>
+                  {item.note && <div className="form-help">{item.note}</div>}
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Unit Price</label>
+                  <div className="form-value">${item.unitPrice.toLocaleString()}</div>
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Quantity</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    min="0"
+                    step="1"
+                    value={qty}
+                    onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value, 10) || 0)}
+                  />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Line Total</label>
+                  <div className="form-value">${lineTotal.toLocaleString()}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      <div className="card" style={{ padding: '1rem', background: '#0f172a', color: 'white' }}>
+        <div className="form-row" style={{ alignItems: 'center' }}>
+          <div className="form-group" style={{ flex: 1 }}>
+            <h3 style={{ margin: 0 }}>Water Features Subtotal</h3>
+          </div>
+          <div className="form-group" style={{ flex: 1, textAlign: 'right' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>${liveTotal.toLocaleString()}</div>
+            <div className="form-help" style={{ color: '#e2e8f0' }}>
+              Updates cost breakdown automatically
             </div>
           </div>
         </div>
-      ))}
-      {data.deckJets.length < 6 && (
-        <button type="button" className="btn btn-add" onClick={addDeckJet}>
-          + Add Deck Jet
-        </button>
-      )}
-
-      {/* Bubblers */}
-      <h3 style={{ marginTop: '2rem' }}>Bubblers</h3>
-      {data.bubblers.map((bubbler, index) => (
-        <div key={index} className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Quantity</label>
-              <input
-                type="number"
-                className="form-input"
-                value={bubbler.quantity}
-                onChange={(e) => updateBubbler(index, 'quantity', parseInt(e.target.value) || 0)}
-                min="0"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Run (LNFT)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={bubbler.run}
-                onChange={(e) => updateBubbler(index, 'run', parseFloat(e.target.value) || 0)}
-                min="0"
-              />
-            </div>
-            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => removeBubbler(index)}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-      {data.bubblers.length < 3 && (
-        <button type="button" className="btn btn-add" onClick={addBubbler}>
-          + Add Bubbler
-        </button>
-      )}
-
-      {/* Wok Pots */}
-      <h3 style={{ marginTop: '2rem' }}>Wok Pots</h3>
-      {data.wokPots.map((wokPot, index) => (
-        <div key={index} className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Type</label>
-              <select
-                className="form-input"
-                value={wokPot.type}
-                onChange={(e) => updateWokPot(index, 'type', e.target.value)}
-              >
-                <option value="18-inch">18"</option>
-                <option value="24-inch">24"</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Quantity</label>
-              <input
-                type="number"
-                className="form-input"
-                value={wokPot.quantity}
-                onChange={(e) => updateWokPot(index, 'quantity', parseInt(e.target.value) || 0)}
-                min="0"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Run (LNFT)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={wokPot.run}
-                onChange={(e) => updateWokPot(index, 'run', parseFloat(e.target.value) || 0)}
-                min="0"
-              />
-            </div>
-            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => removeWokPot(index)}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-      {data.wokPots.length < 2 && (
-        <button type="button" className="btn btn-add" onClick={addWokPot}>
-          + Add Wok Pot
-        </button>
-      )}
-
-      {/* Infinity Edge */}
-      <h3 style={{ marginTop: '2rem' }}>Infinity Edge</h3>
-      <div className="form-group">
-        <label className="form-checkbox">
-          <input
-            type="checkbox"
-            checked={data.hasInfinityEdge}
-            onChange={(e) => handleChange('hasInfinityEdge', e.target.checked)}
-          />
-          <span>Has Infinity Edge</span>
-        </label>
       </div>
-      {data.hasInfinityEdge && (
-        <div className="form-group">
-          <label className="form-label">Infinity Edge Length (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.infinityEdgeLength}
-            onChange={(e) => handleChange('infinityEdgeLength', parseFloat(e.target.value) || 0)}
-            min="0"
-          />
-        </div>
-      )}
-
-      {/* Spillway */}
-      <h3 style={{ marginTop: '2rem' }}>Spillway</h3>
-      <div className="form-group">
-        <label className="form-checkbox">
-          <input
-            type="checkbox"
-            checked={data.hasSpillway}
-            onChange={(e) => handleChange('hasSpillway', e.target.checked)}
-          />
-          <span>Has Spillway</span>
-        </label>
-      </div>
-      {data.hasSpillway && (
-        <div className="form-group">
-          <label className="form-label">Spillway Length (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.spillwayLength}
-            onChange={(e) => handleChange('spillwayLength', parseFloat(e.target.value) || 0)}
-            min="0"
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -26,6 +26,11 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     surfaceArea: 0,
     shallowDepth: 3.5,
     endDepth: 6,
+    fiberglassModelName: undefined,
+    fiberglassModelPrice: undefined,
+    fiberglassPerimeter: undefined,
+    fiberglassSpaModelName: undefined,
+    fiberglassSpaPrice: undefined,
     maxWidth: 0,
     maxLength: 0,
     totalStepsAndBench: 20,
@@ -130,7 +135,9 @@ export function getDefaultEquipment(): Equipment {
   const defaultFilter = pricingData.equipment.filters[0];
   const defaultCleaner = pricingData.equipment.cleaners[2]; // No cleaner
   const defaultHeater = pricingData.equipment.heaters[0];
-  const defaultAutomation = pricingData.equipment.automation[0];
+  const defaultAutomation =
+    pricingData.equipment.automation.find(a => a.name.includes('TCX')) || pricingData.equipment.automation[0];
+  const defaultSalt = pricingData.equipment.saltSystem.find(s => s.name.includes('Tru-Clear')) || undefined;
 
   return {
     pump: {
@@ -162,6 +169,13 @@ export function getDefaultEquipment(): Equipment {
       zones: 0,
       hasChemistry: defaultAutomation.hasChemistry,
     },
+    saltSystem: defaultSalt
+      ? {
+          name: defaultSalt.name,
+          model: defaultSalt.model,
+          price: defaultSalt.price,
+        }
+      : undefined,
     hasBlanketReel: false,
     hasSolarBlanket: false,
     hasAutoFill: false,
@@ -173,13 +187,7 @@ export function getDefaultEquipment(): Equipment {
 
 export function getDefaultWaterFeatures(): WaterFeatures {
   return {
-    deckJets: [],
-    bubblers: [],
-    wokPots: [],
-    hasInfinityEdge: false,
-    infinityEdgeLength: 0,
-    hasSpillway: false,
-    spillwayLength: 0,
+    selections: [],
     totalCost: 0,
   };
 }
@@ -231,6 +239,7 @@ export function getDefaultCostBreakdown(): CostBreakdown {
     drainage: [],
     equipmentOrdered: [],
     equipmentSet: [],
+    waterFeatures: [],
     cleanup: [],
     interiorFinish: [],
     waterTruck: [],
@@ -255,6 +264,7 @@ export function getDefaultCostBreakdown(): CostBreakdown {
       drainage: 0,
       equipmentOrdered: 0,
       equipmentSet: 0,
+      waterFeatures: 0,
       cleanup: 0,
       interiorFinish: 0,
       waterTruck: 0,
