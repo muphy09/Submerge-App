@@ -47,8 +47,6 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
 
   return (
     <div className="section-form">
-      <h2>Interior Finish</h2>
-
       <div className="form-group">
         <label className="form-label required">Finish Type</label>
         <select

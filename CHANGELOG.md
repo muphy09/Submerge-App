@@ -7,6 +7,7 @@
     - Collapsable side columns
     - Independant scroll bars
     - Sticky headers & footers
+    - Removed redundant section titles within tabs
 
 - Backend code cleanup
     - Removed numerous old/unused files

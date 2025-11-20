@@ -48,8 +48,7 @@ function WaterFeaturesSectionNew({ data, onChange }: Props) {
   if (!catalog.length) {
     return (
       <div className="section-form">
-        <h2>Water Features</h2>
-        <div className="form-help">
+        <div className="form-help" style={{ fontStyle: 'italic' }}>
           No catalog data found. Verify pricing data is loaded from Regular pricing.xlsx (Equip tab, column S).
         </div>
       </div>
@@ -58,8 +57,7 @@ function WaterFeaturesSectionNew({ data, onChange }: Props) {
 
   return (
     <div className="section-form">
-      <h2>Water Features</h2>
-      <p className="form-help" style={{ marginBottom: '1.5rem' }}>
+      <p className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
         Catalog mirrors the Regular pricing.xlsx Equip tab (column S). Enter a quantity for each feature you need.
       </p>
 

@@ -33,11 +33,9 @@ function ExcavationSectionNew({ data, onChange }: Props) {
 
   return (
     <div className="section-form">
-      <h2>Excavation</h2>
-
       {/* RBB (Raised Bond Beam) Section */}
       <h3>Raised Bond Beam (RBB)</h3>
-      <div className="form-help" style={{ marginBottom: '1rem' }}>
+      <div className="form-help" style={{ marginBottom: '1rem', fontStyle: 'italic' }}>
         Add raised bond beam levels for retaining walls or elevated pool edges
       </div>
 

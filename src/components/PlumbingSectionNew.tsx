@@ -24,9 +24,7 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
 
   return (
     <div className="section-form">
-      <h2>Plumbing</h2>
-
-      <div className="form-help" style={{ marginBottom: '1.5rem' }}>
+      <div className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
         Enter run lengths in linear feet (LNFT). Overrun charges apply automatically when thresholds are exceeded.
       </div>
 

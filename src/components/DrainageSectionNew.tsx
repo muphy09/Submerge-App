@@ -13,9 +13,7 @@ function DrainageSectionNew({ data, onChange }: Props) {
 
   return (
     <div className="section-form">
-      <h2>Drainage</h2>
-
-      <div className="form-help" style={{ marginBottom: '1.5rem' }}>
+      <div className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
         Enter total linear footage for each drainage type needed for the project.
       </div>
 

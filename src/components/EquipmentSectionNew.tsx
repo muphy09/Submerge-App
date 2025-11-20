@@ -71,8 +71,6 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
 
   return (
     <div className="section-form">
-      <h2>Equipment</h2>
-
       {/* Pump */}
       <h3>Pump</h3>
       <div className="form-group">

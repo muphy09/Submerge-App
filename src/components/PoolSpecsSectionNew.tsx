@@ -44,8 +44,6 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
 
   return (
     <div className="section-form">
-      <h2>Pool Specifications</h2>
-
       {/* Pool Type Selection */}
       <div className="form-group">
         <label className="form-label required">Pool Type</label>

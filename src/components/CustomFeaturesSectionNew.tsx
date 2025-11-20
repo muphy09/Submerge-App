@@ -39,9 +39,7 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
 
   return (
     <div className="section-form">
-      <h2>Custom Features</h2>
-
-      <div className="form-help" style={{ marginBottom: '1.5rem' }}>
+      <div className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
         Add any custom features or special work not covered in other sections (up to 7 features).
       </div>
 

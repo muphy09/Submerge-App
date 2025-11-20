@@ -15,8 +15,6 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
 
   return (
     <div className="section-form">
-      <h2>Tile, Coping & Decking</h2>
-
       {/* Tile Section - Only for gunite pools */}
       {!isFiberglass && (
         <>

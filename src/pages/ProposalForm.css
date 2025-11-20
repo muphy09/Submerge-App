@@ -321,6 +321,7 @@
   padding-right: 10px;
   padding-bottom: 30px;
   margin-right: -20px;
+  position: relative;
 }
 
 /* Custom scrollbar for main content */
@@ -355,9 +356,14 @@
 .section-title {
   color: #1f2937;
   font-size: 1.8rem;
-  margin-bottom: 25px;
-  padding-bottom: 15px;
+  margin: 0;
+  padding: 20px 0 15px 0;
   border-bottom: 2px solid #e5e7eb;
+  background: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .form-actions {
