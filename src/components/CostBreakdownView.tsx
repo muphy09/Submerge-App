@@ -105,40 +105,6 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
       <div className="breakdown-header">
         <h1>Job Cost Summary</h1>
         <h2>Customer: {customerName}</h2>
-        <div className="breakdown-actions">
-          <button className="btn btn-secondary" onClick={expandAll}>
-            Expand All
-          </button>
-          <button className="btn btn-secondary" onClick={collapseAll}>
-            Collapse All
-          </button>
-        </div>
-      </div>
-
-      <div className="breakdown-content">
-        {renderLineItems(costBreakdown.plansAndEngineering, 'Plans & Engineering')}
-        {renderLineItems(costBreakdown.layout, 'Layout')}
-        {renderLineItems(costBreakdown.permit, 'Permit')}
-        {renderLineItems(costBreakdown.excavation, 'Excavation')}
-        {renderLineItems(costBreakdown.plumbing, 'Plumbing')}
-        {renderLineItems(costBreakdown.gas, 'Gas')}
-        {renderLineItems(costBreakdown.steel, 'Steel')}
-        {renderLineItems(costBreakdown.electrical, 'Electrical')}
-        {renderLineItems(costBreakdown.shotcreteLabor, 'Shotcrete Labor')}
-        {renderLineItems(costBreakdown.shotcreteMaterial, 'Shotcrete Material')}
-        {renderLineItems(costBreakdown.tileLabor, 'Tile Labor')}
-        {renderLineItems(costBreakdown.tileMaterial, 'Tile Material')}
-        {renderLineItems(costBreakdown.copingDeckingLabor, 'Coping/Decking Labor')}
-        {renderLineItems(costBreakdown.copingDeckingMaterial, 'Coping/Decking Material')}
-        {renderLineItems(costBreakdown.stoneRockworkLabor, 'Stone/Rockwork')}
-        {renderLineItems(costBreakdown.drainage, 'Drainage')}
-        {renderLineItems(costBreakdown.equipmentOrdered, 'Equipment Ordered')}
-        {renderLineItems(costBreakdown.equipmentSet, 'Equipment Set')}
-        {renderLineItems(costBreakdown.waterFeatures, 'Water Features')}
-        {renderLineItems(costBreakdown.cleanup, 'Cleanup')}
-        {renderLineItems(costBreakdown.interiorFinish, 'Interior Finish')}
-        {renderLineItems(costBreakdown.waterTruck, 'Water Truck')}
-        {renderLineItems(costBreakdown.fiberglassShell, 'Fiberglass Shell')}
       </div>
 
       <div className="breakdown-summary">

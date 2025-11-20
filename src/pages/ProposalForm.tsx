@@ -16,6 +16,7 @@ import WaterFeaturesSectionNew from '../components/WaterFeaturesSectionNew';
 import InteriorFinishSectionNew from '../components/InteriorFinishSectionNew';
 import CustomFeaturesSectionNew from '../components/CustomFeaturesSectionNew';
 import CostBreakdownView from '../components/CostBreakdownView';
+import LiveCostBreakdown from '../components/LiveCostBreakdown';
 import './ProposalForm.css';
 import ppasLogo from '../../PPAS Logo.png';
 import { useToast } from '../components/Toast';
@@ -58,6 +59,8 @@ function ProposalForm() {
   const [isLoading, setIsLoading] = useState(!!proposalNumber);
   const loadRequestRef = useRef(0);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showLeftNav, setShowLeftNav] = useState(true);
+  const [showRightCost, setShowRightCost] = useState(true);
 
   const getInitialProposal = (): Partial<Proposal> => getDefaultProposal();
 
@@ -328,68 +331,122 @@ function ProposalForm() {
     );
   }
 
+  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(proposal);
+
   return (
     <div className="proposal-form">
-      <div className="form-container">
-        <header className="form-header">
-          <div className="form-header-title">
-            <img src={ppasLogo} alt="PPAS Logo" className="form-logo" />
-            <h1>Pool Proposal Builder</h1>
-          </div>
-          <p className="proposal-number">Proposal #{proposal.proposalNumber?.replace('PROP-', '')}</p>
-        </header>
-
-        <div className="progress-bar">
-          <div
-            className="progress-fill"
-            style={{ width: `${((currentSection + 1) / sections.length) * 100}%` }}
-          />
+      <header className="form-header">
+        <div className="form-header-title">
+          <img src={ppasLogo} alt="PPAS Logo" className="form-logo" />
+          <h1>Pool Proposal Builder</h1>
         </div>
+        <p className="proposal-number">Proposal #{proposal.proposalNumber?.replace('PROP-', '')}</p>
+      </header>
 
-        <nav className="section-nav">
-          {sections.map((section, index) => (
-            <button
-              key={section}
-              className={`nav-item ${index === currentSection ? 'active' : ''} ${index < currentSection ? 'completed' : ''}`}
-              onClick={() => setCurrentSection(index)}
+      <div className={`progress-bar ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
+        <div
+          className="progress-fill"
+          style={{ width: `${((currentSection + 1) / sections.length) * 100}%` }}
+        />
+      </div>
+
+      <div className="form-layout">
+        {showLeftNav && (
+          <nav className="section-nav">
+            <div
+              className="nav-header"
+              onClick={() => setShowLeftNav(false)}
+              title="Hide navigation"
             >
-              <span className="nav-number">{index + 1}</span>
-              <span className="nav-label">{section}</span>
-            </button>
-          ))}
-        </nav>
+              <h3>Proposal Navigation</h3>
+              <button
+                className="sidebar-toggle left-toggle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowLeftNav(false);
+                }}
+                title="Hide navigation"
+              >
+                ◀
+              </button>
+            </div>
+            <div className="section-nav-grid">
+              {sections.map((section, index) => (
+                <button
+                  key={section}
+                  className={`nav-item ${index === currentSection ? 'active' : ''} ${index < currentSection ? 'completed' : ''}`}
+                  onClick={() => setCurrentSection(index)}
+                >
+                  <span className="nav-number">{index + 1}</span>
+                  <span className="nav-label">{section}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+        )}
 
-        <div className="section-content">
-          <h2 className="section-title">{sections[currentSection]}</h2>
-          {renderSection()}
+        {!showLeftNav && (
+          <button
+            className="sidebar-show-button left-show"
+            onClick={() => setShowLeftNav(true)}
+            title="Show navigation"
+          >
+            ▶
+          </button>
+        )}
+
+        <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
+          <div className="section-content">
+            <h2 className="section-title">{sections[currentSection]}</h2>
+            {renderSection()}
+          </div>
+
+          <div className="form-actions">
+            <div className="left-actions">
+              <button className="btn btn-secondary" onClick={handleCancel}>
+                Cancel
+              </button>
+              <button className="btn btn-secondary" onClick={() => handleSave(false)}>
+                Save Draft
+              </button>
+            </div>
+            <div className="right-actions">
+              {currentSection > 0 && (
+                <button className="btn btn-secondary" onClick={handlePrevious}>
+                  Previous
+                </button>
+              )}
+              {currentSection < sections.length - 1 ? (
+                <button className="btn btn-primary" onClick={handleNext}>
+                  Next
+                </button>
+              ) : (
+                <button className="btn btn-success" onClick={() => handleSave(true)}>
+                  Submit Proposal
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="form-actions">
-          <div className="left-actions">
-            <button className="btn btn-secondary" onClick={handleCancel}>
-              Cancel
-            </button>
-            <button className="btn btn-secondary" onClick={() => handleSave(false)}>
-              Save Draft
-            </button>
-          </div>
-          <div className="right-actions">
-            {currentSection > 0 && (
-              <button className="btn btn-secondary" onClick={handlePrevious}>
-                Previous
-              </button>
-            )}
-            {currentSection < sections.length - 1 ? (
-              <button className="btn btn-primary" onClick={handleNext}>
-                Next
-              </button>
-            ) : (
-              <button className="btn btn-success" onClick={() => handleSave(true)}>
-                Submit Proposal
-              </button>
-            )}
-          </div>
-        </div>
+        {showRightCost && (
+          <aside className="cost-sidebar">
+            <LiveCostBreakdown
+              costBreakdown={currentCostBreakdown.costBreakdown}
+              onToggle={() => setShowRightCost(false)}
+            />
+          </aside>
+        )}
+
+        {!showRightCost && (
+          <button
+            className="sidebar-show-button right-show"
+            onClick={() => setShowRightCost(true)}
+            title="Show cost breakdown"
+          >
+            ◀
+          </button>
+        )}
       </div>
 
       <ConfirmDialog

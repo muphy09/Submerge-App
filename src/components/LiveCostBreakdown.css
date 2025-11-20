@@ -1,0 +1,167 @@
+.live-cost-breakdown {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: white;
+  font-size: 0.85rem;
+  padding: 10px 0;
+}
+
+.live-breakdown-header {
+  padding: 10px 15px;
+  background: #082556;
+  color: white;
+  text-align: center;
+  border-bottom: 2px solid #e5e7eb;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.live-breakdown-header:hover {
+  background: #0a2d6b;
+}
+
+.live-breakdown-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.live-breakdown-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.2s ease;
+}
+
+.live-breakdown-content:hover {
+  scrollbar-color: rgba(8, 37, 86, 0.25) transparent;
+}
+
+/* Custom scrollbar for cost breakdown */
+.live-breakdown-content::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.live-breakdown-content::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.live-breakdown-content::-webkit-scrollbar-thumb {
+  background: transparent !important;
+  border-radius: 3px !important;
+  transition: background 0.2s ease !important;
+}
+
+.live-breakdown-content:hover::-webkit-scrollbar-thumb {
+  background: rgba(8, 37, 86, 0.25) !important;
+}
+
+.live-breakdown-content::-webkit-scrollbar-thumb:active,
+.live-breakdown-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(8, 37, 86, 0.6) !important;
+}
+
+.live-cost-category {
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  background: white;
+}
+
+.live-category-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f9fafb;
+  cursor: pointer;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.live-category-header:hover {
+  background: #f3f4f6;
+}
+
+.live-expand-icon {
+  font-size: 0.7rem;
+  color: #6b7280;
+  width: 12px;
+  display: inline-block;
+}
+
+.live-category-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #1f2937;
+}
+
+.live-category-total {
+  font-weight: 600;
+  color: #082556;
+  font-size: 0.85rem;
+}
+
+.live-line-items {
+  border-top: 1px solid #e5e7eb;
+  background: white;
+}
+
+.live-line-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.live-line-items-table thead {
+  background: #f9fafb;
+}
+
+.live-line-items-table th {
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.live-line-items-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+
+.live-line-items-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.live-line-items-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.live-line-items-table td:last-child {
+  text-align: right;
+  font-weight: 500;
+}
+
+.live-grand-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px 15px 20px 15px;
+  background: #082556;
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+  border-top: 2px solid #e5e7eb;
+}
+
+.live-grand-total span:last-child {
+  color: #fbbf24;
+}

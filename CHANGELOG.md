@@ -1,5 +1,21 @@
 ---
 
+## [1.2.1]
+### Changed
+- UI redesign of the Proposal Editor
+    - Split into 3 columns; Navigation, Editor, Live Cost Breakdown
+    - Collapsable side columns
+    - Independant scroll bars
+    - Sticky headers & footers
+
+- Backend code cleanup
+    - Removed numerous old/unused files
+    - Reorganized flow of code for better optimization
+
+
+
+---
+
 ## [1.2.0]
 ### Changed
 - Integration of a Formula Engine, Math Engine & Pricing Engine

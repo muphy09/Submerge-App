@@ -1,0 +1,2 @@
+-- Sample data intentionally left empty
+-- Database will be populated through the application interface

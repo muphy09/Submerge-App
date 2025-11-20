@@ -56,22 +56,28 @@ function AppContent() {
     }
   };
 
+  const isHomePage = location.pathname === '/';
+
   return (
     <div className="app">
-      <button
-        className="pricing-data-button"
-        onClick={() => setShowPricingData(true)}
-        title="View pricing data"
-      >
-        Pricing Data
-      </button>
-      <button
-        className="settings-button"
-        onClick={() => setShowSettings(true)}
-        title="Settings"
-      >
-        ⚙️
-      </button>
+      {isHomePage && (
+        <>
+          <button
+            className="pricing-data-button"
+            onClick={() => setShowPricingData(true)}
+            title="View pricing data"
+          >
+            Pricing Data
+          </button>
+          <button
+            className="settings-button"
+            onClick={() => setShowSettings(true)}
+            title="Settings"
+          >
+            ⚙️
+          </button>
+        </>
+      )}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/proposal/new" element={<ProposalForm key="new" />} />

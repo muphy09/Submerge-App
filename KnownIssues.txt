@@ -1,1 +1,1 @@
-- Editing or creating multiple proposals back-to-back will make text box inputs appear frozen 
+- MacOS Release is broken

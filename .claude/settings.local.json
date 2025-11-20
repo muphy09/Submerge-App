@@ -47,7 +47,10 @@
       "Bash(./node_modules/electron/dist/electron.exe:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(del srcpagesProposalFormNew.tsx)"
+      "Bash(del srcpagesProposalFormNew.tsx)",
+      "Bash(if not exist \"C:\\dev\\PPAS\\src\\database\" mkdir \"C:\\dev\\PPAS\\src\\database\")",
+      "Bash(cmd /c \"if not exist C:\\dev\\PPAS\\src\\database mkdir C:\\dev\\PPAS\\src\\database\")",
+      "Bash(npm run dev:renderer:*)"
     ],
     "deny": [],
     "ask": []
