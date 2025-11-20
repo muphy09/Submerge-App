@@ -1,0 +1,785 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  addPricingListItem,
+  getPricingDataSnapshot,
+  initPricingDataStore,
+  removePricingListItem,
+  resetPricingData,
+  subscribeToPricingData,
+  updatePricingListItem,
+  updatePricingValue,
+} from '../services/pricingDataStore';
+import './PricingDataModal.css';
+
+type Path = (string | number)[];
+
+type ScalarField = {
+  label: string;
+  path: Path;
+  type: 'number' | 'boolean' | 'text';
+  note?: string;
+};
+
+type ListField = {
+  key: string;
+  label: string;
+  type: 'number' | 'boolean' | 'text';
+  placeholder?: string;
+};
+
+type ListConfig = {
+  title: string;
+  path: Path;
+  fields: ListField[];
+  addLabel: string;
+};
+
+type Group = {
+  title: string;
+  scalars?: ScalarField[];
+  lists?: ListConfig[];
+};
+
+type Section = {
+  title: string;
+  groups: Group[];
+};
+
+const getValue = (target: any, path: Path) =>
+  path.reduce((acc, key) => (acc ? acc[key] : undefined), target);
+
+const toNumber = (value: string) => {
+  const parsed = parseFloat(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const emptyFromFields = (fields: ListField[]) =>
+  fields.reduce<Record<string, any>>((acc, field) => {
+    acc[field.key] = field.type === 'number' ? 0 : field.type === 'boolean' ? false : '';
+    return acc;
+  }, {});
+
+interface PricingDataModalProps {
+  onClose: () => void;
+}
+
+const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
+  const [data, setData] = useState(getPricingDataSnapshot());
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    initPricingDataStore();
+    const unsubscribe = subscribeToPricingData(setData);
+    return unsubscribe;
+  }, []);
+
+  const toggleSection = (title: string) => {
+    setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
+  };
+
+  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleScalarChange = (field: ScalarField, value: string | boolean) => {
+    if (field.type === 'number') {
+      updatePricingValue(field.path, typeof value === 'string' ? toNumber(value) : value);
+    } else if (field.type === 'boolean') {
+      updatePricingValue(field.path, Boolean(value));
+    } else {
+      updatePricingValue(field.path, value);
+    }
+  };
+
+  const handleListChange = (list: ListConfig, index: number, field: ListField, raw: any) => {
+    const parsed =
+      field.type === 'number' ? toNumber(String(raw)) : field.type === 'boolean' ? Boolean(raw) : raw;
+    updatePricingListItem(list.path, index, field.key, parsed);
+  };
+
+  const handleAddListItem = (list: ListConfig) => {
+    addPricingListItem(list.path, emptyFromFields(list.fields));
+  };
+
+  const handleRemoveListItem = (list: ListConfig, index: number) => {
+    removePricingListItem(list.path, index);
+  };
+
+  const sections: Section[] = useMemo(
+    () => [
+      {
+        title: 'Plans & Engineering',
+        groups: [
+          {
+            title: 'Plan packages',
+            scalars: [
+              { label: 'Pool only', path: ['plans', 'poolOnly'], type: 'number' },
+              { label: 'Spa add-on', path: ['plans', 'spa'], type: 'number' },
+              { label: 'Waterfall add-on', path: ['plans', 'waterfall'], type: 'number' },
+              { label: 'Water feature add-on', path: ['plans', 'waterFeature'], type: 'number' },
+              { label: 'Soil sample engineer', path: ['plans', 'soilSampleEngineer'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Layout & Permit',
+        groups: [
+          {
+            title: 'On-site layout',
+            scalars: [
+              { label: 'Pool only layout', path: ['misc', 'layout', 'poolOnly'], type: 'number' },
+              { label: 'Spa layout add-on', path: ['misc', 'layout', 'spa'], type: 'number' },
+              { label: 'Silt fencing allowance', path: ['misc', 'layout', 'siltFencing'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Permitting',
+            scalars: [
+              { label: 'Pool permit', path: ['misc', 'permit', 'poolOnly'], type: 'number' },
+              { label: 'Spa permit add-on', path: ['misc', 'permit', 'spa'], type: 'number' },
+              { label: 'Permit runner', path: ['misc', 'permit', 'permitRunner'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Excavation',
+        groups: [
+          {
+            title: 'Base & allowances',
+            scalars: [
+              { label: 'Base excavation (project)', path: ['excavation', 'basePricePerSqft'], type: 'number' },
+              { label: 'Over 1,000 sqft surcharge', path: ['excavation', 'over1000Sqft'], type: 'number' },
+              { label: 'Additional 6" depth (per sqft)', path: ['excavation', 'additional6InchDepth'], type: 'number' },
+              { label: 'Site prep (per hour)', path: ['excavation', 'sitePrep'], type: 'number' },
+              { label: 'Backfill', path: ['excavation', 'backfill'], type: 'number' },
+              { label: 'Gravel install (per ton)', path: ['excavation', 'gravelPerTon'], type: 'number' },
+              { label: 'Dirt haul (per load)', path: ['excavation', 'dirtHaulPerLoad'], type: 'number' },
+              { label: 'Cover box', path: ['excavation', 'coverBox'], type: 'number' },
+              { label: 'Travel (per mile)', path: ['excavation', 'travelPerMile'], type: 'number' },
+              { label: 'Miscellaneous', path: ['excavation', 'misc'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Spa excavation',
+            scalars: [
+              { label: 'Spa base excavation', path: ['excavation', 'baseSpa'], type: 'number' },
+              { label: 'Raised spa excavation', path: ['excavation', 'raisedSpa'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Raised bond beam (per lnft)',
+            scalars: [
+              { label: '6" RBB', path: ['excavation', 'rbb6'], type: 'number' },
+              { label: '12" RBB', path: ['excavation', 'rbb12'], type: 'number' },
+              { label: '18" RBB', path: ['excavation', 'rbb18'], type: 'number' },
+              { label: '24" RBB', path: ['excavation', 'rbb24'], type: 'number' },
+              { label: '30" RBB', path: ['excavation', 'rbb30'], type: 'number' },
+              { label: '36" RBB', path: ['excavation', 'rbb36'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Plumbing',
+        groups: [
+          {
+            title: 'Base & overruns',
+            scalars: [
+              { label: 'Short stub / base plumbing', path: ['plumbing', 'shortStub'], type: 'number' },
+              { label: 'Spa base plumbing', path: ['plumbing', 'spaBase'], type: 'number' },
+              {
+                label: 'Pool overrun per ft',
+                path: ['plumbing', 'poolOverrunPerFt'],
+                type: 'number',
+                note: `Applies over ${data.plumbing.poolOverrunThreshold} ft`,
+              },
+              {
+                label: 'Gas overrun per ft',
+                path: ['plumbing', 'gasOverrunPerFt'],
+                type: 'number',
+                note: `Applies over ${data.plumbing.gasOverrunThreshold} ft`,
+              },
+              { label: 'Spa plumbing (per ft)', path: ['plumbing', 'spaPlumbing'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Water features (per ft unless noted)',
+            scalars: [
+              { label: 'Water feature 1', path: ['plumbing', 'waterFeature1'], type: 'number' },
+              { label: 'Water feature 2', path: ['plumbing', 'waterFeature2'], type: 'number' },
+              { label: 'Water feature 3', path: ['plumbing', 'waterFeature3'], type: 'number' },
+              { label: 'Water feature 4', path: ['plumbing', 'waterFeature4'], type: 'number' },
+              { label: 'Deck jet 1', path: ['plumbing', 'deckJet1'], type: 'number' },
+              { label: 'Deck jet 2', path: ['plumbing', 'deckJet2'], type: 'number' },
+              { label: 'Deck jet 3', path: ['plumbing', 'deckJet3'], type: 'number' },
+              { label: 'Deck jet 4', path: ['plumbing', 'deckJet4'], type: 'number' },
+              { label: 'Deck jet 5', path: ['plumbing', 'deckJet5'], type: 'number' },
+              { label: 'Deck jet 6', path: ['plumbing', 'deckJet6'], type: 'number' },
+              { label: 'Bubbler 1', path: ['plumbing', 'bubbler1'], type: 'number' },
+              { label: 'Bubbler 2', path: ['plumbing', 'bubbler2'], type: 'number' },
+              { label: 'Bubbler 3', path: ['plumbing', 'bubbler3'], type: 'number' },
+              { label: 'Wok pot 1', path: ['plumbing', 'wokPot1'], type: 'number' },
+              { label: 'Wok pot 2', path: ['plumbing', 'wokPot2'], type: 'number' },
+              { label: 'Infinity edge (per ft)', path: ['plumbing', 'infinityEdge'], type: 'number' },
+              { label: 'Spillway base', path: ['plumbing', 'spillwayBase'], type: 'number' },
+              { label: 'Spillway (per ft)', path: ['plumbing', 'spillwayPerFt'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Electrical & Gas',
+        groups: [
+          {
+            title: 'Electrical runs',
+            scalars: [
+              { label: 'Base electrical', path: ['electrical', 'baseElectrical'], type: 'number' },
+              {
+                label: 'Electrical overrun per ft',
+                path: ['electrical', 'overrunPerFt'],
+                type: 'number',
+                note: `Applies over ${data.electrical.overrunThreshold} ft`,
+              },
+              { label: 'Spa electrical', path: ['electrical', 'spaElectrical'], type: 'number' },
+              { label: 'Light run base', path: ['electrical', 'lightRunBase'], type: 'number' },
+              {
+                label: 'Light run overrun per ft',
+                path: ['electrical', 'lightRunOverrunPerFt'],
+                type: 'number',
+                note: `Applies over ${data.electrical.lightRunThreshold} ft`,
+              },
+              { label: 'Heat pump electrical (per 10 ft)', path: ['electrical', 'heatPumpElectrical'], type: 'number' },
+              { label: 'Sub-panel allowance', path: ['electrical', 'subPanel'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Gas',
+            scalars: [{ label: 'Gas line (per 10 ft)', path: ['electrical', 'gasPer10Ft'], type: 'number' }],
+          },
+        ],
+      },
+      {
+        title: 'Steel',
+        groups: [
+          {
+            title: 'Rebar',
+            scalars: [
+              { label: 'Pool base (per sqft)', path: ['steel', 'poolBase'], type: 'number' },
+              { label: 'Spa base', path: ['steel', 'spaBase'], type: 'number' },
+              { label: 'Steps & bench (per lnft)', path: ['steel', 'stepsPerLnft'], type: 'number' },
+              { label: 'Tanning shelf', path: ['steel', 'tanningShelf'], type: 'number' },
+              { label: 'Over 700 sqft surcharge', path: ['steel', 'over700Sqft'], type: 'number' },
+              { label: '6" RBB steel (per lnft)', path: ['steel', 'rbb6PerLnft'], type: 'number' },
+              { label: '12" RBB steel (per lnft)', path: ['steel', 'rbb12PerLnft'], type: 'number' },
+              { label: '18" RBB steel (per lnft)', path: ['steel', 'rbb18PerLnft'], type: 'number' },
+              { label: '24" RBB steel (per lnft)', path: ['steel', 'rbb24PerLnft'], type: 'number' },
+              { label: '30" RBB steel (per lnft)', path: ['steel', 'rbb30PerLnft'], type: 'number' },
+              { label: '36" RBB steel (per lnft)', path: ['steel', 'rbb36PerLnft'], type: 'number' },
+              { label: 'Double curtain (per lnft)', path: ['steel', 'doubleCurtainPerLnft'], type: 'number' },
+              { label: 'Automatic cover steel (per perimeter ft)', path: ['steel', 'automaticCover'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Shotcrete Labor',
+        groups: [
+          {
+            title: 'Crew rates',
+            scalars: [
+              { label: 'Pool base (per sqft)', path: ['shotcrete', 'labor', 'poolBase'], type: 'number' },
+              { label: 'Spa base', path: ['shotcrete', 'labor', 'spaBase'], type: 'number' },
+              { label: 'Per 100 sqft over 500', path: ['shotcrete', 'labor', 'per100SqftOver500'], type: 'number' },
+              { label: 'Tanning shelf', path: ['shotcrete', 'labor', 'tanningShelf'], type: 'number' },
+              { label: 'Steps & bench (per lnft)', path: ['shotcrete', 'labor', 'stepsPerLnft'], type: 'number' },
+              { label: 'Raised bond beam 6"', path: ['shotcrete', 'labor', 'raisedBondBeam6'], type: 'number' },
+              { label: 'Raised bond beam 12"', path: ['shotcrete', 'labor', 'raisedBondBeam12'], type: 'number' },
+              { label: 'Raised bond beam 18"', path: ['shotcrete', 'labor', 'raisedBondBeam18'], type: 'number' },
+              { label: 'Raised bond beam 24"', path: ['shotcrete', 'labor', 'raisedBondBeam24'], type: 'number' },
+              { label: 'Raised bond beam 30"', path: ['shotcrete', 'labor', 'raisedBondBeam30'], type: 'number' },
+              { label: 'Raised bond beam 36"', path: ['shotcrete', 'labor', 'raisedBondBeam36'], type: 'number' },
+              { label: 'Raised spa', path: ['shotcrete', 'labor', 'raisedSpa'], type: 'number' },
+              { label: 'Spillway (per lnft)', path: ['shotcrete', 'labor', 'spillwayPerLnft'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Shotcrete Material',
+        groups: [
+          {
+            title: 'Material rates',
+            scalars: [
+              { label: 'Pool material (per sqft)', path: ['shotcrete', 'material', 'poolPerSqft'], type: 'number' },
+              { label: 'Spa material (per sqft)', path: ['shotcrete', 'material', 'spaPerSqft'], type: 'number' },
+              { label: 'Tanning shelf (per sqft)', path: ['shotcrete', 'material', 'tanningShelfPerSqft'], type: 'number' },
+              { label: 'Steps (per lnft)', path: ['shotcrete', 'material', 'stepsPerLnft'], type: 'number' },
+              { label: '6" RBB (per lnft)', path: ['shotcrete', 'material', 'rbb6PerLnft'], type: 'number' },
+              { label: '12" RBB (per lnft)', path: ['shotcrete', 'material', 'rbb12PerLnft'], type: 'number' },
+              { label: '18" RBB (per lnft)', path: ['shotcrete', 'material', 'rbb18PerLnft'], type: 'number' },
+              { label: '24" RBB (per lnft)', path: ['shotcrete', 'material', 'rbb24PerLnft'], type: 'number' },
+              { label: '30" RBB (per lnft)', path: ['shotcrete', 'material', 'rbb30PerLnft'], type: 'number' },
+              { label: '36" RBB (per lnft)', path: ['shotcrete', 'material', 'rbb36PerLnft'], type: 'number' },
+              { label: 'Raised spa (per sqft)', path: ['shotcrete', 'material', 'raisedSpaPerSqft'], type: 'number' },
+              { label: 'Spillway (per lnft)', path: ['shotcrete', 'material', 'spillwayPerLnft'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Tile, Coping & Decking',
+        groups: [
+          {
+            title: 'Tile labor (per lnft)',
+            scalars: [
+              { label: 'Level 1', path: ['tileCoping', 'tile', 'labor', 'level1'], type: 'number' },
+              { label: 'Level 2', path: ['tileCoping', 'tile', 'labor', 'level2'], type: 'number' },
+              { label: 'Level 3', path: ['tileCoping', 'tile', 'labor', 'level3'], type: 'number' },
+              { label: 'Step trim tile', path: ['tileCoping', 'tile', 'labor', 'stepTrim'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Tile material',
+            scalars: [
+              { label: 'Level 1 included', path: ['tileCoping', 'tile', 'material', 'level1Included'], type: 'boolean' },
+              { label: 'Level 2 upgrade (per lnft)', path: ['tileCoping', 'tile', 'material', 'level2Upgrade'], type: 'number' },
+              { label: 'Level 3 upgrade (per lnft)', path: ['tileCoping', 'tile', 'material', 'level3Upgrade'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Coping labor (per lnft)',
+            scalars: [
+              { label: 'Cantilever', path: ['tileCoping', 'coping', 'cantilever'], type: 'number' },
+              { label: 'Flagstone', path: ['tileCoping', 'coping', 'flagstone'], type: 'number' },
+              { label: 'Pavers', path: ['tileCoping', 'coping', 'pavers'], type: 'number' },
+              { label: 'Travertine level 1', path: ['tileCoping', 'coping', 'travertineLevel1'], type: 'number' },
+              { label: 'Travertine level 2', path: ['tileCoping', 'coping', 'travertineLevel2'], type: 'number' },
+              { label: 'Concrete', path: ['tileCoping', 'coping', 'concrete'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Decking labor (per sqft unless noted)',
+            scalars: [
+              { label: 'Pavers', path: ['tileCoping', 'decking', 'labor', 'pavers'], type: 'number' },
+              { label: 'Travertine', path: ['tileCoping', 'decking', 'labor', 'travertine'], type: 'number' },
+              { label: 'Concrete', path: ['tileCoping', 'decking', 'labor', 'concrete'], type: 'number' },
+              { label: 'Concrete steps (each)', path: ['tileCoping', 'decking', 'labor', 'concreteSteps'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Decking material (per sqft unless noted)',
+            scalars: [
+              { label: 'Pavers', path: ['tileCoping', 'decking', 'material', 'pavers'], type: 'number' },
+              { label: 'Travertine level 1', path: ['tileCoping', 'decking', 'material', 'travertineLevel1'], type: 'number' },
+              { label: 'Travertine level 2', path: ['tileCoping', 'decking', 'material', 'travertineLevel2'], type: 'number' },
+              { label: 'Concrete', path: ['tileCoping', 'decking', 'material', 'concrete'], type: 'number' },
+              { label: 'Concrete steps (each)', path: ['tileCoping', 'decking', 'material', 'concreteSteps'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Equipment',
+        groups: [
+          {
+            title: 'Pumps',
+            lists: [
+              {
+                title: 'Pump models',
+                path: ['equipment', 'pumps'],
+                addLabel: 'Add pump',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Pump name' },
+                  { key: 'model', label: 'Model', type: 'text', placeholder: 'Model' },
+                  { key: 'price', label: 'Price', type: 'number', placeholder: '0' },
+                ],
+              },
+            ],
+          },
+          {
+            title: 'Filters',
+            lists: [
+              {
+                title: 'Filter models',
+                path: ['equipment', 'filters'],
+                addLabel: 'Add filter',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Filter name' },
+                  { key: 'sqft', label: 'SQFT', type: 'number', placeholder: '0' },
+                  { key: 'price', label: 'Price', type: 'number', placeholder: '0' },
+                ],
+              },
+            ],
+          },
+          {
+            title: 'Cleaners',
+            lists: [
+              {
+                title: 'Cleaner models',
+                path: ['equipment', 'cleaners'],
+                addLabel: 'Add cleaner',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Cleaner name' },
+                  { key: 'price', label: 'Price', type: 'number', placeholder: '0' },
+                ],
+              },
+            ],
+          },
+          {
+            title: 'Heaters',
+            lists: [
+              {
+                title: 'Heater models',
+                path: ['equipment', 'heaters'],
+                addLabel: 'Add heater',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Heater name' },
+                  { key: 'btu', label: 'BTU', type: 'number', placeholder: '0' },
+                  { key: 'price', label: 'Price', type: 'number', placeholder: '0' },
+                  { key: 'isVersaFlo', label: 'VersaFlo capable', type: 'boolean' },
+                ],
+              },
+            ],
+          },
+          {
+            title: 'Lighting & automation rates',
+            scalars: [
+              { label: 'Niche light', path: ['equipment', 'lights', 'nicheLightPrice'], type: 'number' },
+              { label: 'Spa light add-on', path: ['equipment', 'lights', 'spaLightAddon'], type: 'number' },
+              { label: 'Additional light', path: ['equipment', 'lights', 'additionalLightPrice'], type: 'number' },
+              { label: 'Automation extra zone', path: ['equipment', 'automationZoneAddon'], type: 'number' },
+            ],
+            lists: [
+              {
+                title: 'Automation kits',
+                path: ['equipment', 'automation'],
+                addLabel: 'Add automation',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Automation name' },
+                  { key: 'price', label: 'Price', type: 'number', placeholder: '0' },
+                  { key: 'hasChemistry', label: 'Includes chemistry', type: 'boolean' },
+                ],
+              },
+            ],
+          },
+          {
+            title: 'Salt & accessories',
+            scalars: [
+              { label: 'Blanket reel', path: ['equipment', 'blanketReel'], type: 'number' },
+              { label: 'Solar blanket', path: ['equipment', 'solarBlanket'], type: 'number' },
+              { label: 'Auto-fill', path: ['equipment', 'autoFill'], type: 'number' },
+              { label: 'Handrail', path: ['equipment', 'handrail'], type: 'number' },
+              { label: 'Startup chemicals', path: ['equipment', 'startupChemicals'], type: 'number' },
+            ],
+            lists: [
+              {
+                title: 'Salt systems',
+                path: ['equipment', 'saltSystem'],
+                addLabel: 'Add salt system',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Salt system name' },
+                  { key: 'model', label: 'Model', type: 'text', placeholder: 'Model' },
+                  { key: 'price', label: 'Price', type: 'number', placeholder: '0' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Interior Finish',
+        groups: [
+          {
+            title: 'Labor (per sqft unless noted)',
+            scalars: [
+              { label: 'Plaster base', path: ['interiorFinish', 'labor', 'plasterBase'], type: 'number' },
+              { label: 'Plaster per 100 sqft over 500', path: ['interiorFinish', 'labor', 'plasterPer100SqftOver500'], type: 'number' },
+              { label: 'Pebble base', path: ['interiorFinish', 'labor', 'pebbleBase'], type: 'number' },
+              { label: 'Pebble per 100 sqft over 500', path: ['interiorFinish', 'labor', 'pebblePer100SqftOver500'], type: 'number' },
+              { label: 'Quartz base', path: ['interiorFinish', 'labor', 'quartzBase'], type: 'number' },
+              { label: 'Quartz per 100 sqft over 500', path: ['interiorFinish', 'labor', 'quartzPer100SqftOver500'], type: 'number' },
+              { label: 'Polished base', path: ['interiorFinish', 'labor', 'polishedBase'], type: 'number' },
+              { label: 'Polished per 100 sqft over 500', path: ['interiorFinish', 'labor', 'polishedPer100SqftOver500'], type: 'number' },
+              { label: 'Tile base', path: ['interiorFinish', 'labor', 'tileBase'], type: 'number' },
+              { label: 'Tile per 100 sqft over 500', path: ['interiorFinish', 'labor', 'tilePer100SqftOver500'], type: 'number' },
+              { label: 'Spa labor', path: ['interiorFinish', 'labor', 'spa'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Material (per sqft unless noted)',
+            scalars: [
+              { label: 'Plaster', path: ['interiorFinish', 'material', 'plaster'], type: 'number' },
+              { label: 'PebbleTec', path: ['interiorFinish', 'material', 'pebbleTec'], type: 'number' },
+              { label: 'PebbleSheen', path: ['interiorFinish', 'material', 'pebbleSheen'], type: 'number' },
+              { label: 'PebbleFina', path: ['interiorFinish', 'material', 'pebbleFina'], type: 'number' },
+              { label: 'Mini pebble', path: ['interiorFinish', 'material', 'miniPebble'], type: 'number' },
+              { label: 'Beadcrete', path: ['interiorFinish', 'material', 'beadcrete'], type: 'number' },
+              { label: 'QuartzScapes', path: ['interiorFinish', 'material', 'quartzScapes'], type: 'number' },
+              { label: 'Hydrazzo', path: ['interiorFinish', 'material', 'hydrazzo'], type: 'number' },
+              { label: 'Tile finish', path: ['interiorFinish', 'material', 'tile'], type: 'number' },
+              { label: 'Spa finish', path: ['interiorFinish', 'material', 'spaFinish'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Water truck',
+            scalars: [
+              { label: 'Base load', path: ['interiorFinish', 'waterTruck', 'base'], type: 'number' },
+              { label: 'Per 1,000 gallons', path: ['interiorFinish', 'waterTruck', 'per1000Gallons'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Cleanup',
+        groups: [
+          {
+            title: 'Final cleanup',
+            scalars: [
+              { label: 'Pool cleanup', path: ['cleanup', 'basePool'], type: 'number' },
+              { label: 'Spa cleanup add-on', path: ['cleanup', 'spa'], type: 'number' },
+              { label: 'Per 100 sqft over 500', path: ['cleanup', 'per100SqftOver500'], type: 'number' },
+              { label: 'Dump runs', path: ['cleanup', 'dumpRuns'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Fiberglass Shells',
+        groups: [
+          {
+            title: 'Pool shells',
+            scalars: [
+              { label: 'Small shell', path: ['fiberglass', 'small'], type: 'number' },
+              { label: 'Medium shell', path: ['fiberglass', 'medium'], type: 'number' },
+              { label: 'Large shell', path: ['fiberglass', 'large'], type: 'number' },
+              { label: 'Crystite upgrade', path: ['fiberglass', 'crystite'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Spa shells & options',
+            scalars: [
+              { label: 'Small spa shell', path: ['fiberglass', 'spaSmall'], type: 'number' },
+              { label: 'Medium spa shell', path: ['fiberglass', 'spaMedium'], type: 'number' },
+              { label: 'Large spa shell', path: ['fiberglass', 'spaLarge'], type: 'number' },
+              { label: 'Spillover', path: ['fiberglass', 'spillover'], type: 'number' },
+              { label: 'Crane allowance', path: ['fiberglass', 'crane'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Equipment Set & Drainage',
+        groups: [
+          {
+            title: 'Equipment set labor',
+            scalars: [
+              { label: 'Base equipment set', path: ['misc', 'equipmentSet', 'base'], type: 'number' },
+              { label: 'Spa equipment add-on', path: ['misc', 'equipmentSet', 'spa'], type: 'number' },
+              { label: 'Automation add-on', path: ['misc', 'equipmentSet', 'automation'], type: 'number' },
+              { label: 'Heat pump add-on', path: ['misc', 'equipmentSet', 'heatPump'], type: 'number' },
+            ],
+          },
+          {
+            title: 'Drainage (per lnft)',
+            scalars: [
+              { label: 'Downspout', path: ['misc', 'drainage', 'downspoutPerFt'], type: 'number' },
+              { label: 'Deck drain', path: ['misc', 'drainage', 'deckDrainPerFt'], type: 'number' },
+              { label: 'French drain', path: ['misc', 'drainage', 'frenchDrainPerFt'], type: 'number' },
+              { label: 'Box drain', path: ['misc', 'drainage', 'boxDrainPerFt'], type: 'number' },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Masonry',
+        groups: [
+          {
+            title: 'Columns & facing',
+            scalars: [
+              { label: 'Column base (per column)', path: ['masonry', 'columnBase'], type: 'number' },
+              { label: 'Raised spa facing - tile', path: ['masonry', 'raisedSpaFacing', 'tile'], type: 'number' },
+              { label: 'Raised spa facing - ledge stone', path: ['masonry', 'raisedSpaFacing', 'ledgestone'], type: 'number' },
+              { label: 'Raised spa facing - stacked stone', path: ['masonry', 'raisedSpaFacing', 'stackedStone'], type: 'number' },
+              { label: 'RBB facing - tile', path: ['masonry', 'rbbFacing', 'tile'], type: 'number' },
+              { label: 'RBB facing - panel ledge', path: ['masonry', 'rbbFacing', 'panelLedge'], type: 'number' },
+              { label: 'RBB facing - stacked stone', path: ['masonry', 'rbbFacing', 'stackedStone'], type: 'number' },
+            ],
+          },
+        ],
+      },
+    ],
+    [
+      data.electrical.lightRunThreshold,
+      data.electrical.overrunThreshold,
+      data.plumbing.gasOverrunThreshold,
+      data.plumbing.poolOverrunThreshold,
+    ],
+  );
+
+  const renderScalar = (field: ScalarField) => {
+    const value = getValue(data, field.path);
+    if (field.type === 'boolean') {
+      return (
+        <label className="pricing-field">
+          <div className="pricing-field__label">
+            <input
+              type="checkbox"
+              checked={Boolean(value)}
+              onChange={(e) => handleScalarChange(field, e.target.checked)}
+            />
+            <span>{field.label}</span>
+          </div>
+          {field.note && <div className="pricing-field__note">{field.note}</div>}
+        </label>
+      );
+    }
+
+    return (
+      <label className="pricing-field">
+        <div className="pricing-field__label">{field.label}</div>
+        <input
+          className="pricing-field__input"
+          type={field.type === 'number' ? 'number' : 'text'}
+          value={typeof value === 'number' ? value : value ?? ''}
+          onChange={(e) => handleScalarChange(field, e.target.value)}
+        />
+        {field.note && <div className="pricing-field__note">{field.note}</div>}
+      </label>
+    );
+  };
+
+  const renderList = (config: ListConfig) => {
+    const entries = (getValue(data, config.path) as any[]) || [];
+
+    return (
+      <div className="pricing-list-card">
+        <div className="pricing-list-card__header">
+          <h5>{config.title}</h5>
+          <button className="pricing-chip-button" onClick={() => handleAddListItem(config)}>
+            Add
+          </button>
+        </div>
+        <div className="pricing-list-card__body">
+          {entries.map((entry, index) => (
+            <div key={`${config.title}-${index}`} className="pricing-list-row">
+              <div className="pricing-list-row__fields">
+                {config.fields.map((field) => {
+                  const fieldValue = entry ? entry[field.key] : '';
+                  if (field.type === 'boolean') {
+                    return (
+                      <label key={field.key} className="pricing-field inline">
+                        <div className="pricing-field__label">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(fieldValue)}
+                            onChange={(e) => handleListChange(config, index, field, e.target.checked)}
+                          />
+                          <span>{field.label}</span>
+                        </div>
+                      </label>
+                    );
+                  }
+
+                  return (
+                    <label key={field.key} className="pricing-field inline">
+                      <div className="pricing-field__label">{field.label}</div>
+                      <input
+                        type={field.type === 'number' ? 'number' : 'text'}
+                        className="pricing-field__input"
+                        value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
+                        placeholder={field.placeholder}
+                        onChange={(e) => handleListChange(config, index, field, e.target.value)}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+              <button
+                className="pricing-chip-button danger"
+                onClick={() => handleRemoveListItem(config, index)}
+                aria-label="Remove item"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          {entries.length === 0 && (
+            <div className="pricing-empty">No items yet. Add one to get started.</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="pricing-modal-backdrop" onClick={handleBackdropClick}>
+      <div className="pricing-modal">
+        <div className="pricing-modal__header">
+          <div>
+            <h2>Pricing Data (Live Edit)</h2>
+            <p className="pricing-modal__lede">
+              Adjust labor, material, and equipment costs without touching code. Changes persist locally and apply immediately to pricing calculations.
+            </p>
+          </div>
+          <div className="pricing-modal__actions">
+            <button className="pricing-chip-button ghost" onClick={resetPricingData}>
+              Reset to defaults
+            </button>
+            <button className="pricing-modal__close" onClick={onClose} aria-label="Close pricing data">
+              x
+            </button>
+          </div>
+        </div>
+
+        <div className="pricing-modal__content">
+          {sections.map((section) => {
+            const open = openSections[section.title] ?? true;
+            return (
+              <section key={section.title} className={`pricing-section ${open ? 'open' : ''}`}>
+                <button className="pricing-section__header" onClick={() => toggleSection(section.title)}>
+                  <span>{section.title}</span>
+                  <span className="chevron">{open ? 'v' : '>'}</span>
+                </button>
+                {open && (
+                  <div className="pricing-section__body">
+                    {section.groups.map((group) => (
+                      <div key={group.title} className="pricing-group">
+                        <div className="pricing-group__heading">
+                          <h4>{group.title}</h4>
+                        </div>
+                        {group.scalars && (
+                          <div className="pricing-fields-grid">
+                            {group.scalars.map((field) => (
+                              <React.Fragment key={`${section.title}-${group.title}-${field.label}`}>
+                                {renderScalar(field)}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                        {group.lists && (
+                          <div className="pricing-lists">
+                            {group.lists.map((list) => (
+                              <React.Fragment key={`${group.title}-${list.title}`}>
+                                {renderList(list)}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PricingDataModal;

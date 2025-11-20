@@ -44,7 +44,10 @@
       "Bash(cmd /c \"dir /b node_modules\\electron\\dist\\electron.exe 2>nul\")",
       "Bash(test2.js)",
       "Bash(git stash:*)",
-      "Bash(./node_modules/electron/dist/electron.exe:*)"
+      "Bash(./node_modules/electron/dist/electron.exe:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(del srcpagesProposalFormNew.tsx)"
     ],
     "deny": [],
     "ask": []

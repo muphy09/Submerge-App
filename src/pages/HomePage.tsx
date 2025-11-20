@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Proposal } from '../types/proposal';
-import { calculateFinancials } from '../utils/financials';
+import { Proposal } from '../types/proposal-new';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
@@ -139,7 +138,7 @@ function HomePage() {
                   </div>
                   <div className="proposal-footer">
                     <p className="proposal-total">
-                      ${calculateFinancials(proposal).totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ${(proposal.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </p>
                     <button
                       className="btn-delete"

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { CustomerInfo } from '../types/proposal';
+import { CustomerInfo } from '../types/proposal-new';
 import './SectionStyles.css';
 
 interface Props {

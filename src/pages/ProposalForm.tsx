@@ -1,18 +1,21 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Proposal } from '../types/proposal';
+import { Proposal } from '../types/proposal-new';
+import { getDefaultProposal } from '../utils/proposalDefaults';
+import MasterPricingEngine from '../services/masterPricingEngine';
+import { validateProposal } from '../utils/validation';
 import CustomerInfoSection from '../components/CustomerInfoSection';
-import PoolSpecsSection from '../components/PoolSpecsSection';
-import ExcavationSection from '../components/ExcavationSection';
-import PlumbingSection from '../components/PlumbingSection';
-import TileCopingDeckingSection from '../components/TileCopingDeckingSection';
-import DrainageSection from '../components/DrainageSection';
-import EquipmentSection from '../components/EquipmentSection';
-import WaterFeaturesSection from '../components/WaterFeaturesSection';
-import CustomFeaturesSection from '../components/CustomFeaturesSection';
-import MasonrySection from '../components/MasonrySection';
-import InteriorFinishSection from '../components/InteriorFinishSection';
-import { calculateFinancials } from '../utils/financials';
+import PoolSpecsSectionNew from '../components/PoolSpecsSectionNew';
+import ExcavationSectionNew from '../components/ExcavationSectionNew';
+import PlumbingSectionNew from '../components/PlumbingSectionNew';
+import ElectricalSectionNew from '../components/ElectricalSectionNew';
+import TileCopingDeckingSectionNew from '../components/TileCopingDeckingSectionNew';
+import DrainageSectionNew from '../components/DrainageSectionNew';
+import EquipmentSectionNew from '../components/EquipmentSectionNew';
+import WaterFeaturesSectionNew from '../components/WaterFeaturesSectionNew';
+import InteriorFinishSectionNew from '../components/InteriorFinishSectionNew';
+import CustomFeaturesSectionNew from '../components/CustomFeaturesSectionNew';
+import CostBreakdownView from '../components/CostBreakdownView';
 import './ProposalForm.css';
 import ppasLogo from '../../PPAS Logo.png';
 import { useToast } from '../components/Toast';
@@ -20,16 +23,17 @@ import ConfirmDialog from '../components/ConfirmDialog';
 
 const sections = [
   'Customer Information',
-  'Pool Specs',
+  'Pool Specifications',
   'Excavation',
   'Plumbing',
+  'Electrical',
   'Tile/Coping/Decking',
   'Drainage',
   'Equipment',
   'Water Features',
-  'Custom Features',
-  'Masonry',
   'Interior Finish',
+  'Custom Features',
+  'Cost Breakdown',
 ];
 
 function ProposalForm() {
@@ -41,27 +45,7 @@ function ProposalForm() {
   const loadRequestRef = useRef(0);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
-  const getInitialProposal = (): Partial<Proposal> => ({
-    proposalNumber: `PROP-${Date.now()}`,
-    createdDate: new Date().toISOString(),
-    lastModified: new Date().toISOString(),
-    status: 'draft',
-    customerInfo: { customerName: '', city: '' },
-    poolSpecs: { poolType: 'Fiberglass', length: 0, width: 0, depth: 0, basePrice: 0 },
-    excavation: { excavationType: '', difficulty: 'Medium', accessConcerns: [], cost: 0 },
-    plumbing: { pipeType: '', pipeLength: 0, fittings: [], laborHours: 0, cost: 0 },
-    tileCopingDecking: { copingType: '', copingLength: 0, deckingType: '', deckingArea: 0, cost: 0 },
-    drainage: { drainType: '', drainCount: 0, pipingLength: 0, cost: 0 },
-    equipment: { items: [], totalCost: 0 },
-    waterFeatures: { features: [], totalCost: 0 },
-    customFeatures: { features: [], totalCost: 0 },
-    masonry: { fireplaceIncluded: false, outdoorKitchen: false, cost: 0 },
-    interiorFinish: { finishType: '', color: '', area: 0, cost: 0 },
-    subtotal: 0,
-    taxRate: 0,
-    taxAmount: 0,
-    totalCost: 0,
-  });
+  const getInitialProposal = (): Partial<Proposal> => getDefaultProposal();
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(getInitialProposal());
 
@@ -85,12 +69,17 @@ function ProposalForm() {
       if (data) {
         // Deep clone to ensure fresh object references
         const freshData = JSON.parse(JSON.stringify(data));
+
         if (loadRequestRef.current === requestId) {
           setProposal(freshData);
         }
       }
     } catch (error) {
       console.error('Failed to load proposal:', error);
+      showToast({
+        type: 'error',
+        message: 'Failed to load proposal. Please try again.',
+      });
     } finally {
       if (loadRequestRef.current === requestId) {
         setIsLoading(false);
@@ -107,14 +96,15 @@ function ProposalForm() {
   };
 
   const calculateTotals = (): Proposal => {
-    const { subtotal, taxRate, taxAmount, totalCost } = calculateFinancials(proposal);
+    const result = MasterPricingEngine.calculateCompleteProposal(proposal);
 
     return {
       ...proposal,
-      subtotal,
-      taxRate,
-      taxAmount,
-      totalCost,
+      costBreakdown: result.costBreakdown,
+      subtotal: result.subtotal,
+      taxRate: result.taxRate,
+      taxAmount: result.taxAmount,
+      totalCost: result.totalCost,
     } as Proposal;
   };
 
@@ -132,6 +122,18 @@ function ProposalForm() {
 
   const handleSave = async (submit: boolean = false) => {
     try {
+      // Validate if submitting
+      if (submit) {
+        const errors = validateProposal(proposal);
+        if (errors.length > 0) {
+          showToast({
+            type: 'error',
+            message: `Validation errors: ${errors.map(e => e.message).join(', ')}`,
+          });
+          return;
+        }
+      }
+
       const finalProposal = calculateTotals();
       if (submit) {
         finalProposal.status = 'submitted';
@@ -161,47 +163,141 @@ function ProposalForm() {
     setShowCancelConfirm(true);
   };
 
-  // Memoize default proposal to prevent unnecessary recreations
-  const defaultProposal = useMemo(() => ({
-    customerInfo: { customerName: '', city: '' },
-    poolSpecs: { poolType: 'Fiberglass' as const, length: 0, width: 0, depth: 0, basePrice: 0 },
-    excavation: { excavationType: '', difficulty: 'Medium' as const, accessConcerns: [], cost: 0 },
-    plumbing: { pipeType: '', pipeLength: 0, fittings: [], laborHours: 0, cost: 0 },
-    tileCopingDecking: { copingType: '', copingLength: 0, deckingType: '', deckingArea: 0, cost: 0 },
-    drainage: { drainType: '', drainCount: 0, pipingLength: 0, cost: 0 },
-    equipment: { items: [], totalCost: 0 },
-    waterFeatures: { features: [], totalCost: 0 },
-    customFeatures: { features: [], totalCost: 0 },
-    masonry: { fireplaceIncluded: false, outdoorKitchen: false, cost: 0 },
-    interiorFinish: { finishType: '', color: '', area: 0, cost: 0 },
-  }), []);
-
   const renderSection = () => {
-    switch (currentSection) {
-      case 0:
-        return <CustomerInfoSection data={proposal.customerInfo || defaultProposal.customerInfo!} onChange={(data) => updateProposal('customerInfo', data)} />;
+    // Ensure we have valid proposal data before rendering
+    if (!proposal.poolSpecs || !proposal.customerInfo) {
+      return (
+        <div className="section-form">
+          <p>Loading proposal data...</p>
+        </div>
+      );
+    }
+
+    const hasSpa = proposal.poolSpecs?.spaType !== 'none';
+    const isFiberglass = proposal.poolSpecs?.poolType === 'fiberglass';
+
+    try {
+      switch (currentSection) {
+        case 0:
+          return (
+            <CustomerInfoSection
+              data={proposal.customerInfo}
+              onChange={(data) => updateProposal('customerInfo', data)}
+            />
+          );
       case 1:
-        return <PoolSpecsSection data={proposal.poolSpecs || defaultProposal.poolSpecs!} onChange={(data) => updateProposal('poolSpecs', data)} />;
+        return (
+          <PoolSpecsSectionNew
+            data={proposal.poolSpecs}
+            onChange={(data) => updateProposal('poolSpecs', data)}
+          />
+        );
       case 2:
-        return <ExcavationSection data={proposal.excavation || defaultProposal.excavation!} onChange={(data) => updateProposal('excavation', data)} />;
+        return (
+          <ExcavationSectionNew
+            data={proposal.excavation!}
+            onChange={(data) => updateProposal('excavation', data)}
+          />
+        );
       case 3:
-        return <PlumbingSection data={proposal.plumbing || defaultProposal.plumbing!} onChange={(data) => updateProposal('plumbing', data)} />;
+        return (
+          <PlumbingSectionNew
+            data={proposal.plumbing!}
+            onChange={(data) => updateProposal('plumbing', data)}
+            hasSpa={hasSpa}
+          />
+        );
       case 4:
-        return <TileCopingDeckingSection data={proposal.tileCopingDecking || defaultProposal.tileCopingDecking!} onChange={(data) => updateProposal('tileCopingDecking', data)} />;
+        return (
+          <ElectricalSectionNew
+            data={proposal.electrical!}
+            onChange={(data) => updateProposal('electrical', data)}
+            hasSpa={hasSpa}
+          />
+        );
       case 5:
-        return <DrainageSection data={proposal.drainage || defaultProposal.drainage!} onChange={(data) => updateProposal('drainage', data)} />;
+        return (
+          <TileCopingDeckingSectionNew
+            data={proposal.tileCopingDecking!}
+            onChange={(data) => updateProposal('tileCopingDecking', data)}
+            poolPerimeter={proposal.poolSpecs.perimeter || 0}
+            isFiberglass={isFiberglass}
+          />
+        );
       case 6:
-        return <EquipmentSection data={proposal.equipment || defaultProposal.equipment!} onChange={(data) => updateProposal('equipment', data)} />;
+        return (
+          <DrainageSectionNew
+            data={proposal.drainage!}
+            onChange={(data) => updateProposal('drainage', data)}
+          />
+        );
       case 7:
-        return <WaterFeaturesSection data={proposal.waterFeatures || defaultProposal.waterFeatures!} onChange={(data) => updateProposal('waterFeatures', data)} />;
+        return (
+          <EquipmentSectionNew
+            data={proposal.equipment!}
+            onChange={(data) => updateProposal('equipment', data)}
+            hasSpa={hasSpa}
+          />
+        );
       case 8:
-        return <CustomFeaturesSection data={proposal.customFeatures || defaultProposal.customFeatures!} onChange={(data) => updateProposal('customFeatures', data)} />;
+        return (
+          <WaterFeaturesSectionNew
+            data={proposal.waterFeatures!}
+            onChange={(data) => updateProposal('waterFeatures', data)}
+          />
+        );
       case 9:
-        return <MasonrySection data={proposal.masonry || defaultProposal.masonry!} onChange={(data) => updateProposal('masonry', data)} />;
+        return (
+          <InteriorFinishSectionNew
+            data={proposal.interiorFinish!}
+            onChange={(data) => updateProposal('interiorFinish', data)}
+            poolSurfaceArea={proposal.poolSpecs.surfaceArea || 0}
+            hasSpa={hasSpa}
+          />
+        );
       case 10:
-        return <InteriorFinishSection data={proposal.interiorFinish || defaultProposal.interiorFinish!} onChange={(data) => updateProposal('interiorFinish', data)} />;
+        return (
+          <CustomFeaturesSectionNew
+            data={proposal.customFeatures!}
+            onChange={(data) => updateProposal('customFeatures', data)}
+          />
+        );
+      case 11:
+        // Calculate and show breakdown
+        const result = MasterPricingEngine.calculateCompleteProposal(proposal);
+        return (
+          <CostBreakdownView
+            costBreakdown={result.costBreakdown}
+            customerName={proposal.customerInfo?.customerName || ''}
+          />
+        );
       default:
         return null;
+      }
+    } catch (error) {
+      console.error('Error rendering section:', error);
+      return (
+        <div className="section-form">
+          <div style={{
+            padding: '2rem',
+            backgroundColor: '#fee2e2',
+            borderRadius: '8px',
+            border: '1px solid #dc2626'
+          }}>
+            <h3 style={{ color: '#991b1b', marginBottom: '0.5rem' }}>Error Loading Section</h3>
+            <p style={{ color: '#7f1d1d' }}>
+              There was an error loading this section. This may be due to incompatible data from an older version.
+            </p>
+            <button
+              className="btn btn-primary"
+              onClick={() => navigate('/')}
+              style={{ marginTop: '1rem' }}
+            >
+              Return to Home
+            </button>
+          </div>
+        </div>
+      );
     }
   };
 

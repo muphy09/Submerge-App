@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
-import { Proposal } from '../types/proposal';
+import { Proposal } from '../types/proposal-new';
 
 class DatabaseService {
   private db: Database.Database | null = null;

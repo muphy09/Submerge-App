@@ -5,6 +5,8 @@ import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
 import UpdateNotification from './components/UpdateNotification';
 import SettingsModal from './components/SettingsModal';
+import PricingDataModal from './components/PricingDataModal';
+import { initPricingDataStore } from './services/pricingDataStore';
 import { ToastProvider } from './components/Toast';
 import './App.css';
 
@@ -14,8 +16,12 @@ function AppContent() {
   const [updateStatus, setUpdateStatus] = useState<'downloading' | 'ready' | 'error' | null>(null);
   const [updateError, setUpdateError] = useState<string>('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showPricingData, setShowPricingData] = useState(false);
 
   useEffect(() => {
+    // Load any saved pricing overrides
+    initPricingDataStore();
+
     // Listen for proposals opened from file system
     if (window.electron && window.electron.onOpenProposal) {
       window.electron.onOpenProposal((proposal: any) => {
@@ -53,6 +59,13 @@ function AppContent() {
   return (
     <div className="app">
       <button
+        className="pricing-data-button"
+        onClick={() => setShowPricingData(true)}
+        title="View pricing data"
+      >
+        Pricing Data
+      </button>
+      <button
         className="settings-button"
         onClick={() => setShowSettings(true)}
         title="Settings"
@@ -73,6 +86,9 @@ function AppContent() {
       />
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
+      )}
+      {showPricingData && (
+        <PricingDataModal onClose={() => setShowPricingData(false)} />
       )}
     </div>
   );

@@ -1,5 +1,14 @@
 ---
 
+## [1.2.0]
+### Changed
+- Integration of a Formula Engine, Math Engine & Pricing Engine
+- Began integration of data from the Pricing Excel Spreadsheet (rollout ongoing)
+    - 
+
+
+---
+
 ## [1.1.4]
 ### Changed
 - Removed top menu bar in production builds
