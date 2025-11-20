@@ -1,8 +1,15 @@
 ---
 
+## [1.1.3]
+### Changed
+- Removed top menu bar in production builds
+
+
+---
+
 ## [1.1.2]
 ### Changed
-- Fixed MacOS DMG download
+- Attempted MacOS DMG fix
 
 ---
 
