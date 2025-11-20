@@ -8,12 +8,15 @@
     - Independant scroll bars
     - Sticky headers & footers
     - Removed redundant section titles within tabs
+    - Green text now appears if an item added increases a cost breakdown tab
+
+- Pricing Data
+    - Reworked most input fields to their correct starting value
+    - Began integrating formulas from the master excel into the pricing engine
 
 - Backend code cleanup
     - Removed numerous old/unused files
     - Reorganized flow of code for better optimization
-
-
 
 ---
 

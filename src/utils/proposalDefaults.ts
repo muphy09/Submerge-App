@@ -24,8 +24,8 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     poolType: 'gunite',
     perimeter: 0,
     surfaceArea: 0,
-    shallowDepth: 3.5,
-    endDepth: 6,
+    shallowDepth: 0,
+    endDepth: 0,
     fiberglassModelName: undefined,
     fiberglassModelPrice: undefined,
     fiberglassPerimeter: undefined,
@@ -33,7 +33,7 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     fiberglassSpaPrice: undefined,
     maxWidth: 0,
     maxLength: 0,
-    totalStepsAndBench: 20,
+    totalStepsAndBench: 0,
     hasTanningShelf: false,
     spaType: 'none',
     spaLength: 0,
@@ -46,7 +46,7 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     deckingArea: 0,
     travelDistance: 0,
     poolToStreetDistance: 0,
-    hasSiltFence: true,
+    hasSiltFence: false,
     hasAutomaticCover: false,
     approximateGallons: 0,
   };
@@ -64,8 +64,8 @@ export function getDefaultExcavation(): Excavation {
       facing: 'none',
     },
     additionalSitePrepHours: 0,
-    hasGravelInstall: true,
-    hasDirtHaul: true,
+    hasGravelInstall: false,
+    hasDirtHaul: false,
     additionalBench: 0,
     doubleCurtainLength: 0,
     needsSoilSampleEngineer: false,
@@ -76,9 +76,9 @@ export function getDefaultExcavation(): Excavation {
 export function getDefaultPlumbing(): Plumbing {
   return {
     runs: {
-      skimmerRun: 50,
+      skimmerRun: 0,
       additionalSkimmers: 0,
-      mainDrainRun: 50,
+      mainDrainRun: 0,
       cleanerRun: 0,
       autoFillRun: 0,
       waterFeature1Run: 0,
@@ -87,7 +87,7 @@ export function getDefaultPlumbing(): Plumbing {
       waterFeature4Run: 0,
       infloorValveToEQ: 0,
       infloorValveToPool: 0,
-      gasRun: 75,
+      gasRun: 0,
       spaRun: 0,
     },
     cost: 0,
@@ -97,8 +97,8 @@ export function getDefaultPlumbing(): Plumbing {
 export function getDefaultElectrical(): Electrical {
   return {
     runs: {
-      electricalRun: 75,
-      lightRun: 200,
+      electricalRun: 0,
+      lightRun: 0,
       heatPumpElectricalRun: 0,
     },
     cost: 0,
@@ -131,13 +131,16 @@ export function getDefaultDrainage(): Drainage {
 }
 
 export function getDefaultEquipment(): Equipment {
-  const defaultPump = pricingData.equipment.pumps[0];
-  const defaultFilter = pricingData.equipment.filters[0];
-  const defaultCleaner = pricingData.equipment.cleaners[2]; // No cleaner
-  const defaultHeater = pricingData.equipment.heaters[0];
+  const defaultPump =
+    pricingData.equipment.pumps.find(p => p.price === 0) || pricingData.equipment.pumps[0];
+  const defaultFilter =
+    pricingData.equipment.filters.find(f => f.price === 0) || pricingData.equipment.filters[0];
+  const defaultCleaner =
+    pricingData.equipment.cleaners.find(c => c.price === 0) || pricingData.equipment.cleaners[0];
+  const defaultHeater =
+    pricingData.equipment.heaters.find(h => h.price === 0) || pricingData.equipment.heaters[0];
   const defaultAutomation =
-    pricingData.equipment.automation.find(a => a.name.includes('TCX')) || pricingData.equipment.automation[0];
-  const defaultSalt = pricingData.equipment.saltSystem.find(s => s.name.includes('Tru-Clear')) || undefined;
+    pricingData.equipment.automation.find(a => a.price === 0) || pricingData.equipment.automation[0];
 
   return {
     pump: {
@@ -161,7 +164,7 @@ export function getDefaultEquipment(): Equipment {
       isVersaFlo: defaultHeater.isVersaFlo,
     },
     upgradeToVersaFlo: false,
-    numberOfLights: 2,
+    numberOfLights: 0,
     hasSpaLight: false,
     automation: {
       name: defaultAutomation.name,
@@ -169,13 +172,7 @@ export function getDefaultEquipment(): Equipment {
       zones: 0,
       hasChemistry: defaultAutomation.hasChemistry,
     },
-    saltSystem: defaultSalt
-      ? {
-          name: defaultSalt.name,
-          model: defaultSalt.model,
-          price: defaultSalt.price,
-        }
-      : undefined,
+    saltSystem: undefined,
     hasBlanketReel: false,
     hasSolarBlanket: false,
     hasAutoFill: false,

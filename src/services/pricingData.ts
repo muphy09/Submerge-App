@@ -87,13 +87,12 @@ const pricingData = {
     ],
   },
     electrical: {
-      baseElectrical: 1650,
-      overrunPerFt: 18,
+      baseElectrical: 1650, // Includes first 65ft of electric run
+      overrunPerFt: 18, // Each additional ft beyond 65ft
       overrunThreshold: 65,
       spaElectrical: 100,
-      lightRunBase: 100,
-      lightRunOverrunPerFt: 450,
-      lightRunThreshold: 65,
+      lightRunPerFt: 2.75, // Every foot of light run (no threshold)
+      lightRunConduitMultiplier: 1.25, // 1 ft light run = 1.25 ft billable conduit
       baseGas: 1500,
       gasPer10Ft: 11,
       subPanel: 7,
@@ -185,6 +184,7 @@ const pricingData = {
   },
   equipment: {
     pumps: [
+      { name: 'No Pump (Select pump)', model: 'NONE', price: 0 },
       { name: 'Jandy 1.65HP Variable Pump', model: 'VS-1.65HP', price: 2310 },
       { name: 'Jandy 1.85HP Variable Pump', model: 'VS-1.85HP', price: 2540 },
       { name: 'Jandy 2.7HP Variable Pump', model: 'VS-2.7HP', price: 3110 },
@@ -192,6 +192,7 @@ const pricingData = {
       { name: 'Jandy 2.0HP Single Speed Pump', model: 'SS-2.0HP', price: 2060 },
     ],
     filters: [
+      { name: 'No Filter (Select filter)', sqft: 0, price: 0 },
       { name: '200 SQFT Cartridge Filter', sqft: 200, price: 1103.57 },
       { name: '340 SQFT Cartridge Filter', sqft: 340, price: 1618.57 },
       { name: '460 SQFT Cartridge Filter', sqft: 460, price: 1677.43 },
@@ -208,6 +209,7 @@ const pricingData = {
       { name: 'No Cleaner', price: 0 },
     ],
     heaters: [
+      { name: 'No Heater (Select heater)', btu: 0, price: 0, isVersaFlo: false },
       { name: 'Jandy 400K BTU - VersaFlo', btu: 400000, price: 4710, isVersaFlo: true },
       { name: 'Jandy LXI 250K BTU', btu: 250000, price: 1885, isVersaFlo: false },
       { name: 'Jandy JXI 400K - No Bypass', btu: 400000, price: 2308, isVersaFlo: false },
@@ -221,6 +223,7 @@ const pricingData = {
       catalog: [],
     },
     automation: [
+      { name: 'No Automation (Select system)', price: 0, hasChemistry: false },
       { name: 'iAqualink w/ Rev. R', price: 1720, hasChemistry: false },
       { name: 'iAqualink Controller - New Install', price: 1720, hasChemistry: false },
       { name: 'iAqualink P4 Bundle', price: 0, hasChemistry: false },

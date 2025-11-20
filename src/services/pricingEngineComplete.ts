@@ -5,6 +5,19 @@
 import { PoolSpecs, Excavation, TileCopingDecking, Drainage, Equipment, WaterFeatures, InteriorFinish, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
 
+const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
+  const hasGuniteDimensions =
+    poolSpecs.surfaceArea > 0 ||
+    poolSpecs.perimeter > 0 ||
+    (poolSpecs.maxLength > 0 && poolSpecs.maxWidth > 0);
+  const hasFiberglassSelection =
+    poolSpecs.poolType === 'fiberglass' &&
+    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+  const hasSpaDefinition =
+    (poolSpecs.spaLength > 0 && poolSpecs.spaWidth > 0) || (poolSpecs.spaPerimeter ?? 0) > 0;
+  return hasGuniteDimensions || hasFiberglassSelection || hasSpaDefinition;
+};
+
 // ============================================================================
 // HELPER CALCULATIONS
 // ============================================================================
@@ -290,10 +303,40 @@ export class DrainageCalculations {
 // ============================================================================
 
 export class EquipmentCalculations {
+  private static hasEquipmentSelection(equipment: Equipment): boolean {
+    const pricedSelections = [
+      equipment.pump?.price,
+      equipment.auxiliaryPump?.price,
+      equipment.filter?.price,
+      equipment.cleaner?.price,
+      equipment.heater?.price,
+      equipment.automation?.price,
+      equipment.saltSystem?.price,
+    ];
+
+    const accessoriesSelected =
+      equipment.hasBlanketReel ||
+      equipment.hasSolarBlanket ||
+      equipment.hasAutoFill ||
+      equipment.hasHandrail ||
+      equipment.hasStartupChemicals;
+
+    return pricedSelections.some(price => (price ?? 0) > 0) ||
+      (equipment.automation?.zones ?? 0) > 0 ||
+      (equipment.numberOfLights ?? 0) > 0 ||
+      !!equipment.hasSpaLight ||
+      accessoriesSelected ||
+      !!equipment.upgradeToVersaFlo;
+  }
+
   static calculateEquipmentCost(equipment: Equipment, poolSpecs: PoolSpecs): CostLineItem[] {
     const items: CostLineItem[] = [];
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
     const prices = pricingData.equipment;
+
+    if (!this.hasEquipmentSelection(equipment)) {
+      return items;
+    }
 
     // Base white goods
     if (prices.baseWhiteGoods) {
@@ -483,6 +526,10 @@ export class EquipmentCalculations {
     const prices = pricingData.misc.equipmentSet;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
 
+    if (!this.hasEquipmentSelection(equipment)) {
+      return items;
+    }
+
     items.push({
       category: 'Equipment Set',
       description: 'Base Equipment Set',
@@ -569,6 +616,10 @@ export class InteriorFinishCalculations {
     const prices = pricingData.interiorFinish;
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
 
+    if (!hasPoolDefinition(poolSpecs)) {
+      return { labor: laborItems, material: materialItems, waterTruck: waterTruckItems };
+    }
+
     if (isFiberglass) {
       // Fiberglass pools don't need interior finish
       return { labor: laborItems, material: materialItems, waterTruck: waterTruckItems };
@@ -631,14 +682,16 @@ export class InteriorFinishCalculations {
     // WATER TRUCK
     const gallons = PoolCalculations.calculateGallons(poolSpecs);
     const loadSizeGallons = 7000;
-    const loads = Math.max(1, Math.ceil(gallons / loadSizeGallons));
-    waterTruckItems.push({
-      category: 'Water Truck',
-      description: 'Water Truck',
-      unitPrice: prices.waterTruck.base,
-      quantity: loads,
-      total: prices.waterTruck.base * loads,
-    });
+    if (gallons > 0) {
+      const loads = Math.max(1, Math.ceil(gallons / loadSizeGallons));
+      waterTruckItems.push({
+        category: 'Water Truck',
+        description: 'Water Truck',
+        unitPrice: prices.waterTruck.base,
+        quantity: loads,
+        total: prices.waterTruck.base * loads,
+      });
+    }
 
     return { labor: laborItems, material: materialItems, waterTruck: waterTruckItems };
   }
@@ -711,6 +764,10 @@ export class CleanupCalculations {
     const prices = pricingData.cleanup;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
 
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
+
     items.push({
       category: 'Cleanup',
       description: 'Base Pool Cleanup',
@@ -764,6 +821,10 @@ export class FiberglassCalculations {
     const prices = pricingData.fiberglass;
 
     if (poolSpecs.poolType !== 'fiberglass') return items;
+
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
 
     // Pool shell
     if (poolSpecs.fiberglassModelPrice && poolSpecs.fiberglassModelName) {

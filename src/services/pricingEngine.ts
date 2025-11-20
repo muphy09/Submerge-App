@@ -5,6 +5,19 @@
 import { Proposal, PoolSpecs, Excavation, Plumbing, Electrical, CostBreakdown, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
 
+const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
+  const hasGuniteDimensions =
+    poolSpecs.surfaceArea > 0 ||
+    poolSpecs.perimeter > 0 ||
+    (poolSpecs.maxLength > 0 && poolSpecs.maxWidth > 0);
+  const hasFiberglassSelection =
+    poolSpecs.poolType === 'fiberglass' &&
+    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+  const hasSpaDefinition =
+    (poolSpecs.spaLength > 0 && poolSpecs.spaWidth > 0) || (poolSpecs.spaPerimeter ?? 0) > 0;
+  return hasGuniteDimensions || hasFiberglassSelection || hasSpaDefinition;
+};
+
 // ============================================================================
 // POOL CALCULATIONS
 // ============================================================================
@@ -115,6 +128,10 @@ export class ExcavationCalculations {
     const prices = pricingData.excavation;
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
 
     // Base excavation (flat price derived from Excel sizing table)
     if (!isFiberglass) {
@@ -279,6 +296,10 @@ export class PlumbingCalculations {
     const items: CostLineItem[] = [];
     const prices = pricingData.plumbing;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
 
     // Short stub (base plumbing)
     items.push({
@@ -506,21 +527,25 @@ export class ElectricalCalculations {
     const prices = pricingData.electrical;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
 
-    // Base electrical
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
+
+    // Base electrical (includes first 65ft of electric run)
     items.push({
       category: 'Electrical',
-      description: 'Base Electrical',
+      description: 'Base Electrical (includes first 65 ft)',
       unitPrice: prices.baseElectrical,
       quantity: 1,
       total: prices.baseElectrical,
     });
 
-    // Electrical run overrun (if > 100 ft)
+    // Electrical run overrun (if > 65 ft)
     if (electrical.runs.electricalRun > prices.overrunThreshold) {
       const overrun = electrical.runs.electricalRun - prices.overrunThreshold;
       items.push({
         category: 'Electrical',
-        description: 'Electrical Overrun',
+        description: 'Electrical Run Overrun',
         unitPrice: prices.overrunPerFt,
         quantity: overrun,
         total: prices.overrunPerFt * overrun,
@@ -538,27 +563,17 @@ export class ElectricalCalculations {
       });
     }
 
-    // Light run
+    // Light run - every foot counts (1 ft = 1.25 ft billable conduit @ $2.75/ft)
     if (electrical.runs.lightRun > 0) {
+      const billableConduit = electrical.runs.lightRun * prices.lightRunConduitMultiplier;
+      const totalCost = billableConduit * prices.lightRunPerFt;
       items.push({
         category: 'Electrical',
-        description: 'Light Run Base',
-        unitPrice: prices.lightRunBase,
-        quantity: 1,
-        total: prices.lightRunBase,
+        description: 'Light Run',
+        unitPrice: prices.lightRunPerFt,
+        quantity: billableConduit,
+        total: totalCost,
       });
-
-      // Light run overrun (if > 150 ft)
-      if (electrical.runs.lightRun > prices.lightRunThreshold) {
-        const overrun = electrical.runs.lightRun - prices.lightRunThreshold;
-        items.push({
-          category: 'Electrical',
-          description: 'Light Run Overrun',
-          unitPrice: prices.lightRunOverrunPerFt,
-          quantity: overrun,
-          total: prices.lightRunOverrunPerFt * overrun,
-        });
-      }
     }
 
     // Heat pump electrical
@@ -947,6 +962,10 @@ export class PricingEngine {
     const items: CostLineItem[] = [];
     const prices = pricingData.plans;
 
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
+
     items.push({
       category: 'Plans & Engineering',
       description: 'Pool Only',
@@ -971,6 +990,10 @@ export class PricingEngine {
   private static calculateLayout(poolSpecs: PoolSpecs): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.misc.layout;
+
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
 
     items.push({
       category: 'Layout',
@@ -1006,6 +1029,10 @@ export class PricingEngine {
   private static calculatePermit(poolSpecs: PoolSpecs): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.misc.permit;
+
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
 
     items.push({
       category: 'Permit',

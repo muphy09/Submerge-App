@@ -15,21 +15,24 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
     });
   };
 
-  // Overrun thresholds
-  const ELECTRICAL_THRESHOLD = 100;
-  const LIGHT_THRESHOLD = 150;
+  // Pricing constants
+  const ELECTRICAL_THRESHOLD = 65; // First 65ft included in base price
+  const ELECTRICAL_OVERRUN_RATE = 18; // $18/ft beyond 65ft
+  const LIGHT_RUN_RATE = 2.75; // $2.75/ft
+  const LIGHT_RUN_MULTIPLIER = 1.25; // 1 ft = 1.25 ft billable conduit
 
   const electricalOverrun = data.runs.electricalRun > ELECTRICAL_THRESHOLD
     ? data.runs.electricalRun - ELECTRICAL_THRESHOLD
     : 0;
-  const lightOverrun = data.runs.lightRun > LIGHT_THRESHOLD
-    ? data.runs.lightRun - LIGHT_THRESHOLD
-    : 0;
+
+  // Light run - every foot counts (no threshold)
+  const lightRunBillableConduit = data.runs.lightRun * LIGHT_RUN_MULTIPLIER;
+  const lightRunCost = lightRunBillableConduit * LIGHT_RUN_RATE;
 
   return (
     <div className="section-form">
       <div className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
-        Enter electrical run lengths in linear feet (LNFT). Overrun charges apply automatically when thresholds are exceeded.
+        Enter electrical run lengths in linear feet (LNFT). Base electrical includes first 65 ft. Light run charges apply to every foot.
       </div>
 
       <div className="form-group">
@@ -45,7 +48,7 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
         <small className="form-help">House panel to equipment pad</small>
         {electricalOverrun > 0 && (
           <small className="form-help" style={{ color: '#f59e0b', display: 'block', marginTop: '0.25rem' }}>
-            ⚠️ Overrun: {electricalOverrun} ft over threshold ({ELECTRICAL_THRESHOLD} ft) - Additional charges apply ($18/ft)
+            ⚠️ Overrun: {electricalOverrun} ft over {ELECTRICAL_THRESHOLD} ft threshold - Additional charges apply (${ELECTRICAL_OVERRUN_RATE}/ft)
           </small>
         )}
       </div>
@@ -60,10 +63,10 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
           min="0"
           step="1"
         />
-        <small className="form-help">All lights to equipment pad</small>
-        {lightOverrun > 0 && (
-          <small className="form-help" style={{ color: '#f59e0b', display: 'block', marginTop: '0.25rem' }}>
-            ⚠️ Overrun: {lightOverrun} ft over threshold ({LIGHT_THRESHOLD} ft) - Additional charges apply ($450/ft)
+        <small className="form-help">All lights to equipment pad (1 ft = 1.25 ft billable @ ${LIGHT_RUN_RATE}/ft)</small>
+        {data.runs.lightRun > 0 && (
+          <small className="form-help" style={{ color: '#3b82f6', display: 'block', marginTop: '0.25rem' }}>
+            ℹ️ Billable conduit: {lightRunBillableConduit.toFixed(2)} ft = ${lightRunCost.toFixed(2)}
           </small>
         )}
       </div>
@@ -101,19 +104,19 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
       }}>
         <h4>Cost Summary</h4>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
-          <span>Base Electrical:</span>
+          <span>Base Electrical (includes first 65 ft):</span>
           <span>$1,650</span>
         </div>
         {electricalOverrun > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', color: '#f59e0b' }}>
-            <span>Electrical Overrun ({electricalOverrun} ft):</span>
-            <span>${(electricalOverrun * 18).toLocaleString()}</span>
+            <span>Electrical Overrun ({electricalOverrun} ft @ ${ELECTRICAL_OVERRUN_RATE}/ft):</span>
+            <span>${(electricalOverrun * ELECTRICAL_OVERRUN_RATE).toLocaleString()}</span>
           </div>
         )}
-        {lightOverrun > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', color: '#f59e0b' }}>
-            <span>Light Run Overrun ({lightOverrun} ft):</span>
-            <span>${(lightOverrun * 450).toLocaleString()}</span>
+        {data.runs.lightRun > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', color: '#3b82f6' }}>
+            <span>Light Run ({lightRunBillableConduit.toFixed(2)} ft billable @ ${LIGHT_RUN_RATE}/ft):</span>
+            <span>${lightRunCost.toFixed(2)}</span>
           </div>
         )}
         {hasSpa && (

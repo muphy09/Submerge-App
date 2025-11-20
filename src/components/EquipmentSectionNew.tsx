@@ -161,10 +161,12 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
           className="form-input"
           value={data.numberOfLights}
           onChange={(e) => handleChange('numberOfLights', parseInt(e.target.value) || 0)}
-          min="2"
+          min="0"
           step="1"
         />
-        <small className="form-help">2 lights included, additional lights ${pricingData.equipment.lights.additionalLightPrice} each</small>
+        <small className="form-help">
+          {`Enter total pool lights (typical builds use 2). Additional lights $${pricingData.equipment.lights.additionalLightPrice} each.`}
+        </small>
       </div>
 
       {hasSpa && (
@@ -216,7 +218,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
         <label className="form-label">Salt System</label>
         <select
           className="form-input"
-          value={data.saltSystem?.name || 'None'}
+          value={data.saltSystem?.name || ''}
           onChange={(e) => {
             const system = pricingData.equipment.saltSystem.find(s => s.name === e.target.value);
             handleChange('saltSystem', system ? {

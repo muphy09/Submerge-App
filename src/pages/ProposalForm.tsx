@@ -370,6 +370,10 @@ function ProposalForm() {
                 ◀
               </button>
             </div>
+            <div className="nav-action-space" aria-hidden="true">
+              <span className="nav-divider" />
+              <span className="nav-divider" />
+            </div>
             <div className="section-nav-grid">
               {sections.map((section, index) => (
                 <button

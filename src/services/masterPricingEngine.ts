@@ -6,6 +6,21 @@ import { Proposal, CostBreakdown, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { CalculationModules } from './pricingEngineComplete';
 
+const hasPoolDefinition = (poolSpecs: any): boolean => {
+  if (!poolSpecs) return false;
+  const hasGuniteDimensions =
+    (poolSpecs.surfaceArea ?? 0) > 0 ||
+    (poolSpecs.perimeter ?? 0) > 0 ||
+    ((poolSpecs.maxLength ?? 0) > 0 && (poolSpecs.maxWidth ?? 0) > 0);
+  const hasFiberglassSelection =
+    poolSpecs.poolType === 'fiberglass' &&
+    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+  const hasSpaDefinition =
+    ((poolSpecs.spaLength ?? 0) > 0 && (poolSpecs.spaWidth ?? 0) > 0) ||
+    (poolSpecs.spaPerimeter ?? 0) > 0;
+  return hasGuniteDimensions || hasFiberglassSelection || hasSpaDefinition;
+};
+
 // Import calculation classes from pricingEngine.ts
 import {
   ExcavationCalculations,
@@ -133,6 +148,10 @@ export class MasterPricingEngine {
     const items: CostLineItem[] = [];
     const prices = pricingData.plans;
 
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
+
     items.push({
       category: 'Plans & Engineering',
       description: 'Pool Only',
@@ -168,6 +187,10 @@ export class MasterPricingEngine {
     const items: CostLineItem[] = [];
     const prices = pricingData.misc.layout;
 
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
+
     items.push({
       category: 'Layout',
       description: 'Pool Only',
@@ -202,6 +225,10 @@ export class MasterPricingEngine {
   private static calculatePermit(poolSpecs: any): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.misc.permit;
+
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
 
     items.push({
       category: 'Permit',

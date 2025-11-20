@@ -20,10 +20,13 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
     setExpandedSections(newExpanded);
   };
 
-  const renderLineItems = (items: CostLineItem[], categoryName: string) => {
-    if (!items || items.length === 0) return null;
-
+  const renderLineItems = (items: CostLineItem[] | undefined, categoryName: string) => {
+    const safeItems = items || [];
+    const displayItems = safeItems.filter(
+      (item) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0
+    );
     const isExpanded = expandedSections.has(categoryName);
+    const total = safeItems.reduce((sum, item) => sum + (item.total ?? 0), 0);
 
     return (
       <div className="cost-category">
@@ -32,14 +35,14 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
           onClick={() => toggleSection(categoryName)}
           style={{ cursor: 'pointer' }}
         >
-          <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+          <span className="expand-icon">{isExpanded ? '▼' : '►'}</span>
           <span className="category-name">{categoryName}</span>
           <span className="category-total">
-            ${items.reduce((sum, item) => sum + item.total, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
 
-        {isExpanded && (
+        {isExpanded && displayItems.length > 0 && (
           <div className="line-items">
             <table className="line-items-table">
               <thead>
@@ -51,7 +54,7 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => (
+                {displayItems.map((item, index) => (
                   <tr key={index}>
                     <td>{item.description}</td>
                     <td>${item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -61,6 +64,12 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {isExpanded && displayItems.length === 0 && (
+          <div className="line-items empty">
+            <div className="line-items-empty-state">No line items yet</div>
           </div>
         )}
       </div>
@@ -185,18 +194,14 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
             <span>Water Truck:</span>
             <span>${costBreakdown.totals.waterTruck.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
-          {costBreakdown.totals.fiberglassShell > 0 && (
-            <div className="summary-row">
-              <span>Fiberglass Shell:</span>
-              <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-          )}
-          {costBreakdown.totals.drainage > 0 && (
-            <div className="summary-row">
-              <span>Drainage:</span>
-              <span>${costBreakdown.totals.drainage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-          )}
+          <div className="summary-row">
+            <span>Fiberglass Shell:</span>
+            <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="summary-row">
+            <span>Drainage:</span>
+            <span>${costBreakdown.totals.drainage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
         </div>
 
         <div className="grand-total">
