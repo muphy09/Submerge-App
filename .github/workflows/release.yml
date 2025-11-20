@@ -33,7 +33,15 @@ jobs:
         run: npx electron-builder --win nsis --publish always
 
   release-mac:
-    runs-on: macos-14
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x64
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Check out Git repository
@@ -47,14 +55,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Rosetta (for x64 slice in universal build)
+      - name: Install Rosetta (for x64 builds on Apple Silicon)
+        if: matrix.arch == 'x64' && matrix.runner == 'macos-14'
         run: |
           /usr/sbin/softwareupdate --install-rosetta --agree-to-license || true
 
       - name: Build renderer
         run: npm run build:renderer
 
-      - name: Build and release (Mac)
+      - name: Build and release (Mac ${{ matrix.arch }})
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -82,4 +91,5 @@ jobs:
             echo "No Apple notarization credentials provided; skipping notarization."
           fi
 
-          npx electron-builder --mac dmg --universal --publish always
+          # Build arch-specific DMG to guarantee native modules (better-sqlite3) are compiled for the right CPU.
+          npx electron-builder --mac dmg --${{ matrix.arch }} --publish always
