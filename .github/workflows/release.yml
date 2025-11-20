@@ -82,4 +82,4 @@ jobs:
             echo "No Apple notarization credentials provided; skipping notarization."
           fi
 
-          npx electron-builder --mac dmg --arch universal --publish always
+          npx electron-builder --mac dmg --universal --publish always

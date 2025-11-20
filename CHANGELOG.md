@@ -1,6 +1,6 @@
 ---
 
-## [1.1.3]
+## [1.1.4]
 ### Changed
 - Removed top menu bar in production builds
 
