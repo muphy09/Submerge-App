@@ -1,7 +1,23 @@
-const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, dialog } = require('electron');
 const path = require('path');
-const Database = require('better-sqlite3');
 const fs = require('fs');
+
+// Load native dependency with a guard so startup failures surface a readable error instead of "application can't be opened"
+let Database;
+try {
+  Database = require('better-sqlite3');
+} catch (err) {
+  const logDir = app.getPath('userData');
+  const logPath = path.join(logDir, 'startup-error.log');
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.writeFileSync(logPath, `${new Date().toISOString()} Failed to load better-sqlite3\n${err.stack || err.message}\n`);
+  } catch (_) {
+    // ignore log write issues
+  }
+  dialog.showErrorBox('Startup error', `Failed to start PPAS Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
+  app.quit();
+}
 
 // Handle ASAR paths correctly
 const isDev = process.env.NODE_ENV === 'development';

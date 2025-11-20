@@ -51,7 +51,6 @@
     "appId": "com.ppas.proposalbuilder",
     "productName": "PPAS Proposal Builder",
     "artifactName": "${productName} v${version}-${arch}.${ext}",
-    "afterPack": "scripts/strip-signatures.js",
     "afterSign": "scripts/notarize.js",
     "publish": [
       {
@@ -118,7 +117,7 @@
           ]
         }
       ],
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.inherit.plist",
       "gatekeeperAssess": false,
