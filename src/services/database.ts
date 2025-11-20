@@ -10,7 +10,6 @@ class DatabaseService {
   initialize() {
     const userDataPath = app.getPath('userData');
     const dbPath = path.join(userDataPath, 'pool-proposals.db');
-    const isNewDatabase = !fs.existsSync(dbPath);
 
     console.log('Database path:', dbPath);
 
@@ -23,18 +22,6 @@ class DatabaseService {
 
     // Execute schema statements
     this.db.exec(schema);
-
-    // Load sample data if this is a new database
-    if (isNewDatabase) {
-      try {
-        const sampleDataPath = path.join(__dirname, '../database/sampleData.sql');
-        const sampleData = fs.readFileSync(sampleDataPath, 'utf-8');
-        this.db.exec(sampleData);
-        console.log('Sample data loaded successfully');
-      } catch (error) {
-        console.warn('Failed to load sample data:', error);
-      }
-    }
 
     console.log('Database initialized successfully');
   }
@@ -89,57 +76,6 @@ class DatabaseService {
 
     const stmt = this.db.prepare('DELETE FROM proposals WHERE proposal_number = ?');
     stmt.run(proposalNumber);
-  }
-
-  // Reference data methods
-  getPoolModels() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM pool_models').all();
-  }
-
-  getExcavationRates() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM excavation_rates').all();
-  }
-
-  getPlumbingRates() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM plumbing_rates').all();
-  }
-
-  getTileRates() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM tile_rates').all();
-  }
-
-  getCopingRates() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM coping_rates').all();
-  }
-
-  getDeckingRates() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM decking_rates').all();
-  }
-
-  getEquipmentCatalog() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM equipment_catalog').all();
-  }
-
-  getWaterFeaturesCatalog() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM water_features_catalog').all();
-  }
-
-  getFinishRates() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM finish_rates').all();
-  }
-
-  getDrainageRates() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.prepare('SELECT * FROM drainage_rates').all();
   }
 
   close() {
