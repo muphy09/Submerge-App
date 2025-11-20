@@ -9,13 +9,11 @@
 - Introduced 'Pricing Data' button to display how each price is configured (editable)
     - *Will be removed in a later release to be implemented into a database for an Admin*
 
-
 ---
 
 ## [1.1.4]
 ### Changed
 - Removed top menu bar in production builds
-
 
 ---
 
