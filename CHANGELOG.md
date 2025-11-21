@@ -1,6 +1,6 @@
 ---
 
-## [1.2.1]
+## [1.3.0]
 ### Changed
 - UI redesign of the Proposal Editor
     - Split into 3 columns; Navigation, Editor, Live Cost Breakdown
