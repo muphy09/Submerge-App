@@ -1,4 +1,5 @@
 import { Excavation, RBBLevel } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
 import './SectionStyles.css';
 
 interface Props {
@@ -63,10 +64,11 @@ function ExcavationSectionNew({ data, onChange }: Props) {
               <input
                 type="number"
                 className="form-input"
-                value={level.length}
+                value={level.length || ''}
                 onChange={(e) => updateRBBLevel(index, 'length', parseFloat(e.target.value) || 0)}
                 min="0"
                 step="1"
+                placeholder="0"
               />
             </div>
 
@@ -109,12 +111,13 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.columns.count}
+            value={data.columns.count || ''}
             onChange={(e) =>
               handleChange('columns', { ...data.columns, count: parseInt(e.target.value) || 0 })
             }
             min="0"
             step="1"
+            placeholder="0"
           />
         </div>
 
@@ -125,12 +128,13 @@ function ExcavationSectionNew({ data, onChange }: Props) {
               <input
                 type="number"
                 className="form-input"
-                value={data.columns.width}
+                value={data.columns.width || ''}
                 onChange={(e) =>
                   handleChange('columns', { ...data.columns, width: parseFloat(e.target.value) || 0 })
                 }
                 min="0"
                 step="0.5"
+                placeholder="0"
               />
             </div>
 
@@ -139,12 +143,13 @@ function ExcavationSectionNew({ data, onChange }: Props) {
               <input
                 type="number"
                 className="form-input"
-                value={data.columns.depth}
+                value={data.columns.depth || ''}
                 onChange={(e) =>
                   handleChange('columns', { ...data.columns, depth: parseFloat(e.target.value) || 0 })
                 }
                 min="0"
                 step="0.5"
+                placeholder="0"
               />
             </div>
 
@@ -153,12 +158,13 @@ function ExcavationSectionNew({ data, onChange }: Props) {
               <input
                 type="number"
                 className="form-input"
-                value={data.columns.height}
+                value={data.columns.height || ''}
                 onChange={(e) =>
                   handleChange('columns', { ...data.columns, height: parseFloat(e.target.value) || 0 })
                 }
                 min="0"
                 step="0.5"
+                placeholder="0"
               />
             </div>
 
@@ -187,10 +193,11 @@ function ExcavationSectionNew({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.additionalSitePrepHours}
+          value={data.additionalSitePrepHours || ''}
           onChange={(e) => handleChange('additionalSitePrepHours', parseFloat(e.target.value) || 0)}
           min="0"
           step="0.5"
+          placeholder="0"
         />
       </div>
 
@@ -221,10 +228,11 @@ function ExcavationSectionNew({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.doubleCurtainLength}
+          value={data.doubleCurtainLength || ''}
           onChange={(e) => handleChange('doubleCurtainLength', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
       </div>
 
@@ -237,6 +245,34 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           />
           <span>Soil Sample / Engineer Required</span>
         </label>
+      </div>
+
+      {/* Retaining Wall */}
+      <h3 style={{ marginTop: '2rem' }}>Retaining Wall</h3>
+      <div className="form-group">
+        <label className="form-label">Retaining Wall Type</label>
+        <select
+          className="form-input"
+          value={data.retainingWallType || 'No Retaining Wall'}
+          onChange={(e) => handleChange('retainingWallType', e.target.value)}
+        >
+          {pricingData.masonry.retainingWalls.map((opt: any) => (
+            <option key={opt.name} value={opt.name}>
+              {opt.name} {opt.costPerSqft > 0 ? `- $${opt.costPerSqft}/SQFT` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Retaining Wall Length (LNFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.retainingWallLength || 0}
+          onChange={(e) => handleChange('retainingWallLength', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="1"
+        />
       </div>
     </div>
   );

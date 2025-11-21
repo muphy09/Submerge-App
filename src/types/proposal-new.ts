@@ -106,6 +106,10 @@ export interface Excavation {
   // Soil/Engineering
   needsSoilSampleEngineer: boolean;
 
+  // Retaining walls
+  retainingWallType?: string;
+  retainingWallLength?: number; // LNFT
+
   // Calculated costs
   cost: number;
 }
@@ -179,6 +183,13 @@ export interface TileCopingDecking {
   deckingType: DeckingType;
   deckingArea: number; // SQFT
   concreteStepsLength: number; // LNFT
+
+  // Specialty details
+  doubleBullnoseLnft?: number;
+  spillwayLnft?: number;
+  rockworkPanelLedgeSqft?: number;
+  rockworkStackedStoneSqft?: number;
+  rockworkTileSqft?: number;
 
   // Options
   hasRoughGrading: boolean; // Keep unless deck is off contract
@@ -394,6 +405,8 @@ export interface CostBreakdown {
   interiorFinish: CostLineItem[];
   waterTruck: CostLineItem[];
   fiberglassShell: CostLineItem[];
+  startupOrientation: CostLineItem[]; // NEW
+  customFeatures: CostLineItem[]; // NEW
 
   // Totals by category
   totals: {
@@ -421,8 +434,40 @@ export interface CostBreakdown {
     interiorFinish: number;
     waterTruck: number;
     fiberglassShell: number;
+    customFeatures: number; // NEW - custom features total
+    startupOrientation: number; // NEW - startup/orientation total
     grandTotal: number;
   };
+}
+
+// ============================================================================
+// PRICING & PROFIT CALCULATIONS
+// ============================================================================
+
+export interface PricingCalculations {
+  // Cost calculations
+  totalCostsBeforeOverhead: number; // Sum of all cost sections
+  overheadMultiplier: number; // Default 1.01 (1% overhead)
+  totalCOGS: number; // totalCostsBeforeOverhead × overheadMultiplier
+
+  // Retail price calculation
+  targetMargin: number; // Default 0.70 (70% - meaning 30% profit)
+  baseRetailPrice: number; // CEILING(totalCOGS / targetMargin, 10)
+  g3UpgradeCost: number; // $1,250 if Crystite G3 selected, else $0
+  discountAmount: number; // Manual discount (negative number)
+  retailPrice: number; // baseRetailPrice + g3UpgradeCost + discountAmount
+
+  // Commissions & Fees (calculated from retailPrice)
+  digCommissionRate: number; // Default 0.0275 (2.75%)
+  digCommission: number; // retailPrice × digCommissionRate
+  adminFeeRate: number; // Default 0.029 (2.9%)
+  adminFee: number; // retailPrice × adminFeeRate
+  closeoutCommissionRate: number; // Default 0.0275 (2.75%)
+  closeoutCommission: number; // retailPrice × closeoutCommissionRate
+
+  // Final profit
+  grossProfit: number; // retailPrice - totalCOGS - digCommission - adminFee - closeoutCommission
+  grossProfitMargin: number; // grossProfit / retailPrice (as percentage)
 }
 
 // ============================================================================
@@ -453,7 +498,10 @@ export interface Proposal {
   // Detailed breakdown (like COST - NEW sheet)
   costBreakdown: CostBreakdown;
 
-  // Summary totals
+  // Pricing & Profit Calculations (NEW - matching Excel)
+  pricing: PricingCalculations;
+
+  // Legacy fields (for backward compatibility)
   subtotal: number;
   taxRate: number;
   taxAmount: number;

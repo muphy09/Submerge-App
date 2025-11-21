@@ -133,31 +133,40 @@ export class ExcavationCalculations {
       return items;
     }
 
-    // Base excavation (flat price derived from Excel sizing table)
-    if (!isFiberglass) {
-      const baseExcavation = poolSpecs.surfaceArea > 1000
-        ? prices.over1000Sqft
-        : prices.basePricePerSqft;
-
+    // Base excavation (Excel range table)
+    const baseRanges = prices.baseRanges ?? [];
+    if (!isFiberglass && baseRanges.length) {
+      const baseRange = baseRanges.find((r: any) => poolSpecs.surfaceArea <= r.max) ?? baseRanges[baseRanges.length - 1];
       items.push({
         category: 'Excavation',
-        description: poolSpecs.surfaceArea > 1000 ? 'Base Excavation (Over 1,000 SQFT)' : 'Base Excavation',
-        unitPrice: baseExcavation,
+        description: `Base Excavation (${poolSpecs.surfaceArea > 1000 ? 'Over' : 'Up to'} ${baseRange.max} SQFT)`,
+        unitPrice: baseRange.price,
         quantity: 1,
-        total: baseExcavation,
+        total: baseRange.price,
       });
 
-      // Additional 6" depth charge when the average depth exceeds ~6ft
-      const avgDepth = (poolSpecs.shallowDepth + poolSpecs.endDepth) / 2;
-      if (avgDepth > 6) {
+      if (poolSpecs.surfaceArea > 1000) {
+        const overQty = Math.max(0, poolSpecs.surfaceArea - 1000);
         items.push({
           category: 'Excavation',
-          description: 'Additional 6" Depth',
-          unitPrice: prices.additional6InchDepth,
-          quantity: 1,
-          total: prices.additional6InchDepth,
+          description: 'Over 1,000 SQFT',
+          unitPrice: prices.over1000Sqft,
+          quantity: overQty,
+          total: prices.over1000Sqft * overQty,
         });
       }
+    }
+
+    // Additional 6" depth charge when end depth exceeds 8'
+    if (!isFiberglass && poolSpecs.endDepth >= 8.05) {
+      const additionalDepthQty = (poolSpecs.endDepth - 8) * 2; // increments of 6"
+      items.push({
+        category: 'Excavation',
+        description: 'Additional 6" Depth',
+        unitPrice: prices.additional6InchDepth,
+        quantity: additionalDepthQty,
+        total: prices.additional6InchDepth * additionalDepthQty,
+      });
     }
 
     // RBB levels
@@ -208,29 +217,32 @@ export class ExcavationCalculations {
       });
     }
 
-    // Gravel install
+    // Gravel install (price per sqft from EXC sheet)
     if (excavation.hasGravelInstall) {
       items.push({
         category: 'Excavation',
         description: 'Gravel',
-        unitPrice: prices.gravelPerTon,
+        unitPrice: prices.gravelPerSqft,
         quantity: poolSpecs.surfaceArea,
-        total: Math.ceil(poolSpecs.surfaceArea * prices.gravelPerTon),
+        total: Math.ceil(poolSpecs.surfaceArea * prices.gravelPerSqft),
       });
     }
 
     // Dirt haul
     if (excavation.hasDirtHaul) {
-      const overdigArea = poolSpecs.surfaceArea * 1.15; // Excel bumps surface area for overdig
-      const adjustedDepth = ((poolSpecs.shallowDepth + 1.25) + (poolSpecs.endDepth + 1.25)) / 2;
-      const cubicYards = (overdigArea * adjustedDepth) / 27;
-      const yardage = Math.ceil(cubicYards * 1.128 * 10) / 10; // match sheet uplift and keep one decimal
+      const overdigArea = poolSpecs.surfaceArea * 1.15; // Excel upsizes for overdig
+      const adjustedMinDepth = poolSpecs.shallowDepth + 1.25;
+      const adjustedMaxDepth = poolSpecs.endDepth + 1.25;
+      const adjustedDepth = (adjustedMinDepth + adjustedMaxDepth) / 2;
+      const spaAreaAllowance = hasSpa ? 50 : 0;
+      const cubicYards = ((overdigArea * adjustedDepth) / 24) + ((spaAreaAllowance * 2.5) / 24);
+      const yardage = Math.ceil(cubicYards);
       items.push({
         category: 'Excavation',
         description: 'Dirt Haul',
-        unitPrice: prices.dirtHaulPerLoad,
+        unitPrice: prices.dirtHaulPerYard,
         quantity: yardage,
-        total: Math.ceil(prices.dirtHaulPerLoad * yardage),
+        total: Math.ceil(prices.dirtHaulPerYard * yardage),
       });
     }
 
@@ -240,8 +252,8 @@ export class ExcavationCalculations {
         category: 'Excavation',
         description: 'Cover Box',
         unitPrice: prices.coverBox,
-        quantity: 1,
-        total: prices.coverBox,
+        quantity: poolSpecs.maxWidth,
+        total: prices.coverBox * poolSpecs.maxWidth,
       });
     }
 
@@ -268,7 +280,7 @@ export class ExcavationCalculations {
     }
 
     // PAP Package discount (10% off excavation for fiberglass)
-    if (isFiberglass) {
+    if (isFiberglass && items.length) {
       const subtotal = items.reduce((sum, item) => sum + item.total, 0);
       const discount = subtotal * 0.1;
       items.push({
@@ -333,6 +345,18 @@ export class PlumbingCalculations {
       });
     }
 
+    // Spa overrun
+    if (hasSpa && plumbing.runs.spaRun > prices.spaOverrunThreshold) {
+      const overrun = plumbing.runs.spaRun - prices.spaOverrunThreshold;
+      items.push({
+        category: 'Plumbing',
+        description: 'Spa Overrun',
+        unitPrice: prices.spaOverrunPerFt,
+        quantity: overrun,
+        total: prices.spaOverrunPerFt * overrun,
+      });
+    }
+
     // Core plumbing pipe - 2"
     const twoInchBaseRun =
       poolSpecs.perimeter +
@@ -385,18 +409,19 @@ export class PlumbingCalculations {
       plumbing.runs.waterFeature3Run,
       plumbing.runs.waterFeature4Run,
     ];
-    const baseFeatureAllowance = 30;
-    const featureSetup = 200;
+    const baseFeatureAllowance = prices.waterFeatureRun.baseAllowanceFt;
+    const featureSetup = prices.waterFeatureRun.setup;
+    const featureRate = prices.waterFeatureRun.perFt;
     waterFeatureRuns.forEach((run, idx) => {
       if (run > 0) {
         const cappedRun = Math.max(run, baseFeatureAllowance);
         const overage = Math.max(0, cappedRun - baseFeatureAllowance);
-        items.push({
+       items.push({
           category: 'Plumbing',
           description: `Water Feature ${idx + 1}`,
-          unitPrice: prices[`waterFeature${idx + 1}` as keyof typeof prices],
+          unitPrice: featureRate,
           quantity: overage,
-          total: featureSetup + overage * (prices[`waterFeature${idx + 1}` as keyof typeof prices] as number),
+          total: featureSetup + overage * featureRate,
         });
       }
     });
@@ -407,9 +432,9 @@ export class PlumbingCalculations {
       items.push({
         category: 'Plumbing',
         description: 'Additional Water Feature Run',
-        unitPrice: prices.deckJet1,
+        unitPrice: prices.additionalWaterFeatureRunPerFt ?? featureRate,
         quantity: totalWFRun,
-        total: prices.deckJet1 * totalWFRun,
+        total: (prices.additionalWaterFeatureRunPerFt ?? featureRate) * totalWFRun,
       });
     }
 
@@ -420,25 +445,19 @@ export class PlumbingCalculations {
         category: 'Plumbing',
         description: 'Infloor Plumbing',
         unitPrice: prices.infloorPerFt,
-        quantity: infloorTotal,
-        total: prices.infloorPerFt * infloorTotal,
+        quantity: Math.ceil(poolSpecs.surfaceArea * 0.5),
+        total: prices.infloorPerFt * Math.ceil(poolSpecs.surfaceArea * 0.5),
       });
     }
 
     // Conduit
     const conduitRuns =
-      poolSpecs.perimeter +
       plumbing.runs.skimmerRun +
       plumbing.runs.mainDrainRun +
       plumbing.runs.cleanerRun +
-      plumbing.runs.autoFillRun +
-      plumbing.runs.waterFeature1Run +
-      plumbing.runs.waterFeature2Run +
-      plumbing.runs.waterFeature3Run +
-      plumbing.runs.waterFeature4Run +
-      plumbing.runs.gasRun;
+      plumbing.runs.autoFillRun;
     if (conduitRuns > 0) {
-      const conduitQty = Math.ceil(conduitRuns * 1.2);
+      const conduitQty = Math.ceil((conduitRuns + plumbing.runs.gasRun) * 1.25);
       items.push({
         category: 'Plumbing',
         description: 'Conduit',
@@ -471,9 +490,9 @@ export class PlumbingCalculations {
       items.push({
         category: 'Plumbing',
         description: 'Cleaner Line',
-        unitPrice: 3.25, // From Excel
+        unitPrice: prices.cleanerPerFt,
         quantity: plumbing.runs.cleanerRun,
-        total: 3.25 * plumbing.runs.cleanerRun,
+        total: prices.cleanerPerFt * plumbing.runs.cleanerRun,
       });
     }
 
@@ -482,9 +501,9 @@ export class PlumbingCalculations {
       items.push({
         category: 'Plumbing',
         description: 'Auto-Fill',
-        unitPrice: 3.5, // From Excel
+        unitPrice: prices.autoFillPerFt,
         quantity: plumbing.runs.autoFillRun,
-        total: 3.5 * plumbing.runs.autoFillRun,
+        total: prices.autoFillPerFt * plumbing.runs.autoFillRun,
       });
     }
 
@@ -493,9 +512,9 @@ export class PlumbingCalculations {
       items.push({
         category: 'Plumbing',
         description: 'Additional Skimmers',
-        unitPrice: 275, // From Excel
+        unitPrice: prices.additionalSkimmer,
         quantity: plumbing.runs.additionalSkimmers,
-        total: 275 * plumbing.runs.additionalSkimmers,
+        total: prices.additionalSkimmer * plumbing.runs.additionalSkimmers,
       });
     }
 
@@ -578,14 +597,24 @@ export class ElectricalCalculations {
 
     // Heat pump electrical
     if (electrical.runs.heatPumpElectricalRun > 0) {
-      const runs = Math.ceil(electrical.runs.heatPumpElectricalRun / 10);
       items.push({
         category: 'Electrical',
         description: 'Heat Pump Electrical',
-        unitPrice: prices.heatPumpElectrical,
-        quantity: runs,
-        total: prices.heatPumpElectrical * runs,
+        unitPrice: prices.heatPumpElectricalBase ?? prices.heatPumpElectrical,
+        quantity: 1,
+        total: prices.heatPumpElectricalBase ?? prices.heatPumpElectrical,
       });
+
+      const over = Math.max(0, electrical.runs.heatPumpElectricalRun - (prices.heatPumpOverrunThreshold ?? 40));
+      if (over > 0) {
+        items.push({
+          category: 'Electrical',
+          description: 'Heat Pump Electrical Overrun',
+          unitPrice: prices.heatPumpPerFtOver ?? prices.heatPumpElectrical,
+          quantity: over,
+          total: (prices.heatPumpPerFtOver ?? prices.heatPumpElectrical) * over,
+        });
+      }
     }
 
     return items;
@@ -609,9 +638,9 @@ export class ElectricalCalculations {
         items.push({
           category: 'Gas',
           description: 'Gas Overrun',
-          unitPrice: prices.gasPer10Ft,
+          unitPrice: prices.gasPerFtOverThreshold,
           quantity: overrun,
-          total: prices.gasPer10Ft * overrun,
+          total: prices.gasPerFtOverThreshold * overrun,
         });
       }
     }
@@ -645,6 +674,15 @@ export class SteelCalculations {
       total: prices.poolBase * poolSpecs.perimeter,
     });
 
+    // 4-bar beam
+    items.push({
+      category: 'Steel',
+      description: '4-Bar Beam',
+      unitPrice: prices.fourBarBeam,
+      quantity: 1,
+      total: prices.fourBarBeam,
+    });
+
     // Spa base
     if (hasSpa) {
       items.push({
@@ -654,6 +692,22 @@ export class SteelCalculations {
         quantity: 1,
         total: prices.spaBase,
       });
+      if (poolSpecs.isRaisedSpa) {
+        items.push({
+          category: 'Steel',
+          description: 'Raised Spa',
+          unitPrice: prices.raisedSpa ?? 0,
+          quantity: 1,
+          total: prices.raisedSpa ?? 0,
+        });
+        items.push({
+          category: 'Steel',
+          description: 'Spa Double Curtain',
+          unitPrice: prices.spaDoubleCurtain,
+          quantity: 1,
+          total: prices.spaDoubleCurtain,
+        });
+      }
     }
 
     // Steps
@@ -678,14 +732,15 @@ export class SteelCalculations {
       });
     }
 
-    // Over 700 SQFT
-    if (poolSpecs.surfaceArea > 700) {
+    // Depth over 8'
+    if (poolSpecs.endDepth > 8.1) {
+      const additionalDepthQty = (poolSpecs.endDepth - 8) * 2;
       items.push({
         category: 'Steel',
-        description: 'Over 700 SQFT',
-        unitPrice: prices.over700Sqft,
-        quantity: 1,
-        total: prices.over700Sqft,
+        description: 'Additional 6" Depth',
+        unitPrice: prices.depthOver8Ft,
+        quantity: additionalDepthQty,
+        total: prices.depthOver8Ft * additionalDepthQty,
       });
     }
 
@@ -715,14 +770,23 @@ export class SteelCalculations {
       });
     }
 
-    // Automatic cover
-    if (poolSpecs.hasAutomaticCover) {
+    // Pool bonding
+    items.push({
+      category: 'Steel',
+      description: 'Pool Bonding',
+      unitPrice: prices.poolBonding,
+      quantity: 1,
+      total: prices.poolBonding,
+    });
+
+    // Travel
+    if (poolSpecs.travelDistance > 0) {
       items.push({
         category: 'Steel',
-        description: 'Automatic Cover',
-        unitPrice: prices.automaticCover,
-        quantity: poolSpecs.perimeter,
-        total: prices.automaticCover * poolSpecs.perimeter,
+        description: 'Travel',
+        unitPrice: prices.travelPerMile,
+        quantity: poolSpecs.travelDistance,
+        total: prices.travelPerMile * poolSpecs.travelDistance,
       });
     }
 
@@ -737,7 +801,7 @@ export class SteelCalculations {
 export class ShotcreteCalculations {
   static calculateShotcreteCost(
     poolSpecs: PoolSpecs,
-    excavation: Excavation
+    _excavation: Excavation
   ): { labor: CostLineItem[]; material: CostLineItem[] } {
     const laborItems: CostLineItem[] = [];
     const materialItems: CostLineItem[] = [];
@@ -747,110 +811,118 @@ export class ShotcreteCalculations {
 
     if (isFiberglass) return { labor: laborItems, material: materialItems };
 
+    // Yardage approximation with minimum yardage from Excel (32 yards)
+    const yardage = Math.max(prices.labor.minimumYards, Math.ceil(poolSpecs.surfaceArea / 16));
+
     // LABOR
-    // Base yardage approximates Excel row (surface area / 16)
-    const baseYards = Math.ceil(poolSpecs.surfaceArea / 16);
     laborItems.push({
       category: 'Shotcrete Labor',
       description: 'Pool Base',
       unitPrice: prices.labor.poolBase,
-      quantity: baseYards,
-      total: prices.labor.poolBase * baseYards,
+      quantity: yardage,
+      total: prices.labor.poolBase * yardage,
     });
 
-    // Over 500 SQFT surcharge (Excel shows ~4 units for 12 sqft over)
-    let overageUnits = 0;
-    if (poolSpecs.surfaceArea > 500) {
-      overageUnits = Math.ceil((poolSpecs.surfaceArea - 500) / 3);
-      laborItems.push({
-        category: 'Shotcrete Labor',
-        description: 'Over 500 SQFT',
-        unitPrice: prices.labor.per100SqftOver500,
-        quantity: overageUnits,
-        total: prices.labor.per100SqftOver500 * overageUnits,
-      });
-    }
-
-    // Tanning shelf
-    if (poolSpecs.hasTanningShelf) {
-      laborItems.push({
-        category: 'Shotcrete Labor',
-        description: 'Tanning Shelf',
-        unitPrice: prices.labor.tanningShelf,
-        quantity: 1,
-        total: prices.labor.tanningShelf,
-      });
-    }
-
-    // Steps
-    if (poolSpecs.totalStepsAndBench > 0) {
-      laborItems.push({
-        category: 'Shotcrete Labor',
-        description: 'Steps & Bench',
-        unitPrice: prices.labor.stepsPerLnft,
-        quantity: poolSpecs.totalStepsAndBench,
-        total: prices.labor.stepsPerLnft * poolSpecs.totalStepsAndBench,
-      });
-    }
-
-    // Spa
     if (hasSpa) {
       laborItems.push({
         category: 'Shotcrete Labor',
-        description: poolSpecs.isRaisedSpa ? 'Raised Spa' : 'Spa Base',
-        unitPrice: poolSpecs.isRaisedSpa ? prices.labor.raisedSpa : prices.labor.spaBase,
+        description: 'Spa',
+        unitPrice: prices.labor.spa,
         quantity: 1,
-        total: poolSpecs.isRaisedSpa ? prices.labor.raisedSpa : prices.labor.spaBase,
+        total: prices.labor.spa,
+      });
+    }
+
+    if (poolSpecs.hasAutomaticCover) {
+      laborItems.push({
+        category: 'Shotcrete Labor',
+        description: 'Auto Cover',
+        unitPrice: prices.labor.autoCover,
+        quantity: 1,
+        total: prices.labor.autoCover,
+      });
+    }
+
+    if (poolSpecs.poolToStreetDistance === 1) {
+      laborItems.push({
+        category: 'Shotcrete Labor',
+        description: 'Distance 251-300',
+        unitPrice: prices.labor.distance250to300,
+        quantity: 1,
+        total: prices.labor.distance250to300,
+      });
+    } else if (poolSpecs.poolToStreetDistance === 2) {
+      laborItems.push({
+        category: 'Shotcrete Labor',
+        description: 'Distance 301-350',
+        unitPrice: prices.labor.distance300to350,
+        quantity: 1,
+        total: prices.labor.distance300to350,
+      });
+    }
+
+    if (poolSpecs.travelDistance > 0) {
+      laborItems.push({
+        category: 'Shotcrete Labor',
+        description: 'Travel',
+        unitPrice: prices.labor.travelPerMile,
+        quantity: poolSpecs.travelDistance,
+        total: prices.labor.travelPerMile * poolSpecs.travelDistance,
       });
     }
 
     // MATERIAL
-    // Pool material (match yardage pattern from Excel)
-    const materialQty = baseYards + overageUnits;
+    const baseMaterial = prices.material.perYard * yardage;
     materialItems.push({
       category: 'Shotcrete Material',
       description: 'Pool Material',
-      unitPrice: prices.material.poolPerSqft,
-      quantity: materialQty,
-      total: prices.material.poolPerSqft * materialQty,
+      unitPrice: prices.material.perYard,
+      quantity: yardage,
+      total: baseMaterial,
     });
 
-    // Tanning shelf material
-    if (poolSpecs.hasTanningShelf) {
-      const shelfArea = 150; // Approximation
+    materialItems.push({
+      category: 'Shotcrete Material',
+      description: 'Clean Out',
+      unitPrice: prices.material.cleanOut,
+      quantity: 1,
+      total: prices.material.cleanOut,
+    });
+
+    materialItems.push({
+      category: 'Shotcrete Material',
+      description: 'Env / Fuel',
+      unitPrice: prices.material.envFuelPerYard,
+      quantity: yardage,
+      total: prices.material.envFuelPerYard * yardage,
+    });
+
+    materialItems.push({
+      category: 'Shotcrete Material',
+      description: 'Miscellaneous',
+      unitPrice: prices.material.misc,
+      quantity: 1,
+      total: prices.material.misc,
+    });
+
+    if (poolSpecs.travelDistance > 0) {
       materialItems.push({
         category: 'Shotcrete Material',
-        description: 'Tanning Shelf Material',
-        unitPrice: prices.material.tanningShelfPerSqft,
-        quantity: shelfArea,
-        total: prices.material.tanningShelfPerSqft * shelfArea,
+        description: 'Travel',
+        unitPrice: prices.material.travelPerMile,
+        quantity: poolSpecs.travelDistance,
+        total: prices.material.travelPerMile * poolSpecs.travelDistance,
       });
     }
 
-    // Steps material
-    if (poolSpecs.totalStepsAndBench > 0) {
-      materialItems.push({
-        category: 'Shotcrete Material',
-        description: 'Steps Material',
-        unitPrice: prices.material.stepsPerLnft,
-        quantity: poolSpecs.totalStepsAndBench,
-        total: prices.material.stepsPerLnft * poolSpecs.totalStepsAndBench,
-      });
-    }
-
-    // RBB material
-    excavation.rbbLevels.forEach((level) => {
-      if (level.length > 0) {
-        const priceKey = `rbb${level.height}PerLnft` as keyof typeof prices.material;
-        const unitPrice = prices.material[priceKey] as number;
-        materialItems.push({
-          category: 'Shotcrete Material',
-          description: `${level.height}" RBB Material`,
-          unitPrice,
-          quantity: level.length,
-          total: unitPrice * level.length,
-        });
-      }
+    // Tax applied to material subtotal (Excel applies 7.25%)
+    const materialSubtotal = materialItems.reduce((sum, i) => sum + i.total, 0);
+    materialItems.push({
+      category: 'Shotcrete Material',
+      description: 'Material Tax',
+      unitPrice: prices.material.taxRate,
+      quantity: materialSubtotal,
+      total: materialSubtotal * prices.material.taxRate,
     });
 
     return { labor: laborItems, material: materialItems };
@@ -924,6 +996,8 @@ export class PricingEngine {
       interiorFinish: 0, // TODO
       waterTruck: 0, // TODO
       fiberglassShell: 0, // TODO
+      startupOrientation: 0,
+      customFeatures: 0,
       grandTotal: 0,
     };
 
@@ -954,6 +1028,8 @@ export class PricingEngine {
       interiorFinish: [],
       waterTruck: [],
       fiberglassShell: [],
+      startupOrientation: [],
+      customFeatures: [],
       totals,
     };
   }

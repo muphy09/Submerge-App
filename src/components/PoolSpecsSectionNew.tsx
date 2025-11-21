@@ -26,31 +26,55 @@ const CompactInput = ({
   min?: string;
   step?: string;
   readOnly?: boolean;
-}) => (
-  <div className="compact-input-wrapper">
-    <input
-      type={type}
-      className="compact-input"
-      value={value}
-      onChange={onChange}
-      min={min}
-      step={step}
-      readOnly={readOnly}
-      style={readOnly ? { backgroundColor: '#f0f0f0', cursor: 'not-allowed' } : {}}
-    />
-    {unit && <span className="compact-input-unit">{unit}</span>}
-  </div>
-);
+}) => {
+  // For number inputs with value 0, show as placeholder instead
+  const displayValue = type === 'number' && value === 0 && !readOnly ? '' : value;
+  const placeholder = type === 'number' && !readOnly ? '0' : undefined;
+
+  return (
+    <div className="compact-input-wrapper">
+      <input
+        type={type}
+        className="compact-input"
+        value={displayValue}
+        onChange={onChange}
+        min={min}
+        step={step}
+        readOnly={readOnly}
+        placeholder={placeholder}
+        style={readOnly ? { backgroundColor: '#f0f0f0', cursor: 'not-allowed' } : {}}
+      />
+      {unit && <span className="compact-input-unit">{unit}</span>}
+    </div>
+  );
+};
 
 function PoolSpecsSectionNew({ data, onChange }: Props) {
   // Auto-calculate gallons and spa perimeter when relevant fields change
   useEffect(() => {
     const gallons = CalculationModules.Pool.calculateGallons(data);
     const spaPerimeter = CalculationModules.Pool.calculateSpaPerimeter(data);
+    const surfaceFromDims =
+      data.surfaceArea && data.surfaceArea > 0
+        ? data.surfaceArea
+        : CalculationModules.Pool.calculateSurfaceAreaFromDimensions(data);
+    const perimeterFromDims =
+      data.perimeter && data.perimeter > 0
+        ? data.perimeter
+        : data.maxLength && data.maxWidth
+        ? Math.ceil((data.maxLength + data.maxWidth) * 2)
+        : 0;
 
-    if (gallons !== data.approximateGallons || spaPerimeter !== data.spaPerimeter) {
+    if (
+      gallons !== data.approximateGallons ||
+      spaPerimeter !== data.spaPerimeter ||
+      surfaceFromDims !== data.surfaceArea ||
+      perimeterFromDims !== data.perimeter
+    ) {
       onChange({
         ...data,
+        surfaceArea: surfaceFromDims,
+        perimeter: perimeterFromDims,
         approximateGallons: gallons,
         spaPerimeter: spaPerimeter,
       });

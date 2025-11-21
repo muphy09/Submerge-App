@@ -38,10 +38,11 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
             <input
               type="number"
               className="form-input"
-              value={data.additionalTileLength}
+              value={data.additionalTileLength || ''}
               onChange={(e) => handleChange('additionalTileLength', parseFloat(e.target.value) || 0)}
               min="0"
               step="1"
+              placeholder="0"
             />
             <small className="form-help">For spillway or infinity edge (beyond perimeter)</small>
           </div>
@@ -82,13 +83,39 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
         <input
           type="number"
           className="form-input"
-          value={data.copingLength || poolPerimeter}
-          onChange={(e) => handleChange('copingLength', parseFloat(e.target.value) || 0)}
+          value={data.copingLength || ''}
+          onChange={(e) => handleChange('copingLength', parseFloat(e.target.value) || poolPerimeter)}
           min="0"
           step="1"
           placeholder={`Auto: ${poolPerimeter}`}
         />
         <small className="form-help">Defaults to pool perimeter ({poolPerimeter} LNFT)</small>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Double Bullnose (LNFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.doubleBullnoseLnft || ''}
+          onChange={(e) => handleChange('doubleBullnoseLnft', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="1"
+          placeholder="0"
+        />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Spillway Length (LNFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.spillwayLnft || ''}
+          onChange={(e) => handleChange('spillwayLnft', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="1"
+          placeholder="0"
+        />
       </div>
 
       {/* Decking */}
@@ -112,10 +139,11 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
         <input
           type="number"
           className="form-input"
-          value={data.deckingArea}
+          value={data.deckingArea || ''}
           onChange={(e) => handleChange('deckingArea', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
       </div>
 
@@ -124,10 +152,50 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
         <input
           type="number"
           className="form-input"
-          value={data.concreteStepsLength}
+          value={data.concreteStepsLength || ''}
           onChange={(e) => handleChange('concreteStepsLength', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
+        />
+      </div>
+
+      {/* Stone / Rockwork */}
+      <h3 style={{ marginTop: '2rem' }}>Stone / Rockwork</h3>
+      <div className="form-group">
+        <label className="form-label">Panel Ledge Facing (SQFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.rockworkPanelLedgeSqft || ''}
+          onChange={(e) => handleChange('rockworkPanelLedgeSqft', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="1"
+          placeholder="0"
+        />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Stacked Stone Facing (SQFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.rockworkStackedStoneSqft || ''}
+          onChange={(e) => handleChange('rockworkStackedStoneSqft', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="1"
+          placeholder="0"
+        />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Tile Facing (SQFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.rockworkTileSqft || ''}
+          onChange={(e) => handleChange('rockworkTileSqft', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="1"
+          placeholder="0"
         />
       </div>
 

@@ -74,10 +74,11 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
               <input
                 type="number"
                 className="form-input"
-                value={feature.laborCost}
+                value={feature.laborCost || ''}
                 onChange={(e) => updateFeature(index, 'laborCost', parseFloat(e.target.value) || 0)}
                 min="0"
                 step="0.01"
+                placeholder="0"
               />
             </div>
 
@@ -86,10 +87,11 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
               <input
                 type="number"
                 className="form-input"
-                value={feature.materialCost}
+                value={feature.materialCost || ''}
                 onChange={(e) => updateFeature(index, 'materialCost', parseFloat(e.target.value) || 0)}
                 min="0"
                 step="0.01"
+                placeholder="0"
               />
             </div>
 

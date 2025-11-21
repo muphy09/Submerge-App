@@ -468,6 +468,7 @@ function ProposalForm() {
               costBreakdown={currentCostBreakdown.costBreakdown}
               customerName={proposal.customerInfo?.customerName || ''}
               proposal={proposal}
+              pricing={currentCostBreakdown.pricing}
             />
           </div>
         </div>

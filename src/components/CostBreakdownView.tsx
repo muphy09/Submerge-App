@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CostBreakdown, CostLineItem, Proposal } from '../types/proposal-new';
+import { CostBreakdown, CostLineItem, Proposal, PricingCalculations } from '../types/proposal-new';
 import PremierAdvantageWarranty from './PremierAdvantageWarranty';
 import ppasLogo from '../../PPAS Logo.png';
 import './CostBreakdownView.css';
@@ -8,9 +8,10 @@ interface Props {
   costBreakdown: CostBreakdown;
   customerName: string;
   proposal?: Partial<Proposal>;
+  pricing?: PricingCalculations;
 }
 
-function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
+function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [zoomLevel, setZoomLevel] = useState(0.5); // Start at 50% (0.5 scale)
 
@@ -105,6 +106,8 @@ function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
       'Interior Finish',
       'Water Truck',
       'Fiberglass Shell',
+      'Startup/Orientation',
+      'Custom Features',
     ]);
     setExpandedSections(allSections);
   };
@@ -112,6 +115,11 @@ function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
   const collapseAll = () => {
     setExpandedSections(new Set());
   };
+
+  // Keep unused helpers referenced so TS doesn't prune them (reserved for future interactive view)
+  void renderLineItems;
+  void expandAll;
+  void collapseAll;
 
   const scaleValue = 0.5 + (zoomLevel * 0.5); // Maps 0-1 slider to 0.5-1.0 scale
   const scaleStyle = {
@@ -230,12 +238,98 @@ function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
               <span>Fiberglass Shell:</span>
               <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
+            <div className="summary-row">
+              <span>Startup/Orientation:</span>
+              <span>${costBreakdown.totals.startupOrientation.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Custom Features:</span>
+              <span>${costBreakdown.totals.customFeatures.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
           </div>
 
-          <div className="grand-total">
-            <span>GRAND TOTAL:</span>
-            <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          {/* Cost Summary Section */}
+          <div className="cost-summary-section">
+            <div className="summary-row subtotal-row">
+              <span>TOTAL COSTS:</span>
+              <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
           </div>
+
+          {/* Pricing & Profit Section */}
+          {pricing && (
+            <div className="pricing-section">
+              <div className="section-divider"></div>
+
+              <div className="summary-row">
+                <span>Overhead ({((pricing.overheadMultiplier - 1) * 100).toFixed(1)}%):</span>
+                <span>${(pricing.totalCOGS - pricing.totalCostsBeforeOverhead).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+
+              <div className="summary-row subtotal-row">
+                <span>TOTAL COGS:</span>
+                <span>${pricing.totalCOGS.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+
+              <div className="section-divider"></div>
+
+              <div className="summary-row">
+                <span>Base Retail Price (@ {(pricing.targetMargin * 100).toFixed(0)}% cost target):</span>
+                <span>${pricing.baseRetailPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+
+              {pricing.g3UpgradeCost > 0 && (
+                <div className="summary-row">
+                  <span>G3 Upgrade:</span>
+                  <span>${pricing.g3UpgradeCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+
+              {pricing.discountAmount !== 0 && (
+                <div className="summary-row discount-row">
+                  <span>Discount:</span>
+                  <span>${pricing.discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+
+              <div className="summary-row retail-price-row">
+                <span>RETAIL PRICE:</span>
+                <span>${pricing.retailPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+
+              <div className="section-divider"></div>
+
+              <div className="summary-row">
+                <span>Dig Commission ({(pricing.digCommissionRate * 100).toFixed(2)}%):</span>
+                <span>$(${pricing.digCommission.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
+              </div>
+
+              <div className="summary-row">
+                <span>Admin Fee ({(pricing.adminFeeRate * 100).toFixed(2)}%):</span>
+                <span>$(${pricing.adminFee.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
+              </div>
+
+              <div className="summary-row">
+                <span>Closeout Commission ({(pricing.closeoutCommissionRate * 100).toFixed(2)}%):</span>
+                <span>$(${pricing.closeoutCommission.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
+              </div>
+
+              <div className="section-divider"></div>
+
+              <div className="summary-row gross-profit-row">
+                <span>GROSS PROFIT ({pricing.grossProfitMargin.toFixed(1)}%):</span>
+                <span>${pricing.grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Legacy Grand Total (if no pricing data) */}
+          {!pricing && (
+            <div className="grand-total">
+              <span>GRAND TOTAL:</span>
+              <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          )}
         </div>
         </div>
 

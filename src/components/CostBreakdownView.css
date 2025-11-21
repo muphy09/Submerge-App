@@ -304,6 +304,87 @@
   font-family: 'Courier New', monospace;
 }
 
+/* Pricing & Profit Sections */
+.cost-summary-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 2px solid #cbd5e1;
+}
+
+.pricing-section {
+  margin-top: 0.5rem;
+}
+
+.section-divider {
+  height: 2px;
+  background: #e2e8f0;
+  margin: 1rem 0;
+}
+
+.subtotal-row {
+  font-weight: 700;
+  font-size: 1.1rem;
+  background: #f8fafc;
+  padding: 0.75rem 0;
+  margin: 0.5rem 0;
+}
+
+.subtotal-row span:first-child {
+  color: #1e293b;
+}
+
+.subtotal-row span:last-child {
+  color: #0f172a;
+  font-family: 'Courier New', monospace;
+}
+
+.retail-price-row {
+  font-weight: 700;
+  font-size: 1.3rem;
+  background: #dbeafe;
+  padding: 1rem 0;
+  margin: 0.5rem 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.retail-price-row span:first-child {
+  color: #1e40af;
+}
+
+.retail-price-row span:last-child {
+  color: #1e40af;
+  font-family: 'Courier New', monospace;
+}
+
+.discount-row {
+  color: #dc2626;
+}
+
+.discount-row span:last-child {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.gross-profit-row {
+  font-weight: 700;
+  font-size: 1.2rem;
+  background: #d1fae5;
+  padding: 1rem 0;
+  margin: 0.5rem 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.gross-profit-row span:first-child {
+  color: #065f46;
+}
+
+.gross-profit-row span:last-child {
+  color: #065f46;
+  font-family: 'Courier New', monospace;
+}
+
 @media print {
   .breakdown-actions {
     display: none;

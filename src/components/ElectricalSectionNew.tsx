@@ -40,10 +40,11 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.electricalRun}
+          value={data.runs.electricalRun || ''}
           onChange={(e) => handleRunChange('electricalRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">House panel to equipment pad</small>
         {electricalOverrun > 0 && (
@@ -58,10 +59,11 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.lightRun}
+          value={data.runs.lightRun || ''}
           onChange={(e) => handleRunChange('lightRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">All lights to equipment pad (1 ft = 1.25 ft billable @ ${LIGHT_RUN_RATE}/ft)</small>
         {data.runs.lightRun > 0 && (
@@ -76,10 +78,11 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.heatPumpElectricalRun}
+          value={data.runs.heatPumpElectricalRun || ''}
           onChange={(e) => handleRunChange('heatPumpElectricalRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Only if using heat pump (charged per 10 ft)</small>
       </div>

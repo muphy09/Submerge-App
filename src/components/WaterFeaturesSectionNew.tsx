@@ -86,8 +86,9 @@ function WaterFeaturesSectionNew({ data, onChange }: Props) {
                     className="form-input"
                     min="0"
                     step="1"
-                    value={qty}
+                    value={qty || ''}
                     onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value, 10) || 0)}
+                    placeholder="0"
                   />
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>

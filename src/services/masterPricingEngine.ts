@@ -36,6 +36,7 @@ export class MasterPricingEngine {
    */
   static calculateCompleteProposal(proposal: Partial<Proposal>): {
     costBreakdown: CostBreakdown;
+    pricing: import('../types/proposal-new').PricingCalculations;
     subtotal: number;
     taxRate: number;
     taxAmount: number;
@@ -67,10 +68,25 @@ export class MasterPricingEngine {
     const equipmentItems = CalculationModules.Equipment.calculateEquipmentCost(equipment, poolSpecs);
     const equipmentSetItems = CalculationModules.Equipment.calculateEquipmentSetCost(equipment, poolSpecs);
     const waterFeaturesItems = CalculationModules.WaterFeatures.calculateWaterFeaturesCost(waterFeatures);
-    const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish);
-    const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs);
+    const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);
+    const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, excavation, tileCopingDecking);
     const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(poolSpecs);
-    const masonryItems = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, excavation);
+    const masonryCalc = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, excavation);
+    const rockworkLabor = masonryCalc.labor.concat(tileCoping.labor.filter(i => i.category.includes('Rockwork')));
+    const rockworkMaterial = masonryCalc.material.concat(tileCoping.material.filter(i => i.category.includes('Rockwork')));
+
+    // Startup & Orientation
+    const startupItems = this.calculateStartupOrientation(poolSpecs, equipment);
+
+    // Custom Features (convert to line items)
+    const customFeaturesItems: CostLineItem[] = customFeatures?.features.map(f => ({
+      category: 'Custom Features',
+      description: f.name,
+      unitPrice: f.totalCost,
+      quantity: 1,
+      total: f.totalCost,
+      notes: f.description
+    })) || [];
 
     // Calculate totals
     const totals = {
@@ -87,9 +103,9 @@ export class MasterPricingEngine {
       tileLabor: this.sumItems(tileCoping.labor),
       tileMaterial: this.sumItems(tileCoping.material),
       copingDeckingLabor: this.sumItems(tileCoping.labor.filter(i => i.category.includes('Coping') || i.category.includes('Decking'))),
-      copingDeckingMaterial: this.sumItems(tileCoping.material.filter(i => i.category.includes('Decking'))),
-      stoneRockworkLabor: this.sumItems(masonryItems),
-      stoneRockworkMaterial: 0, // Included in masonry
+      copingDeckingMaterial: this.sumItems(tileCoping.material.filter(i => i.category.includes('Coping') || i.category.includes('Decking') || i.category.includes('Tax'))),
+      stoneRockworkLabor: this.sumItems(rockworkLabor),
+      stoneRockworkMaterial: this.sumItems(rockworkMaterial),
       drainage: this.sumItems(drainageItems),
       equipmentOrdered: this.sumItems(equipmentItems),
       equipmentSet: this.sumItems(equipmentSetItems),
@@ -98,14 +114,13 @@ export class MasterPricingEngine {
       interiorFinish: this.sumItems([...interior.labor, ...interior.material]),
       waterTruck: this.sumItems(interior.waterTruck),
       fiberglassShell: this.sumItems(fiberglassItems),
+      startupOrientation: this.sumItems(startupItems),
+      customFeatures: this.sumItems(customFeaturesItems),
       grandTotal: 0,
     };
 
-    // Add custom features
-    const customFeaturesTotal = customFeatures?.features.reduce((sum, f) => sum + f.totalCost, 0) || 0;
-
     // Calculate grand total
-    totals.grandTotal = Object.values(totals).reduce((sum, val) => sum + val, 0) + customFeaturesTotal;
+    totals.grandTotal = Object.values(totals).reduce((sum, val) => sum + val, 0);
 
     const costBreakdown: CostBreakdown = {
       plansAndEngineering: plansItems,
@@ -121,9 +136,9 @@ export class MasterPricingEngine {
       tileLabor: tileCoping.labor,
       tileMaterial: tileCoping.material,
       copingDeckingLabor: tileCoping.labor.filter(i => i.category.includes('Coping') || i.category.includes('Decking')),
-      copingDeckingMaterial: tileCoping.material.filter(i => i.category.includes('Decking')),
-      stoneRockworkLabor: masonryItems,
-      stoneRockworkMaterial: [],
+      copingDeckingMaterial: tileCoping.material.filter(i => i.category.includes('Coping') || i.category.includes('Decking') || i.category.includes('Tax')),
+      stoneRockworkLabor: rockworkLabor,
+      stoneRockworkMaterial: rockworkMaterial,
       drainage: drainageItems,
       equipmentOrdered: equipmentItems,
       equipmentSet: equipmentSetItems,
@@ -132,15 +147,74 @@ export class MasterPricingEngine {
       interiorFinish: [...interior.labor, ...interior.material],
       waterTruck: interior.waterTruck,
       fiberglassShell: fiberglassItems,
+      startupOrientation: startupItems,
+      customFeatures: customFeaturesItems,
       totals,
+    };
+
+    // ============================================================================
+    // PRICING CALCULATIONS (Matching Excel)
+    // ============================================================================
+
+    // Get configuration values (these should come from proposal or defaults)
+    const overheadMultiplier = proposal.pricing?.overheadMultiplier ?? 1.01; // 1% overhead
+    const targetMargin = proposal.pricing?.targetMargin ?? 0.70; // 70% cost target
+    const discountAmount = proposal.pricing?.discountAmount ?? 0; // Manual discount
+    const digCommissionRate = proposal.pricing?.digCommissionRate ?? 0.0275; // 2.75%
+    const adminFeeRate = proposal.pricing?.adminFeeRate ?? 0.029; // 2.9%
+    const closeoutCommissionRate = proposal.pricing?.closeoutCommissionRate ?? 0.0275; // 2.75%
+
+    // Determine G3 upgrade cost
+    const hasG3Upgrade = interiorFinish?.finishType?.toLowerCase().includes('crystite') ?? false;
+    const g3UpgradeCost = hasG3Upgrade ? 1250 : 0;
+
+    // Step 1: Total costs before overhead
+    const totalCostsBeforeOverhead = totals.grandTotal;
+
+    // Step 2: Apply overhead multiplier
+    const totalCOGS = totalCostsBeforeOverhead * overheadMultiplier;
+
+    // Step 3: Calculate base retail price (divide by target margin and round up to nearest $10)
+    const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 10) * 10;
+
+    // Step 4: Add G3 upgrade and discount
+    const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount;
+
+    // Step 5: Calculate commissions and fees
+    const digCommission = retailPrice * digCommissionRate;
+    const adminFee = retailPrice * adminFeeRate;
+    const closeoutCommission = retailPrice * closeoutCommissionRate;
+
+    // Step 6: Calculate gross profit
+    const grossProfit = retailPrice - totalCOGS - digCommission - adminFee - closeoutCommission;
+    const grossProfitMargin = retailPrice > 0 ? (grossProfit / retailPrice) * 100 : 0;
+
+    const pricing: import('../types/proposal-new').PricingCalculations = {
+      totalCostsBeforeOverhead,
+      overheadMultiplier,
+      totalCOGS,
+      targetMargin,
+      baseRetailPrice,
+      g3UpgradeCost,
+      discountAmount,
+      retailPrice,
+      digCommissionRate,
+      digCommission,
+      adminFeeRate,
+      adminFee,
+      closeoutCommissionRate,
+      closeoutCommission,
+      grossProfit,
+      grossProfitMargin,
     };
 
     return {
       costBreakdown,
+      pricing,
       subtotal: totals.grandTotal,
       taxRate: 0,
       taxAmount: 0,
-      totalCost: totals.grandTotal,
+      totalCost: retailPrice, // Return retail price, not just costs
     };
   }
 
@@ -259,6 +333,38 @@ export class MasterPricingEngine {
     return items;
   }
 
+  private static calculateStartupOrientation(poolSpecs: any, equipment: any): CostLineItem[] {
+    const items: CostLineItem[] = [];
+    const prices = pricingData.misc.startup;
+
+    if (!hasPoolDefinition(poolSpecs)) {
+      return items;
+    }
+
+    // Base startup & 30-day service
+    items.push({
+      category: 'Start-Up / Orientation',
+      description: 'Start-Up & 30 Days',
+      unitPrice: prices.base,
+      quantity: 1,
+      total: prices.base,
+    });
+
+    // Add automation fee if automation is present
+    const hasSpa = CalculationModules.Pool.hasSpa(poolSpecs);
+    if (hasSpa && equipment?.automation) {
+      items.push({
+        category: 'Start-Up / Orientation',
+        description: 'Add Automation',
+        unitPrice: prices.automationAdd,
+        quantity: 1,
+        total: prices.automationAdd,
+      });
+    }
+
+    return items;
+  }
+
   private static sumItems(items: CostLineItem[]): number {
     return items.reduce((sum, item) => sum + item.total, 0);
   }
@@ -267,8 +373,18 @@ export class MasterPricingEngine {
    * Auto-calculate pool specifications based on dimensions
    */
   static autoCalculatePoolSpecs(poolSpecs: any): any {
+    const computedSurfaceArea =
+      (poolSpecs.surfaceArea && poolSpecs.surfaceArea > 0)
+        ? poolSpecs.surfaceArea
+        : CalculationModules.Pool.calculateSurfaceAreaFromDimensions(poolSpecs);
+    const computedPerimeter =
+      (poolSpecs.perimeter && poolSpecs.perimeter > 0)
+        ? poolSpecs.perimeter
+        : (poolSpecs.maxLength && poolSpecs.maxWidth ? Math.ceil((poolSpecs.maxLength + poolSpecs.maxWidth) * 2) : 0);
     return {
       ...poolSpecs,
+      surfaceArea: computedSurfaceArea,
+      perimeter: computedPerimeter,
       approximateGallons: CalculationModules.Pool.calculateGallons(poolSpecs),
       spaPerimeter: CalculationModules.Pool.calculateSpaPerimeter(poolSpecs),
     };

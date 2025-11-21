@@ -1,3 +1,2 @@
 - MacOS Release is broken
-- Changelog doesnt format right
 - 

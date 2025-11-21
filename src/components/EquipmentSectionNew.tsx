@@ -159,10 +159,11 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.numberOfLights}
+          value={data.numberOfLights || ''}
           onChange={(e) => handleChange('numberOfLights', parseInt(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">
           {`Enter total pool lights (typical builds use 2). Additional lights $${pricingData.equipment.lights.additionalLightPrice} each.`}
@@ -204,10 +205,11 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.automation.zones}
+          value={data.automation.zones || ''}
           onChange={(e) => handleChange('automation', { ...data.automation, zones: parseInt(e.target.value) || 0 })}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Additional zones beyond base: ${pricingData.equipment.automationZoneAddon}/zone</small>
       </div>

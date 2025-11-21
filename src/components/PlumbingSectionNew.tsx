@@ -36,10 +36,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.skimmerRun}
+          value={data.runs.skimmerRun || ''}
           onChange={(e) => handleRunChange('skimmerRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         {skimmerOverrun > 0 && (
           <small className="form-help" style={{ color: '#f59e0b' }}>
@@ -53,10 +54,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.additionalSkimmers}
+          value={data.runs.additionalSkimmers || ''}
           onChange={(e) => handleRunChange('additionalSkimmers', parseInt(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">(1) skimmer is included in base price</small>
       </div>
@@ -66,10 +68,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.mainDrainRun}
+          value={data.runs.mainDrainRun || ''}
           onChange={(e) => handleRunChange('mainDrainRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Main drain to equipment</small>
       </div>
@@ -79,10 +82,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.cleanerRun}
+          value={data.runs.cleanerRun || ''}
           onChange={(e) => handleRunChange('cleanerRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Pool center to equipment</small>
       </div>
@@ -92,10 +96,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.autoFillRun}
+          value={data.runs.autoFillRun || ''}
           onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Hose bibb to auto water leveler</small>
       </div>
@@ -107,10 +112,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.runs.gasRun}
+          value={data.runs.gasRun || ''}
           onChange={(e) => handleRunChange('gasRun', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Meter to heater</small>
         {gasOverrun > 0 && (
@@ -128,10 +134,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.runs.waterFeature1Run}
+            value={data.runs.waterFeature1Run || ''}
             onChange={(e) => handleRunChange('waterFeature1Run', parseFloat(e.target.value) || 0)}
             min="0"
             step="1"
+            placeholder="0"
           />
         </div>
 
@@ -140,10 +147,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.runs.waterFeature2Run}
+            value={data.runs.waterFeature2Run || ''}
             onChange={(e) => handleRunChange('waterFeature2Run', parseFloat(e.target.value) || 0)}
             min="0"
             step="1"
+            placeholder="0"
           />
         </div>
       </div>
@@ -154,10 +162,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.runs.waterFeature3Run}
+            value={data.runs.waterFeature3Run || ''}
             onChange={(e) => handleRunChange('waterFeature3Run', parseFloat(e.target.value) || 0)}
             min="0"
             step="1"
+            placeholder="0"
           />
         </div>
 
@@ -166,10 +175,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.runs.waterFeature4Run}
+            value={data.runs.waterFeature4Run || ''}
             onChange={(e) => handleRunChange('waterFeature4Run', parseFloat(e.target.value) || 0)}
             min="0"
             step="1"
+            placeholder="0"
           />
         </div>
       </div>
@@ -182,10 +192,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.runs.infloorValveToEQ}
+            value={data.runs.infloorValveToEQ || ''}
             onChange={(e) => handleRunChange('infloorValveToEQ', parseFloat(e.target.value) || 0)}
             min="0"
             step="1"
+            placeholder="0"
           />
         </div>
 
@@ -194,10 +205,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
           <input
             type="number"
             className="form-input"
-            value={data.runs.infloorValveToPool}
+            value={data.runs.infloorValveToPool || ''}
             onChange={(e) => handleRunChange('infloorValveToPool', parseFloat(e.target.value) || 0)}
             min="0"
             step="1"
+            placeholder="0"
           />
         </div>
       </div>
@@ -211,10 +223,11 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
             <input
               type="number"
               className="form-input"
-              value={data.runs.spaRun}
+              value={data.runs.spaRun || ''}
               onChange={(e) => handleRunChange('spaRun', parseFloat(e.target.value) || 0)}
               min="0"
               step="1"
+              placeholder="0"
             />
             <small className="form-help">Spa to equipment</small>
           </div>

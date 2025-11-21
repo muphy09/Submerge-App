@@ -22,10 +22,11 @@ function DrainageSectionNew({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.downspoutTotalLF}
+          value={data.downspoutTotalLF || ''}
           onChange={(e) => handleChange('downspoutTotalLF', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Total from all downspouts - $11/ft</small>
       </div>
@@ -35,10 +36,11 @@ function DrainageSectionNew({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.deckDrainTotalLF}
+          value={data.deckDrainTotalLF || ''}
           onChange={(e) => handleChange('deckDrainTotalLF', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Deck drainage system - $15/ft</small>
       </div>
@@ -48,10 +50,11 @@ function DrainageSectionNew({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.frenchDrainTotalLF}
+          value={data.frenchDrainTotalLF || ''}
           onChange={(e) => handleChange('frenchDrainTotalLF', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Perforated pipe with gravel - $12/ft</small>
       </div>
@@ -61,10 +64,11 @@ function DrainageSectionNew({ data, onChange }: Props) {
         <input
           type="number"
           className="form-input"
-          value={data.boxDrainTotalLF}
+          value={data.boxDrainTotalLF || ''}
           onChange={(e) => handleChange('boxDrainTotalLF', parseFloat(e.target.value) || 0)}
           min="0"
           step="1"
+          placeholder="0"
         />
         <small className="form-help">Surface water collection - $18/ft</small>
       </div>

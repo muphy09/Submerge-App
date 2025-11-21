@@ -29,8 +29,6 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     fiberglassModelName: undefined,
     fiberglassModelPrice: undefined,
     fiberglassPerimeter: undefined,
-    fiberglassSpaModelName: undefined,
-    fiberglassSpaPrice: undefined,
     maxWidth: 0,
     maxLength: 0,
     totalStepsAndBench: 0,
@@ -69,6 +67,8 @@ export function getDefaultExcavation(): Excavation {
     additionalBench: 0,
     doubleCurtainLength: 0,
     needsSoilSampleEngineer: false,
+    retainingWallType: 'None',
+    retainingWallLength: 0,
     cost: 0,
   };
 }
@@ -115,6 +115,11 @@ export function getDefaultTileCopingDecking(): TileCopingDecking {
     deckingType: 'travertine-level1',
     deckingArea: 0,
     concreteStepsLength: 0,
+    doubleBullnoseLnft: 0,
+    spillwayLnft: 0,
+    rockworkPanelLedgeSqft: 0,
+    rockworkStackedStoneSqft: 0,
+    rockworkTileSqft: 0,
     hasRoughGrading: true,
     cost: 0,
   };
@@ -241,6 +246,8 @@ export function getDefaultCostBreakdown(): CostBreakdown {
     interiorFinish: [],
     waterTruck: [],
     fiberglassShell: [],
+    startupOrientation: [],
+    customFeatures: [],
     totals: {
       plansAndEngineering: 0,
       layout: 0,
@@ -266,6 +273,8 @@ export function getDefaultCostBreakdown(): CostBreakdown {
       interiorFinish: 0,
       waterTruck: 0,
       fiberglassShell: 0,
+      startupOrientation: 0,
+      customFeatures: 0,
       grandTotal: 0,
     },
   };

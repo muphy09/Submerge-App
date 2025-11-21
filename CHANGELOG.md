@@ -1,5 +1,11 @@
 ---
 
+## [1.3.1]
+### Changed
+
+
+---
+
 ## [1.3.0]
 ### Changed
 - UI redesign of the Proposal Editor
