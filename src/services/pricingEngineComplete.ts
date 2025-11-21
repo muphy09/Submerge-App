@@ -847,29 +847,7 @@ export class FiberglassCalculations {
       });
     }
 
-    // Spa shell (if fiberglass spa)
-    if (poolSpecs.spaType.startsWith('fiberglass-') || poolSpecs.spaType === 'crystite') {
-      if (poolSpecs.fiberglassSpaPrice && poolSpecs.fiberglassSpaModelName) {
-        items.push({
-          category: 'Fiberglass Shell',
-          description: poolSpecs.fiberglassSpaModelName,
-          unitPrice: poolSpecs.fiberglassSpaPrice,
-          quantity: 1,
-          total: poolSpecs.fiberglassSpaPrice,
-        });
-      } else {
-        const spaSize = poolSpecs.spaType.replace('fiberglass-', '');
-        const spaKey = `spa${spaSize.charAt(0).toUpperCase() + spaSize.slice(1)}` as keyof typeof prices;
-        const spaPrice = prices[spaKey] as number;
-        items.push({
-          category: 'Fiberglass Shell',
-          description: `${spaSize} Fiberglass Spa`,
-          unitPrice: spaPrice,
-          quantity: 1,
-          total: spaPrice,
-        });
-      }
-    }
+    // Fiberglass spa pricing removed - only gunite spas are supported now
 
     // Spillover
     if (poolSpecs.hasSpillover) {

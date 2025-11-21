@@ -9,6 +9,7 @@ interface Props {
 
 function CostBreakdownView({ costBreakdown, customerName }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [zoomLevel, setZoomLevel] = useState(0.5); // Start at 50% (0.5 scale)
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -109,12 +110,15 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
     setExpandedSections(new Set());
   };
 
+  const scaleValue = 0.5 + (zoomLevel * 0.5); // Maps 0-1 slider to 0.5-1.0 scale
+
   return (
-    <div className="cost-breakdown-container">
-      <div className="breakdown-header">
-        <h1>Job Cost Summary</h1>
-        <h2>Customer: {customerName}</h2>
-      </div>
+    <div className="cost-breakdown-wrapper">
+      <div className="cost-breakdown-container" style={{ transform: `scale(${scaleValue})`, transformOrigin: 'top center' }}>
+        <div className="breakdown-header">
+          <h1>Job Cost Summary</h1>
+          <h2>Customer: {customerName}</h2>
+        </div>
 
       <div className="breakdown-summary">
         <div className="summary-grid">
@@ -163,6 +167,10 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
             <span>${costBreakdown.totals.tileLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="summary-row">
+            <span>Tile Material:</span>
+            <span>${costBreakdown.totals.tileMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="summary-row">
             <span>Coping/Decking Labor:</span>
             <span>${costBreakdown.totals.copingDeckingLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
@@ -171,7 +179,15 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
             <span>${costBreakdown.totals.copingDeckingMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="summary-row">
-            <span>Equipment:</span>
+            <span>Stone/Rockwork:</span>
+            <span>${costBreakdown.totals.stoneRockworkLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="summary-row">
+            <span>Drainage:</span>
+            <span>${costBreakdown.totals.drainage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="summary-row">
+            <span>Equipment Ordered:</span>
             <span>${costBreakdown.totals.equipmentOrdered.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="summary-row">
@@ -198,16 +214,29 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
             <span>Fiberglass Shell:</span>
             <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="summary-row">
-            <span>Drainage:</span>
-            <span>${costBreakdown.totals.drainage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
         </div>
 
         <div className="grand-total">
           <span>GRAND TOTAL:</span>
           <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
+      </div>
+      </div>
+
+      <div className="zoom-control-container">
+        <label className="zoom-label">
+          <span className="zoom-icon">🔍</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={zoomLevel}
+            onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+            className="zoom-slider"
+          />
+          <span className="zoom-percentage">{Math.round(scaleValue * 100)}%</span>
+        </label>
       </div>
     </div>
   );

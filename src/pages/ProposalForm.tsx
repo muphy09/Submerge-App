@@ -19,6 +19,7 @@ import CostBreakdownView from '../components/CostBreakdownView';
 import LiveCostBreakdown from '../components/LiveCostBreakdown';
 import './ProposalForm.css';
 import ppasLogo from '../../PPAS Logo.png';
+import customerProposalIcon from '../../CustomerProposalIcon.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -48,7 +49,6 @@ const sections = [
   'Water Features',
   'Interior Finish',
   'Custom Features',
-  'Cost Breakdown',
 ];
 
 function ProposalForm() {
@@ -61,6 +61,7 @@ function ProposalForm() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showLeftNav, setShowLeftNav] = useState(true);
   const [showRightCost, setShowRightCost] = useState(true);
+  const [showCostModal, setShowCostModal] = useState(false);
 
   const getInitialProposal = (): Partial<Proposal> => getDefaultProposal();
 
@@ -282,15 +283,6 @@ function ProposalForm() {
             onChange={(data) => updateProposal('customFeatures', data)}
           />
         );
-      case 11:
-        // Calculate and show breakdown
-        const result = MasterPricingEngine.calculateCompleteProposal(proposal);
-        return (
-          <CostBreakdownView
-            costBreakdown={result.costBreakdown}
-            customerName={proposal.customerInfo?.customerName || ''}
-          />
-        );
       default:
         return null;
       }
@@ -372,6 +364,19 @@ function ProposalForm() {
             </div>
             <div className="nav-action-space" aria-hidden="true">
               <span className="nav-divider" />
+              <div className="nav-action-buttons">
+                <button
+                  className="cost-modal-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowCostModal(true);
+                  }}
+                  title="View Customer Proposal"
+                >
+                  <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
+                  <span className="cost-modal-label">Customer Proposal</span>
+                </button>
+              </div>
               <span className="nav-divider" />
             </div>
             <div className="section-nav-grid">
@@ -452,6 +457,20 @@ function ProposalForm() {
           </button>
         )}
       </div>
+
+      {showCostModal && (
+        <div className="cost-modal-overlay" onClick={() => setShowCostModal(false)}>
+          <div className="cost-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="cost-modal-close" onClick={() => setShowCostModal(false)}>
+              ✕
+            </button>
+            <CostBreakdownView
+              costBreakdown={currentCostBreakdown.costBreakdown}
+              customerName={proposal.customerInfo?.customerName || ''}
+            />
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={showCancelConfirm}

@@ -119,11 +119,10 @@
 
 .nav-action-space {
   background: #e8ebed;
-  padding: 18px 20px 14px;
+  padding: 12px 20px 8px;
   display: flex;
   flex-direction: column;
-  gap: clamp(60px, 14vh, 140px);
-  min-height: clamp(140px, 18vh, 200px);
+  gap: 12px;
   flex-shrink: 0;
 }
 
@@ -137,46 +136,16 @@
 .section-nav-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(6, auto);
-  gap: 12px;
-  align-content: start;
+  grid-template-rows: repeat(6, 1fr);
+  gap: 10px;
+  align-content: stretch;
   padding: 8px 20px 20px;
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   background: #e8ebed;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 0.2s ease;
-  position: relative;
+  min-height: 0;
 }
 
-.section-nav-grid:hover {
-  scrollbar-color: rgba(8, 37, 86, 0.25) transparent;
-}
-
-/* Custom scrollbar for navigation grid */
-.section-nav-grid::-webkit-scrollbar {
-  width: 6px !important;
-}
-
-.section-nav-grid::-webkit-scrollbar-track {
-  background: transparent !important;
-}
-
-.section-nav-grid::-webkit-scrollbar-thumb {
-  background: transparent !important;
-  border-radius: 3px !important;
-  transition: background 0.2s ease !important;
-}
-
-.section-nav-grid:hover::-webkit-scrollbar-thumb {
-  background: rgba(8, 37, 86, 0.25) !important;
-}
-
-.section-nav-grid::-webkit-scrollbar-thumb:active,
-.section-nav-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(8, 37, 86, 0.6) !important;
-}
 
 .cost-sidebar {
   width: 380px;
@@ -273,18 +242,19 @@
 .nav-item {
   background: white;
   border: 2px solid #e5e7eb;
-  padding: 14px 12px;
+  padding: 10px 8px;
   border-radius: 8px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   transition: all 0.2s ease;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   text-align: center;
-  min-height: 90px;
+  min-height: 0;
+  height: 100%;
 }
 
 .nav-item:hover {
@@ -307,14 +277,15 @@
 
 .nav-number {
   background: rgba(0, 0, 0, 0.1);
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 .nav-item.active .nav-number {
@@ -327,9 +298,13 @@
 
 .nav-label {
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.2;
   font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .section-content {
@@ -458,4 +433,114 @@
 .form-container.no-left-nav.no-right-cost {
   margin-left: 40px;
   margin-right: 40px;
+}
+
+/* Nav Action Buttons Container */
+.nav-action-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 0;
+}
+
+/* Cost Modal Button */
+.cost-modal-button {
+  background: white;
+  border: 2px solid #082556;
+  border-radius: 8px;
+  padding: 8px 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  min-height: 60px;
+}
+
+.cost-modal-button:hover {
+  background: #082556;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(8, 37, 86, 0.25);
+}
+
+.cost-modal-button:hover .cost-modal-label {
+  color: white;
+}
+
+.cost-modal-button:hover .button-icon {
+  transform: scale(1.1);
+}
+
+.button-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.cost-modal-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #082556;
+  text-align: center;
+  line-height: 1.1;
+  letter-spacing: 0.1px;
+  font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+  transition: color 0.3s ease;
+}
+
+/* Cost Modal Overlay and Content */
+.cost-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 40px;
+}
+
+.cost-modal-content {
+  background: white;
+  border-radius: 12px;
+  max-width: 1200px;
+  max-height: 90vh;
+  width: 100%;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 40px;
+}
+
+.cost-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+  line-height: 1;
+}
+
+.cost-modal-close:hover {
+  background: #dc2626;
+  transform: scale(1.1);
 }

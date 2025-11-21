@@ -50,7 +50,8 @@
       "Bash(del srcpagesProposalFormNew.tsx)",
       "Bash(if not exist \"C:\\dev\\PPAS\\src\\database\" mkdir \"C:\\dev\\PPAS\\src\\database\")",
       "Bash(cmd /c \"if not exist C:\\dev\\PPAS\\src\\database mkdir C:\\dev\\PPAS\\src\\database\")",
-      "Bash(npm run dev:renderer:*)"
+      "Bash(npm run dev:renderer:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": []

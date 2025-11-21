@@ -17,7 +17,7 @@ export interface CustomerInfo {
 
 export type PoolType = 'gunite' | 'fiberglass';
 export type FiberglassSize = 'small' | 'medium' | 'large' | 'crystite';
-export type SpaType = 'none' | 'fiberglass-small' | 'fiberglass-medium' | 'fiberglass-large' | 'crystite' | 'gunite';
+export type SpaType = 'none' | 'gunite';
 export type SpaShape = 'round' | 'square';
 export type FiberglassModelSize = 'small' | 'medium' | 'large';
 
@@ -30,8 +30,6 @@ export interface PoolSpecs {
   fiberglassModelName?: string;
   fiberglassModelPrice?: number;
   fiberglassPerimeter?: number;
-  fiberglassSpaModelName?: string;
-  fiberglassSpaPrice?: number;
 
   // Gunite pool dimensions
   perimeter: number; // LNFT
