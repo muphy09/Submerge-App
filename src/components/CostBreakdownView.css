@@ -10,26 +10,54 @@
   padding: 2rem;
   background: white;
   transition: transform 0.2s ease;
+  border: 2px solid #0c2243;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .breakdown-header {
-  border-bottom: 2px solid #3b82f6;
+  border-bottom: 1px solid #e2e8f0;
   padding-bottom: 1rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
-.breakdown-header h1 {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #1e293b;
-  margin: 0 0 0.5rem 0;
+.breakdown-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0c2243;
+  margin: 0 0 0.15rem 0;
 }
 
-.breakdown-header h2 {
-  font-size: 1.25rem;
-  color: #64748b;
-  margin: 0 0 1rem 0;
+.breakdown-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.15rem 0;
+}
+
+.breakdown-subtitle {
+  font-size: 0.95rem;
+  color: #475569;
+  margin: 0;
+  font-style: italic;
+}
+
+.breakdown-customer {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.breakdown-logo img {
+  height: 64px;
+  width: auto;
+  margin-right: 0.25rem;
 }
 
 .zoom-control-container {
@@ -219,9 +247,14 @@
 
 .breakdown-summary {
   background: #f8fafc;
-  border: 2px solid #3b82f6;
-  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
   padding: 2rem;
+}
+
+.warranty-shell {
+  max-width: 1200px;
+  margin: calc(0.5rem * var(--cb-scale, 1)) auto 0 auto;
 }
 
 .summary-grid {
@@ -257,7 +290,7 @@
   display: flex;
   justify-content: space-between;
   padding: 1.5rem 0 0 0;
-  border-top: 3px solid #3b82f6;
+  border-top: 3px solid #0c2243;
   font-size: 1.5rem;
   font-weight: 700;
 }

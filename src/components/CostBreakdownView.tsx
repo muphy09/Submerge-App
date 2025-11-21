@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { CostBreakdown, CostLineItem } from '../types/proposal-new';
+import { CostBreakdown, CostLineItem, Proposal } from '../types/proposal-new';
+import PremierAdvantageWarranty from './PremierAdvantageWarranty';
+import ppasLogo from '../../PPAS Logo.png';
 import './CostBreakdownView.css';
 
 interface Props {
   costBreakdown: CostBreakdown;
   customerName: string;
+  proposal?: Partial<Proposal>;
 }
 
-function CostBreakdownView({ costBreakdown, customerName }: Props) {
+function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [zoomLevel, setZoomLevel] = useState(0.5); // Start at 50% (0.5 scale)
 
@@ -111,116 +114,136 @@ function CostBreakdownView({ costBreakdown, customerName }: Props) {
   };
 
   const scaleValue = 0.5 + (zoomLevel * 0.5); // Maps 0-1 slider to 0.5-1.0 scale
+  const scaleStyle = {
+    transform: `scale(${scaleValue})`,
+    transformOrigin: 'top center',
+  };
 
   return (
     <div className="cost-breakdown-wrapper">
-      <div className="cost-breakdown-container" style={{ transform: `scale(${scaleValue})`, transformOrigin: 'top center' }}>
-        <div className="breakdown-header">
-          <h1>Job Cost Summary</h1>
-          <h2>Customer: {customerName}</h2>
+      <div className="stacked-sheets" style={scaleStyle}>
+        <div className="cost-breakdown-container">
+          <div className="breakdown-header">
+            <div>
+              <p className="breakdown-eyebrow">Job Cost Summary</p>
+              <h2 className="breakdown-title">Proposal and Specifications</h2>
+              <p className="breakdown-subtitle">
+                Prepared for: <span className="breakdown-customer">{customerName}</span>
+              </p>
+            </div>
+            <div className="breakdown-logo">
+              <img src={ppasLogo} alt="PPAS Logo" />
+            </div>
+          </div>
+
+        <div className="breakdown-summary">
+          <div className="summary-grid">
+            <div className="summary-row">
+              <span>Plans & Engineering:</span>
+              <span>${costBreakdown.totals.plansAndEngineering.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Layout:</span>
+              <span>${costBreakdown.totals.layout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Permit:</span>
+              <span>${costBreakdown.totals.permit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Excavation:</span>
+              <span>${costBreakdown.totals.excavation.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Plumbing:</span>
+              <span>${costBreakdown.totals.plumbing.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Gas:</span>
+              <span>${costBreakdown.totals.gas.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Steel:</span>
+              <span>${costBreakdown.totals.steel.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Electrical:</span>
+              <span>${costBreakdown.totals.electrical.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Shotcrete Labor:</span>
+              <span>${costBreakdown.totals.shotcreteLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Shotcrete Material:</span>
+              <span>${costBreakdown.totals.shotcreteMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Tile Labor:</span>
+              <span>${costBreakdown.totals.tileLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Tile Material:</span>
+              <span>${costBreakdown.totals.tileMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Coping/Decking Labor:</span>
+              <span>${costBreakdown.totals.copingDeckingLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Coping/Decking Material:</span>
+              <span>${costBreakdown.totals.copingDeckingMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Stone/Rockwork:</span>
+              <span>${costBreakdown.totals.stoneRockworkLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Drainage:</span>
+              <span>${costBreakdown.totals.drainage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Equipment Ordered:</span>
+              <span>${costBreakdown.totals.equipmentOrdered.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Equipment Set:</span>
+              <span>${costBreakdown.totals.equipmentSet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Water Features:</span>
+              <span>${costBreakdown.totals.waterFeatures.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Cleanup:</span>
+              <span>${costBreakdown.totals.cleanup.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Interior Finish:</span>
+              <span>${costBreakdown.totals.interiorFinish.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Water Truck:</span>
+              <span>${costBreakdown.totals.waterTruck.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Fiberglass Shell:</span>
+              <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          <div className="grand-total">
+            <span>GRAND TOTAL:</span>
+            <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
         </div>
 
-      <div className="breakdown-summary">
-        <div className="summary-grid">
-          <div className="summary-row">
-            <span>Plans & Engineering:</span>
-            <span>${costBreakdown.totals.plansAndEngineering.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+        {proposal && (
+          <div className="warranty-shell">
+            <PremierAdvantageWarranty proposal={proposal} />
           </div>
-          <div className="summary-row">
-            <span>Layout:</span>
-            <span>${costBreakdown.totals.layout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Permit:</span>
-            <span>${costBreakdown.totals.permit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Excavation:</span>
-            <span>${costBreakdown.totals.excavation.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Plumbing:</span>
-            <span>${costBreakdown.totals.plumbing.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Gas:</span>
-            <span>${costBreakdown.totals.gas.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Steel:</span>
-            <span>${costBreakdown.totals.steel.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Electrical:</span>
-            <span>${costBreakdown.totals.electrical.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Shotcrete Labor:</span>
-            <span>${costBreakdown.totals.shotcreteLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Shotcrete Material:</span>
-            <span>${costBreakdown.totals.shotcreteMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Tile Labor:</span>
-            <span>${costBreakdown.totals.tileLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Tile Material:</span>
-            <span>${costBreakdown.totals.tileMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Coping/Decking Labor:</span>
-            <span>${costBreakdown.totals.copingDeckingLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Coping/Decking Material:</span>
-            <span>${costBreakdown.totals.copingDeckingMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Stone/Rockwork:</span>
-            <span>${costBreakdown.totals.stoneRockworkLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Drainage:</span>
-            <span>${costBreakdown.totals.drainage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Equipment Ordered:</span>
-            <span>${costBreakdown.totals.equipmentOrdered.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Equipment Set:</span>
-            <span>${costBreakdown.totals.equipmentSet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Water Features:</span>
-            <span>${costBreakdown.totals.waterFeatures.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Cleanup:</span>
-            <span>${costBreakdown.totals.cleanup.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Interior Finish:</span>
-            <span>${costBreakdown.totals.interiorFinish.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Water Truck:</span>
-            <span>${costBreakdown.totals.waterTruck.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="summary-row">
-            <span>Fiberglass Shell:</span>
-            <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-          </div>
-        </div>
-
-        <div className="grand-total">
-          <span>GRAND TOTAL:</span>
-          <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </div>
-      </div>
+        )}
       </div>
 
       <div className="zoom-control-container">

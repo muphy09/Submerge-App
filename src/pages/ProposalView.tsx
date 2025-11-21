@@ -170,6 +170,7 @@ function ProposalView() {
             <CostBreakdownView
               costBreakdown={proposal.costBreakdown}
               customerName={proposal.customerInfo.customerName}
+              proposal={proposal}
             />
           </section>
         )}

@@ -8,7 +8,19 @@
     - Independant scroll bars
     - Sticky headers & footers
     - Removed redundant section titles within tabs
-    - Green text now appears if an item added increases a cost breakdown tab
+    - Green text & an arrow now appear if an input increases the cost amount of a particular category
+    - Mapped most blue colors to match the PPAS blue
+    
+- Customer Proposal Button
+    - Reworked Job Cost Summary Tab into a Customer Proposal button in the Nav panel
+    - Now includes a customer facing Job Cost Summary and the Premier Advantage Warranty Summary
+        - *Editing these pages is being implemented*
+
+- Pool Specifications Tab
+    - Remodeled to include section boxes
+    - Cleaned up placeholder pool models
+    - Integrated correct logic for Pool Dimensions, Spillover, Raised Spa, Silt Fence, & Automatic Cover
+    - Cleaned up placeholder spa models
 
 - Pricing Data
     - Reworked most input fields to their correct starting value

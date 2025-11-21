@@ -16,17 +16,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const renderChangelog = (content: string) => {
     const lines = content.split(/\r?\n/);
     const elements: React.ReactNode[] = [];
-    let listItems: string[] = [];
+    let listItems: Array<{ text: string; level: number }> = [];
     let hasContent = false;
     let lastWasDivider = false;
 
     const flushList = (index: number) => {
       if (!listItems.length) return;
+
+      const renderNestedList = (items: Array<{ text: string; level: number }>, startIndex: number = 0): React.ReactNode => {
+        const result: React.ReactNode[] = [];
+        let i = startIndex;
+
+        while (i < items.length) {
+          const currentItem = items[i];
+          const currentLevel = currentItem.level;
+
+          // Collect all children (items with higher level immediately following)
+          const children: Array<{ text: string; level: number }> = [];
+          let j = i + 1;
+          while (j < items.length && items[j].level > currentLevel) {
+            children.push(items[j]);
+            j++;
+          }
+
+          result.push(
+            <li key={`item-${i}`}>
+              {currentItem.text}
+              {children.length > 0 && (
+                <ul className="changelog-list-nested">
+                  {renderNestedList(children, 0)}
+                </ul>
+              )}
+            </li>
+          );
+
+          i = j;
+        }
+
+        return result;
+      };
+
       elements.push(
         <ul key={`list-${index}`} className="changelog-list">
-          {listItems.map((item, itemIndex) => (
-            <li key={`list-${index}-${itemIndex}`}>{item}</li>
-          ))}
+          {renderNestedList(listItems)}
         </ul>
       );
       hasContent = true;
@@ -76,7 +108,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       }
 
       if (trimmed.startsWith('- ')) {
-        listItems.push(trimmed.replace(/^-+\s*/, ''));
+        // Calculate indentation level (number of leading spaces / 4)
+        const leadingSpaces = line.length - line.trimStart().length;
+        const level = Math.floor(leadingSpaces / 4);
+        listItems.push({
+          text: trimmed.replace(/^-\s*/, ''),
+          level: level
+        });
         hasContent = true;
         lastWasDivider = false;
         return;

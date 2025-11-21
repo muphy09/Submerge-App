@@ -165,7 +165,7 @@
   display: flex;
   justify-content: space-between;
   padding: 15px 15px 20px 15px;
-  background: #082556;
+  background: #0c2243;
   color: white;
   font-weight: 700;
   font-size: 1rem;
@@ -173,7 +173,7 @@
 }
 
 .live-grand-total span:last-child {
-  color: #fbbf24;
+  color: white;
 }
 
 /* Highlight animations */
