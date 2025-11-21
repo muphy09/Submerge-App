@@ -12,7 +12,7 @@
     - Mapped most blue colors to match the PPAS blue
     
 - Customer Proposal Button
-    - Reworked Job Cost Summary Tab into a Customer Proposal button in the Nav panel
+    - Reworked Cost Breakdown Tab into a Customer Proposal button in the Nav panel
     - Now includes a customer facing Job Cost Summary and the Premier Advantage Warranty Summary
         - *Editing these pages is being implemented*
 
