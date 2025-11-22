@@ -364,6 +364,7 @@ export interface InteriorFinish {
   color: string;
   surfaceArea: number; // Auto-calculated from pool specs
   hasSpa: boolean;
+  hasWaterproofing?: boolean; // Optional waterproofing line item
   cost: number; // Auto-calculated
 }
 
@@ -441,6 +442,23 @@ export interface CostBreakdown {
 }
 
 // ============================================================================
+// PAP DISCOUNT CONFIGURATION
+// ============================================================================
+
+export interface PAPDiscounts {
+  excavation: number; // percentage (e.g., 0.10 for 10%)
+  plumbing: number;
+  steel: number;
+  electrical: number;
+  shotcrete: number;
+  tileCopingLabor: number;
+  tileCopingMaterial: number;
+  equipment: number;
+  interiorFinish: number;
+  startup: number;
+}
+
+// ============================================================================
 // PRICING & PROFIT CALCULATIONS
 // ============================================================================
 
@@ -497,6 +515,9 @@ export interface Proposal {
 
   // Detailed breakdown (like COST - NEW sheet)
   costBreakdown: CostBreakdown;
+
+  // PAP Discount Configuration
+  papDiscounts?: PAPDiscounts;
 
   // Pricing & Profit Calculations (NEW - matching Excel)
   pricing: PricingCalculations;

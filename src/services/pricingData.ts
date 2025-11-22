@@ -3,6 +3,20 @@
 // ============================================================================
 
 const pricingData = {
+  // PAP (Preferred Approved Provider) Discount Rates
+  // These are applied as negative line items in various sections
+  papDiscountRates: {
+    excavation: 0.10, // 10%
+    plumbing: 0.10, // 10%
+    steel: 0.10, // 10%
+    electrical: 0.00, // No discount in Excel
+    shotcrete: 0.10, // 10% (combined labor + material)
+    tileCopingLabor: 0.10, // 10%
+    tileCopingMaterial: 0.10, // 10% (on specific quantities)
+    equipment: 0.10, // 10%
+    interiorFinish: 0.10, // 10%
+    startup: 0.10, // 10%
+  },
   plans: {
     poolOnly: 410,
     spa: 80,
@@ -133,6 +147,8 @@ const pricingData = {
     doubleCurtainPerLnft: 35,
     spaDoubleCurtain: 75,
     poolBonding: 500,
+    muckOut: 100, // Unit price (Excel: $100 × 2 qty = $200)
+    muckOutQty: 2,
     automaticCover: 0,
     travelPerMile: 7,
   },
@@ -157,6 +173,7 @@ const pricingData = {
   },
   tileCoping: {
     materialTaxRate: 0.0725,
+    flagstoneQuantityMultiplier: 1.1, // 10% overage for flagstone materials (Excel rows 192-197)
     tile: {
       labor: {
         level1: 10,
@@ -337,6 +354,7 @@ const pricingData = {
       misc: 100,
       travelPerMile: 10,
       stepDetailPerLnftOver20: 20,
+      waterproofing: 500, // Waterproofing line item from INT sheet
     },
   },
   cleanup: {
@@ -357,6 +375,14 @@ const pricingData = {
     spaLarge: 13857,
     spillover: 1000,
     crane: 2500,
+    freight: 900, // Per shell (Excel: SUM(FIBER!G62:G64))
+    surcharge2022: 0, // 2022 surcharge per shell (Excel: FIBER!C65)
+    discountRate: 0.10, // 10% discount on shell costs
+    taxRate: 0.0725, // 7.25% tax on total
+    fiberglassInstall: {
+      labor: 2500, // Installation labor
+      gravel: 600, // Gravel for base
+    },
     models: [
       { name: 'Caeser', size: 'small', price: 11325, perimeter: 48 },
       { name: 'Chateau & Gayla 12', size: 'small', price: 14825, perimeter: 70 },

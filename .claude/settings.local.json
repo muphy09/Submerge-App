@@ -52,7 +52,12 @@
       "Bash(cmd /c \"if not exist C:\\dev\\PPAS\\src\\database mkdir C:\\dev\\PPAS\\src\\database\")",
       "Bash(npm run dev:renderer:*)",
       "Bash(npm run:*)",
-      "Bash(cost-analysis.txt)"
+      "Bash(cost-analysis.txt)",
+      "Bash(pip install:*)",
+      "Bash(python analyze_excel.py:*)",
+      "Bash(python detailed_cost_analysis.py:*)",
+      "Bash(cost_analysis_output.txt)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

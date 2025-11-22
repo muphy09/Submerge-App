@@ -2,7 +2,7 @@
 // MASTER PRICING ENGINE - Complete Integration
 // ============================================================================
 
-import { Proposal, CostBreakdown, CostLineItem } from '../types/proposal-new';
+import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { CalculationModules } from './pricingEngineComplete';
 
@@ -34,7 +34,7 @@ export class MasterPricingEngine {
   /**
    * Main entry point - calculates complete proposal with full cost breakdown
    */
-  static calculateCompleteProposal(proposal: Partial<Proposal>): {
+  static calculateCompleteProposal(proposal: Partial<Proposal>, papDiscounts?: PAPDiscounts): {
     costBreakdown: CostBreakdown;
     pricing: import('../types/proposal-new').PricingCalculations;
     subtotal: number;
@@ -52,20 +52,21 @@ export class MasterPricingEngine {
     const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0 };
     const customFeatures = proposal.customFeatures!;
     const interiorFinish = proposal.interiorFinish!;
+    const isFiberglass = CalculationModules.Pool.isFiberglassPool(poolSpecs);
 
     // Calculate all sections
-    const plansItems = this.calculatePlansEngineering(poolSpecs, excavation);
+    const plansItems = this.calculatePlansEngineering(poolSpecs, excavation, waterFeatures);
     const layoutItems = this.calculateLayout(poolSpecs);
     const permitItems = this.calculatePermit(poolSpecs);
-    const excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
-    const plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbing);
+    let excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
+    let plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbing);
     const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
-    const steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
-    const electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical);
+    let steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
+    let electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical);
     const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation);
     const tileCoping = CalculationModules.TileCopingDecking.calculateCosts(poolSpecs, tileCopingDecking);
     const drainageItems = CalculationModules.Drainage.calculateDrainageCost(drainage);
-    const equipmentItems = CalculationModules.Equipment.calculateEquipmentCost(equipment, poolSpecs);
+    let equipmentItems = CalculationModules.Equipment.calculateEquipmentCost(equipment, poolSpecs);
     const equipmentSetItems = CalculationModules.Equipment.calculateEquipmentSetCost(equipment, poolSpecs);
     const waterFeaturesItems = CalculationModules.WaterFeatures.calculateWaterFeaturesCost(waterFeatures);
     const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);
@@ -76,7 +77,151 @@ export class MasterPricingEngine {
     const rockworkMaterial = masonryCalc.material.concat(tileCoping.material.filter(i => i.category.includes('Rockwork')));
 
     // Startup & Orientation
-    const startupItems = this.calculateStartupOrientation(poolSpecs, equipment);
+    let startupItems = this.calculateStartupOrientation(poolSpecs, equipment);
+
+    // Apply PAP Discounts if provided
+    if (papDiscounts) {
+      // Excavation (NOT for fiberglass)
+      if (!isFiberglass && papDiscounts.excavation > 0) {
+        const subtotal = excavationItems.reduce((sum, item) => sum + item.total, 0);
+        excavationItems.push({
+          category: 'Excavation',
+          description: 'PAP Discount',
+          unitPrice: -(subtotal * papDiscounts.excavation),
+          quantity: 1,
+          total: -(subtotal * papDiscounts.excavation),
+        });
+      }
+
+      // Plumbing
+      if (papDiscounts.plumbing > 0) {
+        const subtotal = plumbingItems.reduce((sum, item) => sum + item.total, 0);
+        plumbingItems.push({
+          category: 'Plumbing',
+          description: 'PAP Discount',
+          unitPrice: -(subtotal * papDiscounts.plumbing),
+          quantity: 1,
+          total: -(subtotal * papDiscounts.plumbing),
+        });
+      }
+
+      // Steel
+      if (papDiscounts.steel > 0) {
+        const subtotal = steelItems.reduce((sum, item) => sum + item.total, 0);
+        steelItems.push({
+          category: 'Steel',
+          description: 'PAP Discount',
+          unitPrice: -(subtotal * papDiscounts.steel),
+          quantity: 1,
+          total: -(subtotal * papDiscounts.steel),
+        });
+      }
+
+      // Electrical
+      if (papDiscounts.electrical > 0) {
+        const subtotal = electricalItems.reduce((sum, item) => sum + item.total, 0);
+        electricalItems.push({
+          category: 'Electrical',
+          description: 'PAP Discount',
+          unitPrice: -(subtotal * papDiscounts.electrical),
+          quantity: 1,
+          total: -(subtotal * papDiscounts.electrical),
+        });
+      }
+
+      // Shotcrete (combined labor + material)
+      if (papDiscounts.shotcrete > 0) {
+        const laborSubtotal = shotcrete.labor.reduce((sum, i) => sum + i.total, 0);
+        const materialSubtotal = shotcrete.material.reduce((sum, i) => sum + i.total, 0);
+        const combinedSubtotal = laborSubtotal + materialSubtotal;
+        shotcrete.labor.push({
+          category: 'Shotcrete Labor',
+          description: 'PAP Discount',
+          unitPrice: -(combinedSubtotal * papDiscounts.shotcrete),
+          quantity: 1,
+          total: -(combinedSubtotal * papDiscounts.shotcrete),
+        });
+      }
+
+      // Tile/Coping Labor
+      if (papDiscounts.tileCopingLabor > 0) {
+        const laborSubtotal = tileCoping.labor.reduce((sum, item) => sum + item.total, 0);
+        tileCoping.labor.push({
+          category: 'Tile & Coping Labor',
+          description: 'PAP Discount',
+          unitPrice: -(laborSubtotal * papDiscounts.tileCopingLabor),
+          quantity: 1,
+          total: -(laborSubtotal * papDiscounts.tileCopingLabor),
+        });
+      }
+
+      // Tile/Coping Material (ONLY on flagstone)
+      if (papDiscounts.tileCopingMaterial > 0) {
+        let flagstoneMaterialTotal = 0;
+        tileCoping.material.forEach((item) => {
+          if (item.description.toLowerCase().includes('flagstone') ||
+              (tileCopingDecking.copingType === 'flagstone' && item.category === 'Coping Material')) {
+            flagstoneMaterialTotal += item.total;
+          }
+        });
+        if (flagstoneMaterialTotal > 0) {
+          tileCoping.material.push({
+            category: 'Tile & Coping Material',
+            description: 'PAP Discount',
+            unitPrice: -(flagstoneMaterialTotal * papDiscounts.tileCopingMaterial),
+            quantity: 1,
+            total: -(flagstoneMaterialTotal * papDiscounts.tileCopingMaterial),
+          });
+        }
+      }
+
+      // Equipment
+      if (papDiscounts.equipment > 0) {
+        const subtotalBeforeTax = equipmentItems
+          .filter(item => !item.description.includes('Tax'))
+          .reduce((sum, i) => sum + i.total, 0);
+        if (subtotalBeforeTax > 0) {
+          // Insert before tax
+          const taxIndex = equipmentItems.findIndex(item => item.description.includes('Tax'));
+          const discountItem: CostLineItem = {
+            category: 'Equipment',
+            description: 'PAP Discount',
+            unitPrice: -(subtotalBeforeTax * papDiscounts.equipment),
+            quantity: 1,
+            total: -(subtotalBeforeTax * papDiscounts.equipment),
+          };
+          if (taxIndex >= 0) {
+            equipmentItems.splice(taxIndex, 0, discountItem);
+          } else {
+            equipmentItems.push(discountItem);
+          }
+        }
+      }
+
+      // Interior Finish
+      if (papDiscounts.interiorFinish > 0) {
+        const laborSubtotal = interior.labor.reduce((sum, item) => sum + item.total, 0);
+        interior.labor.push({
+          category: 'Interior Finish',
+          description: 'PAP Discount',
+          unitPrice: -(laborSubtotal * papDiscounts.interiorFinish),
+          quantity: 1,
+          total: -(laborSubtotal * papDiscounts.interiorFinish),
+        });
+      }
+
+      // Startup
+      if (papDiscounts.startup > 0) {
+        const subtotal = startupItems.reduce((sum, item) => sum + item.total, 0);
+        startupItems.push({
+          category: 'Start-Up / Orientation',
+          description: 'PAP Discount',
+          unitPrice: -(subtotal * papDiscounts.startup),
+          quantity: 1,
+          total: -(subtotal * papDiscounts.startup),
+        });
+      }
+    }
 
     // Custom Features (convert to line items)
     const customFeaturesItems: CostLineItem[] = customFeatures?.features.map(f => ({
@@ -218,7 +363,7 @@ export class MasterPricingEngine {
     };
   }
 
-  private static calculatePlansEngineering(poolSpecs: any, excavation: any): CostLineItem[] {
+  private static calculatePlansEngineering(poolSpecs: any, excavation: any, waterFeatures: any): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.plans;
 
@@ -241,6 +386,25 @@ export class MasterPricingEngine {
         unitPrice: prices.spa,
         quantity: 1,
         total: prices.spa,
+      });
+    }
+
+    // Waterfall cost from water features
+    const waterfallCount = (waterFeatures?.selections || [])
+      .filter((sel: any) => {
+        const catalog = pricingData.waterFeatures?.catalog ?? [];
+        const feature = catalog.find((f: any) => f.id === sel.featureId);
+        return feature?.name?.toLowerCase().includes('waterfall');
+      })
+      .reduce((sum: number, sel: any) => sum + (sel.quantity || 0), 0);
+
+    if (waterfallCount > 0) {
+      items.push({
+        category: 'Plans & Engineering',
+        description: 'Waterfall',
+        unitPrice: prices.waterfall,
+        quantity: waterfallCount,
+        total: prices.waterfall * waterfallCount,
       });
     }
 

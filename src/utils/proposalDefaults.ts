@@ -16,6 +16,7 @@ import {
   Masonry,
   InteriorFinish,
   CostBreakdown,
+  PAPDiscounts,
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 
@@ -277,6 +278,21 @@ export function getDefaultCostBreakdown(): CostBreakdown {
       customFeatures: 0,
       grandTotal: 0,
     },
+  };
+}
+
+export function getDefaultPAPDiscounts(): PAPDiscounts {
+  return {
+    excavation: 0,
+    plumbing: 0,
+    steel: 0,
+    electrical: 0,
+    shotcrete: 0,
+    tileCopingLabor: 0,
+    tileCopingMaterial: 0,
+    equipment: 0,
+    interiorFinish: 0,
+    startup: 0,
   };
 }
 

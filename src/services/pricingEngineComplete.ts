@@ -173,12 +173,18 @@ export class TileCopingDeckingCalculations {
         prices.decking.material.coping[
           tileCopingDecking.copingType.replace('-', '') as keyof typeof prices.decking.material.coping
         ] ?? copingRate;
+
+      // Apply flagstone quantity multiplier (1.1) for material calculations
+      const copingMaterialQty = tileCopingDecking.copingType === 'flagstone'
+        ? copingLnft * prices.flagstoneQuantityMultiplier
+        : copingLnft;
+
       materialItems.push({
         category: 'Coping Material',
         description: `${tileCopingDecking.copingType} Coping Material`,
         unitPrice: copingMaterialRate,
-        quantity: copingLnft,
-        total: copingMaterialRate * copingLnft,
+        quantity: copingMaterialQty,
+        total: copingMaterialRate * copingMaterialQty,
       });
     }
 
@@ -609,14 +615,14 @@ export class EquipmentCalculations {
       });
     }
 
-    // Equipment tax (7.25% in sheet)
+    // Equipment tax (7.25% in sheet) - shown as separate line item
     const subtotal = items.reduce((sum, i) => sum + i.total, 0);
     if (subtotal > 0 && prices.taxRate) {
       items.push({
         category: 'Equipment',
         description: 'Equipment Tax',
-        unitPrice: prices.taxRate,
-        quantity: subtotal,
+        unitPrice: subtotal * prices.taxRate,
+        quantity: 1,
         total: subtotal * prices.taxRate,
       });
     }
@@ -661,15 +667,26 @@ export class EquipmentCalculations {
       });
     }
 
-    if (equipment.heater.name.toLowerCase().includes('heat pump')) {
+    // Heater set (for all heaters) - Excel PLUM!Row43: $200
+    if (equipment.heater && equipment.heater.price > 0) {
+      const isHeatPump = equipment.heater.name.toLowerCase().includes('heat pump');
       items.push({
         category: 'Equipment Set',
-        description: 'Heat Pump Set',
-        unitPrice: prices.heatPump,
+        description: isHeatPump ? 'Heat Pump Set' : 'Heater',
+        unitPrice: isHeatPump ? prices.heatPump : 200,
         quantity: 1,
-        total: prices.heatPump,
+        total: isHeatPump ? prices.heatPump : 200,
       });
     }
+
+    // Pool bonding - Excel PLUM!Row44: $125 × 1 = $125
+    items.push({
+      category: 'Equipment Set',
+      description: 'Pool Bonding',
+      unitPrice: 125,
+      quantity: 1,
+      total: 125,
+    });
 
     if (equipment.auxiliaryPump) {
       items.push({
@@ -822,6 +839,17 @@ export class InteriorFinishCalculations {
         unitPrice: prices.extras.stepDetailPerLnftOver20,
         quantity: extraSteps,
         total: prices.extras.stepDetailPerLnftOver20 * extraSteps,
+      });
+    }
+
+    // Waterproofing (if applicable)
+    if (interiorFinish.hasWaterproofing) {
+      laborItems.push({
+        category: 'Interior Finish',
+        description: 'Waterproofing',
+        unitPrice: prices.extras.waterproofing,
+        quantity: 1,
+        total: prices.extras.waterproofing,
       });
     }
 
@@ -1027,6 +1055,70 @@ export class FiberglassCalculations {
       quantity: 1,
       total: prices.crane,
     });
+
+    // Count the number of shells (pool shells + spa shells)
+    let shellCount = 0;
+    if (poolSpecs.fiberglassModelPrice || poolSpecs.fiberglassSize) {
+      shellCount += 1;
+    }
+    // Note: Fiberglass spa pricing removed - only gunite spas are supported now
+
+    // Freight (per shell) - Excel Row 1154
+    if (shellCount > 0) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: 'Freight',
+        unitPrice: prices.freight,
+        quantity: shellCount,
+        total: prices.freight * shellCount,
+      });
+    }
+
+    // 2022 Surcharge (per shell) - Excel Row 1159
+    if (shellCount > 0 && prices.surcharge2022 > 0) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: '2022 Surcharge',
+        unitPrice: prices.surcharge2022,
+        quantity: shellCount,
+        total: prices.surcharge2022 * shellCount,
+      });
+    }
+
+    // Discount (10% off shell costs only) - Excel Row 1165
+    // Calculate selective sum of shell costs (pool shell + spa shell + spillover)
+    let shellCostsTotal = 0;
+    items.forEach((item) => {
+      // Include only actual shell items, not freight, surcharge, crane
+      if (item.description.toLowerCase().includes('fiberglass pool') ||
+          item.description.toLowerCase().includes('fiberglass spa') ||
+          item.description.toLowerCase().includes('spillover')) {
+        shellCostsTotal += item.total;
+      }
+    });
+
+    if (shellCostsTotal > 0) {
+      const discount = shellCostsTotal * prices.discountRate;
+      items.push({
+        category: 'Fiberglass Shell',
+        description: 'Discount',
+        unitPrice: -discount,
+        quantity: 1,
+        total: -discount,
+      });
+    }
+
+    // Tax (7.25% on total) - Excel Row 1168
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+    if (subtotal > 0) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: 'Tax',
+        unitPrice: prices.taxRate,
+        quantity: subtotal,
+        total: subtotal * prices.taxRate,
+      });
+    }
 
     return items;
   }

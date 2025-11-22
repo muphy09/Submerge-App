@@ -5,6 +5,12 @@
 import { Proposal, PoolSpecs, Excavation, Plumbing, Electrical, CostBreakdown, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
 
+/**
+ * ROUNDUP function - Excel-style ceiling function
+ * Rounds up to the nearest integer
+ */
+const roundUp = (value: number): number => Math.ceil(value);
+
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasGuniteDimensions =
     poolSpecs.surfaceArea > 0 ||
@@ -159,7 +165,7 @@ export class ExcavationCalculations {
 
     // Additional 6" depth charge when end depth exceeds 8'
     if (!isFiberglass && poolSpecs.endDepth >= 8.05) {
-      const additionalDepthQty = (poolSpecs.endDepth - 8) * 2; // increments of 6"
+      const additionalDepthQty = roundUp((poolSpecs.endDepth - 8) * 2); // increments of 6"
       items.push({
         category: 'Excavation',
         description: 'Additional 6" Depth',
@@ -228,6 +234,27 @@ export class ExcavationCalculations {
       });
     }
 
+    // Fiberglass Install (labor and gravel for fiberglass pools)
+    if (isFiberglass && hasPoolDefinition(poolSpecs)) {
+      const fiberglassInstallPrices = pricingData.fiberglass.fiberglassInstall;
+
+      items.push({
+        category: 'Excavation',
+        description: 'Fiberglass Install - Labor',
+        unitPrice: fiberglassInstallPrices.labor,
+        quantity: 1,
+        total: fiberglassInstallPrices.labor,
+      });
+
+      items.push({
+        category: 'Excavation',
+        description: 'Fiberglass Install - Gravel',
+        unitPrice: fiberglassInstallPrices.gravel,
+        quantity: 1,
+        total: fiberglassInstallPrices.gravel,
+      });
+    }
+
     // Dirt haul
     if (excavation.hasDirtHaul) {
       const overdigArea = poolSpecs.surfaceArea * 1.15; // Excel upsizes for overdig
@@ -276,19 +303,6 @@ export class ExcavationCalculations {
         unitPrice: prices.misc,
         quantity: 1,
         total: prices.misc,
-      });
-    }
-
-    // PAP Package discount (10% off excavation for fiberglass)
-    if (isFiberglass && items.length) {
-      const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-      const discount = subtotal * 0.1;
-      items.push({
-        category: 'Excavation',
-        description: 'PAP Discount',
-        unitPrice: -discount,
-        quantity: 1,
-        total: -discount,
       });
     }
 
@@ -518,16 +532,17 @@ export class PlumbingCalculations {
       });
     }
 
-    // Spa plumbing (additional runs)
-    if (hasSpa && plumbing.runs.spaRun > 0) {
-      items.push({
-        category: 'Plumbing',
-        description: 'Spa Plumbing',
-        unitPrice: prices.spaPlumbing,
-        quantity: plumbing.runs.spaRun,
-        total: prices.spaPlumbing * plumbing.runs.spaRun,
-      });
-    }
+    // Spa plumbing (additional runs) - NOT included in COST-NEW tab per Excel sheet
+    // Commenting out to match Excel COST-NEW tab behavior
+    // if (hasSpa && plumbing.runs.spaRun > 0) {
+    //   items.push({
+    //     category: 'Plumbing',
+    //     description: 'Spa Plumbing',
+    //     unitPrice: prices.spaPlumbing,
+    //     quantity: plumbing.runs.spaRun,
+    //     total: prices.spaPlumbing * plumbing.runs.spaRun,
+    //   });
+    // }
 
     return items;
   }
@@ -777,6 +792,16 @@ export class SteelCalculations {
       unitPrice: prices.poolBonding,
       quantity: 1,
       total: prices.poolBonding,
+    });
+
+    // Muck Out (standard for gunite pools)
+    const muckOutQty = prices.muckOutQty || 100;
+    items.push({
+      category: 'Steel',
+      description: 'Muck Out',
+      unitPrice: prices.muckOut,
+      quantity: muckOutQty,
+      total: prices.muckOut * muckOutQty,
     });
 
     // Travel

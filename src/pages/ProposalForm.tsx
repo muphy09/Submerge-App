@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Proposal, WaterFeatures } from '../types/proposal-new';
-import { getDefaultProposal } from '../utils/proposalDefaults';
+import { Proposal, WaterFeatures, PAPDiscounts } from '../types/proposal-new';
+import { getDefaultProposal, getDefaultPAPDiscounts } from '../utils/proposalDefaults';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { validateProposal } from '../utils/validation';
 import CustomerInfoSection from '../components/CustomerInfoSection';
@@ -17,6 +17,7 @@ import InteriorFinishSectionNew from '../components/InteriorFinishSectionNew';
 import CustomFeaturesSectionNew from '../components/CustomFeaturesSectionNew';
 import CostBreakdownView from '../components/CostBreakdownView';
 import LiveCostBreakdown from '../components/LiveCostBreakdown';
+import CostBreakdownPage from '../components/CostBreakdownPage';
 import './ProposalForm.css';
 import ppasLogo from '../../PPAS Logo.png';
 import customerProposalIcon from '../../CustomerProposalIcon.png';
@@ -62,6 +63,8 @@ function ProposalForm() {
   const [showLeftNav, setShowLeftNav] = useState(true);
   const [showRightCost, setShowRightCost] = useState(true);
   const [showCostModal, setShowCostModal] = useState(false);
+  const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
+  const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(getDefaultPAPDiscounts());
 
   const getInitialProposal = (): Partial<Proposal> => getDefaultProposal();
 
@@ -93,6 +96,10 @@ function ProposalForm() {
 
         if (loadRequestRef.current === requestId) {
           setProposal(freshData);
+          // Load PAP discounts if they exist
+          if (freshData.papDiscounts) {
+            setPapDiscounts(freshData.papDiscounts);
+          }
         }
       }
     } catch (error) {
@@ -117,10 +124,11 @@ function ProposalForm() {
   };
 
   const calculateTotals = (): Proposal => {
-    const result = MasterPricingEngine.calculateCompleteProposal(proposal);
+    const result = MasterPricingEngine.calculateCompleteProposal(proposal, papDiscounts);
 
     return {
       ...proposal,
+      papDiscounts,
       costBreakdown: result.costBreakdown,
       subtotal: result.subtotal,
       taxRate: result.taxRate,
@@ -369,6 +377,17 @@ function ProposalForm() {
                   className="cost-modal-button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setShowCostBreakdownPage(true);
+                  }}
+                  title="View Cost Breakdown"
+                >
+                  <span className="button-icon">💰</span>
+                  <span className="cost-modal-label">Cost Breakdown</span>
+                </button>
+                <button
+                  className="cost-modal-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setShowCostModal(true);
                   }}
                   title="View Customer Proposal"
@@ -472,6 +491,17 @@ function ProposalForm() {
             />
           </div>
         </div>
+      )}
+
+      {showCostBreakdownPage && (
+        <CostBreakdownPage
+          proposal={{ ...proposal, papDiscounts }}
+          onClose={() => setShowCostBreakdownPage(false)}
+          onPAPDiscountsChange={(discounts) => {
+            setPapDiscounts(discounts);
+            updateProposal('papDiscounts', discounts);
+          }}
+        />
       )}
 
       <ConfirmDialog
