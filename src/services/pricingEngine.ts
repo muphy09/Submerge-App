@@ -464,14 +464,11 @@ export class PlumbingCalculations {
       });
     }
 
-    // Conduit
-    const conduitRuns =
-      plumbing.runs.skimmerRun +
-      plumbing.runs.mainDrainRun +
-      plumbing.runs.cleanerRun +
-      plumbing.runs.autoFillRun;
-    if (conduitRuns > 0) {
-      const conduitQty = Math.ceil((conduitRuns + plumbing.runs.gasRun) * 1.25);
+    // Conduit - Excel PLUM!Row26: electricRun + (gasRun × 1.25)
+    // Note: electricRun is stored in electrical.runs.electricalRun, need to access it
+    const electricalRun = (poolSpecs as any).electricalRun || 0;
+    const conduitQty = Math.ceil(electricalRun + (plumbing.runs.gasRun * 1.25));
+    if (conduitQty > 0) {
       items.push({
         category: 'Plumbing',
         description: 'Conduit',
@@ -574,12 +571,12 @@ export class ElectricalCalculations {
       total: prices.baseElectrical,
     });
 
-    // Electrical run overrun (if > 65 ft)
+    // Homerun overrun (if > 65 ft) - Excel ELEC!Row5
     if (electrical.runs.electricalRun > prices.overrunThreshold) {
       const overrun = electrical.runs.electricalRun - prices.overrunThreshold;
       items.push({
         category: 'Electrical',
-        description: 'Electrical Run Overrun',
+        description: 'Homerun',
         unitPrice: prices.overrunPerFt,
         quantity: overrun,
         total: prices.overrunPerFt * overrun,
@@ -839,14 +836,27 @@ export class ShotcreteCalculations {
     // Yardage approximation with minimum yardage from Excel (32 yards)
     const yardage = Math.max(prices.labor.minimumYards, Math.ceil(poolSpecs.surfaceArea / 16));
 
-    // LABOR
+    // LABOR - Two-tier pricing per Excel SHOT sheet
+    // Minimum Labor: Always charge for 32 yards at $90/yard
     laborItems.push({
       category: 'Shotcrete Labor',
-      description: 'Pool Base',
+      description: 'Minimum Labor',
       unitPrice: prices.labor.poolBase,
-      quantity: yardage,
-      total: prices.labor.poolBase * yardage,
+      quantity: prices.labor.minimumYards,
+      total: prices.labor.poolBase * prices.labor.minimumYards,
     });
+
+    // Additional Labor: If > 32 yards, charge for additional at same rate
+    if (yardage > prices.labor.minimumYards) {
+      const additionalYards = yardage - prices.labor.minimumYards;
+      laborItems.push({
+        category: 'Shotcrete Labor',
+        description: 'Add\'l Labor',
+        unitPrice: prices.labor.poolBase,
+        quantity: additionalYards,
+        total: prices.labor.poolBase * additionalYards,
+      });
+    }
 
     if (hasSpa) {
       laborItems.push({
