@@ -155,6 +155,74 @@ Dirt Haul: $18 × (hasGravelInstall × yardageRemoved)
 
 ---
 
+## 🔗 Cross-Module Dependencies
+
+Several calculations require data from other modules. These dependencies need to be addressed for complete 1:1 parity:
+
+### 1. Plumbing → Electrical Data
+**Issue**: Conduit calculation (in Plumbing) requires `electricalRun` from Electrical module
+
+**Excel Reference**: PLUM!Row26
+```
+Conduit Qty = ROUNDUP(electricRun + (gasRun × 1.25), 0)
+```
+
+**Current Implementation**: ✅ Partially implemented - accesses `(poolSpecs as any).electricalRun`
+
+**Required**: Ensure `electricalRun` is properly passed through proposal data structure
+
+---
+
+### 2. Electrical → Steel Data
+**Issue**: Electrical lights calculation may reference steel bonding count
+
+**Excel Reference**: ELEC!Row6
+```
+Lights: $100 × (lightBondingCount - 1) if > 1
+```
+
+**Current Status**: ⚠️ Needs investigation - unclear if this is light count or light run footage
+
+**Required**: Verify exact formula and data source from Excel ELEC sheet
+
+---
+
+### 3. Plumbing → Pool Geometry
+**Issue**: Pipe calculations need accurate perimeter, main drain run, cleaner run, and in-floor valve distances
+
+**Excel Reference**: PLUM!Row18-20
+```
+2.0" Pipe = ROUNDUP((perimeter + mainDrainRun + cleanerRun + infloorCalc) × 1.25, 0)
+  where infloorCalc = infloorValveToEQ + (infloorValveToPool × 6 × 1.15)
+
+2.5" Pipe = ROUNDUP(skimmerRun + spaPerimeter, 0)
+```
+
+**Current Status**: ⚠️ Not fully implemented - pipe quantities don't match Excel
+
+**Required**:
+- Verify all input values are accurately calculated/available in proposal data
+- Implement exact Excel formulas with proper rounding
+- Add in-floor valve distance calculations if missing
+
+---
+
+### 4. Shotcrete → Tax Location
+**Issue**: Shotcrete material tax rate depends on county location
+
+**Excel Reference**: SHOT sheet tax calculation
+```
+Tax Rate:
+  - MECK County: 2.5% (0.025)
+  - NC (other): 4.75% (0.0475)
+```
+
+**Current Status**: ⚠️ Needs implementation
+
+**Required**: Add location/county field to proposal data and apply correct tax rate
+
+---
+
 ## 📝 Notes
 
 - All Excel formula references documented in extraction scripts
