@@ -297,9 +297,24 @@
   color: #082556;
   font-size: 1.3rem;
   font-weight: 700;
-  margin: 0 0 20px 0;
-  padding-bottom: 10px;
+  margin: 0 0 10px 0;
+  padding-bottom: 8px;
   border-bottom: 2px solid #082556;
+  width: 100%;
+}
+
+.spec-block-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+}
+
+.spec-block-subtitle {
+  margin: 4px 0 0 0;
+  color: #6b7280;
+  font-size: 0.9rem;
 }
 
 .spec-grid {
@@ -380,6 +395,14 @@
   margin-bottom: 20px;
 }
 
+.pool-type-buttons.stackable {
+  flex-wrap: wrap;
+}
+
+.pool-type-buttons.stackable .pool-type-btn {
+  flex: 1 1 220px;
+}
+
 .pool-type-btn {
   flex: 1;
   padding: 16px 24px;
@@ -411,4 +434,113 @@
 .pool-type-btn.active:hover {
   background: #0a2d6b;
   border-color: #0a2d6b;
+}
+
+/* Spec sub-cards inside blocks */
+.spec-subcard {
+  background: #ffffff;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 12px;
+  box-shadow: 0 4px 12px rgba(8, 37, 86, 0.05);
+}
+
+.spec-subcard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.spec-subcard-title {
+  margin: 0;
+  color: #082556;
+  font-weight: 700;
+}
+
+.spec-subcard-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.link-btn {
+  background: transparent;
+  border: none;
+  color: #082556;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.link-btn:hover {
+  background: #f3f4f6;
+}
+
+.link-btn.danger {
+  color: #b91c1c;
+}
+
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.info-pill {
+  background: #e5e7eb;
+  color: #111827;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border: 1px solid #d1d5db;
+}
+
+.action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.action-btn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 2px solid #082556;
+  background: #082556;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn.secondary {
+  background: white;
+  color: #082556;
+}
+
+.action-btn.danger {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecdd3;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(8, 37, 86, 0.15);
+}
+
+.action-btn.secondary:hover {
+  background: #f3f4f6;
+}
+
+.action-btn.danger:hover {
+  background: #fecdd3;
 }

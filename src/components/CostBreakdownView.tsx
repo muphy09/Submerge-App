@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CostBreakdown, CostLineItem, Proposal, PricingCalculations } from '../types/proposal-new';
+import { CostBreakdown, CostLineItem, Proposal } from '../types/proposal-new';
 import PremierAdvantageWarranty from './PremierAdvantageWarranty';
 import ppasLogo from '../../PPAS Logo.png';
 import './CostBreakdownView.css';
@@ -8,10 +8,12 @@ interface Props {
   costBreakdown: CostBreakdown;
   customerName: string;
   proposal?: Partial<Proposal>;
-  pricing?: PricingCalculations;
 }
 
-function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: Props) {
+const isPapDiscount = (item: CostLineItem): boolean =>
+  item.description?.toLowerCase().includes('pap discount') ?? false;
+
+function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [zoomLevel, setZoomLevel] = useState(0.5); // Start at 50% (0.5 scale)
 
@@ -28,7 +30,9 @@ function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: P
   const renderLineItems = (items: CostLineItem[] | undefined, categoryName: string) => {
     const safeItems = items || [];
     const displayItems = safeItems.filter(
-      (item) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0
+      (item) =>
+        !isPapDiscount(item) &&
+        ((item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0)
     );
     const isExpanded = expandedSections.has(categoryName);
     const total = safeItems.reduce((sum, item) => sum + (item.total ?? 0), 0);
@@ -260,81 +264,6 @@ function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: P
               <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
-
-          {/* Pricing & Profit Section */}
-          {pricing && (
-            <div className="pricing-section">
-              <div className="section-divider"></div>
-
-              <div className="summary-row">
-                <span>Overhead ({((pricing.overheadMultiplier - 1) * 100).toFixed(1)}%):</span>
-                <span>${(pricing.totalCOGS - pricing.totalCostsBeforeOverhead).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-              </div>
-
-              <div className="summary-row subtotal-row">
-                <span>TOTAL COGS:</span>
-                <span>${pricing.totalCOGS.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-
-              <div className="section-divider"></div>
-
-              <div className="summary-row">
-                <span>Base Retail Price (@ {(pricing.targetMargin * 100).toFixed(0)}% cost target):</span>
-                <span>${pricing.baseRetailPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-              </div>
-
-              {pricing.g3UpgradeCost > 0 && (
-                <div className="summary-row">
-                  <span>G3 Upgrade:</span>
-                  <span>${pricing.g3UpgradeCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-              )}
-
-              {pricing.discountAmount !== 0 && (
-                <div className="summary-row discount-row">
-                  <span>Discount:</span>
-                  <span>${pricing.discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-              )}
-
-              <div className="summary-row retail-price-row">
-                <span>RETAIL PRICE:</span>
-                <span>${pricing.retailPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-
-              <div className="section-divider"></div>
-
-              <div className="summary-row">
-                <span>Dig Commission ({(pricing.digCommissionRate * 100).toFixed(2)}%):</span>
-                <span>$(${pricing.digCommission.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
-              </div>
-
-              <div className="summary-row">
-                <span>Admin Fee ({(pricing.adminFeeRate * 100).toFixed(2)}%):</span>
-                <span>$(${pricing.adminFee.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
-              </div>
-
-              <div className="summary-row">
-                <span>Closeout Commission ({(pricing.closeoutCommissionRate * 100).toFixed(2)}%):</span>
-                <span>$(${pricing.closeoutCommission.toLocaleString(undefined, { minimumFractionDigits: 2 })})</span>
-              </div>
-
-              <div className="section-divider"></div>
-
-              <div className="summary-row gross-profit-row">
-                <span>GROSS PROFIT ({pricing.grossProfitMargin.toFixed(1)}%):</span>
-                <span>${pricing.grossProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Legacy Grand Total (if no pricing data) */}
-          {!pricing && (
-            <div className="grand-total">
-              <span>GRAND TOTAL:</span>
-              <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-          )}
         </div>
         </div>
 

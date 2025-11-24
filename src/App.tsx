@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react';
 import HomePage from './pages/HomePage';
 import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
+import ProposalsListPage from './pages/ProposalsListPage';
+import TemplatesPage from './pages/TemplatesPage';
+import SettingsPage from './pages/SettingsPage';
+import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
-import SettingsModal from './components/SettingsModal';
 import PricingDataModal from './components/PricingDataModal';
 import { initPricingDataStore } from './services/pricingDataStore';
 import { ToastProvider } from './components/Toast';
@@ -15,7 +18,6 @@ function AppContent() {
   const location = useLocation();
   const [updateStatus, setUpdateStatus] = useState<'downloading' | 'ready' | 'error' | null>(null);
   const [updateError, setUpdateError] = useState<string>('');
-  const [showSettings, setShowSettings] = useState(false);
   const [showPricingData, setShowPricingData] = useState(false);
 
   useEffect(() => {
@@ -56,30 +58,17 @@ function AppContent() {
     }
   };
 
-  const isHomePage = location.pathname === '/';
+  // Show navigation bar on main pages, hide it on proposal form/view pages
+  const showNavigation = !location.pathname.startsWith('/proposal/');
 
   return (
     <div className="app">
-      {isHomePage && (
-        <>
-          <button
-            className="pricing-data-button"
-            onClick={() => setShowPricingData(true)}
-            title="View pricing data"
-          >
-            Pricing Data
-          </button>
-          <button
-            className="settings-button"
-            onClick={() => setShowSettings(true)}
-            title="Settings"
-          >
-            ⚙️
-          </button>
-        </>
-      )}
+      {showNavigation && <NavigationBar />}
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/proposals" element={<ProposalsListPage />} />
+        <Route path="/templates" element={<TemplatesPage />} />
+        <Route path="/settings" element={<SettingsPage onOpenPricingData={() => setShowPricingData(true)} />} />
         <Route path="/proposal/new" element={<ProposalForm key="new" />} />
         <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm key={location.pathname} />} />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
@@ -90,9 +79,6 @@ function AppContent() {
         onInstall={handleInstallUpdate}
         errorMessage={updateError}
       />
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
-      )}
       {showPricingData && (
         <PricingDataModal onClose={() => setShowPricingData(false)} />
       )}

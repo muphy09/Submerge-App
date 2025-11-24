@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal-new';
-import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
-import ppasLogo from '../../PPAS Logo.png';
+import heroImage from '../assets/homepagetestbck.jpg';
 
 function HomePage() {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [proposalToDelete, setProposalToDelete] = useState<string | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -37,39 +35,12 @@ function HomePage() {
     navigate('/proposal/new');
   };
 
-  const handleOpenProposalsFolder = async () => {
-    try {
-      await window.electron.openProposalsFolder();
-    } catch (error) {
-      console.error('Failed to open proposals folder:', error);
-    }
+  const handlePresentationMode = () => {
+    showToast({ type: 'info', message: 'Presentation Mode coming soon!' });
   };
 
   const handleOpenProposal = (proposalNumber: string) => {
     navigate(`/proposal/view/${proposalNumber}`);
-  };
-
-  const handleDeleteProposal = async (proposalNumber: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setProposalToDelete(proposalNumber);
-  };
-
-  const confirmDelete = async () => {
-    if (!proposalToDelete) return;
-    try {
-      await window.electron.deleteProposal(proposalToDelete);
-      showToast({ type: 'success', message: 'Proposal deleted.' });
-      loadProposals();
-    } catch (error) {
-      console.error('Failed to delete proposal:', error);
-      showToast({ type: 'error', message: 'Failed to delete proposal.' });
-    } finally {
-      setProposalToDelete(null);
-    }
-  };
-
-  const cancelDelete = () => {
-    setProposalToDelete(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -82,91 +53,142 @@ function HomePage() {
     }
   };
 
-  return (
-    <div className="home-page">
-      <div className="home-container">
-        <header className="home-header">
-          <div className="header-title-container">
-            <img src={ppasLogo} alt="PPAS Logo" className="header-logo" />
-            <h1>Premier Pools and Spas Proposal Builder</h1>
-          </div>
-          <p className="header-tagline">A passion for splashin'</p>
-        </header>
+  // Get last 4 proposals sorted by most recent
+  const recentProposals = [...proposals]
+    .sort((a, b) => new Date(b.lastModified || b.createdDate).getTime() - new Date(a.lastModified || a.createdDate).getTime())
+    .slice(0, 4);
 
-        <div className="action-section">
-          <button className="btn-primary" onClick={handleNewProposal}>
-            <span className="btn-icon">+</span>
+  // Calculate stats
+  const totalProposalsCreated = proposals.length;
+  const averageRetailCost = proposals.length > 0
+    ? proposals.reduce((sum, p) => sum + (p.totalCost || 0), 0) / proposals.length
+    : 0;
+
+  // Get proposals by month for the chart (last 5 months)
+  const getProposalsByMonth = () => {
+    const monthCounts: { [key: string]: number } = {};
+    const now = new Date();
+
+    // Initialize last 5 months
+    for (let i = 4; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = date.toLocaleString('default', { month: 'short' });
+      monthCounts[monthKey] = 0;
+    }
+
+    // Count proposals by month
+    proposals.forEach(proposal => {
+      const date = new Date(proposal.createdDate);
+      const monthKey = date.toLocaleString('default', { month: 'short' });
+      if (monthKey in monthCounts) {
+        monthCounts[monthKey]++;
+      }
+    });
+
+    return monthCounts;
+  };
+
+  const proposalsByMonth = getProposalsByMonth();
+  const maxProposals = Math.max(...Object.values(proposalsByMonth), 1);
+
+  return (
+    <div className="dashboard-page">
+      <div className="hero-section">
+        <img src={heroImage} alt="Pool Design" className="hero-image" />
+        <div className="hero-content">
+          <h1 className="hero-title">Design, Build, Present.</h1>
+          <p className="hero-subtitle">A passion for splashin'</p>
+          <button className="btn-create-proposal" onClick={handleNewProposal}>
             Create New Proposal
           </button>
-          <button className="btn-primary" onClick={handleOpenProposalsFolder}>
-            <span className="btn-icon">📁</span>
-            Open Proposals Folder
+          <button className="btn-presentation-mode" onClick={handlePresentationMode}>
+            Presentation Mode
           </button>
         </div>
+      </div>
 
-        <div className="proposals-section">
-          <h2>Recent Proposals</h2>
-          {loading ? (
-            <div className="loading">Loading proposals...</div>
-          ) : proposals.length === 0 ? (
-            <div className="empty-state">
-              <p>No proposals yet. Create your first proposal to get started!</p>
-            </div>
-          ) : (
-            <div className="proposals-grid">
-              {proposals.map((proposal) => (
+      <div className="dashboard-columns">
+        {/* Recent Proposals Column */}
+        <div className="dashboard-column">
+          <h2 className="column-title">Recent Proposals</h2>
+          <div className="recent-proposals-list">
+            {loading ? (
+              <div className="loading-message">Loading...</div>
+            ) : recentProposals.length === 0 ? (
+              <div className="empty-message">No proposals yet</div>
+            ) : (
+              recentProposals.map((proposal) => (
                 <div
                   key={proposal.proposalNumber}
-                  className="proposal-card"
+                  className="recent-proposal-item"
                   onClick={() => handleOpenProposal(proposal.proposalNumber)}
                 >
-                  <div className="proposal-header">
-                    <h3>{proposal.customerInfo.customerName}</h3>
+                  <div className="proposal-item-header">
+                    <div className="proposal-item-name">{proposal.customerInfo.customerName}</div>
+                    <div className="proposal-item-price">
+                      ${(proposal.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="proposal-item-footer">
                     <span
-                      className="status-badge"
+                      className="proposal-item-status"
                       style={{ backgroundColor: getStatusColor(proposal.status) }}
                     >
                       {proposal.status}
                     </span>
+                    <span className="proposal-item-date">
+                      {new Date(proposal.lastModified || proposal.createdDate).toLocaleDateString()}
+                    </span>
                   </div>
-                  <div className="proposal-details">
-                    <p className="proposal-number">#{proposal.proposalNumber.replace('PROP-', '')}</p>
-                    <p className="proposal-location">{proposal.customerInfo.city}</p>
-                    <p className="proposal-date">
-                      {new Date(proposal.createdDate).toLocaleDateString()}
-                    </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Quick Actions Column */}
+        <div className="dashboard-column">
+          <h2 className="column-title">Quick Actions</h2>
+          <div className="quick-actions-list">
+            <button className="quick-action-btn">Placeholder</button>
+            <button className="quick-action-btn">Placeholder</button>
+            <button className="quick-action-btn">Placeholder</button>
+          </div>
+        </div>
+
+        {/* Performance Overview Column */}
+        <div className="dashboard-column">
+          <h2 className="column-title">Performance Overview</h2>
+          <div className="performance-chart">
+            <div className="chart-title">Proposals Created</div>
+            <div className="bar-chart">
+              {Object.entries(proposalsByMonth).map(([month, count]) => (
+                <div key={month} className="bar-container">
+                  <div
+                    className="bar"
+                    style={{ height: `${(count / maxProposals) * 100}%` }}
+                  >
+                    <span className="bar-value">{count}</span>
                   </div>
-                  <div className="proposal-footer">
-                    <p className="proposal-total">
-                      ${(proposal.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </p>
-                    <button
-                      className="btn-delete"
-                      onClick={(e) => handleDeleteProposal(proposal.proposalNumber, e)}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  <div className="bar-label">{month}</div>
                 </div>
               ))}
             </div>
-          )}
+          </div>
+          <div className="performance-stats">
+            <div className="stat-item">
+              <div className="stat-label">Total Proposals Created:</div>
+              <div className="stat-value">{totalProposalsCreated}</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Average Retail Cost:</div>
+              <div className="stat-value">
+                ${averageRetailCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-
-      <ConfirmDialog
-        open={proposalToDelete !== null}
-        title="Delete proposal?"
-        message={
-          proposalToDelete
-            ? `Delete proposal #${proposalToDelete.replace('PROP-', '')}? This action cannot be undone.`
-            : 'This action cannot be undone.'
-        }
-        confirmLabel="Delete"
-        cancelLabel="Keep proposal"
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
-      />
     </div>
   );
 }

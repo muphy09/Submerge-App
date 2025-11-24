@@ -7,6 +7,7 @@ import html2canvas from 'html2canvas';
 import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import ppasLogo from '../../PPAS Logo.png';
+import MasterPricingEngine from '../services/masterPricingEngine';
 
 function ProposalView() {
   const navigate = useNavigate();
@@ -90,8 +91,16 @@ function ProposalView() {
     );
   }
 
-  const subtotal = proposal.subtotal || 0;
-  const totalCost = proposal.totalCost || 0;
+  let calculated: ReturnType<typeof MasterPricingEngine.calculateCompleteProposal> | null = null;
+  try {
+    calculated = MasterPricingEngine.calculateCompleteProposal(proposal, proposal.papDiscounts);
+  } catch (error) {
+    console.error('Failed to recalculate proposal for view:', error);
+  }
+
+  const costBreakdownForDisplay = calculated?.costBreakdown || proposal.costBreakdown;
+  const subtotal = calculated?.subtotal ?? proposal.subtotal ?? 0;
+  const totalCost = calculated?.totalCost ?? proposal.totalCost ?? 0;
 
   return (
     <div className="proposal-view">
@@ -165,10 +174,10 @@ function ProposalView() {
         </section>
 
         {/* Cost Breakdown */}
-        {proposal.costBreakdown && (
+        {costBreakdownForDisplay && (
           <section className="doc-section">
             <CostBreakdownView
-              costBreakdown={proposal.costBreakdown}
+              costBreakdown={costBreakdownForDisplay}
               customerName={proposal.customerInfo.customerName}
               proposal={proposal}
             />

@@ -58,7 +58,8 @@
       "Bash(python detailed_cost_analysis.py:*)",
       "Bash(cost_analysis_output.txt)",
       "Bash(python:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(cmd /c:*)"
     ],
     "deny": [],
     "ask": []

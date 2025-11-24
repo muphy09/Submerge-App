@@ -1,0 +1,360 @@
+.proposals-list-page {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding: clamp(0.75rem, 1.5vh, 1rem);
+  padding-top: calc(var(--header-offset) + clamp(0.75rem, 1.5vh, 1rem));
+  animation: slideInFromLeft 0.3s ease-out;
+  max-width: 100vw;
+  overflow-x: hidden;
+  zoom: var(--scale-factor);
+}
+
+/* Reduce zoom for narrow displays (vertical monitors) */
+@media (max-width: 1400px) and (min-width: 1000px) {
+  .proposals-list-page {
+    zoom: 0.85;
+  }
+}
+
+@media (max-width: 999px) and (min-width: 769px) {
+  .proposals-list-page {
+    zoom: 0.75;
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.proposals-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: clamp(0.75rem, 1.5vh, 1rem);
+  background-color: white;
+  padding: clamp(0.75rem, 1.5vh, 1rem) clamp(1rem, 2vh, 1.25rem);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.proposals-list-header h1 {
+  margin: 0;
+  color: #1e3a5f;
+  font-size: clamp(1.25rem, 2.5vh, 1.5rem);
+}
+
+.proposals-list-stats {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 1.5vh, 1rem);
+  font-size: clamp(0.875rem, 1.5vh, 1rem);
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.btn-delete-selected {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  padding: clamp(0.4rem, 0.8vh, 0.5rem) clamp(0.8rem, 1.5vh, 1rem);
+  border-radius: 6px;
+  font-size: clamp(1.25rem, 2.5vh, 1.5rem);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-delete-selected:hover {
+  background-color: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+}
+
+.proposals-loading,
+.proposals-empty {
+  background-color: white;
+  border-radius: 8px;
+  padding: clamp(3rem, 6vh, 4rem) clamp(1.5rem, 3vh, 2rem);
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.proposals-loading {
+  color: #6b7280;
+  font-style: italic;
+  font-size: clamp(0.95rem, 1.8vh, 1.1rem);
+}
+
+.proposals-empty p {
+  color: #6b7280;
+  font-size: clamp(1rem, 1.8vh, 1.1rem);
+  margin-bottom: clamp(1.25rem, 2.5vh, 1.5rem);
+}
+
+.btn-create {
+  background-color: #78c0d4;
+  color: white;
+  border: none;
+  padding: clamp(0.75rem, 1.5vh, 0.875rem) clamp(1.5rem, 3vh, 2rem);
+  font-size: clamp(0.9rem, 1.5vh, 1rem);
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-create:hover {
+  background-color: #68b0c4;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.proposals-table-container {
+  background-color: white;
+  border-radius: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+}
+
+.proposals-table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+  table-layout: auto;
+  margin: 0 auto;
+}
+
+/* Center table on vertical displays when it's narrower than container */
+@media (max-width: 1400px) and (min-width: 1000px) {
+  .proposals-table-container {
+    display: flex;
+    justify-content: center;
+  }
+
+  .proposals-table {
+    width: auto;
+    min-width: 950px;
+  }
+}
+
+.proposals-table thead {
+  background-color: #1e3a5f;
+  color: white;
+}
+
+.proposals-table th {
+  padding: clamp(0.625rem, 1.2vh, 0.75rem) clamp(0.4rem, 0.8vh, 0.5rem);
+  text-align: left;
+  font-weight: 600;
+  font-size: clamp(0.7rem, 1.2vh, 0.75rem);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.proposals-table th.checkbox-header {
+  width: 40px;
+  text-align: center;
+  cursor: default;
+}
+
+.proposals-table th.th-right {
+  text-align: right;
+}
+
+.proposals-table th:hover {
+  background-color: #2a4a6f;
+}
+
+.sort-icon {
+  margin-left: clamp(0.2rem, 0.4vh, 0.25rem);
+  opacity: 0.6;
+  font-size: clamp(0.7rem, 1.2vh, 0.75rem);
+}
+
+.proposals-table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.proposals-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+.proposals-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.proposals-table td {
+  padding: clamp(0.625rem, 1.2vh, 0.75rem) clamp(0.4rem, 0.8vh, 0.5rem);
+  color: #374151;
+  font-size: clamp(0.8rem, 1.4vh, 0.85rem);
+}
+
+.checkbox-cell {
+  width: 40px;
+  text-align: center;
+  padding: clamp(0.4rem, 0.8vh, 0.5rem) !important;
+}
+
+.checkbox-row,
+.checkbox-select-all {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #1e3a5f;
+}
+
+.customer-name {
+  font-weight: 600;
+  color: #1e3a5f;
+}
+
+.status-badge-table {
+  padding: clamp(0.2rem, 0.4vh, 0.25rem) clamp(0.625rem, 1.2vh, 0.75rem);
+  border-radius: 12px;
+  font-size: clamp(0.7rem, 1.2vh, 0.75rem);
+  font-weight: 600;
+  color: white;
+  text-transform: capitalize;
+  display: inline-block;
+}
+
+.price-cell {
+  font-weight: 600;
+  text-align: right;
+}
+
+.percent-cell {
+  font-weight: 600;
+  text-align: right;
+  color: #059669;
+}
+
+.profit-cell {
+  color: #059669;
+}
+
+/* Responsive Design */
+@media (max-width: 1400px) {
+  .proposals-table {
+    font-size: 0.7rem;
+    min-width: 950px;
+  }
+
+  .proposals-table th,
+  .proposals-table td {
+    padding: 0.5rem 0.25rem;
+    white-space: nowrap;
+  }
+
+  .proposals-table th {
+    font-size: 0.65rem;
+    letter-spacing: 0.2px;
+  }
+
+  .status-badge-table {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.5rem;
+  }
+}
+
+@media (max-width: 1200px) {
+  .proposals-list-page {
+    padding: 0.5rem;
+    padding-top: calc(var(--header-offset) + 0.5rem);
+  }
+
+  .proposals-list-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .proposals-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .proposals-table {
+    min-width: 900px;
+    font-size: 0.68rem;
+  }
+
+  .proposals-table th,
+  .proposals-table td {
+    padding: 0.45rem 0.2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .proposals-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(0.625rem, 1.2vh, 0.75rem);
+  }
+
+  .proposals-list-header h1 {
+    font-size: clamp(1.25rem, 2.5vh, 1.5rem);
+  }
+
+  .proposals-list-stats {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .proposals-table {
+    font-size: clamp(0.75rem, 1.3vh, 0.8rem);
+    min-width: 800px;
+  }
+
+  .status-badge-table {
+    font-size: clamp(0.65rem, 1.1vh, 0.7rem);
+    padding: clamp(0.15rem, 0.3vh, 0.2rem) clamp(0.5rem, 0.9vh, 0.6rem);
+  }
+}
+
+@media (max-width: 500px) {
+  .proposals-list-page {
+    padding: clamp(0.4rem, 0.8vh, 0.5rem);
+    padding-top: calc(var(--header-offset) + clamp(0.625rem, 1.2vh, 0.75rem));
+  }
+
+  .proposals-list-header {
+    padding: clamp(0.4rem, 0.8vh, 0.5rem);
+  }
+
+  .proposals-list-header h1 {
+    font-size: clamp(1rem, 1.8vh, 1.1rem);
+  }
+
+  .proposals-table {
+    font-size: clamp(0.65rem, 1.1vh, 0.7rem);
+  }
+
+  .proposals-table th,
+  .proposals-table td {
+    padding: clamp(0.25rem, 0.5vh, 0.3rem);
+    white-space: nowrap;
+  }
+
+  .checkbox-row,
+  .checkbox-select-all {
+    width: 14px;
+    height: 14px;
+  }
+}

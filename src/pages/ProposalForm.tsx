@@ -130,6 +130,7 @@ function ProposalForm() {
       ...proposal,
       papDiscounts,
       costBreakdown: result.costBreakdown,
+      pricing: result.pricing,
       subtotal: result.subtotal,
       taxRate: result.taxRate,
       taxAmount: result.taxAmount,
@@ -331,7 +332,7 @@ function ProposalForm() {
     );
   }
 
-  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(proposal);
+  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(proposal, papDiscounts);
 
   return (
     <div className="proposal-form">
@@ -487,7 +488,6 @@ function ProposalForm() {
               costBreakdown={currentCostBreakdown.costBreakdown}
               customerName={proposal.customerInfo?.customerName || ''}
               proposal={proposal}
-              pricing={currentCostBreakdown.pricing}
             />
           </div>
         </div>

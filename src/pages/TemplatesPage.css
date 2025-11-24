@@ -1,0 +1,67 @@
+.templates-page {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 3vh, 2rem);
+  padding-top: calc(var(--header-offset) + clamp(1.5rem, 3vh, 2rem));
+  animation: slideInFromLeft 0.3s ease-out;
+  zoom: var(--scale-factor);
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.templates-container {
+  background-color: white;
+  border-radius: 12px;
+  padding: clamp(3rem, 6vh, 4rem) clamp(2.25rem, 4.5vh, 3rem);
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 600px;
+}
+
+.wip-icon {
+  font-size: clamp(3rem, 6vh, 4rem);
+  margin-bottom: clamp(1.125rem, 2.25vh, 1.5rem);
+}
+
+.templates-container h1 {
+  color: #1e3a5f;
+  font-size: clamp(2rem, 4vh, 2.5rem);
+  margin: 0 0 clamp(0.75rem, 1.5vh, 1rem) 0;
+}
+
+.wip-message {
+  color: #78c0d4;
+  font-size: clamp(1.25rem, 2.5vh, 1.5rem);
+  font-weight: 600;
+  margin: 0 0 clamp(0.75rem, 1.5vh, 1rem) 0;
+}
+
+.wip-description {
+  color: #6b7280;
+  font-size: clamp(1rem, 1.8vh, 1.1rem);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Responsive Design for smaller widths */
+@media (max-width: 768px) {
+  .templates-page {
+    padding: clamp(1rem, 2vh, 1.5rem);
+  }
+
+  .templates-container {
+    padding: clamp(2rem, 4vh, 3rem) clamp(1.5rem, 3vh, 2rem);
+  }
+}
