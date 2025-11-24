@@ -21,61 +21,63 @@ function CustomerInfoSection({ data, onChange }: Props) {
 
   return (
     <div className="section-form">
-      <div className="form-group">
-        <label className="form-label required">Customer Name</label>
-        <input
-          type="text"
-          className="form-input"
-          value={data.customerName}
-          onChange={(e) => handleChange('customerName', e.target.value)}
-          onFocus={() => console.log('Input focused: customerName')}
-          onKeyDown={(e) => console.log('Key down:', e.key)}
-          placeholder="Enter customer name"
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="form-label required">City</label>
-        <input
-          type="text"
-          className="form-input"
-          value={data.city}
-          onChange={(e) => handleChange('city', e.target.value)}
-          placeholder="Enter city"
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Address</label>
-        <input
-          type="text"
-          className="form-input"
-          value={data.address || ''}
-          onChange={(e) => handleChange('address', e.target.value)}
-          placeholder="Enter full address (optional)"
-        />
-      </div>
-
-      <div className="form-row">
+      <div className="customer-info-row-1">
         <div className="form-group">
-          <label className="form-label">Phone</label>
+          <label className="form-label required">Customer Name</label>
+          <input
+            type="text"
+            className="form-input"
+            value={data.customerName}
+            onChange={(e) => handleChange('customerName', e.target.value)}
+            onFocus={() => console.log('Input focused: customerName')}
+            onKeyDown={(e) => console.log('Key down:', e.key)}
+            placeholder="John Smith"
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Address (optional)</label>
+          <input
+            type="text"
+            className="form-input"
+            value={data.address || ''}
+            onChange={(e) => handleChange('address', e.target.value)}
+            placeholder="Enter full address"
+          />
+        </div>
+      </div>
+
+      <div className="customer-info-row-2">
+        <div className="form-group">
+          <label className="form-label required">City</label>
+          <input
+            type="text"
+            className="form-input"
+            value={data.city}
+            onChange={(e) => handleChange('city', e.target.value)}
+            placeholder="Anytown"
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Phone (optional)</label>
           <input
             type="tel"
             className="form-input"
             value={data.phone || ''}
             onChange={(e) => handleChange('phone', e.target.value)}
-            placeholder="(123) 456-7890"
+            placeholder="📞 (555) 123-4567"
           />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Email</label>
+          <label className="form-label">Email (optional)</label>
           <input
             type="email"
             className="form-input"
             value={data.email || ''}
             onChange={(e) => handleChange('email', e.target.value)}
-            placeholder="customer@email.com"
+            placeholder="✉ john.smith@example.com"
           />
         </div>
       </div>

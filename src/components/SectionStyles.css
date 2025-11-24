@@ -19,6 +19,27 @@
   margin-bottom: 20px;
 }
 
+.customer-info-row-1 {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.customer-info-row-2 {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .customer-info-row-1,
+  .customer-info-row-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .form-label {
   display: block;
   color: #374151;
