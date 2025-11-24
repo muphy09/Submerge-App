@@ -1,4 +1,5 @@
 import { Plumbing, PlumbingRuns } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
 import './SectionStyles.css';
 
 interface Props {
@@ -15,9 +16,9 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
     });
   };
 
-  // Overrun thresholds
-  const SKIMMER_THRESHOLD = 33;
-  const GAS_THRESHOLD = 30;
+  // Overrun thresholds (kept in sync with Excel / pricing data)
+  const SKIMMER_THRESHOLD = pricingData.plumbing.poolOverrunThreshold;
+  const GAS_THRESHOLD = pricingData.plumbing.gasOverrunThreshold;
 
   const skimmerOverrun = data.runs.skimmerRun > SKIMMER_THRESHOLD ? data.runs.skimmerRun - SKIMMER_THRESHOLD : 0;
   const gasOverrun = data.runs.gasRun > GAS_THRESHOLD ? data.runs.gasRun - GAS_THRESHOLD : 0;
@@ -121,7 +122,7 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <small className="form-help">Meter to heater</small>
         {gasOverrun > 0 && (
           <small className="form-help" style={{ color: '#f59e0b', display: 'block', marginTop: '0.25rem' }}>
-            ⚠️ Overrun: {gasOverrun} ft over threshold ({GAS_THRESHOLD} ft) - Additional charges apply
+            ⚠️ Overrun: {gasOverrun} ft over threshold ({GAS_THRESHOLD} ft) - Additional charges apply (${pricingData.plumbing.gasOverrunPerFt}/ft)
           </small>
         )}
       </div>

@@ -68,6 +68,7 @@ const pricingData = {
     spaOverrunThreshold: 30,
     gasOverrunPerFt: 11,
     gasOverrunThreshold: 25,
+    heaterSet: 300,
     waterFeatureRun: {
       setup: 200,
       baseAllowanceFt: 30,
@@ -109,9 +110,9 @@ const pricingData = {
       { id: 'led-bubbler', name: 'LED Bubbler (with light)', category: 'Bubblers & Lighting', unitPrice: 1380, note: 'Includes bubbler and light; add matching light run + water feature run' },
     ],
   },
-    electrical: {
+  electrical: {
       baseElectrical: 1650, // Includes first 65ft of electric run
-      overrunPerFt: 18, // Each additional ft beyond 65ft
+      overrunPerFt: 18, // Excel ELEC!B5
       overrunThreshold: 65,
       spaElectrical: 255,
       lightAdditionalPerLight: 100, // Each light beyond the first
@@ -166,14 +167,18 @@ const pricingData = {
       perYard: 228,
       cleanOut: 125,
       envFuelPerYard: 25,
-      misc: 150,
+      misc: 125, // Fixed: Excel shows $125, not $150
       travelPerMile: 7,
-      taxRate: 0.0725,
+      taxRate: 0.0725, // Default 7.25% (can be overridden by county-based calculation)
     },
   },
   tileCoping: {
     materialTaxRate: 0.0725,
+    tileMaterialTaxRate: 0.075,
     flagstoneQuantityMultiplier: 1.1, // 10% overage for flagstone materials (Excel rows 192-197)
+    rockworkMaterialWaste: {
+      panelLedge: 1.15, // 15% material overage on panel ledge (matches TILE COPING sheet)
+    },
     tile: {
       labor: {
         level1: 10,
@@ -214,11 +219,13 @@ const pricingData = {
         concreteSteps: 7.5,
         flagstone: 25,
         coping: {
-          paver: 9,
-          travertineLevel1: 11,
-          travertineLevel2: 12,
-          concrete: 7,
-        },
+        paver: 9,
+        travertineLevel1: 11,
+        travertineLevel2: 12,
+        travertinelevel1: 11,
+        travertinelevel2: 12,
+        concrete: 7,
+      },
         rockwork: {
           panelLedge: 13,
           stackedStone: 27,
@@ -244,7 +251,7 @@ const pricingData = {
       { name: 'No Pump (Select pump)', model: 'NONE', price: 0 },
       { name: 'Jandy 1.65HP Variable Pump', model: 'VS-1.65HP', price: 2310 },
       { name: 'Jandy 1.85HP Variable Pump', model: 'VS-1.85HP', price: 2540 },
-      { name: 'Jandy 2.7HP Variable Pump', model: 'VS-2.7HP', price: 3110 },
+      { name: 'Jandy 2.7HP Variable Pump', model: 'VS-2.7HP', price: 2174.15 },
       { name: 'Jandy 1.0HP Single Speed Pump', model: 'SS-1.0HP', price: 1900 },
       { name: 'Jandy 2.0HP Single Speed Pump', model: 'SS-2.0HP', price: 2060 },
     ],
@@ -252,14 +259,14 @@ const pricingData = {
       { name: 'No Filter (Select filter)', sqft: 0, price: 0 },
       { name: '200 SQFT Cartridge Filter', sqft: 200, price: 1103.57 },
       { name: '340 SQFT Cartridge Filter', sqft: 340, price: 1618.57 },
-      { name: '460 SQFT Cartridge Filter', sqft: 460, price: 1677.43 },
+      { name: '460 SQFT Cartridge Filter', sqft: 460, price: 1174.20 },
       { name: '580 SQFT Cartridge Filter', sqft: 580, price: 2133.57 },
       { name: '4.9 SQFT Sand Filter', sqft: 0, price: 1115.2 },
       { name: '60 SQFT DE Filter', sqft: 60, price: 1224.37 },
     ],
     cleaners: [
       { name: 'Polaris Epic IQ', price: 1540 },
-      { name: 'Polaris Alpha IQ', price: 2000 },
+      { name: 'Polaris Alpha IQ', price: 1397.13 },
       { name: 'Polaris 360 Standard', price: 1618.57 },
       { name: 'Polaris 360 Black', price: 1677.43 },
       { name: 'Polaris 280 w/ Booster', price: 2133.57 },
@@ -267,32 +274,35 @@ const pricingData = {
     ],
     heaters: [
       { name: 'No Heater (Select heater)', btu: 0, price: 0, isVersaFlo: false },
-      { name: 'Jandy 400K BTU - VersaFlo', btu: 400000, price: 4710, isVersaFlo: true },
+      { name: 'Jandy 400K BTU - VersaFlo', btu: 400000, price: 3297, isVersaFlo: true },
       { name: 'Jandy LXI 250K BTU', btu: 250000, price: 1885, isVersaFlo: false },
       { name: 'Jandy JXI 400K - No Bypass', btu: 400000, price: 2308, isVersaFlo: false },
       { name: 'Jandy JXI 400K - w/ Bypass', btu: 400000, price: 2475, isVersaFlo: false },
       { name: 'Heat Pump', btu: 0, price: 0, isVersaFlo: false },
     ],
     lights: {
-      nicheLightPrice: 860, // 24 Watt - Jandy Nicheless LED (S column)
+      nicheLightPrice: 601, // 24 Watt - Jandy Nicheless LED (Excel)
       spaLightAddon: 0,
-      additionalLightPrice: 860,
+      additionalLightPrice: 601,
       catalog: [],
     },
     automation: [
-      { name: 'No Automation (Select system)', price: 0, hasChemistry: false },
-      { name: 'iAqualink w/ Rev. R', price: 1720, hasChemistry: false },
-      { name: 'iAqualink Controller - New Install', price: 1720, hasChemistry: false },
-      { name: 'iAqualink P4 Bundle', price: 0, hasChemistry: false },
-      { name: 'iAqualink PS4 Bundle', price: 0, hasChemistry: false },
-      { name: 'iAqualink RS Upgrade', price: 0, hasChemistry: false },
-      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', price: 1217.78, hasChemistry: false },
+      // Automation prices include the 6614 base panel and any required install adders (matches EQUIP sheet rows 61-69)
+      { name: 'No Automation', price: 0, hasChemistry: false },
+      { name: '6614 APL BASE PANEL', price: 1600, hasChemistry: false },
+      { name: 'Additional JVA', price: 1800, hasChemistry: false }, // base panel + JVA
+      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', price: 2250, hasChemistry: false }, // base + 650
+      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', price: 2575, hasChemistry: false }, // base + 650 + install
+      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', price: 3025, hasChemistry: false }, // base + 1100 + install
+      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', price: 3722, hasChemistry: false }, // base + 1797 + install
+      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', price: 4525, hasChemistry: false }, // base + 2600 + install
+      { name: 'IQ Pump 01', price: 1721, hasChemistry: false }, // base + 121
     ],
     automationZoneAddon: 365, // Per additional zone
     saltSystem: [
       { name: 'Jandy AquaPure 1400', model: 'AquaPure', price: 0 },
       { name: 'Jandy Tru-Clear', model: 'TruClear', price: 1150 },
-      { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', price: 1430 },
+      { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', price: 1000 },
       { name: 'No Salt System', model: 'None', price: 0 },
     ],
     blanketReel: 0,
@@ -301,7 +311,7 @@ const pricingData = {
     handrail: 0,
     startupChemicals: 0,
     baseWhiteGoods: 1046.1,
-    taxRate: 0.072, // 7.2% equipment tax per Excel
+    taxRate: 0.0725, // Equipment tax rate (Excel shows 7.3% -> effective 7.25% with rounding)
   },
   interiorFinish: {
     minimumChargeSqft: 850,
@@ -350,11 +360,12 @@ const pricingData = {
       poolPrepBase: 750,
       poolPrepThreshold: 1200,
       poolPrepOverRate: 1,
-      spaPrep: 250,
+      spaPrep: 100,
       misc: 100,
       travelPerMile: 10,
       stepDetailPerLnftOver20: 20,
-      waterproofing: 500, // Waterproofing line item from INT sheet
+      waterproofingPerSqft: 1.95, // Waterproofing rate per sqft (INT sheet)
+      waterproofingRaisedSpa: 300,
     },
   },
   cleanup: {
@@ -375,6 +386,7 @@ const pricingData = {
     spaLarge: 13857,
     spillover: 1000,
     crane: 2500,
+    noCrane: 150, // FIBER!D66 (applies when fiberglass is not selected)
     freight: 900, // Per shell (Excel: SUM(FIBER!G62:G64))
     surcharge2022: 0, // 2022 surcharge per shell (Excel: FIBER!C65)
     discountRate: 0.10, // 10% discount on shell costs
@@ -383,6 +395,13 @@ const pricingData = {
       labor: 2500, // Installation labor
       gravel: 600, // Gravel for base
     },
+    spaModels: [
+      { name: 'Meridian', price: 4794 },
+      { name: 'Mystic', price: 4575 },
+      { name: 'Regal', price: 5000 },
+      { name: 'Royal', price: 5000 },
+      { name: 'Shasta', price: 4150 },
+    ],
     models: [
       { name: 'Caeser', size: 'small', price: 11325, perimeter: 48 },
       { name: 'Chateau & Gayla 12', size: 'small', price: 14825, perimeter: 70 },
@@ -485,6 +504,8 @@ const pricingData = {
       },
       spillway: 150,
     },
+    raisedSpaWasteMultiplier: 1.125, // Waste factor applied to raised spa facing area
+    raisedSpaMaterialWaste: 1.15, // Material overage for raised spa facing
     retainingWalls: [
       { name: 'No Retaining Wall', heightFt: 0, costPerSqft: 0 },
       { name: '12" High - Standard', heightFt: 2, costPerSqft: 50 },

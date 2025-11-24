@@ -57,7 +57,8 @@
       "Bash(python analyze_excel.py:*)",
       "Bash(python detailed_cost_analysis.py:*)",
       "Bash(cost_analysis_output.txt)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

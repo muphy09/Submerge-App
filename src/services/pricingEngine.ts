@@ -73,7 +73,7 @@ export class PoolCalculations {
    * Formula: ROUNDUP(IF(Shape=Round, (Length * 3.14), (Length * 2 + Width * 2)), 0)
    */
   static calculateSpaPerimeter(poolSpecs: PoolSpecs): number {
-    if (poolSpecs.spaType === 'none') return 0;
+    if (poolSpecs.spaType === 'none' || poolSpecs.spaType === 'fiberglass') return 0;
 
     if (poolSpecs.spaShape === 'round') {
       return Math.ceil(poolSpecs.spaLength * 3.14);
@@ -134,6 +134,7 @@ export class ExcavationCalculations {
     const prices = pricingData.excavation;
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const isGuniteSpa = poolSpecs.spaType === 'gunite';
 
     if (!hasPoolDefinition(poolSpecs)) {
       return items;
@@ -191,14 +192,25 @@ export class ExcavationCalculations {
     });
 
     // Spa excavation
-    if (hasSpa && !isFiberglass) {
+    if (isGuniteSpa && !isFiberglass) {
+      // Base spa excavation is always charged
       items.push({
         category: 'Excavation',
-        description: poolSpecs.isRaisedSpa ? 'Raised Spa' : 'Base Spa',
-        unitPrice: poolSpecs.isRaisedSpa ? prices.raisedSpa : prices.baseSpa,
+        description: 'Base Spa',
+        unitPrice: prices.baseSpa,
         quantity: 1,
-        total: poolSpecs.isRaisedSpa ? prices.raisedSpa : prices.baseSpa,
+        total: prices.baseSpa,
       });
+
+      if (poolSpecs.isRaisedSpa) {
+        items.push({
+          category: 'Excavation',
+          description: 'Raised Spa',
+          unitPrice: prices.raisedSpa,
+          quantity: 1,
+          total: prices.raisedSpa,
+        });
+      }
     }
 
     // Site prep
@@ -230,7 +242,7 @@ export class ExcavationCalculations {
         description: 'Gravel',
         unitPrice: prices.gravelPerSqft,
         quantity: poolSpecs.surfaceArea,
-        total: Math.ceil(poolSpecs.surfaceArea * prices.gravelPerSqft),
+        total: poolSpecs.surfaceArea * prices.gravelPerSqft,
       });
     }
 
@@ -261,15 +273,17 @@ export class ExcavationCalculations {
       const adjustedMinDepth = poolSpecs.shallowDepth + 1.25;
       const adjustedMaxDepth = poolSpecs.endDepth + 1.25;
       const adjustedDepth = (adjustedMinDepth + adjustedMaxDepth) / 2;
-      const spaAreaAllowance = hasSpa ? 50 : 0;
+      const spaAreaAllowance = hasSpa ? 75 : 0; // EXC!G9 -> 75 when spa is present
       const cubicYards = ((overdigArea * adjustedDepth) / 24) + ((spaAreaAllowance * 2.5) / 24);
-      const yardage = Math.ceil(cubicYards);
+      const yardage = Math.max(0, cubicYards); // Excel keeps decimals
+      const yardageDisplay = Math.round(yardage * 100) / 100;
+      const dirtHaulTotal = Math.ceil(prices.dirtHaulPerYard * yardage);
       items.push({
         category: 'Excavation',
         description: 'Dirt Haul',
         unitPrice: prices.dirtHaulPerYard,
-        quantity: yardage,
-        total: Math.ceil(prices.dirtHaulPerYard * yardage),
+        quantity: yardageDisplay,
+        total: dirtHaulTotal,
       });
     }
 
@@ -322,6 +336,13 @@ export class PlumbingCalculations {
     const items: CostLineItem[] = [];
     const prices = pricingData.plumbing;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const isGuniteSpa = poolSpecs.spaType === 'gunite';
+    const skimmerRun = plumbing.runs.skimmerRun || 0;
+    const mainDrainRun = plumbing.runs.mainDrainRun || 0;
+    const cleanerRun = plumbing.runs.cleanerRun || 0;
+    const infloorValveToEQ = plumbing.runs.infloorValveToEQ || 0;
+    const infloorValveToPool = plumbing.runs.infloorValveToPool || 0;
+    const infloorCalc = infloorValveToEQ + (infloorValveToPool * 6 * 1.15);
 
     if (!hasPoolDefinition(poolSpecs)) {
       return items;
@@ -337,7 +358,7 @@ export class PlumbingCalculations {
     });
 
     // Spa base plumbing
-    if (hasSpa) {
+    if (hasSpa && isGuniteSpa) {
       items.push({
         category: 'Plumbing',
         description: 'Spa Base',
@@ -348,8 +369,8 @@ export class PlumbingCalculations {
     }
 
     // Pool overrun (if skimmer run > 33 ft)
-    if (plumbing.runs.skimmerRun > prices.poolOverrunThreshold) {
-      const overrun = plumbing.runs.skimmerRun - prices.poolOverrunThreshold;
+    if (skimmerRun > prices.poolOverrunThreshold) {
+      const overrun = skimmerRun - prices.poolOverrunThreshold;
       items.push({
         category: 'Plumbing',
         description: 'Pool Overrun',
@@ -360,7 +381,7 @@ export class PlumbingCalculations {
     }
 
     // Spa overrun
-    if (hasSpa && plumbing.runs.spaRun > prices.spaOverrunThreshold) {
+    if (hasSpa && isGuniteSpa && plumbing.runs.spaRun > prices.spaOverrunThreshold) {
       const overrun = plumbing.runs.spaRun - prices.spaOverrunThreshold;
       items.push({
         category: 'Plumbing',
@@ -371,13 +392,12 @@ export class PlumbingCalculations {
       });
     }
 
-    // Core plumbing pipe - 2"
+    // Core plumbing pipe - 2" (PLUM!K14)
     const twoInchBaseRun =
       poolSpecs.perimeter +
-      plumbing.runs.mainDrainRun +
-      plumbing.runs.cleanerRun +
-      plumbing.runs.infloorValveToEQ +
-      (plumbing.runs.infloorValveToPool * 6 * 1.15);
+      skimmerRun +
+      cleanerRun +
+      infloorCalc;
     const twoInchQty = Math.ceil(twoInchBaseRun * 1.25);
     if (twoInchQty > 0) {
       items.push({
@@ -389,8 +409,9 @@ export class PlumbingCalculations {
       });
     }
 
-    // Skimmer + spa loop - 2.5"
-    const twoPointFiveRun = plumbing.runs.skimmerRun + (poolSpecs.spaPerimeter || 0);
+    // Main drain + spa loop - 2.5" (PLUM!K15)
+    const spaPerimeter = isGuniteSpa ? (poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs)) : 0;
+    const twoPointFiveRun = mainDrainRun + spaPerimeter;
     const twoPointFiveQty = Math.ceil(twoPointFiveRun);
     if (twoPointFiveQty > 0) {
       items.push({
@@ -464,10 +485,11 @@ export class PlumbingCalculations {
       });
     }
 
-    // Conduit - Excel PLUM!Row26: electricRun + (gasRun × 1.25)
-    // Note: electricRun is stored in electrical.runs.electricalRun, need to access it
-    const electricalRun = (poolSpecs as any).electricalRun || 0;
-    const conduitQty = Math.ceil(electricalRun + (plumbing.runs.gasRun * 1.25));
+    // Conduit - Excel PLUM!Row26: ROUNDUP(electricalRun + (lightRun * 1.25), 0)
+    // Note: electricRun lives on electrical module; grab it from either plumbing or pool specs for flexibility
+    const electricalRun = plumbing.runs?.electricalRun ?? (plumbing as any).electricalRun ?? (poolSpecs as any).electricalRun ?? 0;
+    const lightRun = plumbing.runs?.lightRun ?? (plumbing as any).lightRun ?? (poolSpecs as any).lightRun ?? 0;
+    const conduitQty = Math.ceil(electricalRun + (lightRun * 1.25));
     if (conduitQty > 0) {
       items.push({
         category: 'Plumbing',
@@ -552,7 +574,8 @@ export class PlumbingCalculations {
 export class ElectricalCalculations {
   static calculateElectricalCost(
     poolSpecs: PoolSpecs,
-    electrical: Electrical
+    electrical: Electrical,
+    equipment?: any
   ): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.electrical;
@@ -583,29 +606,66 @@ export class ElectricalCalculations {
       });
     }
 
-    // Spa electrical
+    // Lights - $100 per additional light beyond the first (ELEC!Row6)
+    const poolLights = equipment?.numberOfLights ?? 0;
+    const spaLight = equipment?.hasSpaLight ? 1 : 0;
+    const additionalLights = Math.max(0, poolLights + spaLight - 1);
+    if (additionalLights > 0) {
+      items.push({
+        category: 'Electrical',
+        description: 'Lights',
+        unitPrice: prices.lightAdditionalPerLight,
+        quantity: additionalLights,
+        total: prices.lightAdditionalPerLight * additionalLights,
+      });
+    }
+
+    // Spa electrical (heater)
     if (hasSpa) {
       items.push({
         category: 'Electrical',
-        description: 'Spa Electrical',
+        description: 'Heater (Spa)',
         unitPrice: prices.spaElectrical,
         quantity: 1,
         total: prices.spaElectrical,
       });
     }
 
-    // Light run - every foot counts (1 ft = 1.25 ft billable conduit @ $2.75/ft)
-    if (electrical.runs.lightRun > 0) {
-      const billableConduit = electrical.runs.lightRun * prices.lightRunConduitMultiplier;
-      const totalCost = billableConduit * prices.lightRunPerFt;
+    // Automation - Excel ELEC!Row8: $250 × hasAutomation
+    const automationSelection = equipment?.automation;
+    const hasAutomation = !!automationSelection && (
+      (automationSelection.price ?? 0) > 0 ||
+      (automationSelection.name && !automationSelection.name.toLowerCase().includes('no automation')) ||
+      (automationSelection.zones ?? 0) > 0 ||
+      automationSelection.hasChemistry
+    );
+    if (hasAutomation) {
       items.push({
         category: 'Electrical',
-        description: 'Light Run',
-        unitPrice: prices.lightRunPerFt,
-        quantity: billableConduit,
-        total: totalCost,
+        description: 'Automation',
+        unitPrice: prices.automation,
+        quantity: 1,
+        total: prices.automation,
       });
     }
+
+    // Bonding - Excel ELEC!Row9: $300 × 1
+    items.push({
+      category: 'Electrical',
+      description: 'Bonding',
+      unitPrice: prices.bonding,
+      quantity: 1,
+      total: prices.bonding,
+    });
+
+    // Outlet - Excel ELEC!Row10: $85 × 1
+    items.push({
+      category: 'Electrical',
+      description: 'Outlet',
+      unitPrice: prices.outlet,
+      quantity: 1,
+      total: prices.outlet,
+    });
 
     // Heat pump electrical
     if (electrical.runs.heatPumpElectricalRun > 0) {
@@ -673,6 +733,7 @@ export class SteelCalculations {
     const items: CostLineItem[] = [];
     const prices = pricingData.steel;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const isGuniteSpa = poolSpecs.spaType === 'gunite';
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
 
     if (isFiberglass) return items; // No steel for fiberglass
@@ -696,7 +757,7 @@ export class SteelCalculations {
     });
 
     // Spa base
-    if (hasSpa) {
+    if (isGuniteSpa && hasSpa) {
       items.push({
         category: 'Steel',
         description: 'Spa Base',
@@ -823,18 +884,45 @@ export class SteelCalculations {
 export class ShotcreteCalculations {
   static calculateShotcreteCost(
     poolSpecs: PoolSpecs,
-    _excavation: Excavation
+    excavation: Excavation,
+    county?: string,
+    tileCopingDecking?: any,
   ): { labor: CostLineItem[]; material: CostLineItem[] } {
     const laborItems: CostLineItem[] = [];
     const materialItems: CostLineItem[] = [];
     const prices = pricingData.shotcrete;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const isGuniteSpa = poolSpecs.spaType === 'gunite';
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
 
     if (isFiberglass) return { labor: laborItems, material: materialItems };
 
-    // Yardage approximation with minimum yardage from Excel (32 yards)
-    const yardage = Math.max(prices.labor.minimumYards, Math.ceil(poolSpecs.surfaceArea / 16));
+    // Yardage approximation (SHOT sheet):
+    // ROUNDUP((((perimeter + (interiorArea * 0.67) + rbbSqft) / 24)
+    //        + ((spaPerimeter + spaPerimeter*3 + 40) / 25)
+    //        + (doubleBullnoseLnft / 10)) * 1.1, 0)
+    //        + (doubleCurtainLnft / 20) + (isRaisedSpa ? 2 : 0)
+    const perimeter = poolSpecs.perimeter || 0;
+    const surfaceArea = poolSpecs.surfaceArea || 0;
+    const shallowDepth = poolSpecs.shallowDepth || 0;
+    const endDepth = poolSpecs.endDepth || 0;
+    const interiorArea = ((shallowDepth + endDepth) / 2) * perimeter + surfaceArea;
+    const rbbSqft = excavation ? ExcavationCalculations.calculateTotalRBBSqft(excavation) : 0;
+    const spaPerimeter = poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs);
+    const doubleBullnoseLnft = tileCopingDecking?.doubleBullnoseLnft ?? 0;
+    const doubleCurtainLnft = excavation?.doubleCurtainLength ?? 0;
+
+    const baseYardage =
+      ((perimeter + (interiorArea * 0.67) + rbbSqft) / 24) +
+      ((spaPerimeter + (spaPerimeter * 3) + 40) / 25) +
+      (doubleBullnoseLnft / 10);
+
+    let yardage = Math.ceil(baseYardage * 1.1);
+    yardage += (doubleCurtainLnft / 20);
+    yardage += isGuniteSpa && poolSpecs.isRaisedSpa ? 2 : 0;
+
+    // Ensure yardage stays numeric
+    yardage = Math.max(0, yardage);
 
     // LABOR - Two-tier pricing per Excel SHOT sheet
     // Minimum Labor: Always charge for 32 yards at $90/yard
@@ -858,7 +946,7 @@ export class ShotcreteCalculations {
       });
     }
 
-    if (hasSpa) {
+    if (isGuniteSpa && hasSpa) {
       laborItems.push({
         category: 'Shotcrete Labor',
         description: 'Spa',
@@ -950,15 +1038,51 @@ export class ShotcreteCalculations {
       });
     }
 
-    // Tax applied to material subtotal (Excel applies 7.25%)
+    // Tax breakdown (Excel SHOT sheet)
+    // NC State Tax: 4.75% (0.0475)
+    // MECK County Tax: 2.5% (0.025)
+    // Combined for MECK County NC: 7.25% (4.75% + 2.5%)
     const materialSubtotal = materialItems.reduce((sum, i) => sum + i.total, 0);
-    materialItems.push({
-      category: 'Shotcrete Material',
-      description: 'Material Tax',
-      unitPrice: prices.material.taxRate,
-      quantity: materialSubtotal,
-      total: materialSubtotal * prices.material.taxRate,
-    });
+
+    if (county === 'MECK') {
+      // MECK County NC: Show state + county tax separately
+      const stateTax = materialSubtotal * 0.0475;
+      const countyTax = materialSubtotal * 0.025;
+
+      materialItems.push({
+        category: 'Shotcrete Material',
+        description: 'NC State Tax (4.75%)',
+        unitPrice: 0.0475,
+        quantity: materialSubtotal,
+        total: stateTax,
+      });
+
+      materialItems.push({
+        category: 'Shotcrete Material',
+        description: 'MECK County Tax (2.5%)',
+        unitPrice: 0.025,
+        quantity: materialSubtotal,
+        total: countyTax,
+      });
+    } else if (county === 'NC') {
+      // Other NC counties: Only state tax
+      materialItems.push({
+        category: 'Shotcrete Material',
+        description: 'NC State Tax (4.75%)',
+        unitPrice: 0.0475,
+        quantity: materialSubtotal,
+        total: materialSubtotal * 0.0475,
+      });
+    } else {
+      // Default: Combined tax (for other states or unspecified)
+      materialItems.push({
+        category: 'Shotcrete Material',
+        description: 'Material Tax (7.25%)',
+        unitPrice: prices.material.taxRate,
+        quantity: materialSubtotal,
+        total: materialSubtotal * prices.material.taxRate,
+      });
+    }
 
     return { labor: laborItems, material: materialItems };
   }
@@ -1031,6 +1155,7 @@ export class PricingEngine {
       interiorFinish: 0, // TODO
       waterTruck: 0, // TODO
       fiberglassShell: 0, // TODO
+      fiberglassInstall: 0, // TODO
       startupOrientation: 0,
       customFeatures: 0,
       grandTotal: 0,
@@ -1063,6 +1188,7 @@ export class PricingEngine {
       interiorFinish: [],
       waterTruck: [],
       fiberglassShell: [],
+      fiberglassInstall: [],
       startupOrientation: [],
       customFeatures: [],
       totals,

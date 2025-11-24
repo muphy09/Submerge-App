@@ -9,6 +9,7 @@ export interface CustomerInfo {
   address?: string;
   phone?: string;
   email?: string;
+  county?: 'MECK' | 'NC' | string; // For tax rate calculations (MECK: 2.5%, NC other: 4.75%)
 }
 
 // ============================================================================
@@ -17,9 +18,10 @@ export interface CustomerInfo {
 
 export type PoolType = 'gunite' | 'fiberglass';
 export type FiberglassSize = 'small' | 'medium' | 'large' | 'crystite';
-export type SpaType = 'none' | 'gunite';
+export type SpaType = 'none' | 'gunite' | 'fiberglass';
 export type SpaShape = 'round' | 'square';
 export type FiberglassModelSize = 'small' | 'medium' | 'large';
+export type FiberglassCraneOption = 'no-crane' | 'crane-small' | 'crane-medium' | 'crane-large';
 
 export interface PoolSpecs {
   // Pool Type
@@ -30,6 +32,7 @@ export interface PoolSpecs {
   fiberglassModelName?: string;
   fiberglassModelPrice?: number;
   fiberglassPerimeter?: number;
+  fiberglassCraneOption?: FiberglassCraneOption;
 
   // Gunite pool dimensions
   perimeter: number; // LNFT
@@ -49,6 +52,8 @@ export interface PoolSpecs {
   spaWidth: number;
   spaShape: SpaShape;
   spaPerimeter: number; // Auto-calculated
+  spaFiberglassModelName?: string;
+  spaFiberglassModelPrice?: number;
   isRaisedSpa: boolean; // +18"
   raisedSpaFacing: 'none' | 'tile' | 'ledgestone' | 'stacked-stone';
   hasSpillover: boolean;
@@ -63,6 +68,7 @@ export interface PoolSpecs {
   // Options
   hasSiltFence: boolean;
   hasAutomaticCover: boolean;
+  waterfallCount?: number;
 
   // Calculated
   approximateGallons: number; // Auto-calculated
@@ -139,6 +145,10 @@ export interface PlumbingRuns {
   // Gas and Spa
   gasRun: number; // Meter to heater (LNFT)
   spaRun: number; // Spa to EQ (LNFT)
+
+  // Electrical (shared run lengths injected from electrical section)
+  electricalRun?: number; // House panel to EQ (LNFT)
+  lightRun?: number; // Lights to EQ (LNFT)
 }
 
 export interface Plumbing {
@@ -185,9 +195,11 @@ export interface TileCopingDecking {
   concreteStepsLength: number; // LNFT
 
   // Specialty details
-  doubleBullnoseLnft?: number;
+  bullnoseLnft?: number; // Regular bullnose (single)
+  doubleBullnoseLnft?: number; // Double bullnose travertine (treated same rate as bullnose)
   spillwayLnft?: number;
   rockworkPanelLedgeSqft?: number;
+  rockworkPanelLedgeMaterialSqft?: number; // Allow explicit material overage entry
   rockworkStackedStoneSqft?: number;
   rockworkTileSqft?: number;
 
@@ -257,6 +269,7 @@ export interface Equipment {
   auxiliaryPump?: PumpSelection; // Optional second pump
   filter: FilterSelection;
   cleaner: CleanerSelection;
+  cleanerQuantity?: number; // Excel NEW POOL B119 qty (0 to exclude cleaner)
   heater: HeaterSelection;
   upgradeToVersaFlo: boolean;
 
@@ -406,6 +419,7 @@ export interface CostBreakdown {
   interiorFinish: CostLineItem[];
   waterTruck: CostLineItem[];
   fiberglassShell: CostLineItem[];
+  fiberglassInstall: CostLineItem[];
   startupOrientation: CostLineItem[]; // NEW
   customFeatures: CostLineItem[]; // NEW
 
@@ -435,6 +449,7 @@ export interface CostBreakdown {
     interiorFinish: number;
     waterTruck: number;
     fiberglassShell: number;
+    fiberglassInstall: number;
     customFeatures: number; // NEW - custom features total
     startupOrientation: number; // NEW - startup/orientation total
     grandTotal: number;

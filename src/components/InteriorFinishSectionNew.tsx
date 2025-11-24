@@ -12,10 +12,20 @@ interface Props {
 function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: Props) {
   // Auto-set surface area from pool specs
   useEffect(() => {
+    const updates: Partial<InteriorFinish> = {};
     if (poolSurfaceArea !== data.surfaceArea) {
-      onChange({ ...data, surfaceArea: poolSurfaceArea, hasSpa });
+      updates.surfaceArea = poolSurfaceArea;
     }
-  }, [poolSurfaceArea, hasSpa]);
+    if (data.hasSpa !== hasSpa) {
+      updates.hasSpa = hasSpa;
+    }
+    if (data.hasWaterproofing === undefined) {
+      updates.hasWaterproofing = true;
+    }
+    if (Object.keys(updates).length > 0) {
+      onChange({ ...data, ...updates });
+    }
+  }, [poolSurfaceArea, hasSpa, data.hasWaterproofing, data.hasSpa, data.surfaceArea]);
 
   const handleChange = (field: keyof InteriorFinish, value: any) => {
     onChange({ ...data, [field]: value });
@@ -83,6 +93,18 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
           style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
         />
         <small className="form-help">Automatically set from pool specifications</small>
+      </div>
+
+      <div className="form-group">
+        <label className="form-checkbox">
+          <input
+            type="checkbox"
+            checked={data.hasWaterproofing ?? true}
+            onChange={(e) => handleChange('hasWaterproofing', e.target.checked)}
+          />
+          <span>Include Waterproofing (matches INT sheet)</span>
+        </label>
+        <small className="form-help">Leave checked to mirror the COST-NEW waterproofing line item.</small>
       </div>
 
       {hasSpa && (

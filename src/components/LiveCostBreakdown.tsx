@@ -104,6 +104,8 @@ function LiveCostBreakdown({ costBreakdown, onToggle }: Props) {
     checkCategory('Interior Finish', prev.interiorFinish, costBreakdown.interiorFinish);
     checkCategory('Water Truck', prev.waterTruck, costBreakdown.waterTruck);
     checkCategory('Fiberglass Shell', prev.fiberglassShell, costBreakdown.fiberglassShell);
+    checkCategory('Fiberglass Install', prev.fiberglassInstall, costBreakdown.fiberglassInstall);
+    checkCategory('Custom Features', prev.customFeatures, costBreakdown.customFeatures);
 
     if (newHighlights.length > 0 || newCategories.size > 0) {
       // Merge with existing highlights instead of replacing
@@ -263,6 +265,8 @@ function LiveCostBreakdown({ costBreakdown, onToggle }: Props) {
         {renderLineItems(costBreakdown.interiorFinish, 'Interior Finish')}
         {renderLineItems(costBreakdown.waterTruck, 'Water Truck')}
         {renderLineItems(costBreakdown.fiberglassShell, 'Fiberglass Shell')}
+        {renderLineItems(costBreakdown.fiberglassInstall, 'Fiberglass Install')}
+        {renderLineItems(costBreakdown.customFeatures, 'Custom Features')}
       </div>
 
       <div className="live-grand-total">

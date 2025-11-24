@@ -38,9 +38,18 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
   const handleCleanerChange = (name: string) => {
     const cleaner = pricingData.equipment.cleaners.find(c => c.name === name);
     if (cleaner) {
-      handleChange('cleaner', {
-        name: cleaner.name,
-        price: cleaner.price,
+      const nextQuantity =
+        cleaner.price > 0
+          ? (data.cleanerQuantity && data.cleanerQuantity > 0 ? data.cleanerQuantity : 1)
+          : 0;
+
+      onChange({
+        ...data,
+        cleaner: {
+          name: cleaner.name,
+          price: cleaner.price,
+        },
+        cleanerQuantity: nextQuantity,
       });
     }
   };
@@ -120,6 +129,23 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
             </option>
           ))}
         </select>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Cleaner Quantity</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.cleanerQuantity ?? 0}
+          onChange={(e) =>
+            onChange({
+              ...data,
+              cleanerQuantity: Math.max(0, parseInt(e.target.value) || 0),
+            })
+          }
+          min="0"
+          step="1"
+        />
+        <small className="form-help">Matches Excel NEW POOL cleaner qty (set to 0 to exclude).</small>
       </div>
 
       {/* Heater */}

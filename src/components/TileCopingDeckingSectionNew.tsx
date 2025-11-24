@@ -93,7 +93,21 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
       </div>
 
       <div className="form-group">
-        <label className="form-label">Double Bullnose (LNFT)</label>
+        <label className="form-label">Bullnose (LNFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.bullnoseLnft || ''}
+          onChange={(e) => handleChange('bullnoseLnft', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="1"
+          placeholder="0"
+        />
+        <small className="form-help">Regular bullnose edges around spas, steps, etc.</small>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Double Bullnose Travertine (LNFT)</label>
         <input
           type="number"
           className="form-input"
@@ -103,6 +117,7 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
           step="1"
           placeholder="0"
         />
+        <small className="form-help">Enter the double bullnose length here (Excel NEW POOL double bullnose row).</small>
       </div>
 
       <div className="form-group">
@@ -173,6 +188,19 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
           step="1"
           placeholder="0"
         />
+      </div>
+      <div className="form-group">
+        <label className="form-label">Panel Ledge Material (SQFT)</label>
+        <input
+          type="number"
+          className="form-input"
+          value={data.rockworkPanelLedgeMaterialSqft || ''}
+          onChange={(e) => handleChange('rockworkPanelLedgeMaterialSqft', parseFloat(e.target.value) || 0)}
+          min="0"
+          step="0.01"
+          placeholder="0"
+        />
+        <small className="form-help">Use if material overage differs from labor sqft (Excel applies ~15% overage).</small>
       </div>
       <div className="form-group">
         <label className="form-label">Stacked Stone Facing (SQFT)</label>

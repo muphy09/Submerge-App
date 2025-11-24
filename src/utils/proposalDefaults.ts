@@ -27,9 +27,11 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     surfaceArea: 0,
     shallowDepth: 0,
     endDepth: 0,
+    fiberglassSize: undefined,
     fiberglassModelName: undefined,
     fiberglassModelPrice: undefined,
     fiberglassPerimeter: undefined,
+    fiberglassCraneOption: 'no-crane',
     maxWidth: 0,
     maxLength: 0,
     totalStepsAndBench: 0,
@@ -39,6 +41,8 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     spaWidth: 0,
     spaShape: 'round',
     spaPerimeter: 0,
+    spaFiberglassModelName: undefined,
+    spaFiberglassModelPrice: undefined,
     isRaisedSpa: false,
     raisedSpaFacing: 'none',
     hasSpillover: false,
@@ -47,6 +51,7 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     poolToStreetDistance: 0,
     hasSiltFence: false,
     hasAutomaticCover: false,
+    waterfallCount: 0,
     approximateGallons: 0,
   };
 }
@@ -116,9 +121,11 @@ export function getDefaultTileCopingDecking(): TileCopingDecking {
     deckingType: 'travertine-level1',
     deckingArea: 0,
     concreteStepsLength: 0,
+    bullnoseLnft: 0,
     doubleBullnoseLnft: 0,
     spillwayLnft: 0,
     rockworkPanelLedgeSqft: 0,
+    rockworkPanelLedgeMaterialSqft: 0,
     rockworkStackedStoneSqft: 0,
     rockworkTileSqft: 0,
     hasRoughGrading: true,
@@ -163,6 +170,7 @@ export function getDefaultEquipment(): Equipment {
       name: defaultCleaner.name,
       price: defaultCleaner.price,
     },
+    cleanerQuantity: 0,
     heater: {
       name: defaultHeater.name,
       btu: defaultHeater.btu,
@@ -217,6 +225,7 @@ export function getDefaultInteriorFinish(): InteriorFinish {
     color: '',
     surfaceArea: 0,
     hasSpa: false,
+    hasWaterproofing: true,
     cost: 0,
   };
 }
@@ -247,6 +256,7 @@ export function getDefaultCostBreakdown(): CostBreakdown {
     interiorFinish: [],
     waterTruck: [],
     fiberglassShell: [],
+    fiberglassInstall: [],
     startupOrientation: [],
     customFeatures: [],
     totals: {
@@ -274,6 +284,7 @@ export function getDefaultCostBreakdown(): CostBreakdown {
       interiorFinish: 0,
       waterTruck: 0,
       fiberglassShell: 0,
+      fiberglassInstall: 0,
       startupOrientation: 0,
       customFeatures: 0,
       grandTotal: 0,

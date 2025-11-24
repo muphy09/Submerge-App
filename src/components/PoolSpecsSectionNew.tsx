@@ -97,7 +97,8 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
   };
 
   const isFiberglass = data.poolType === 'fiberglass';
-  const hasSpa = data.spaType === 'gunite';
+  const hasSpa = data.spaType !== 'none';
+  const isGuniteSpa = data.spaType === 'gunite';
 
   return (
     <div className="section-form">
@@ -182,6 +183,23 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
             <small className="form-help" style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '-10px', marginBottom: '15px', display: 'block' }}>
               Selecting a model will also set the perimeter from the spreadsheet.
             </small>
+
+            <div className="spec-grid-2">
+              <div className="spec-field">
+                <label className="spec-label">Crane Option (Fiberglass)</label>
+                <select
+                  className="compact-input"
+                  value={data.fiberglassCraneOption || 'no-crane'}
+                  onChange={(e) => handleChange('fiberglassCraneOption', e.target.value)}
+                >
+                  <option value="no-crane">No Crane</option>
+                  <option value="crane-small">Crane - Small</option>
+                  <option value="crane-medium">Crane - Medium</option>
+                  <option value="crane-large">Crane - Large</option>
+                </select>
+                <small className="form-help">Matches FIBER sheet crane selection.</small>
+              </div>
+            </div>
           </>
         )}
 
@@ -301,6 +319,54 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
             </div>
           </div>
         )}
+
+        {/* Fiberglass Spa Details */}
+        {hasSpa && data.spaType === 'fiberglass' && (
+          <div className="spec-grid-2" style={{ marginTop: '15px' }}>
+            <div className="spec-field">
+              <label className="spec-label required">Fiberglass Spa Model</label>
+              <select
+                className="compact-input"
+                value={data.spaFiberglassModelName || ''}
+                onChange={(e) => {
+                  const model = pricingData.fiberglass.spaModels.find(m => m.name === e.target.value);
+                  if (model) {
+                    handleChange('spaFiberglassModelName', model.name);
+                    handleChange('spaFiberglassModelPrice', model.price);
+                  } else {
+                    handleChange('spaFiberglassModelName', undefined);
+                    handleChange('spaFiberglassModelPrice', undefined);
+                  }
+                }}
+              >
+                <option value="">Select model</option>
+                {pricingData.fiberglass.spaModels.map(model => (
+                  <option key={model.name} value={model.name}>
+                    {model.name} - ${model.price.toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="spec-field">
+              <label className="spec-label">Spa Price (auto)</label>
+              <CompactInput
+                type="text"
+                value={data.spaFiberglassModelPrice ? `$${data.spaFiberglassModelPrice.toLocaleString()}` : '$0'}
+                readOnly
+              />
+            </div>
+
+            <label className="form-checkbox" style={{ gridColumn: '1 / span 2' }}>
+              <input
+                type="checkbox"
+                checked={data.hasSpillover}
+                onChange={(e) => handleChange('hasSpillover', e.target.checked)}
+              />
+              <span>Include Spillover (Fiberglass)</span>
+            </label>
+          </div>
+        )}
       </div>
 
       {/* ==================== SPA BLOCK ==================== */}
@@ -323,10 +389,19 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
           >
             Gunite (Custom)
           </button>
+          <button
+            type="button"
+            className={`pool-type-btn ${data.spaType === 'fiberglass' ? 'active' : ''}`}
+            onClick={() =>
+              handleChange('spaType', 'fiberglass')
+            }
+          >
+            Fiberglass Spa
+          </button>
         </div>
 
         {/* Gunite Spa Details */}
-        {hasSpa && data.spaType === 'gunite' && (
+        {isGuniteSpa && (
           <>
             <div className="spec-grid-4">
               <div className="spec-field">
@@ -463,6 +538,7 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
             <span>Automatic Cover</span>
           </label>
         </div>
+
       </div>
     </div>
   );

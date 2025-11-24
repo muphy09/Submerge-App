@@ -1,2 +1,17 @@
 - MacOS Release is broken
 - 
+
+
+Gas overrun quan off 1
+Electrical missing automation
+tile - labor & material subtotal wrong, but total correct **
+coping/decking - no pap discount area **
+stone - raise spa ledgestone quan off by 5, bullnose labor quan off by 1, panel ledge material quan off, no tax displayed in excel (might be there tho)
+equip - automation not implemneted right
+interior - spa finish value off, spa prep not included in excel, no waterproofing line
+fiberglass - no crane is present when it shouldnt be
+custom features needs to include total cost + 70% markup in the cost breakdown
+
+
+Plans - waterfall $15 not appearing
+Eelc - pool lights missing 1

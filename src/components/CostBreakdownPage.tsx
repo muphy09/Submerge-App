@@ -118,6 +118,7 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
     { name: 'Interior Finish', items: costBreakdown.interiorFinish, papDiscountKey: 'interiorFinish', showPAPInput: true },
     { name: 'Water Truck', items: costBreakdown.waterTruck, showPAPInput: false },
     { name: 'Fiberglass Shell', items: costBreakdown.fiberglassShell, showPAPInput: false },
+    { name: 'Fiberglass Install', items: costBreakdown.fiberglassInstall, showPAPInput: false },
     { name: 'Startup/Orientation', items: costBreakdown.startupOrientation, papDiscountKey: 'startup', showPAPInput: true },
     { name: 'Custom Features', items: costBreakdown.customFeatures, showPAPInput: false },
   ];

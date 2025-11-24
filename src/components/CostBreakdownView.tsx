@@ -106,6 +106,7 @@ function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: P
       'Interior Finish',
       'Water Truck',
       'Fiberglass Shell',
+      'Fiberglass Install',
       'Startup/Orientation',
       'Custom Features',
     ]);
@@ -237,6 +238,10 @@ function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: P
             <div className="summary-row">
               <span>Fiberglass Shell:</span>
               <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="summary-row">
+              <span>Fiberglass Install:</span>
+              <span>${costBreakdown.totals.fiberglassInstall.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="summary-row">
               <span>Startup/Orientation:</span>

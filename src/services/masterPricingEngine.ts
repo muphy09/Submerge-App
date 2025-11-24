@@ -42,16 +42,23 @@ export class MasterPricingEngine {
     taxAmount: number;
     totalCost: number;
   } {
-    const poolSpecs = proposal.poolSpecs!;
+    const tileCopingDecking = proposal.tileCopingDecking!;
+    const derivedWaterfallCount = (tileCopingDecking?.doubleBullnoseLnft ?? 0) > 0 ? 1 : 0;
+    const explicitWaterfalls = proposal.poolSpecs?.waterfallCount ?? 0;
+    const waterfallCount = explicitWaterfalls > 0 ? explicitWaterfalls : derivedWaterfallCount;
+    const poolSpecs = {
+      ...proposal.poolSpecs!,
+      waterfallCount,
+    };
     const excavation = proposal.excavation!;
     const plumbing = proposal.plumbing!;
     const electrical = proposal.electrical!;
-    const tileCopingDecking = proposal.tileCopingDecking!;
     const drainage = proposal.drainage!;
     const equipment = proposal.equipment!;
     const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0 };
     const customFeatures = proposal.customFeatures!;
     const interiorFinish = proposal.interiorFinish!;
+    const county = proposal.customerInfo?.county;
     const isFiberglass = CalculationModules.Pool.isFiberglassPool(poolSpecs);
 
     // Calculate all sections
@@ -59,12 +66,22 @@ export class MasterPricingEngine {
     const layoutItems = this.calculateLayout(poolSpecs);
     const permitItems = this.calculatePermit(poolSpecs);
     let excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
-    let plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbing);
+    const plumbingWithElectrical = {
+      ...plumbing,
+      runs: {
+        ...plumbing.runs,
+        electricalRun: electrical?.runs?.electricalRun ?? 0,
+        lightRun: electrical?.runs?.lightRun ?? 0,
+      },
+    };
+    let plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbingWithElectrical);
     const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
     let steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
-    let electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical);
-    const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation);
+    let electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment);
+    const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation, county, tileCopingDecking);
     const tileCoping = CalculationModules.TileCopingDecking.calculateCosts(poolSpecs, tileCopingDecking);
+    const tileLaborOnly = tileCoping.labor.filter(i => i.category.toLowerCase().includes('tile'));
+    const tileMaterialOnly = tileCoping.material.filter(i => i.category.toLowerCase().includes('tile'));
     const drainageItems = CalculationModules.Drainage.calculateDrainageCost(drainage);
     let equipmentItems = CalculationModules.Equipment.calculateEquipmentCost(equipment, poolSpecs);
     const equipmentSetItems = CalculationModules.Equipment.calculateEquipmentSetCost(equipment, poolSpecs);
@@ -72,9 +89,20 @@ export class MasterPricingEngine {
     const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);
     const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, excavation, tileCopingDecking);
     const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(poolSpecs);
+    const fiberglassInstallItems = CalculationModules.Fiberglass.calculateFiberglassInstallCost(poolSpecs);
     const masonryCalc = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, excavation);
     const rockworkLabor = masonryCalc.labor.concat(tileCoping.labor.filter(i => i.category.includes('Rockwork')));
     const rockworkMaterial = masonryCalc.material.concat(tileCoping.material.filter(i => i.category.includes('Rockwork')));
+    const masonryMaterialSubtotal = masonryCalc.material.reduce((sum, i) => sum + i.total, 0);
+    if (masonryMaterialSubtotal > 0) {
+      rockworkMaterial.push({
+        category: 'Stone & Rockwork Material',
+        description: 'Stone & Rockwork Material Tax (Masonry)',
+        unitPrice: pricingData.tileCoping.materialTaxRate,
+        quantity: masonryMaterialSubtotal,
+        total: masonryMaterialSubtotal * pricingData.tileCoping.materialTaxRate,
+      });
+    }
 
     // Startup & Orientation
     let startupItems = this.calculateStartupOrientation(poolSpecs, equipment);
@@ -181,19 +209,36 @@ export class MasterPricingEngine {
           .filter(item => !item.description.includes('Tax'))
           .reduce((sum, i) => sum + i.total, 0);
         if (subtotalBeforeTax > 0) {
+          const discountAmount = subtotalBeforeTax * papDiscounts.equipment;
           // Insert before tax
           const taxIndex = equipmentItems.findIndex(item => item.description.includes('Tax'));
           const discountItem: CostLineItem = {
             category: 'Equipment',
             description: 'PAP Discount',
-            unitPrice: -(subtotalBeforeTax * papDiscounts.equipment),
+            unitPrice: -discountAmount,
             quantity: 1,
-            total: -(subtotalBeforeTax * papDiscounts.equipment),
+            total: -discountAmount,
           };
           if (taxIndex >= 0) {
             equipmentItems.splice(taxIndex, 0, discountItem);
+            const taxRate = pricingData.equipment.taxRate ?? 0;
+            const taxableBase = subtotalBeforeTax - discountAmount;
+            equipmentItems[taxIndex + 1] = {
+              ...equipmentItems[taxIndex + 1],
+              unitPrice: taxRate,
+              quantity: taxableBase,
+              total: taxableBase * taxRate,
+            };
           } else {
             equipmentItems.push(discountItem);
+            const taxRate = pricingData.equipment.taxRate ?? 0;
+            equipmentItems.push({
+              category: 'Equipment',
+              description: 'Equipment Tax',
+              unitPrice: taxRate,
+              quantity: subtotalBeforeTax - discountAmount,
+              total: (subtotalBeforeTax - discountAmount) * taxRate,
+            });
           }
         }
       }
@@ -245,8 +290,8 @@ export class MasterPricingEngine {
       electrical: this.sumItems(electricalItems),
       shotcreteLabor: this.sumItems(shotcrete.labor),
       shotcreteMaterial: this.sumItems(shotcrete.material),
-      tileLabor: this.sumItems(tileCoping.labor),
-      tileMaterial: this.sumItems(tileCoping.material),
+      tileLabor: this.sumItems(tileLaborOnly),
+      tileMaterial: this.sumItems(tileMaterialOnly),
       copingDeckingLabor: this.sumItems(tileCoping.labor.filter(i => i.category.includes('Coping') || i.category.includes('Decking'))),
       copingDeckingMaterial: this.sumItems(tileCoping.material.filter(i => i.category.includes('Coping') || i.category.includes('Decking') || i.category.includes('Tax'))),
       stoneRockworkLabor: this.sumItems(rockworkLabor),
@@ -259,6 +304,7 @@ export class MasterPricingEngine {
       interiorFinish: this.sumItems([...interior.labor, ...interior.material]),
       waterTruck: this.sumItems(interior.waterTruck),
       fiberglassShell: this.sumItems(fiberglassItems),
+      fiberglassInstall: this.sumItems(fiberglassInstallItems),
       startupOrientation: this.sumItems(startupItems),
       customFeatures: this.sumItems(customFeaturesItems),
       grandTotal: 0,
@@ -278,8 +324,8 @@ export class MasterPricingEngine {
       electrical: electricalItems,
       shotcreteLabor: shotcrete.labor,
       shotcreteMaterial: shotcrete.material,
-      tileLabor: tileCoping.labor,
-      tileMaterial: tileCoping.material,
+      tileLabor: tileLaborOnly,
+      tileMaterial: tileMaterialOnly,
       copingDeckingLabor: tileCoping.labor.filter(i => i.category.includes('Coping') || i.category.includes('Decking')),
       copingDeckingMaterial: tileCoping.material.filter(i => i.category.includes('Coping') || i.category.includes('Decking') || i.category.includes('Tax')),
       stoneRockworkLabor: rockworkLabor,
@@ -292,6 +338,7 @@ export class MasterPricingEngine {
       interiorFinish: [...interior.labor, ...interior.material],
       waterTruck: interior.waterTruck,
       fiberglassShell: fiberglassItems,
+      fiberglassInstall: fiberglassInstallItems,
       startupOrientation: startupItems,
       customFeatures: customFeaturesItems,
       totals,
@@ -303,7 +350,7 @@ export class MasterPricingEngine {
 
     // Get configuration values (these should come from proposal or defaults)
     const overheadMultiplier = proposal.pricing?.overheadMultiplier ?? 1.01; // 1% overhead
-    const targetMargin = proposal.pricing?.targetMargin ?? 0.70; // 70% cost target
+    const targetMargin = proposal.pricing?.targetMargin ?? 0.733; // Excel target margin (COGS ≈ 73.3% of retail)
     const discountAmount = proposal.pricing?.discountAmount ?? 0; // Manual discount
     const digCommissionRate = proposal.pricing?.digCommissionRate ?? 0.0275; // 2.75%
     const adminFeeRate = proposal.pricing?.adminFeeRate ?? 0.029; // 2.9%
@@ -319,8 +366,8 @@ export class MasterPricingEngine {
     // Step 2: Apply overhead multiplier
     const totalCOGS = totalCostsBeforeOverhead * overheadMultiplier;
 
-    // Step 3: Calculate base retail price (divide by target margin and round up to nearest $10)
-    const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 10) * 10;
+    // Step 3: Calculate base retail price (divide by target margin and round up to nearest $50 to match Excel)
+    const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 50) * 50;
 
     // Step 4: Add G3 upgrade and discount
     const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount;
@@ -389,8 +436,10 @@ export class MasterPricingEngine {
       });
     }
 
-    // Waterfall cost from water features
-    const waterfallCount = (waterFeatures?.selections || [])
+    // Waterfall cost from water features or explicit count
+    const explicitWaterfalls =
+      (poolSpecs as any).waterfallCount ?? (waterFeatures as any)?.waterfallCount ?? 0;
+    const waterfallCount = explicitWaterfalls > 0 ? explicitWaterfalls : (waterFeatures?.selections || [])
       .filter((sel: any) => {
         const catalog = pricingData.waterFeatures?.catalog ?? [];
         const feature = catalog.find((f: any) => f.id === sel.featureId);

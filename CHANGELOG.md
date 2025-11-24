@@ -1,5 +1,17 @@
 ---
 
+## [1.4.0]
+### Changed
+- Data
+    - Near Full Data integration from Excel sheet (99%)
+        - *Niche pool scenarios may not result in the intended outcome*
+    - Functionality, logic, pricing, variables, database information, formulas, labor, taxes, & base costs now mirrors Excel builder 1:1
+
+- UI
+    - 
+
+---
+
 ## [1.3.1]
 ### Changed
 
