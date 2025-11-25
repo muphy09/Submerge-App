@@ -1,15 +1,54 @@
 import { useMemo } from 'react';
-import { WaterFeatures, WaterFeatureSelection } from '../types/proposal-new';
+import { WaterFeatures, WaterFeatureSelection, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import './SectionStyles.css';
 
 interface Props {
   data: WaterFeatures;
   onChange: (data: WaterFeatures) => void;
+  plumbingRuns: PlumbingRuns;
+  onChangePlumbingRuns: (runs: PlumbingRuns) => void;
 }
 
-function WaterFeaturesSectionNew({ data, onChange }: Props) {
+const CompactInput = ({
+  type = 'number',
+  value,
+  onChange,
+  unit,
+  min,
+  step,
+  placeholder,
+}: {
+  type?: string;
+  value: string | number;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  unit?: string;
+  min?: string;
+  step?: string;
+  placeholder?: string;
+}) => {
+  const displayValue = type === 'number' && value === 0 ? '' : value;
+  const finalPlaceholder = placeholder ?? (type === 'number' ? '0' : undefined);
+
+  return (
+    <div className="compact-input-wrapper">
+      <input
+        type={type}
+        className="compact-input"
+        value={displayValue}
+        onChange={onChange}
+        min={min}
+        step={step}
+        placeholder={finalPlaceholder}
+      />
+      {unit && <span className="compact-input-unit">{unit}</span>}
+    </div>
+  );
+};
+
+function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns }: Props) {
   const catalog = pricingData.waterFeatures?.catalog ?? [];
+  const hasCatalog = catalog.length > 0;
 
   const selectionMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -45,74 +84,101 @@ function WaterFeaturesSectionNew({ data, onChange }: Props) {
 
   const liveTotal = calculateTotal(data?.selections ?? []);
 
-  if (!catalog.length) {
-    return (
-      <div className="section-form">
-        <div className="form-help" style={{ fontStyle: 'italic' }}>
-          No catalog data found. Verify pricing data is loaded from Regular pricing.xlsx (Equip tab, column S).
-        </div>
-      </div>
-    );
-  }
+  const renderRunInput = (label: string, field: keyof PlumbingRuns) => (
+    <div className="spec-field">
+      <label className="spec-label">{label}</label>
+      <CompactInput
+        value={plumbingRuns[field] ?? 0}
+        onChange={(e) => onChangePlumbingRuns({ ...plumbingRuns, [field]: parseFloat(e.target.value) || 0 })}
+        unit="LNFT"
+        min="0"
+        step="1"
+        placeholder="0"
+      />
+    </div>
+  );
 
   return (
     <div className="section-form">
-      <p className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
-        Catalog mirrors the Regular pricing.xlsx Equip tab (column S). Enter a quantity for each feature you need.
-      </p>
+      {hasCatalog ? (
+        <>
+          <p className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
+            Catalog mirrors the Regular pricing.xlsx Equip tab (column S). Enter a quantity for each feature you need.
+          </p>
 
-      {Object.entries(groupedCatalog).map(([category, items]) => (
-        <div key={category} className="card" style={{ padding: '1rem', marginBottom: '1.25rem' }}>
-          <div className="form-row" style={{ marginBottom: '0.5rem' }}>
-            <h3 style={{ margin: 0 }}>{category}</h3>
-          </div>
-          {items.map((item) => {
-            const qty = selectionMap.get(item.id) || 0;
-            const lineTotal = qty * item.unitPrice;
-            return (
-              <div key={item.id} className="form-row" style={{ alignItems: 'flex-end', marginBottom: '0.75rem' }}>
-                <div className="form-group" style={{ flex: 2 }}>
-                  <label className="form-label">{item.name}</label>
-                  {item.note && <div className="form-help">{item.note}</div>}
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Unit Price</label>
-                  <div className="form-value">${item.unitPrice.toLocaleString()}</div>
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Quantity</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    min="0"
-                    step="1"
-                    value={qty || ''}
-                    onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value, 10) || 0)}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Line Total</label>
-                  <div className="form-value">${lineTotal.toLocaleString()}</div>
+          {Object.entries(groupedCatalog).map(([category, items]) => (
+            <div key={category} className="card" style={{ padding: '1rem', marginBottom: '1.25rem' }}>
+              <div className="form-row" style={{ marginBottom: '0.5rem' }}>
+                <h3 style={{ margin: 0 }}>{category}</h3>
+              </div>
+              {items.map((item) => {
+                const qty = selectionMap.get(item.id) || 0;
+                const lineTotal = qty * item.unitPrice;
+                return (
+                  <div key={item.id} className="form-row" style={{ alignItems: 'flex-end', marginBottom: '0.75rem' }}>
+                    <div className="form-group" style={{ flex: 2 }}>
+                      <label className="form-label">{item.name}</label>
+                      {item.note && <div className="form-help">{item.note}</div>}
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Unit Price</label>
+                      <div className="form-value">${item.unitPrice.toLocaleString()}</div>
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Quantity</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        min="0"
+                        step="1"
+                        value={qty || ''}
+                        onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value, 10) || 0)}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Line Total</label>
+                      <div className="form-value">${lineTotal.toLocaleString()}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          <div className="card" style={{ padding: '1rem', background: '#0f172a', color: 'white' }}>
+            <div className="form-row" style={{ alignItems: 'center' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <h3 style={{ margin: 0 }}>Water Features Subtotal</h3>
+              </div>
+              <div className="form-group" style={{ flex: 1, textAlign: 'right' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>${liveTotal.toLocaleString()}</div>
+                <div className="form-help" style={{ color: '#e2e8f0' }}>
+                  Updates cost breakdown automatically
                 </div>
               </div>
-            );
-          })}
-        </div>
-      ))}
-
-      <div className="card" style={{ padding: '1rem', background: '#0f172a', color: 'white' }}>
-        <div className="form-row" style={{ alignItems: 'center' }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <h3 style={{ margin: 0 }}>Water Features Subtotal</h3>
-          </div>
-          <div className="form-group" style={{ flex: 1, textAlign: 'right' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>${liveTotal.toLocaleString()}</div>
-            <div className="form-help" style={{ color: '#e2e8f0' }}>
-              Updates cost breakdown automatically
             </div>
           </div>
+        </>
+      ) : (
+        <div className="form-help" style={{ fontStyle: 'italic', marginBottom: '1rem' }}>
+          No catalog data found. Verify pricing data is loaded from Regular pricing.xlsx (Equip tab, column S).
         </div>
+      )}
+
+      <div className="spec-block" style={{ marginTop: '1.5rem' }}>
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Water Feature Runs</h2>
+          <p className="spec-block-subtitle">Moved from the Plumbing tab. Enter LNFT per feature run.</p>
+        </div>
+
+        <div className="spec-grid spec-grid-2">
+          {renderRunInput('Water Feature 1 Run', 'waterFeature1Run')}
+          {renderRunInput('Water Feature 2 Run', 'waterFeature2Run')}
+          {renderRunInput('Water Feature 3 Run', 'waterFeature3Run')}
+          {renderRunInput('Water Feature 4 Run', 'waterFeature4Run')}
+        </div>
+        <div className="form-help">These lengths still roll into plumbing pricing.</div>
       </div>
     </div>
   );

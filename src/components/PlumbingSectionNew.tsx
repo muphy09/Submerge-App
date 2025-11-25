@@ -8,6 +8,47 @@ interface Props {
   hasSpa: boolean;
 }
 
+// Compact input mirrors Pool Specs / Excavation styling with inline unit label
+const CompactInput = ({
+  type = 'number',
+  value,
+  onChange,
+  unit,
+  min,
+  step,
+  readOnly = false,
+  placeholder,
+}: {
+  type?: string;
+  value: string | number;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  unit?: string;
+  min?: string;
+  step?: string;
+  readOnly?: boolean;
+  placeholder?: string;
+}) => {
+  const displayValue = type === 'number' && value === 0 && !readOnly ? '' : value;
+  const finalPlaceholder = placeholder ?? (type === 'number' ? '0' : undefined);
+
+  return (
+    <div className="compact-input-wrapper">
+      <input
+        type={type}
+        className="compact-input"
+        value={displayValue}
+        onChange={onChange}
+        min={min}
+        step={step}
+        readOnly={readOnly}
+        placeholder={finalPlaceholder}
+        style={readOnly ? { backgroundColor: '#f0f0f0', cursor: 'not-allowed' } : {}}
+      />
+      {unit && <span className="compact-input-unit">{unit}</span>}
+    </div>
+  );
+};
+
 function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
     onChange({
@@ -16,224 +57,97 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
     });
   };
 
-  // Overrun thresholds (kept in sync with Excel / pricing data)
   const SKIMMER_THRESHOLD = pricingData.plumbing.poolOverrunThreshold;
-  const GAS_THRESHOLD = pricingData.plumbing.gasOverrunThreshold;
+  const SKIMMER_RATE = pricingData.plumbing.poolOverrunPerFt;
+  const skimmerOverrun = Math.max(0, (data.runs.skimmerRun || 0) - SKIMMER_THRESHOLD);
 
-  const skimmerOverrun = data.runs.skimmerRun > SKIMMER_THRESHOLD ? data.runs.skimmerRun - SKIMMER_THRESHOLD : 0;
-  const gasOverrun = data.runs.gasRun > GAS_THRESHOLD ? data.runs.gasRun - GAS_THRESHOLD : 0;
+  const renderRunInput = (
+    label: string,
+    field: keyof PlumbingRuns,
+    helper?: string,
+    opts?: { unit?: string; readOnly?: boolean; placeholder?: string }
+  ) => {
+    const isReadOnly = opts?.readOnly;
+    const valueForInput = isReadOnly ? '' : (data.runs[field] ?? 0);
+    return (
+      <div className="spec-field">
+        <label className="spec-label">{label}</label>
+        <CompactInput
+          value={valueForInput}
+          onChange={
+            isReadOnly
+              ? undefined
+              : (e) => handleRunChange(field, parseFloat(e.target.value) || 0)
+          }
+          unit={opts?.unit ?? 'LNFT'}
+          min="0"
+          step="1"
+          readOnly={isReadOnly}
+          placeholder={opts?.placeholder ?? '0'}
+        />
+        {helper && <small className="form-help">{helper}</small>}
+      </div>
+    );
+  };
 
   return (
     <div className="section-form">
-      <div className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
-        Enter run lengths in linear feet (LNFT). Overrun charges apply automatically when thresholds are exceeded.
-      </div>
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Core Plumbing</h2>
+          <p className="spec-block-subtitle">Overruns will calculate automatically.</p>
+        </div>
 
-      {/* Core Runs */}
-      <h3>Core Plumbing</h3>
+        <div className="spec-grid spec-grid-3">
+          {renderRunInput('Total Skimmer Run', 'skimmerRun', 'All skimmers to equipment pad')}
+          {renderRunInput('Main Drain Run', 'mainDrainRun', 'Main drain to equipment')}
+          {renderRunInput('Cleaner Run', 'cleanerRun', 'Pool center to equipment')}
+          {renderRunInput('Auto-Fill Run', 'autoFillRun', 'Hose bibb to auto water leveler')}
+          {hasSpa
+            ? renderRunInput('Spa Run', 'spaRun', 'Spa to equipment')
+            : renderRunInput('Spa Run', 'spaRun', 'Enable a spa in Pool Specs to activate', { readOnly: true, placeholder: '0' })}
+        </div>
 
-      <div className="form-group">
-        <label className="form-label">Skimmer Run (LNFT) - Total All Skimmers</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.skimmerRun || ''}
-          onChange={(e) => handleRunChange('skimmerRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
         {skimmerOverrun > 0 && (
-          <small className="form-help" style={{ color: '#f59e0b' }}>
-            ⚠️ Overrun: {skimmerOverrun} ft over threshold ({SKIMMER_THRESHOLD} ft) - Additional charges apply
-          </small>
-        )}
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Additional Skimmers</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.additionalSkimmers || ''}
-          onChange={(e) => handleRunChange('additionalSkimmers', parseInt(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">(1) skimmer is included in base price</small>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Main Drain Run (LNFT)</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.mainDrainRun || ''}
-          onChange={(e) => handleRunChange('mainDrainRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">Main drain to equipment</small>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Cleaner Run (LNFT)</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.cleanerRun || ''}
-          onChange={(e) => handleRunChange('cleanerRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">Pool center to equipment</small>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Auto-Fill Run (LNFT)</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.autoFillRun || ''}
-          onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">Hose bibb to auto water leveler</small>
-      </div>
-
-      {/* Gas Run */}
-      <h3 style={{ marginTop: '2rem' }}>Gas</h3>
-      <div className="form-group">
-        <label className="form-label">Gas Run (LNFT)</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.gasRun || ''}
-          onChange={(e) => handleRunChange('gasRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">Meter to heater</small>
-        {gasOverrun > 0 && (
-          <small className="form-help" style={{ color: '#f59e0b', display: 'block', marginTop: '0.25rem' }}>
-            ⚠️ Overrun: {gasOverrun} ft over threshold ({GAS_THRESHOLD} ft) - Additional charges apply (${pricingData.plumbing.gasOverrunPerFt}/ft)
-          </small>
-        )}
-      </div>
-
-      {/* Water Features */}
-      <h3 style={{ marginTop: '2rem' }}>Water Features Plumbing</h3>
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label">Water Feature 1 (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.runs.waterFeature1Run || ''}
-            onChange={(e) => handleRunChange('waterFeature1Run', parseFloat(e.target.value) || 0)}
-            min="0"
-            step="1"
-            placeholder="0"
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Water Feature 2 (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.runs.waterFeature2Run || ''}
-            onChange={(e) => handleRunChange('waterFeature2Run', parseFloat(e.target.value) || 0)}
-            min="0"
-            step="1"
-            placeholder="0"
-          />
-        </div>
-      </div>
-
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label">Water Feature 3 (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.runs.waterFeature3Run || ''}
-            onChange={(e) => handleRunChange('waterFeature3Run', parseFloat(e.target.value) || 0)}
-            min="0"
-            step="1"
-            placeholder="0"
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Water Feature 4 (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.runs.waterFeature4Run || ''}
-            onChange={(e) => handleRunChange('waterFeature4Run', parseFloat(e.target.value) || 0)}
-            min="0"
-            step="1"
-            placeholder="0"
-          />
-        </div>
-      </div>
-
-      {/* In-Floor Cleaning */}
-      <h3 style={{ marginTop: '2rem' }}>In-Floor Cleaning System</h3>
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label">I/F Valve to Equipment (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.runs.infloorValveToEQ || ''}
-            onChange={(e) => handleRunChange('infloorValveToEQ', parseFloat(e.target.value) || 0)}
-            min="0"
-            step="1"
-            placeholder="0"
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">I/F Valve to Pool (LNFT)</label>
-          <input
-            type="number"
-            className="form-input"
-            value={data.runs.infloorValveToPool || ''}
-            onChange={(e) => handleRunChange('infloorValveToPool', parseFloat(e.target.value) || 0)}
-            min="0"
-            step="1"
-            placeholder="0"
-          />
-        </div>
-      </div>
-
-      {/* Spa Run */}
-      {hasSpa && (
-        <>
-          <h3 style={{ marginTop: '2rem' }}>Spa Plumbing</h3>
-          <div className="form-group">
-            <label className="form-label">Spa Run (LNFT)</label>
-            <input
-              type="number"
-              className="form-input"
-              value={data.runs.spaRun || ''}
-              onChange={(e) => handleRunChange('spaRun', parseFloat(e.target.value) || 0)}
-              min="0"
-              step="1"
-              placeholder="0"
-            />
-            <small className="form-help">Spa to equipment</small>
+          <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
+            <strong>Skimmer Overrun:</strong> {skimmerOverrun} ft over {SKIMMER_THRESHOLD} ft maximum. Additional charges added - ${(
+              skimmerOverrun * SKIMMER_RATE
+            ).toLocaleString()}
           </div>
-        </>
-      )}
+        )}
+
+        <div className="spec-subcard">
+          <div className="spec-subcard-header">
+            <h4 className="spec-subcard-title">Additional Skimmers</h4>
+            <span className="info-pill">1 skimmer included</span>
+          </div>
+          <div className="spec-grid">
+            <div className="spec-field" style={{ maxWidth: '220px' }}>
+              <label className="spec-label">Extra Skimmers</label>
+              <CompactInput
+                value={data.runs.additionalSkimmers ?? 0}
+                onChange={(e) => handleRunChange('additionalSkimmers', parseInt(e.target.value) || 0)}
+                unit="ea"
+                min="0"
+                step="1"
+                placeholder="0"
+              />
+              <small className="form-help">Beyond base package</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Additional Plumbing</h2>
+        </div>
+
+        <div className="spec-grid spec-grid-2">
+          {renderRunInput('I/F Valve to Equipment', 'infloorValveToEQ')}
+          {renderRunInput('I/F Valve to Pool', 'infloorValveToPool', 'Pool run auto-expands for heads')}
+        </div>
+      </div>
     </div>
   );
 }

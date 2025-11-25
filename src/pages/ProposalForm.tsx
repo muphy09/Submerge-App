@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Proposal, WaterFeatures, PAPDiscounts } from '../types/proposal-new';
 import { getDefaultProposal, getDefaultPAPDiscounts } from '../utils/proposalDefaults';
@@ -38,18 +38,123 @@ const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
   };
 };
 
-const sections = [
-  'Customer Information',
-  'Pool Specifications',
-  'Excavation',
-  'Plumbing',
-  'Electrical',
-  'Tile/Coping/Decking',
-  'Drainage',
-  'Equipment',
-  'Water Features',
-  'Interior Finish',
-  'Custom Features',
+type SectionKey =
+  | 'customerInfo'
+  | 'poolSpecs'
+  | 'excavation'
+  | 'plumbing'
+  | 'electrical'
+  | 'tileCopingDecking'
+  | 'drainage'
+  | 'equipment'
+  | 'waterFeatures'
+  | 'interiorFinish'
+  | 'customFeatures';
+
+interface SectionConfig {
+  key: SectionKey;
+  label: string;
+  shortLabel: string;
+  includeInProgress?: boolean;
+}
+
+const sectionIcons: Record<SectionKey, () => JSX.Element> = {
+  customerInfo: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <rect x="8" y="14" width="48" height="36" rx="6" ry="6" fill="none" stroke="currentColor" strokeWidth="4" />
+      <circle cx="24" cy="32" r="7" fill="none" stroke="currentColor" strokeWidth="4" />
+      <path d="M18 42c4-4 12-4 16 0" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+      <path d="M36 24h14M36 32h14M36 40h10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  ),
+  poolSpecs: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <rect x="10" y="18" width="44" height="28" rx="12" ry="12" fill="none" stroke="currentColor" strokeWidth="4" />
+      <path
+        d="M14 36c4-2 8-2 12 0s8 2 12 0 8-2 12 0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+      <path d="M14 28c4-2 8-2 12 0s8 2 12 0 8-2 12 0" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  ),
+  excavation: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <path d="M16 40 34 22l6 6-18 18-10 2z" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M40 24 46 18l8 8-6 6" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M28 38 16 50" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  ),
+  plumbing: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <path d="M12 20h20v10H12zM32 24h12a8 8 0 0 1 0 16H22" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M12 34h12v10h-8a4 4 0 0 1-4-4z" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+      <circle cx="46" cy="32" r="4" fill="currentColor" />
+    </svg>
+  ),
+  electrical: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <path d="M30 10 16 36h12l-6 18 24-28h-14l8-16z" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+    </svg>
+  ),
+  tileCopingDecking: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <rect x="10" y="14" width="16" height="36" rx="2" fill="none" stroke="currentColor" strokeWidth="4" />
+      <rect x="26" y="18" width="16" height="32" rx="2" fill="none" stroke="currentColor" strokeWidth="4" />
+      <rect x="42" y="14" width="12" height="36" rx="2" fill="none" stroke="currentColor" strokeWidth="4" />
+      <path d="M10 28h44M10 36h44" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  ),
+  drainage: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <path d="M14 20h22a8 8 0 0 1 8 8v16h-6" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M38 44c0 6-6 10-6 14 0-4-6-8-6-14a6 6 0 1 1 12 0Z" fill="none" stroke="currentColor" strokeWidth="4" />
+      <path d="M14 28h10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  ),
+  equipment: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <rect x="22" y="10" width="20" height="44" rx="8" fill="none" stroke="currentColor" strokeWidth="4" />
+      <circle cx="32" cy="22" r="4" fill="currentColor" />
+      <path d="M26 32h12M26 40h12" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+      <path d="M24 16c4-4 12-4 16 0" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  ),
+  waterFeatures: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <path d="M18 36c6-4 10-10 14-18 4 8 8 14 14 18 0 8-6 14-14 14s-14-6-14-14Z" fill="none" stroke="currentColor" strokeWidth="4" />
+      <path d="M22 46c2-2 6-3 10-3s8 1 10 3" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  ),
+  interiorFinish: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <rect x="12" y="12" width="40" height="40" rx="4" fill="none" stroke="currentColor" strokeWidth="4" />
+      <path d="M12 32h40M32 12v40" stroke="currentColor" strokeWidth="3" />
+      <path d="M12 22h20M12 42h20M32 22h20M32 42h20" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+    </svg>
+  ),
+  customFeatures: () => (
+    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
+      <circle cx="32" cy="32" r="18" fill="none" stroke="#16a34a" strokeWidth="4" />
+      <path d="M32 22v20M22 32h20" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  ),
+};
+
+const sections: SectionConfig[] = [
+  { key: 'customerInfo', label: 'Customer Information', shortLabel: 'Customer' },
+  { key: 'poolSpecs', label: 'Pool Specifications', shortLabel: 'Pool Specs' },
+  { key: 'excavation', label: 'Excavation', shortLabel: 'Excavation' },
+  { key: 'plumbing', label: 'Plumbing', shortLabel: 'Plumbing' },
+  { key: 'electrical', label: 'Gas / Electrical', shortLabel: 'Gas/Electrical' },
+  { key: 'tileCopingDecking', label: 'Tile/Coping/Decking', shortLabel: 'Tile/Coping' },
+  { key: 'drainage', label: 'Drainage', shortLabel: 'Drainage' },
+  { key: 'equipment', label: 'Equipment', shortLabel: 'Equipment' },
+  { key: 'waterFeatures', label: 'Water Features', shortLabel: 'Water Features', includeInProgress: false },
+  { key: 'interiorFinish', label: 'Interior Finish', shortLabel: 'Interior' },
+  { key: 'customFeatures', label: 'Custom Features', shortLabel: 'Custom', includeInProgress: false },
 ];
 
 function ProposalForm() {
@@ -203,97 +308,107 @@ function ProposalForm() {
       );
     }
 
+    const currentSectionKey = sections[currentSection]?.key;
     const hasSpa = proposal.poolSpecs?.spaType !== 'none';
     const isFiberglass = proposal.poolSpecs?.poolType === 'fiberglass';
 
     try {
-      switch (currentSection) {
-        case 0:
+      switch (currentSectionKey) {
+        case 'customerInfo':
           return (
             <CustomerInfoSection
               data={proposal.customerInfo}
               onChange={(data) => updateProposal('customerInfo', data)}
             />
           );
-      case 1:
-        return (
-          <PoolSpecsSectionNew
-            data={proposal.poolSpecs}
-            onChange={(data) => updateProposal('poolSpecs', data)}
-          />
-        );
-      case 2:
-        return (
-          <ExcavationSectionNew
-            data={proposal.excavation!}
-            onChange={(data) => updateProposal('excavation', data)}
-          />
-        );
-      case 3:
-        return (
-          <PlumbingSectionNew
-            data={proposal.plumbing!}
-            onChange={(data) => updateProposal('plumbing', data)}
-            hasSpa={hasSpa}
-          />
-        );
-      case 4:
-        return (
-          <ElectricalSectionNew
-            data={proposal.electrical!}
-            onChange={(data) => updateProposal('electrical', data)}
-            hasSpa={hasSpa}
-          />
-        );
-      case 5:
-        return (
-          <TileCopingDeckingSectionNew
-            data={proposal.tileCopingDecking!}
-            onChange={(data) => updateProposal('tileCopingDecking', data)}
-            poolPerimeter={proposal.poolSpecs.perimeter || 0}
-            isFiberglass={isFiberglass}
-          />
-        );
-      case 6:
-        return (
-          <DrainageSectionNew
-            data={proposal.drainage!}
-            onChange={(data) => updateProposal('drainage', data)}
-          />
-        );
-      case 7:
-        return (
-          <EquipmentSectionNew
-            data={proposal.equipment!}
-            onChange={(data) => updateProposal('equipment', data)}
-            hasSpa={hasSpa}
-          />
-        );
-      case 8:
-        return (
-          <WaterFeaturesSectionNew
-            data={proposal.waterFeatures!}
-            onChange={(data) => updateProposal('waterFeatures', data)}
-          />
-        );
-      case 9:
-        return (
-          <InteriorFinishSectionNew
-            data={proposal.interiorFinish!}
-            onChange={(data) => updateProposal('interiorFinish', data)}
-            poolSurfaceArea={proposal.poolSpecs.surfaceArea || 0}
-            hasSpa={hasSpa}
-          />
-        );
-      case 10:
-        return (
-          <CustomFeaturesSectionNew
-            data={proposal.customFeatures!}
-            onChange={(data) => updateProposal('customFeatures', data)}
-          />
-        );
-      default:
-        return null;
+        case 'poolSpecs':
+          return (
+            <PoolSpecsSectionNew
+              data={proposal.poolSpecs}
+              onChange={(data) => updateProposal('poolSpecs', data)}
+            />
+          );
+        case 'excavation':
+          return (
+            <ExcavationSectionNew
+              data={proposal.excavation!}
+              onChange={(data) => updateProposal('excavation', data)}
+            />
+          );
+        case 'plumbing':
+          return (
+            <PlumbingSectionNew
+              data={proposal.plumbing!}
+              onChange={(data) => updateProposal('plumbing', data)}
+              hasSpa={hasSpa}
+            />
+          );
+        case 'electrical':
+          return (
+            <ElectricalSectionNew
+              data={proposal.electrical!}
+              onChange={(data) => updateProposal('electrical', data)}
+              plumbingRuns={proposal.plumbing!.runs}
+              onChangePlumbingRuns={(runs) =>
+                updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
+              }
+              hasSpa={hasSpa}
+            />
+          );
+        case 'tileCopingDecking':
+          return (
+            <TileCopingDeckingSectionNew
+              data={proposal.tileCopingDecking!}
+              onChange={(data) => updateProposal('tileCopingDecking', data)}
+              poolPerimeter={proposal.poolSpecs.perimeter || 0}
+              isFiberglass={isFiberglass}
+              poolDeckingArea={proposal.poolSpecs.deckingArea || 0}
+            />
+          );
+        case 'drainage':
+          return (
+            <DrainageSectionNew
+              data={proposal.drainage!}
+              onChange={(data) => updateProposal('drainage', data)}
+            />
+          );
+        case 'equipment':
+          return (
+            <EquipmentSectionNew
+              data={proposal.equipment!}
+              onChange={(data) => updateProposal('equipment', data)}
+              hasSpa={hasSpa}
+            />
+          );
+        case 'waterFeatures':
+          return (
+            <WaterFeaturesSectionNew
+              data={proposal.waterFeatures!}
+              onChange={(data) => updateProposal('waterFeatures', data)}
+              plumbingRuns={proposal.plumbing!.runs}
+              onChangePlumbingRuns={(runs) =>
+                updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
+              }
+            />
+          );
+        case 'interiorFinish':
+          return (
+            <InteriorFinishSectionNew
+              data={proposal.interiorFinish!}
+              onChange={(data) => updateProposal('interiorFinish', data)}
+              poolSurfaceArea={proposal.poolSpecs.surfaceArea || 0}
+              hasSpa={hasSpa}
+            />
+          );
+        case 'customFeatures':
+          return (
+            <CustomFeaturesSectionNew
+              data={proposal.customFeatures!}
+              onChange={(data) => updateProposal('customFeatures', data)}
+            />
+          );
+        default:
+          return null;
       }
     } catch (error) {
       console.error('Error rendering section:', error);
@@ -322,6 +437,192 @@ function ProposalForm() {
     }
   };
 
+  const sectionCompletion = useMemo<Record<SectionKey, boolean>>(() => {
+    const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
+    const hasAnyPositive = (...values: Array<number | undefined>) => values.some(v => hasPositive(v));
+
+    const hasCustomerInfoData =
+      !!proposal.customerInfo?.customerName?.trim() && !!proposal.customerInfo?.city?.trim();
+
+    const poolSpecs = proposal.poolSpecs;
+    const hasPoolSpecsData =
+      !!poolSpecs &&
+      (poolSpecs.poolType !== 'gunite' ||
+        hasAnyPositive(
+          poolSpecs.perimeter,
+          poolSpecs.surfaceArea,
+          poolSpecs.shallowDepth,
+          poolSpecs.endDepth,
+          poolSpecs.maxLength,
+          poolSpecs.maxWidth,
+          poolSpecs.totalStepsAndBench,
+          poolSpecs.deckingArea,
+          poolSpecs.travelDistance,
+          poolSpecs.poolToStreetDistance,
+          poolSpecs.waterfallCount,
+        ) ||
+        poolSpecs.spaType !== 'none' ||
+        hasAnyPositive(poolSpecs.spaLength, poolSpecs.spaWidth, poolSpecs.spaPerimeter) ||
+        poolSpecs.hasTanningShelf ||
+        poolSpecs.hasAutomaticCover ||
+        !!poolSpecs.fiberglassModelName ||
+        poolSpecs.isRaisedSpa ||
+        poolSpecs.hasSpillover);
+
+    const excavation = proposal.excavation;
+    const hasExcavationData =
+      !!excavation &&
+      ((excavation.rbbLevels?.length ?? 0) > 0 ||
+        hasPositive(excavation.totalRBBSqft) ||
+        hasAnyPositive(
+          excavation.columns?.count,
+          excavation.columns?.width,
+          excavation.columns?.depth,
+          excavation.columns?.height,
+        ) ||
+        (excavation.columns?.facing && excavation.columns.facing !== 'none') ||
+        hasPositive(excavation.additionalSitePrepHours) ||
+        excavation.hasGravelInstall === false ||
+        excavation.hasDirtHaul === false ||
+        hasPositive(excavation.additionalBench) ||
+        hasPositive(excavation.doubleCurtainLength) ||
+        excavation.needsSoilSampleEngineer ||
+        (excavation.retainingWallType &&
+          excavation.retainingWallType !== 'None' &&
+          excavation.retainingWallType !== 'none') ||
+        hasPositive(excavation.retainingWallLength) ||
+        hasPositive(excavation.cost));
+
+    const plumbingRuns = proposal.plumbing?.runs;
+    const hasPlumbingData =
+      !!proposal.plumbing &&
+      (hasAnyPositive(
+        plumbingRuns?.skimmerRun,
+        plumbingRuns?.additionalSkimmers,
+        plumbingRuns?.mainDrainRun,
+        plumbingRuns?.cleanerRun,
+        plumbingRuns?.autoFillRun,
+        plumbingRuns?.infloorValveToEQ,
+        plumbingRuns?.infloorValveToPool,
+        plumbingRuns?.spaRun,
+      ) ||
+        hasPositive(proposal.plumbing.cost));
+
+    const electricalRuns = proposal.electrical?.runs;
+    const hasElectricalData =
+      !!proposal.electrical &&
+      (hasAnyPositive(
+        electricalRuns?.electricalRun,
+        electricalRuns?.lightRun,
+        electricalRuns?.heatPumpElectricalRun,
+        plumbingRuns?.gasRun,
+      ) ||
+        hasPositive(proposal.electrical.cost));
+
+    const tile = proposal.tileCopingDecking;
+    const hasTileData =
+      !!tile &&
+      (tile.tileLevel !== 1 ||
+        tile.copingType !== 'travertine-level1' ||
+        tile.deckingType !== 'travertine-level1' ||
+        tile.hasTrimTileOnSteps ||
+        tile.hasRoughGrading === false ||
+        hasAnyPositive(
+          tile.additionalTileLength,
+          tile.copingLength,
+          tile.deckingArea,
+          tile.concreteStepsLength,
+          tile.bullnoseLnft,
+          tile.doubleBullnoseLnft,
+          tile.spillwayLnft,
+          tile.rockworkPanelLedgeSqft,
+          tile.rockworkPanelLedgeMaterialSqft,
+          tile.rockworkStackedStoneSqft,
+          tile.rockworkTileSqft,
+        ) ||
+        hasPositive(tile.cost));
+
+    const drainage = proposal.drainage;
+    const hasDrainageData =
+      !!drainage &&
+      (hasAnyPositive(
+        drainage.downspoutTotalLF,
+        drainage.deckDrainTotalLF,
+        drainage.frenchDrainTotalLF,
+        drainage.boxDrainTotalLF,
+      ) ||
+        hasPositive(drainage.cost));
+
+    const equipment = proposal.equipment;
+    const hasEquipmentData =
+      !!equipment &&
+      (hasPositive(equipment.totalCost) ||
+        hasPositive(equipment.numberOfLights) ||
+        equipment.hasSpaLight ||
+        equipment.upgradeToVersaFlo ||
+        hasPositive(equipment.cleanerQuantity) ||
+        !!equipment.auxiliaryPump ||
+        hasPositive(equipment.pump?.price) ||
+        hasPositive(equipment.filter?.price) ||
+        hasPositive(equipment.cleaner?.price) ||
+        hasPositive(equipment.heater?.price) ||
+        hasPositive(equipment.automation?.price) ||
+        hasPositive(equipment.saltSystem?.price) ||
+        equipment.hasBlanketReel ||
+        equipment.hasSolarBlanket ||
+        equipment.hasAutoFill ||
+        equipment.hasHandrail ||
+        equipment.hasStartupChemicals);
+
+    const waterFeatures = proposal.waterFeatures;
+    const hasWaterFeaturesData =
+      !!waterFeatures &&
+      (((waterFeatures.selections || []).filter(selection => (selection?.quantity ?? 0) > 0).length > 0) ||
+        hasAnyPositive(
+          plumbingRuns?.waterFeature1Run,
+          plumbingRuns?.waterFeature2Run,
+          plumbingRuns?.waterFeature3Run,
+          plumbingRuns?.waterFeature4Run,
+        ) ||
+        hasPositive(waterFeatures.totalCost));
+
+    const interiorFinish = proposal.interiorFinish;
+    const hasInteriorData =
+      !!interiorFinish &&
+      (interiorFinish.finishType !== 'pebble-tec' ||
+        !!interiorFinish.color?.trim() ||
+        interiorFinish.hasSpa ||
+        interiorFinish.hasWaterproofing === false ||
+        hasPositive(interiorFinish.cost));
+
+    const customFeatures = proposal.customFeatures;
+    const hasCustomFeatures =
+      !!customFeatures &&
+      (((customFeatures.features || []).filter(feature => feature?.name?.trim() || feature?.description?.trim()).length >
+        0) ||
+        hasPositive(customFeatures.totalCost));
+
+    return {
+      customerInfo: hasCustomerInfoData,
+      poolSpecs: hasPoolSpecsData,
+      excavation: hasExcavationData,
+      plumbing: hasPlumbingData,
+      electrical: hasElectricalData,
+      tileCopingDecking: hasTileData,
+      drainage: hasDrainageData,
+      equipment: hasEquipmentData,
+      waterFeatures: hasWaterFeaturesData,
+      interiorFinish: hasInteriorData,
+      customFeatures: hasCustomFeatures,
+    };
+  }, [proposal]);
+
+  const progressSections = sections.filter(section => section.includeInProgress !== false);
+  const completedProgressCount = progressSections.filter(section => sectionCompletion[section.key]).length;
+  const progressPercent = progressSections.length
+    ? Math.round((completedProgressCount / progressSections.length) * 100)
+    : 0;
+
   if (isLoading) {
     return (
       <div className="proposal-form">
@@ -345,10 +646,30 @@ function ProposalForm() {
       </header>
 
       <div className={`progress-bar ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
-        <div
-          className="progress-fill"
-          style={{ width: `${((currentSection + 1) / sections.length) * 100}%` }}
-        />
+        <div className="progress-steps">
+          {progressSections.map(section => {
+            const isDone = sectionCompletion[section.key];
+            const isCurrent = sections[currentSection]?.key === section.key;
+            return (
+              <div
+                key={section.key}
+                className={`progress-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}
+                title={section.label}
+              >
+                <div className="progress-step-box">
+                  {isDone ? <span className="progress-check" aria-hidden="true">&#10003;</span> : null}
+                </div>
+                <span className="progress-step-label">{section.shortLabel}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="progress-summary">
+          <span className="progress-percent">{progressPercent}%</span>
+          <span className="progress-summary-text">
+            {completedProgressCount}/{progressSections.length} required sections
+          </span>
+        </div>
       </div>
 
       <div className="form-layout">
@@ -400,16 +721,22 @@ function ProposalForm() {
               <span className="nav-divider" />
             </div>
             <div className="section-nav-grid">
-              {sections.map((section, index) => (
-                <button
-                  key={section}
-                  className={`nav-item ${index === currentSection ? 'active' : ''} ${index < currentSection ? 'completed' : ''}`}
-                  onClick={() => setCurrentSection(index)}
-                >
-                  <span className="nav-number">{index + 1}</span>
-                  <span className="nav-label">{section}</span>
-                </button>
-              ))}
+              {sections.map((section, index) => {
+                const isActive = index === currentSection;
+                const isCompleted = sectionCompletion[section.key];
+                return (
+                  <button
+                    key={section.key}
+                    className={`nav-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                    onClick={() => setCurrentSection(index)}
+                  >
+                    <span className="nav-icon-wrapper" aria-hidden="true">
+                      {sectionIcons[section.key]()}
+                    </span>
+                    <span className="nav-label">{section.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </nav>
         )}
@@ -426,7 +753,7 @@ function ProposalForm() {
 
         <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
           <div className="section-content">
-            <h2 className="section-title">{sections[currentSection]}</h2>
+            <h2 className="section-title">{sections[currentSection]?.label}</h2>
             {renderSection()}
           </div>
 

@@ -1,13 +1,57 @@
-import { Electrical, ElectricalRuns } from '../types/proposal-new';
+import { Electrical, ElectricalRuns, PlumbingRuns } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
 import './SectionStyles.css';
 
 interface Props {
   data: Electrical;
   onChange: (data: Electrical) => void;
+  plumbingRuns: PlumbingRuns;
+  onChangePlumbingRuns: (runs: PlumbingRuns) => void;
   hasSpa: boolean;
 }
 
-function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
+// Reusable compact input to mirror Pool Specs / Excavation styling
+const CompactInput = ({
+  type = 'number',
+  value,
+  onChange,
+  unit,
+  min,
+  step,
+  readOnly = false,
+  placeholder,
+}: {
+  type?: string;
+  value: string | number;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  unit?: string;
+  min?: string;
+  step?: string;
+  readOnly?: boolean;
+  placeholder?: string;
+}) => {
+  const displayValue = type === 'number' && value === 0 && !readOnly ? '' : value;
+  const finalPlaceholder = placeholder ?? (type === 'number' ? '0' : undefined);
+
+  return (
+    <div className="compact-input-wrapper">
+      <input
+        type={type}
+        className="compact-input"
+        value={displayValue}
+        onChange={onChange}
+        min={min}
+        step={step}
+        readOnly={readOnly}
+        placeholder={finalPlaceholder}
+        style={readOnly ? { backgroundColor: '#f0f0f0', cursor: 'not-allowed' } : {}}
+      />
+      {unit && <span className="compact-input-unit">{unit}</span>}
+    </div>
+  );
+};
+
+function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns, hasSpa }: Props) {
   const handleRunChange = (field: keyof ElectricalRuns, value: number) => {
     onChange({
       ...data,
@@ -15,117 +59,108 @@ function ElectricalSectionNew({ data, onChange, hasSpa }: Props) {
     });
   };
 
+  const handleGasRunChange = (value: number) => {
+    onChangePlumbingRuns({ ...plumbingRuns, gasRun: value });
+  };
+
   // Pricing constants
-  const ELECTRICAL_THRESHOLD = 65; // First 65ft included in base price
-  const ELECTRICAL_OVERRUN_RATE = 18; // $18/ft beyond 65ft
-  const LIGHT_RUN_RATE = 2.75; // $2.75/ft
-  const LIGHT_RUN_MULTIPLIER = 1.25; // 1 ft = 1.25 ft billable conduit
+  const ELECTRICAL_THRESHOLD = 65; // First 65 ft included in base price
+  const ELECTRICAL_OVERRUN_RATE = 18; // $18/ft beyond 65 ft
+  const gasRun = plumbingRuns?.gasRun ?? 0;
+  const GAS_THRESHOLD = pricingData.plumbing.gasOverrunThreshold;
+  const GAS_OVERRUN_RATE = pricingData.electrical.gasPerFtOverThreshold;
+  const gasOverrun = Math.max(0, gasRun - GAS_THRESHOLD);
+  const gasOverrunCost = gasOverrun * GAS_OVERRUN_RATE;
 
-  const electricalOverrun = data.runs.electricalRun > ELECTRICAL_THRESHOLD
-    ? data.runs.electricalRun - ELECTRICAL_THRESHOLD
-    : 0;
-
-  // Light run - every foot counts (no threshold)
-  const lightRunBillableConduit = data.runs.lightRun * LIGHT_RUN_MULTIPLIER;
-  const lightRunCost = lightRunBillableConduit * LIGHT_RUN_RATE;
+  const electricalOverrun = Math.max(0, (data.runs.electricalRun || 0) - ELECTRICAL_THRESHOLD);
 
   return (
     <div className="section-form">
-      <div className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
-        Enter electrical run lengths in linear feet (LNFT). Base electrical includes first 65 ft. Light run charges apply to every foot.
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Main Electrical Run (LNFT)</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.electricalRun || ''}
-          onChange={(e) => handleRunChange('electricalRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">House panel to equipment pad</small>
-        {electricalOverrun > 0 && (
-          <small className="form-help" style={{ color: '#f59e0b', display: 'block', marginTop: '0.25rem' }}>
-            ⚠️ Overrun: {electricalOverrun} ft over {ELECTRICAL_THRESHOLD} ft threshold - Additional charges apply (${ELECTRICAL_OVERRUN_RATE}/ft)
-          </small>
-        )}
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Light Run (LNFT)</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.lightRun || ''}
-          onChange={(e) => handleRunChange('lightRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">All lights to equipment pad (1 ft = 1.25 ft billable @ ${LIGHT_RUN_RATE}/ft)</small>
-        {data.runs.lightRun > 0 && (
-          <small className="form-help" style={{ color: '#3b82f6', display: 'block', marginTop: '0.25rem' }}>
-            ℹ️ Billable conduit: {lightRunBillableConduit.toFixed(2)} ft = ${lightRunCost.toFixed(2)}
-          </small>
-        )}
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Heat Pump Electrical Run (LNFT)</label>
-        <input
-          type="number"
-          className="form-input"
-          value={data.runs.heatPumpElectricalRun || ''}
-          onChange={(e) => handleRunChange('heatPumpElectricalRun', parseFloat(e.target.value) || 0)}
-          min="0"
-          step="1"
-          placeholder="0"
-        />
-        <small className="form-help">Only if using heat pump (charged per 10 ft)</small>
-      </div>
-
-      {hasSpa && (
-        <div className="alert" style={{
-          marginTop: '1.5rem',
-          padding: '1rem',
-          backgroundColor: '#dbeafe',
-          borderLeft: '4px solid #3b82f6',
-          borderRadius: '4px'
-        }}>
-          <strong>Note:</strong> Spa electrical included in base electrical pricing. Additional spa light wiring calculated in equipment section.
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Gas Run</h2>
+          <p className="spec-block-subtitle">Base Gas includes the first 25ft.</p>
         </div>
-      )}
 
-      <div className="cost-summary" style={{
-        marginTop: '2rem',
-        padding: '1rem',
-        backgroundColor: '#f9fafb',
-        borderRadius: '4px'
-      }}>
-        <h4>Cost Summary</h4>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
-          <span>Base Electrical (includes first 65 ft):</span>
-          <span>$1,650</span>
+        <div className="spec-grid spec-grid-3">
+          <div className="spec-field">
+            <label className="spec-label">Gas Run</label>
+            <CompactInput
+              value={gasRun}
+              onChange={(e) => handleGasRunChange(parseFloat(e.target.value) || 0)}
+              unit="LNFT"
+              min="0"
+              step="1"
+              placeholder="0"
+            />
+            <small className="form-help">Meter to heater</small>
+          </div>
         </div>
-        {electricalOverrun > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', color: '#f59e0b' }}>
-            <span>Electrical Overrun ({electricalOverrun} ft @ ${ELECTRICAL_OVERRUN_RATE}/ft):</span>
-            <span>${(electricalOverrun * ELECTRICAL_OVERRUN_RATE).toLocaleString()}</span>
+
+        {gasOverrun > 0 && (
+          <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
+            <strong>Gas Overrun:</strong> {gasOverrun} ft over {GAS_THRESHOLD} ft maximum. Additional charges added - ${gasOverrunCost.toLocaleString()}
           </div>
         )}
-        {data.runs.lightRun > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', color: '#3b82f6' }}>
-            <span>Light Run ({lightRunBillableConduit.toFixed(2)} ft billable @ ${LIGHT_RUN_RATE}/ft):</span>
-            <span>${lightRunCost.toFixed(2)}</span>
+      </div>
+
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Electrical Runs</h2>
+          <p className="spec-block-subtitle">Base Electrical includes the first 65ft</p>
+        </div>
+
+        <div className="spec-grid spec-grid-3">
+          <div className="spec-field">
+            <label className="spec-label">Main Electrical Run</label>
+            <CompactInput
+              value={data.runs.electricalRun || 0}
+              onChange={(e) => handleRunChange('electricalRun', parseFloat(e.target.value) || 0)}
+              unit="LNFT"
+              min="0"
+              step="1"
+              placeholder="0"
+            />
+            <small className="form-help">House panel to equipment pad</small>
+          </div>
+
+          <div className="spec-field">
+            <label className="spec-label">Light Run</label>
+            <CompactInput
+              value={data.runs.lightRun || 0}
+              onChange={(e) => handleRunChange('lightRun', parseFloat(e.target.value) || 0)}
+              unit="LNFT"
+              min="0"
+              step="1"
+              placeholder="0"
+            />
+            <small className="form-help">1 ft counts as 1.25 ft billable conduit</small>
+          </div>
+
+          <div className="spec-field">
+            <label className="spec-label">Heat Pump Electrical Run</label>
+            <CompactInput
+              value={data.runs.heatPumpElectricalRun || 0}
+              onChange={(e) => handleRunChange('heatPumpElectricalRun', parseFloat(e.target.value) || 0)}
+              unit="LNFT"
+              min="0"
+              step="1"
+              placeholder="0"
+            />
+            <small className="form-help">Only if using a heat pump (charged per 10 ft)</small>
+          </div>
+        </div>
+
+        {electricalOverrun > 0 && (
+          <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
+            <strong>Electrical Overrun:</strong> {electricalOverrun} ft over {ELECTRICAL_THRESHOLD}ft maximum. Additional charges added - ${(
+              electricalOverrun * ELECTRICAL_OVERRUN_RATE
+            ).toLocaleString()}
           </div>
         )}
         {hasSpa && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}>
-            <span>Spa Electrical:</span>
-            <span>$100</span>
+          <div className="info-box" style={{ marginTop: '8px' }}>
+            Spa electrical is included in base pricing; additional spa light wiring is handled in the Equipment section.
           </div>
         )}
       </div>
