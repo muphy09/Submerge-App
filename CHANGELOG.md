@@ -8,7 +8,8 @@
     - Functionality, logic, pricing, variables, database information, formulas, labor, taxes, & base costs now mirrors Excel builder 1:1
 
 - UI
-    - 
+    - Complete UI uplift
+        - Ongoing rollout
 
 ---
 
