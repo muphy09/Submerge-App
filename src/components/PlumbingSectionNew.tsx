@@ -145,7 +145,7 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
 
         <div className="spec-grid spec-grid-2">
           {renderRunInput('I/F Valve to Equipment', 'infloorValveToEQ')}
-          {renderRunInput('I/F Valve to Pool', 'infloorValveToPool', 'Pool run auto-expands for heads')}
+          {renderRunInput('I/F Valve to Pool', 'infloorValveToPool')}
         </div>
       </div>
     </div>

@@ -52,7 +52,7 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
               className="form-input"
               value={feature.name}
               onChange={(e) => updateFeature(index, 'name', e.target.value)}
-              placeholder="e.g., Fire Pit, BBQ Island, etc."
+              placeholder="e.g., 16x16, Turf, etc."
             />
           </div>
 
@@ -62,7 +62,7 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
               className="form-input"
               value={feature.description}
               onChange={(e) => updateFeature(index, 'description', e.target.value)}
-              placeholder="Detailed description of the feature..."
+              placeholder="Description of the feature..."
               rows={3}
               style={{ resize: 'vertical' }}
             />
@@ -107,18 +107,31 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-danger"
-            onClick={() => removeFeature(index)}
-            style={{ marginTop: '0.5rem' }}
-          >
-            Remove Feature
-          </button>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => removeFeature(index)}
+            >
+              Remove Feature
+            </button>
+            <button type="button" className="action-btn secondary" onClick={() => {}}>
+              Done
+            </button>
+            {data.features.length < 7 && (
+              <button
+                type="button"
+                className="action-btn"
+                onClick={addFeature}
+              >
+                Add Another
+              </button>
+            )}
+          </div>
         </div>
       ))}
 
-      {data.features.length < 7 && (
+      {data.features.length === 0 && (
         <button type="button" className="btn btn-add" onClick={addFeature}>
           + Add Custom Feature
         </button>

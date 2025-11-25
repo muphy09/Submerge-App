@@ -266,11 +266,14 @@ export interface SaltSystemSelection {
 export interface Equipment {
   // Main equipment
   pump: PumpSelection;
-  auxiliaryPump?: PumpSelection; // Optional second pump
+  auxiliaryPump?: PumpSelection; // Deprecated: use auxiliaryPumps
+  auxiliaryPumps?: PumpSelection[]; // Optional auxiliary pumps (up to 2)
   filter: FilterSelection;
+  filterQuantity?: number;
   cleaner: CleanerSelection;
   cleanerQuantity?: number; // Excel NEW POOL B119 qty (0 to exclude cleaner)
   heater: HeaterSelection;
+  heaterQuantity?: number;
   upgradeToVersaFlo: boolean;
 
   // Lights
@@ -279,6 +282,7 @@ export interface Equipment {
 
   // Automation
   automation: AutomationSelection;
+  automationQuantity?: number;
 
   // Salt system
   saltSystem?: SaltSystemSelection;
@@ -292,6 +296,7 @@ export interface Equipment {
 
   // Calculated
   totalCost: number;
+  hasBeenEdited?: boolean;
 }
 
 // ============================================================================
@@ -350,16 +355,6 @@ export interface Masonry {
 // ============================================================================
 
 export type InteriorFinishType =
-  | 'plaster'
-  | 'pebble-tec'
-  | 'pebble-sheen'
-  | 'pebble-fina'
-  | 'mini-pebble'
-  | 'beadcrete'
-  | 'quartz-scapes'
-  | 'hydrazzo'
-  | 'tile'
-  | 'ivory-quartz'
   | 'pebble-tec-l1'
   | 'pebble-tec-l2'
   | 'pebble-tec-l3'
@@ -369,8 +364,7 @@ export type InteriorFinishType =
   | 'pebble-fina-l1'
   | 'pebble-fina-l2'
   | 'pebble-brilliance'
-  | 'pebble-breeze'
-  | 'pebble-essence';
+  | 'pebble-breeze';
 
 export interface InteriorFinish {
   finishType: InteriorFinishType;

@@ -1,5 +1,11 @@
 ---
 
+## [1.5.0]
+### Changed
+- Numerous UI Changes to modernize the look and feel of the app
+
+---
+
 ## [1.4.0]
 ### Changed
 - Data

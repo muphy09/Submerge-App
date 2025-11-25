@@ -134,7 +134,7 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
               step="1"
               placeholder="0"
             />
-            <small className="form-help">1 ft counts as 1.25 ft billable conduit</small>
+            <small className="form-help">All lights to equipment pad</small>
           </div>
 
           <div className="spec-field">
@@ -147,7 +147,7 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
               step="1"
               placeholder="0"
             />
-            <small className="form-help">Only if using a heat pump (charged per 10 ft)</small>
+            <small className="form-help">Only if using a heat pump </small>
           </div>
         </div>
 

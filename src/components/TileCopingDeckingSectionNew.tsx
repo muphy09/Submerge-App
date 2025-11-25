@@ -57,6 +57,7 @@ const ButtonGroup = <T extends string | number>({
   onChange,
   required,
   helper,
+  buttonClassName,
 }: {
   label: string;
   value: T;
@@ -64,10 +65,11 @@ const ButtonGroup = <T extends string | number>({
   onChange: (val: T) => void;
   required?: boolean;
   helper?: string;
+  buttonClassName?: string;
 }) => (
   <div className="spec-field">
     <label className={`spec-label ${required ? 'required' : ''}`}>{label}</label>
-    <div className="pool-type-buttons stackable">
+    <div className={`pool-type-buttons stackable ${buttonClassName || ''}`.trim()}>
       {options.map(opt => (
         <button
           key={String(opt.value)}
@@ -115,7 +117,6 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
               required
               value={data.tileLevel}
               onChange={(val) => handleChange('tileLevel', val)}
-              helper="Level 1: Standard ceramic | Level 2: Glass | Level 3: Premium glass"
               options={[
                 { label: 'Level 1 (Included)', value: 1 },
                 { label: 'Level 2 (+$7/LNFT)', value: 2 },
@@ -142,17 +143,17 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
               <div className="pool-type-buttons">
                 <button
                   type="button"
-                  className={`pool-type-btn ${data.hasTrimTileOnSteps ? 'active' : ''}`}
-                  onClick={() => handleChange('hasTrimTileOnSteps', true)}
-                >
-                  Add Trim Tile
-                </button>
-                <button
-                  type="button"
                   className={`pool-type-btn ${!data.hasTrimTileOnSteps ? 'active' : ''}`}
                   onClick={() => handleChange('hasTrimTileOnSteps', false)}
                 >
                   No Trim Tile
+                </button>
+                <button
+                  type="button"
+                  className={`pool-type-btn ${data.hasTrimTileOnSteps ? 'active' : ''}`}
+                  onClick={() => handleChange('hasTrimTileOnSteps', true)}
+                >
+                  Add Trim Tile
                 </button>
               </div>
             </div>
@@ -167,22 +168,23 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
           <p className="spec-block-subtitle">Choose coping type and enter lengths</p>
         </div>
 
-        <div className="spec-grid spec-grid-2">
-          <ButtonGroup
-            label="Coping Type"
-            required
-            value={data.copingType}
-            onChange={(val) => handleChange('copingType', val)}
-            options={[
-              { label: 'Cantilever', value: 'cantilever' },
-              { label: 'Flagstone', value: 'flagstone' },
-              { label: 'Paver', value: 'paver' },
-              { label: 'Travertine - L1', value: 'travertine-level1' },
-              { label: 'Travertine - L2', value: 'travertine-level2' },
-              { label: 'Concrete', value: 'concrete' },
-            ]}
-          />
+        <ButtonGroup
+          label="Coping Type"
+          required
+          value={data.copingType}
+          onChange={(val) => handleChange('copingType', val)}
+          buttonClassName="coping-type-grid"
+          options={[
+            { label: 'Travertine - Level 1', value: 'travertine-level1' },
+            { label: 'Travertine - Level 2', value: 'travertine-level2' },
+            { label: 'Cantilever', value: 'cantilever' },
+            { label: 'Flagstone', value: 'flagstone' },
+            { label: 'Paver', value: 'paver' },
+            { label: 'Concrete', value: 'concrete' },
+          ]}
+        />
 
+        <div className="spec-grid spec-grid-3">
           <div className="spec-field">
             <label className="spec-label">Coping Length</label>
             <CompactInput
@@ -195,9 +197,7 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
             />
             <small className="form-help">Defaults to pool perimeter ({poolPerimeter} LNFT)</small>
           </div>
-        </div>
 
-        <div className="spec-grid spec-grid-3">
           <div className="spec-field">
             <label className="spec-label">Bullnose</label>
             <CompactInput
@@ -250,20 +250,21 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
           <p className="spec-block-subtitle">Select deck surface and enter areas/lengths.</p>
         </div>
 
-        <div className="spec-grid spec-grid-2">
-          <ButtonGroup
-            label="Decking Type"
-            required
-            value={data.deckingType}
-            onChange={(val) => handleChange('deckingType', val)}
-            options={[
-              { label: 'Paver', value: 'paver' },
-              { label: 'Travertine - L1', value: 'travertine-level1' },
-              { label: 'Travertine - L2', value: 'travertine-level2' },
-              { label: 'Concrete', value: 'concrete' },
-            ]}
-          />
+        <ButtonGroup
+          label="Decking Type"
+          required
+          value={data.deckingType}
+          onChange={(val) => handleChange('deckingType', val)}
+          buttonClassName="decking-type-row"
+          options={[
+            { label: 'Travertine - Level 1', value: 'travertine-level1' },
+            { label: 'Travertine - Level 2', value: 'travertine-level2' },
+            { label: 'Paver', value: 'paver' },
+            { label: 'Concrete', value: 'concrete' },
+          ]}
+        />
 
+        <div className={data.deckingType === 'concrete' ? 'spec-grid spec-grid-2' : 'spec-grid'}>
           <div className="spec-field">
             <label className="spec-label required">Decking Area</label>
             <CompactInput
@@ -272,21 +273,22 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
               unit="SQFT"
               min="0"
               step="1"
+              placeholder={`Auto: ${poolPerimeter}`}
             />
+            <small className="form-help">Defaults to decking perimeter ({poolPerimeter} LNFT)</small>
           </div>
-        </div>
-
-        <div className="spec-grid spec-grid-3">
-          <div className="spec-field">
-            <label className="spec-label">Concrete Steps Length</label>
-            <CompactInput
-              value={data.concreteStepsLength ?? 0}
-              onChange={(e) => handleChange('concreteStepsLength', parseFloat(e.target.value) || 0)}
-              unit="LNFT"
-              min="0"
-              step="1"
-            />
-          </div>
+          {data.deckingType === 'concrete' && (
+            <div className="spec-field">
+              <label className="spec-label">Concrete Steps Length</label>
+              <CompactInput
+                value={data.concreteStepsLength ?? 0}
+                onChange={(e) => handleChange('concreteStepsLength', parseFloat(e.target.value) || 0)}
+                unit="LNFT"
+                min="0"
+                step="1"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -358,19 +360,12 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
           <button
             type="button"
             className={`pool-type-btn ${data.hasRoughGrading ? 'active' : ''}`}
-            onClick={() => handleChange('hasRoughGrading', true)}
+            onClick={() => handleChange('hasRoughGrading', !data.hasRoughGrading)}
           >
-            Include Rough Grading
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${!data.hasRoughGrading ? 'active' : ''}`}
-            onClick={() => handleChange('hasRoughGrading', false)}
-          >
-            Exclude Rough Grading
+            Rough Grading
           </button>
         </div>
-        <small className="form-help" style={{ marginTop: '8px' }}>Keep unless deck is off contract.</small>
+        <small className="form-help" style={{ marginTop: '8px' }}>Keep ON unless deck is off contract</small>
       </div>
     </div>
   );

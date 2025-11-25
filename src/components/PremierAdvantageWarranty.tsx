@@ -14,16 +14,6 @@ interface WarrantySection {
 }
 
 const interiorFinishLabels: Partial<Record<InteriorFinishType, string>> = {
-  plaster: 'Plaster (White/Color)',
-  'pebble-tec': 'Pebble Tec',
-  'pebble-sheen': 'Pebble Sheen',
-  'pebble-fina': 'Pebble Fina',
-  'mini-pebble': 'Mini Pebble',
-  beadcrete: 'Beadcrete',
-  'quartz-scapes': 'Quartz Scapes',
-  hydrazzo: 'Hydrazzo',
-  tile: 'Tile (Full)',
-  'ivory-quartz': 'Ivory Quartz',
   'pebble-tec-l1': 'Pebble Tec - Level 1',
   'pebble-tec-l2': 'Pebble Tec - Level 2',
   'pebble-tec-l3': 'Pebble Tec - Level 3',
@@ -34,7 +24,6 @@ const interiorFinishLabels: Partial<Record<InteriorFinishType, string>> = {
   'pebble-fina-l2': 'Pebble Fina - Level 2',
   'pebble-brilliance': 'Pebble Brilliance',
   'pebble-breeze': 'Pebble Breeze',
-  'pebble-essence': 'Pebble Essence',
 };
 
 const formatNumber = (value?: number, digits = 1) =>
@@ -108,9 +97,17 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
     advantage: '3-Year NO-FAULT Warranty on all Jandy equipment',
   });
 
-  if (equipment.auxiliaryPump?.name) {
-    items.push({ label: equipment.auxiliaryPump.name });
-  }
+  const auxiliaryPumps =
+    equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
+      ? equipment.auxiliaryPumps
+      : equipment.auxiliaryPump
+        ? [equipment.auxiliaryPump]
+        : [];
+  auxiliaryPumps.forEach(pump => {
+    if (pump?.name) {
+      items.push({ label: pump.name });
+    }
+  });
 
   items.push(
     { label: equipment.filter?.name || 'Filter not selected' },

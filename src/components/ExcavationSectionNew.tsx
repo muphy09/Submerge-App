@@ -59,6 +59,32 @@ const formatFacingLabel = (facing: RBBLevel['facing']) => {
   return facing === 'none' ? 'No Facing' : facing.charAt(0).toUpperCase() + facing.slice(1);
 };
 
+const formatNumber = (value: number) => {
+  const num = Number(value) || 0;
+  return Number.isInteger(num) ? num.toString() : num.toFixed(2).replace(/\.?0+$/, '');
+};
+
+const formatRBBTitle = (level: RBBLevel) => {
+  const parts = [`${formatNumber(level.height)}" RBB`, `${formatNumber(level.length)} LNFT`];
+  if (level.facing && level.facing !== 'none') {
+    parts.push(formatFacingLabel(level.facing));
+  }
+  return parts.join(' | ');
+};
+
+const formatColumnsTitle = (columns: Excavation['columns']) => {
+  const count = formatNumber(columns.count || 0);
+  const parts = [
+    `${count} ${columns.count === 1 ? 'Column' : 'Columns'}`,
+    `${formatNumber(columns.width || 0)} FT W x ${formatNumber(columns.depth || 0)} FT D`,
+    `${formatNumber(columns.height || 0)} FT H`,
+  ];
+  if (columns.facing && columns.facing !== 'none') {
+    parts.push(formatFacingLabel(columns.facing as RBBLevel['facing']));
+  }
+  return parts.join(' | ');
+};
+
 function ExcavationSectionNew({ data, onChange }: Props) {
   const [activeRBBIndex, setActiveRBBIndex] = useState<number | null>(null);
   const [columnsEditing, setColumnsEditing] = useState<boolean>(data.columns.count > 0);
@@ -213,30 +239,31 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                 <div key={index} className="spec-subcard">
                   <div className="spec-subcard-header">
                     <div>
-                      <div className="spec-subcard-title">RBB #{index + 1}</div>
-                      {!isEditing && (
-                        <div className="pill-row">
-                          <span className="info-pill">{level.height}" height</span>
-                          <span className="info-pill">{level.length || 0} lnft</span>
-                          <span className="info-pill">{formatFacingLabel(level.facing)}</span>
-                        </div>
-                      )}
+                      <div className="spec-subcard-title">{formatRBBTitle(level)}</div>
+                      {!isEditing && <div className="spec-subcard-subtitle">RBB #{index + 1}</div>}
                     </div>
-                    <div className="spec-subcard-actions">
-                      <button
-                        type="button"
-                        className="link-btn"
-                        onClick={() => setActiveRBBIndex(isEditing ? null : index)}
-                      >
-                        {isEditing ? 'Collapse' : 'Edit'}
-                      </button>
-                      <button
-                        type="button"
-                        className="link-btn danger"
-                        onClick={() => removeRBBLevel(index)}
-                      >
-                        Remove
-                      </button>
+                    <div className="spec-subcard-actions stacked-actions">
+                      <div className="stacked-primary-actions">
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setActiveRBBIndex(isEditing ? null : index)}
+                        >
+                          {isEditing ? 'Collapse' : 'Edit'}
+                        </button>
+                        <button
+                          type="button"
+                          className="link-btn danger"
+                          onClick={() => removeRBBLevel(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {!isEditing && (
+                        <button type="button" className="link-btn small" onClick={addRBBLevel}>
+                          Add Another
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -264,7 +291,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                           <CompactInput
                             value={level.length}
                             onChange={(e) => updateRBBLevel(index, 'length', parseFloat(e.target.value) || 0)}
-                            unit="ft"
+                            unit="LNFT"
                             min="0"
                             step="1"
                           />
@@ -301,7 +328,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           </>
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
-            No raised bond beam selected.
+            No Raised Bond Beams
           </div>
         )}
       </div>
@@ -319,7 +346,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
             className={`pool-type-btn ${!columnsActive ? 'active' : ''}`}
             onClick={handleNoColumns}
           >
-            No Columns
+            No Column
           </button>
           <button
             type="button"
@@ -331,34 +358,36 @@ function ExcavationSectionNew({ data, onChange }: Props) {
         </div>
 
         {columnsActive ? (
-          <div className="spec-subcard">
-            <div className="spec-subcard-header">
-              <div>
-                <div className="spec-subcard-title">Column Specs</div>
-                {!columnsEditing && (
-                  <div className="pill-row">
-                    <span className="info-pill">{data.columns.count || 0} columns</span>
-                    <span className="info-pill">
-                      {data.columns.width || 0}ft W x {data.columns.depth || 0}ft D
-                    </span>
-                    <span className="info-pill">{data.columns.height || 0}ft H</span>
-                    <span className="info-pill">{formatFacingLabel(data.columns.facing as RBBLevel['facing'])}</span>
+            <div className="spec-subcard">
+              <div className="spec-subcard-header">
+                <div>
+                  <div className="spec-subcard-title">{formatColumnsTitle(data.columns)}</div>
+                  {!columnsEditing && (
+                    <div className="spec-subcard-subtitle">
+                      {data.columns.count && data.columns.count > 0 ? 'Column #1' : 'Columns'}
+                    </div>
+                  )}
+                </div>
+                <div className="spec-subcard-actions stacked-actions">
+                  <div className="stacked-primary-actions">
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setColumnsEditing(!columnsEditing)}
+                    >
+                      {columnsEditing ? 'Collapse' : 'Edit'}
+                    </button>
+                    <button type="button" className="link-btn danger" onClick={handleNoColumns}>
+                      Clear
+                    </button>
                   </div>
-                )}
+                  {!columnsEditing && (
+                    <button type="button" className="link-btn small" onClick={addAnotherColumn}>
+                      Add Another
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="spec-subcard-actions">
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={() => setColumnsEditing(!columnsEditing)}
-                >
-                  {columnsEditing ? 'Collapse' : 'Edit'}
-                </button>
-                <button type="button" className="link-btn danger" onClick={handleNoColumns}>
-                  Clear
-                </button>
-              </div>
-            </div>
 
             {columnsEditing && (
               <>
@@ -454,7 +483,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           </div>
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
-            No columns selected.
+            No Columns
           </div>
         )}
       </div>
@@ -483,7 +512,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           </button>
         </div>
 
-        {retainingOpen && (
+        {retainingOpen ? (
           <div className="spec-grid-2">
             <div className="spec-field">
               <label className="spec-label">Retaining Wall Type</label>
@@ -510,6 +539,10 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                 step="1"
               />
             </div>
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Retaining Wall
           </div>
         )}
       </div>

@@ -481,13 +481,24 @@ export class DrainageCalculations {
 
 export class EquipmentCalculations {
   private static hasEquipmentSelection(equipment: Equipment): boolean {
+    const auxiliaryPrices = (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
+      ? equipment.auxiliaryPumps
+      : equipment.auxiliaryPump
+        ? [equipment.auxiliaryPump]
+        : []
+    ).map(p => p?.price ?? 0);
+    const filterQty = Math.max(equipment.filterQuantity ?? 0, 0);
+    const heaterQty = Math.max(equipment.heaterQuantity ?? 0, 0);
+    const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
+    const cleanerQty = Math.max(equipment.cleanerQuantity ?? 0, 0);
+
     const pricedSelections = [
       equipment.pump?.price,
-      equipment.auxiliaryPump?.price,
-      equipment.filter?.price,
-      (equipment.cleanerQuantity ?? 0) > 0 ? equipment.cleaner?.price : 0,
-      equipment.heater?.price,
-      equipment.automation?.price,
+      ...auxiliaryPrices,
+      filterQty > 0 ? equipment.filter?.price : 0,
+      cleanerQty > 0 ? equipment.cleaner?.price : 0,
+      heaterQty > 0 ? equipment.heater?.price : 0,
+      automationQty > 0 ? equipment.automation?.price : 0,
       equipment.saltSystem?.price,
     ];
 
@@ -499,6 +510,10 @@ export class EquipmentCalculations {
       equipment.hasStartupChemicals;
 
     return pricedSelections.some(price => (price ?? 0) > 0) ||
+      filterQty > 0 ||
+      heaterQty > 0 ||
+      automationQty > 0 ||
+      cleanerQty > 0 ||
       (equipment.automation?.zones ?? 0) > 0 ||
       (equipment.numberOfLights ?? 0) > 0 ||
       !!equipment.hasSpaLight ||
@@ -510,6 +525,15 @@ export class EquipmentCalculations {
     const items: CostLineItem[] = [];
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
     const prices = pricingData.equipment;
+    const auxiliaryPumps =
+      equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
+        ? equipment.auxiliaryPumps
+        : equipment.auxiliaryPump
+          ? [equipment.auxiliaryPump]
+          : [];
+    const filterQty = Math.max(equipment.filterQuantity ?? 0, 0);
+    const heaterQty = Math.max(equipment.heaterQuantity ?? 0, 0);
+    const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
 
     if (!this.hasEquipmentSelection(equipment)) {
       return items;
@@ -533,29 +557,30 @@ export class EquipmentCalculations {
       total: equipment.pump.price,
     });
 
-    // Auxiliary pump
-    if (equipment.auxiliaryPump) {
+    // Auxiliary pumps
+    auxiliaryPumps.forEach((pump, idx) => {
       items.push({
         category: 'Equipment',
-        description: equipment.auxiliaryPump.name,
-        unitPrice: equipment.auxiliaryPump.price,
+        description: pump.name || `Auxiliary Pump ${idx + 1}`,
+        unitPrice: pump.price,
         quantity: 1,
-        total: equipment.auxiliaryPump.price,
+        total: pump.price,
+      });
+    });
+
+    // Filter
+    if (filterQty > 0) {
+      items.push({
+        category: 'Equipment',
+        description: equipment.filter.name,
+        unitPrice: equipment.filter.price,
+        quantity: filterQty,
+        total: equipment.filter.price * filterQty,
       });
     }
 
-    // Filter
-    items.push({
-      category: 'Equipment',
-      description: equipment.filter.name,
-      unitPrice: equipment.filter.price,
-      quantity: 1,
-      total: equipment.filter.price,
-    });
-
     // Cleaner
-    const cleanerQuantity =
-      equipment.cleanerQuantity ?? (equipment.cleaner && equipment.cleaner.price > 0 ? 1 : 0);
+    const cleanerQuantity = Math.max(equipment.cleanerQuantity ?? 0, 0);
     if (equipment.cleaner.price > 0 && cleanerQuantity > 0) {
       items.push({
         category: 'Equipment',
@@ -567,13 +592,15 @@ export class EquipmentCalculations {
     }
 
     // Heater
-    items.push({
-      category: 'Equipment',
-      description: equipment.heater.name,
-      unitPrice: equipment.heater.price,
-      quantity: 1,
-      total: equipment.heater.price,
-    });
+    if (heaterQty > 0) {
+      items.push({
+        category: 'Equipment',
+        description: equipment.heater.name,
+        unitPrice: equipment.heater.price,
+        quantity: heaterQty,
+        total: equipment.heater.price * heaterQty,
+      });
+    }
 
     // VersaFlo upgrade
     if (equipment.upgradeToVersaFlo && !equipment.heater.isVersaFlo) {
@@ -614,16 +641,18 @@ export class EquipmentCalculations {
     }
 
     // Automation
-    items.push({
-      category: 'Equipment',
-      description: equipment.automation.name,
-      unitPrice: equipment.automation.price,
-      quantity: 1,
-      total: equipment.automation.price,
-    });
+    if (automationQty > 0) {
+      items.push({
+        category: 'Equipment',
+        description: equipment.automation.name,
+        unitPrice: equipment.automation.price,
+        quantity: automationQty,
+        total: equipment.automation.price * automationQty,
+      });
+    }
 
     // Additional automation zones
-    if (equipment.automation.zones > 0) {
+    if (automationQty > 0 && equipment.automation.zones > 0) {
       items.push({
         category: 'Equipment',
         description: 'Additional Automation Zones',
@@ -748,13 +777,20 @@ export class EquipmentCalculations {
       total: 125,
     });
 
-    if (equipment.auxiliaryPump) {
+    const auxiliaryPumpCount =
+      equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
+        ? equipment.auxiliaryPumps.length
+        : equipment?.auxiliaryPump
+          ? 1
+          : 0;
+
+    if (auxiliaryPumpCount > 0) {
       items.push({
         category: 'Equipment Set',
         description: 'Additional Pump',
         unitPrice: prices.additionalPump,
-        quantity: 1,
-        total: prices.additionalPump,
+        quantity: auxiliaryPumpCount,
+        total: prices.additionalPump * auxiliaryPumpCount,
       });
     }
 
@@ -929,7 +965,13 @@ export class InteriorFinishCalculations {
 
     // Fittings (Drains, Vac, Returns, Hydro) as per INT sheet logic
     const mainPumpCount = equipment && equipment.pump && equipment.pump.price > 0 ? 1 : 0;
-    const auxPumpCount = equipment && equipment.auxiliaryPump ? 1 : 0;
+    const auxPumpCount = (
+      equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
+        ? equipment.auxiliaryPumps
+        : equipment?.auxiliaryPump
+          ? [equipment.auxiliaryPump]
+          : []
+    ).filter(p => p && p.price > 0).length;
     const drains = (mainPumpCount + auxPumpCount) * 2 * 15;
     const vac = 0; // Excel INT sheet shows fittings total $110 (drains/returns/hydro only)
     const returns = 20;
@@ -964,16 +1006,6 @@ export class InteriorFinishCalculations {
 
   private static getMaterialRate(finishType: string, prices: any): number {
     const mapping: Record<string, number> = {
-      plaster: prices.material.plaster,
-      'pebble-tec': prices.material.pebbleTec,
-      'pebble-sheen': prices.material.pebbleSheen,
-      'pebble-fina': prices.material.pebbleFina,
-      'mini-pebble': prices.material.miniPebble,
-      beadcrete: prices.material.beadcrete,
-      'quartz-scapes': prices.material.quartzScapes,
-      hydrazzo: prices.material.hydrazzo,
-      tile: prices.material.tile,
-      'ivory-quartz': prices.material.ivoryQuartz,
       'pebble-tec-l1': prices.material.pebbleTecL1,
       'pebble-tec-l2': prices.material.pebbleTecL2,
       'pebble-tec-l3': prices.material.pebbleTecL3,
@@ -984,7 +1016,6 @@ export class InteriorFinishCalculations {
       'pebble-fina-l2': prices.material.pebbleFinaL2,
       'pebble-brilliance': prices.material.pebbleBrilliance,
       'pebble-breeze': prices.material.pebbleBreeze,
-      'pebble-essence': prices.material.pebbleEssence,
     };
     return mapping[finishType] || 0;
   }

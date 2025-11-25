@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { PoolSpecs } from '../types/proposal-new';
+import { CustomerInfo, PoolSpecs } from '../types/proposal-new';
 import { CalculationModules } from '../services/pricingEngineComplete';
 import pricingData from '../services/pricingData';
 import './SectionStyles.css';
@@ -7,6 +7,8 @@ import './SectionStyles.css';
 interface Props {
   data: PoolSpecs;
   onChange: (data: PoolSpecs) => void;
+  customerInfo: CustomerInfo;
+  onChangeCustomerInfo: (info: CustomerInfo) => void;
 }
 
 // Helper component for compact inputs with inline unit labels
@@ -49,7 +51,9 @@ const CompactInput = ({
   );
 };
 
-function PoolSpecsSectionNew({ data, onChange }: Props) {
+function PoolSpecsSectionNew({ data, onChange, customerInfo, onChangeCustomerInfo }: Props) {
+  const dropdownStyle = { width: '100%', height: '38px', padding: '6px 10px', lineHeight: '20px', boxSizing: 'border-box' as const };
+
   // Auto-calculate gallons and spa perimeter when relevant fields change
   useEffect(() => {
     const gallons = CalculationModules.Pool.calculateGallons(data);
@@ -97,11 +101,37 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
   };
 
   const isFiberglass = data.poolType === 'fiberglass';
-  const hasSpa = data.spaType !== 'none';
   const isGuniteSpa = data.spaType === 'gunite';
 
   return (
     <div className="section-form">
+      {/* ==================== CUSTOMER INFORMATION ==================== */}
+      <div className="spec-block">
+        <h2 className="spec-block-title">Customer Information</h2>
+        <div className="spec-grid-2">
+          <div className="spec-field">
+            <label className="spec-label required">Customer Name</label>
+            <input
+              type="text"
+              className="compact-input"
+              value={customerInfo.customerName || ''}
+              onChange={(e) => onChangeCustomerInfo({ ...customerInfo, customerName: e.target.value })}
+              placeholder="Enter customer name"
+            />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label required">Customer City</label>
+            <input
+              type="text"
+              className="compact-input"
+              value={customerInfo.city || ''}
+              onChange={(e) => onChangeCustomerInfo({ ...customerInfo, city: e.target.value })}
+              placeholder="Enter city"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* ==================== POOL DIMENSIONS BLOCK ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Pool Dimensions</h2>
@@ -197,7 +227,6 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
                   <option value="crane-medium">Crane - Medium</option>
                   <option value="crane-large">Crane - Large</option>
                 </select>
-                <small className="form-help">Matches FIBER sheet crane selection.</small>
               </div>
             </div>
           </>
@@ -292,16 +321,6 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
               </div>
             </div>
 
-            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
-              <label className="form-checkbox">
-                <input
-                  type="checkbox"
-                  checked={data.hasTanningShelf}
-                  onChange={(e) => handleChange('hasTanningShelf', e.target.checked)}
-                />
-                <span>Has Tanning Shelf</span>
-              </label>
-            </div>
           </>
         )}
 
@@ -317,54 +336,6 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
                 readOnly
               />
             </div>
-          </div>
-        )}
-
-        {/* Fiberglass Spa Details */}
-        {hasSpa && data.spaType === 'fiberglass' && (
-          <div className="spec-grid-2" style={{ marginTop: '15px' }}>
-            <div className="spec-field">
-              <label className="spec-label required">Fiberglass Spa Model</label>
-              <select
-                className="compact-input"
-                value={data.spaFiberglassModelName || ''}
-                onChange={(e) => {
-                  const model = pricingData.fiberglass.spaModels.find(m => m.name === e.target.value);
-                  if (model) {
-                    handleChange('spaFiberglassModelName', model.name);
-                    handleChange('spaFiberglassModelPrice', model.price);
-                  } else {
-                    handleChange('spaFiberglassModelName', undefined);
-                    handleChange('spaFiberglassModelPrice', undefined);
-                  }
-                }}
-              >
-                <option value="">Select model</option>
-                {pricingData.fiberglass.spaModels.map(model => (
-                  <option key={model.name} value={model.name}>
-                    {model.name} - ${model.price.toLocaleString()}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="spec-field">
-              <label className="spec-label">Spa Price (auto)</label>
-              <CompactInput
-                type="text"
-                value={data.spaFiberglassModelPrice ? `$${data.spaFiberglassModelPrice.toLocaleString()}` : '$0'}
-                readOnly
-              />
-            </div>
-
-            <label className="form-checkbox" style={{ gridColumn: '1 / span 2' }}>
-              <input
-                type="checkbox"
-                checked={data.hasSpillover}
-                onChange={(e) => handleChange('hasSpillover', e.target.checked)}
-              />
-              <span>Include Spillover (Fiberglass)</span>
-            </label>
           </div>
         )}
       </div>
@@ -399,6 +370,58 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
             Fiberglass Spa
           </button>
         </div>
+
+        {/* Fiberglass Spa Details */}
+        {data.spaType === 'fiberglass' && (
+          <>
+            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
+              <div className="spec-field">
+                <label className="spec-label required">Fiberglass Spa Model</label>
+                <select
+                  className="compact-input"
+                  value={data.spaFiberglassModelName || ''}
+                  onChange={(e) => {
+                    const model = pricingData.fiberglass.spaModels.find(m => m.name === e.target.value);
+                    if (model) {
+                      onChange({
+                        ...data,
+                        spaFiberglassModelName: model.name,
+                        spaFiberglassModelPrice: model.price,
+                      });
+                    } else {
+                      onChange({
+                        ...data,
+                        spaFiberglassModelName: undefined,
+                        spaFiberglassModelPrice: undefined,
+                      });
+                    }
+                  }}
+                >
+                  <option value="">Select model</option>
+                  {pricingData.fiberglass.spaModels.map(model => (
+                    <option key={model.name} value={model.name}>
+                      {model.name} - ${model.price.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="spec-grid-3" style={{ marginTop: '15px' }}>
+              <div className="spec-field">
+                <div className="pool-type-buttons">
+                  <button
+                    type="button"
+                    className={`pool-type-btn ${data.hasSpillover ? 'active' : ''}`}
+                    onClick={() => handleChange('hasSpillover', !data.hasSpillover)}
+                  >
+                    Include Spillover
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Gunite Spa Details */}
         {isGuniteSpa && (
@@ -446,41 +469,49 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
               </div>
             </div>
 
-            <div className="spec-grid-3" style={{ marginTop: '15px' }}>
-              <label className="form-checkbox">
-                <input
-                  type="checkbox"
-                  checked={data.hasSpillover}
-                  onChange={(e) => handleChange('hasSpillover', e.target.checked)}
-                />
-                <span>Has Spillover</span>
-              </label>
-
-              <label className="form-checkbox">
-                <input
-                  type="checkbox"
-                  checked={data.isRaisedSpa}
-                  onChange={(e) => handleChange('isRaisedSpa', e.target.checked)}
-                />
-                <span>Raised Spa (+18")</span>
-              </label>
-
-              {data.isRaisedSpa && (
-                <div className="spec-field">
-                  <label className="spec-label">Raised Spa Facing</label>
-                  <select
-                    className="compact-input"
-                    value={data.raisedSpaFacing}
-                    onChange={(e) => handleChange('raisedSpaFacing', e.target.value)}
+            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
+              <div className="spec-field">
+                <label className="spec-label">Spillover</label>
+                <div className="pool-type-buttons">
+                  <button
+                    type="button"
+                    className={`pool-type-btn ${data.hasSpillover ? 'active' : ''}`}
+                    onClick={() => handleChange('hasSpillover', !data.hasSpillover)}
                   >
-                    <option value="none">None</option>
-                    <option value="tile">Tile</option>
-                    <option value="ledgestone">Ledgestone</option>
-                    <option value="stacked-stone">Stacked Stone</option>
-                  </select>
+                    Include Spillover
+                  </button>
                 </div>
-              )}
+              </div>
+
+              <div className="spec-field">
+                <label className="spec-label">Raised Spa</label>
+                <div className="pool-type-buttons">
+                  <button
+                    type="button"
+                    className={`pool-type-btn ${data.isRaisedSpa ? 'active' : ''}`}
+                    onClick={() => handleChange('isRaisedSpa', !data.isRaisedSpa)}
+                  >
+                    Raised Spa (+18")
+                  </button>
+                </div>
+              </div>
             </div>
+
+            {data.isRaisedSpa && (
+              <div className="spec-field" style={{ marginTop: '10px' }}>
+                <label className="spec-label">Raised Spa Facing</label>
+                <select
+                  className="compact-input"
+                  value={data.raisedSpaFacing}
+                  onChange={(e) => handleChange('raisedSpaFacing', e.target.value)}
+                >
+                  <option value="none">None</option>
+                  <option value="tile">Tile</option>
+                  <option value="ledgestone">Ledgestone</option>
+                  <option value="stacked-stone">Stacked Stone</option>
+                </select>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -504,6 +535,7 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
             <label className="spec-label">Pool to Street Distance</label>
             <select
               className="compact-input"
+              style={dropdownStyle}
               value={data.poolToStreetDistance}
               onChange={(e) => handleChange('poolToStreetDistance', parseInt(e.target.value))}
             >
@@ -519,24 +551,24 @@ function PoolSpecsSectionNew({ data, onChange }: Props) {
       <div className="spec-block">
         <h2 className="spec-block-title">Additional Options</h2>
 
-        <div className="spec-grid-2">
-          <label className="form-checkbox">
-            <input
-              type="checkbox"
-              checked={data.hasSiltFence}
-              onChange={(e) => handleChange('hasSiltFence', e.target.checked)}
-            />
-            <span>Silt Fence Required</span>
-          </label>
-
-          <label className="form-checkbox">
-            <input
-              type="checkbox"
-              checked={data.hasAutomaticCover}
-              onChange={(e) => handleChange('hasAutomaticCover', e.target.checked)}
-            />
-            <span>Automatic Cover</span>
-          </label>
+        <div className="spec-grid-3">
+          {[
+            { key: 'hasSiltFence', label: 'Silt Fence Required' },
+            { key: 'hasAutomaticCover', label: 'Automatic Cover' },
+            { key: 'hasTanningShelf', label: 'Tanning Shelf' },
+          ].map(option => (
+            <div className="spec-field" key={option.key}>
+              <div className="pool-type-buttons">
+                <button
+                  type="button"
+                  className={`pool-type-btn ${(data as any)[option.key] ? 'active' : ''}`}
+                  onClick={() => handleChange(option.key as keyof PoolSpecs, !(data as any)[option.key])}
+                >
+                  {option.label}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
       </div>

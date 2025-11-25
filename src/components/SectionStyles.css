@@ -265,6 +265,14 @@
   min-width: 0;
 }
 
+select.compact-input {
+  height: 38px !important;
+  padding: 6px 10px !important;
+  line-height: 20px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
 .compact-input:focus {
   outline: none;
   border-color: #667eea;
@@ -403,6 +411,36 @@
   flex: 1 1 220px;
 }
 
+.pool-type-buttons.pump-row .pool-type-btn {
+  flex: 1 1 calc(20% - 12px);
+  min-width: 170px;
+}
+
+.pool-type-buttons.filter-grid .pool-type-btn {
+  flex: 1 1 calc(33.333% - 12px);
+  min-width: 200px;
+}
+
+.pool-type-buttons.cleaner-row .pool-type-btn {
+  flex: 1 1 calc(20% - 10px);
+  min-width: 160px;
+}
+
+.pool-type-buttons.automation-grid .pool-type-btn {
+  flex: 1 1 calc(25% - 12px);
+  min-width: 180px;
+}
+
+.pool-type-buttons.coping-type-grid .pool-type-btn {
+  flex: 1 1 calc(33.333% - 10px);
+  min-width: 180px;
+}
+
+.pool-type-buttons.decking-type-row .pool-type-btn {
+  flex: 1 1 calc(25% - 10px);
+  min-width: 160px;
+}
+
 .pool-type-btn {
   flex: 1;
   padding: 16px 24px;
@@ -460,7 +498,26 @@
   font-weight: 700;
 }
 
+.spec-subcard-subtitle {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
 .spec-subcard-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.spec-subcard-actions.stacked-actions {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.stacked-primary-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -480,6 +537,14 @@
 
 .link-btn:hover {
   background: #f3f4f6;
+}
+
+.link-btn.small {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
 }
 
 .link-btn.danger {

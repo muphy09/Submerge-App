@@ -49,7 +49,7 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     deckingArea: 0,
     travelDistance: 0,
     poolToStreetDistance: 0,
-    hasSiltFence: false,
+    hasSiltFence: true,
     hasAutomaticCover: false,
     waterfallCount: 0,
     approximateGallons: 0,
@@ -161,11 +161,13 @@ export function getDefaultEquipment(): Equipment {
       model: defaultPump.model,
       price: defaultPump.price,
     },
+    auxiliaryPumps: [],
     filter: {
       name: defaultFilter.name,
       sqft: defaultFilter.sqft,
       price: defaultFilter.price,
     },
+    filterQuantity: 0,
     cleaner: {
       name: defaultCleaner.name,
       price: defaultCleaner.price,
@@ -177,6 +179,7 @@ export function getDefaultEquipment(): Equipment {
       price: defaultHeater.price,
       isVersaFlo: defaultHeater.isVersaFlo,
     },
+    heaterQuantity: 1,
     upgradeToVersaFlo: false,
     numberOfLights: 0,
     hasSpaLight: false,
@@ -186,6 +189,7 @@ export function getDefaultEquipment(): Equipment {
       zones: 0,
       hasChemistry: defaultAutomation.hasChemistry,
     },
+    automationQuantity: 0,
     saltSystem: undefined,
     hasBlanketReel: false,
     hasSolarBlanket: false,
@@ -193,6 +197,7 @@ export function getDefaultEquipment(): Equipment {
     hasHandrail: false,
     hasStartupChemicals: false,
     totalCost: 0,
+    hasBeenEdited: false,
   };
 }
 
@@ -221,7 +226,7 @@ export function getDefaultMasonry(): Masonry {
 
 export function getDefaultInteriorFinish(): InteriorFinish {
   return {
-    finishType: 'pebble-tec',
+    finishType: 'pebble-tec-l1',
     color: '',
     surfaceArea: 0,
     hasSpa: false,

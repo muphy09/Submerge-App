@@ -4,7 +4,6 @@ import { Proposal, WaterFeatures, PAPDiscounts } from '../types/proposal-new';
 import { getDefaultProposal, getDefaultPAPDiscounts } from '../utils/proposalDefaults';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { validateProposal } from '../utils/validation';
-import CustomerInfoSection from '../components/CustomerInfoSection';
 import PoolSpecsSectionNew from '../components/PoolSpecsSectionNew';
 import ExcavationSectionNew from '../components/ExcavationSectionNew';
 import PlumbingSectionNew from '../components/PlumbingSectionNew';
@@ -39,7 +38,6 @@ const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
 };
 
 type SectionKey =
-  | 'customerInfo'
   | 'poolSpecs'
   | 'excavation'
   | 'plumbing'
@@ -59,14 +57,6 @@ interface SectionConfig {
 }
 
 const sectionIcons: Record<SectionKey, () => JSX.Element> = {
-  customerInfo: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <rect x="8" y="14" width="48" height="36" rx="6" ry="6" fill="none" stroke="currentColor" strokeWidth="4" />
-      <circle cx="24" cy="32" r="7" fill="none" stroke="currentColor" strokeWidth="4" />
-      <path d="M18 42c4-4 12-4 16 0" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M36 24h14M36 32h14M36 40h10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  ),
   poolSpecs: () => (
     <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
       <rect x="10" y="18" width="44" height="28" rx="12" ry="12" fill="none" stroke="currentColor" strokeWidth="4" />
@@ -144,7 +134,6 @@ const sectionIcons: Record<SectionKey, () => JSX.Element> = {
 };
 
 const sections: SectionConfig[] = [
-  { key: 'customerInfo', label: 'Customer Information', shortLabel: 'Customer' },
   { key: 'poolSpecs', label: 'Pool Specifications', shortLabel: 'Pool Specs' },
   { key: 'excavation', label: 'Excavation', shortLabel: 'Excavation' },
   { key: 'plumbing', label: 'Plumbing', shortLabel: 'Plumbing' },
@@ -170,10 +159,60 @@ function ProposalForm() {
   const [showCostModal, setShowCostModal] = useState(false);
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(getDefaultPAPDiscounts());
+  const sectionContentRef = useRef<HTMLDivElement | null>(null);
+  const createCompletionMap = () =>
+    sections.reduce((acc, section) => {
+      acc[section.key] = false;
+      return acc;
+    }, {} as Record<SectionKey, boolean>);
+  const [completedByAdvance, setCompletedByAdvance] = useState<Record<SectionKey, boolean>>(createCompletionMap());
+
+  const computeHasEquipmentData = (equipment?: Proposal['equipment']) => {
+    const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
+    if (!equipment) return false;
+    return (
+      hasPositive(equipment.totalCost) ||
+      hasPositive(equipment.numberOfLights) ||
+      equipment.hasSpaLight ||
+      equipment.upgradeToVersaFlo ||
+      hasPositive(equipment.cleanerQuantity) ||
+      hasPositive(equipment.filterQuantity) ||
+      hasPositive(equipment.heaterQuantity) ||
+      hasPositive(equipment.automationQuantity) ||
+      (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0) ||
+      !!equipment.auxiliaryPump ||
+      hasPositive(equipment.pump?.price) ||
+      hasPositive(equipment.filter?.price) ||
+      hasPositive(equipment.cleaner?.price) ||
+      hasPositive(equipment.heater?.price) ||
+      hasPositive(equipment.automation?.price) ||
+      hasPositive(equipment.saltSystem?.price) ||
+      equipment.hasBlanketReel ||
+      equipment.hasSolarBlanket ||
+      equipment.hasAutoFill ||
+      equipment.hasHandrail ||
+      equipment.hasStartupChemicals
+    );
+  };
+  useEffect(() => {
+    // Ensure each section starts at top when navigating
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    if (sectionContentRef.current) {
+      sectionContentRef.current.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, [currentSection]);
 
   const getInitialProposal = (): Partial<Proposal> => getDefaultProposal();
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(getInitialProposal());
+
+  useEffect(() => {
+    const hasContent =
+      (proposal.equipment?.hasBeenEdited ?? false) && computeHasEquipmentData(proposal.equipment as any);
+    if (!hasContent && completedByAdvance.equipment) {
+      setCompletedByAdvance(prev => ({ ...prev, equipment: false }));
+    }
+  }, [proposal.equipment, completedByAdvance.equipment]);
 
   useEffect(() => {
     const requestId = ++loadRequestRef.current;
@@ -185,6 +224,7 @@ function ProposalForm() {
       setProposal(freshProposal);
       setCurrentSection(0);
       setIsLoading(false);
+      setCompletedByAdvance(createCompletionMap());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalNumber]);
@@ -201,6 +241,7 @@ function ProposalForm() {
 
         if (loadRequestRef.current === requestId) {
           setProposal(freshData);
+          setCompletedByAdvance(createCompletionMap());
           // Load PAP discounts if they exist
           if (freshData.papDiscounts) {
             setPapDiscounts(freshData.papDiscounts);
@@ -226,6 +267,9 @@ function ProposalForm() {
       [section]: data,
       lastModified: new Date().toISOString(),
     }));
+    if (section === 'poolSpecs') {
+      setCompletedByAdvance(prev => ({ ...prev, poolSpecs: true }));
+    }
   };
 
   const calculateTotals = (): Proposal => {
@@ -245,6 +289,10 @@ function ProposalForm() {
 
   const handleNext = () => {
     if (currentSection < sections.length - 1) {
+      const currentKey = sections[currentSection]?.key;
+      if (currentKey) {
+        setCompletedByAdvance(prev => ({ ...prev, [currentKey]: true }));
+      }
       setCurrentSection(currentSection + 1);
     }
   };
@@ -314,17 +362,12 @@ function ProposalForm() {
 
     try {
       switch (currentSectionKey) {
-        case 'customerInfo':
-          return (
-            <CustomerInfoSection
-              data={proposal.customerInfo}
-              onChange={(data) => updateProposal('customerInfo', data)}
-            />
-          );
         case 'poolSpecs':
           return (
             <PoolSpecsSectionNew
               data={proposal.poolSpecs}
+              customerInfo={proposal.customerInfo!}
+              onChangeCustomerInfo={(info) => updateProposal('customerInfo', info)}
               onChange={(data) => updateProposal('poolSpecs', data)}
             />
           );
@@ -441,12 +484,11 @@ function ProposalForm() {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
     const hasAnyPositive = (...values: Array<number | undefined>) => values.some(v => hasPositive(v));
 
-    const hasCustomerInfoData =
-      !!proposal.customerInfo?.customerName?.trim() && !!proposal.customerInfo?.city?.trim();
-
     const poolSpecs = proposal.poolSpecs;
     const hasPoolSpecsData =
       !!poolSpecs &&
+      !!proposal.customerInfo?.customerName?.trim() &&
+      !!proposal.customerInfo?.city?.trim() &&
       (poolSpecs.poolType !== 'gunite' ||
         hasAnyPositive(
           poolSpecs.perimeter,
@@ -553,26 +595,8 @@ function ProposalForm() {
       ) ||
         hasPositive(drainage.cost));
 
-    const equipment = proposal.equipment;
     const hasEquipmentData =
-      !!equipment &&
-      (hasPositive(equipment.totalCost) ||
-        hasPositive(equipment.numberOfLights) ||
-        equipment.hasSpaLight ||
-        equipment.upgradeToVersaFlo ||
-        hasPositive(equipment.cleanerQuantity) ||
-        !!equipment.auxiliaryPump ||
-        hasPositive(equipment.pump?.price) ||
-        hasPositive(equipment.filter?.price) ||
-        hasPositive(equipment.cleaner?.price) ||
-        hasPositive(equipment.heater?.price) ||
-        hasPositive(equipment.automation?.price) ||
-        hasPositive(equipment.saltSystem?.price) ||
-        equipment.hasBlanketReel ||
-        equipment.hasSolarBlanket ||
-        equipment.hasAutoFill ||
-        equipment.hasHandrail ||
-        equipment.hasStartupChemicals);
+      !!proposal.equipment?.hasBeenEdited && computeHasEquipmentData(proposal.equipment as any);
 
     const waterFeatures = proposal.waterFeatures;
     const hasWaterFeaturesData =
@@ -589,7 +613,7 @@ function ProposalForm() {
     const interiorFinish = proposal.interiorFinish;
     const hasInteriorData =
       !!interiorFinish &&
-      (interiorFinish.finishType !== 'pebble-tec' ||
+      (interiorFinish.finishType !== 'pebble-tec-l1' ||
         !!interiorFinish.color?.trim() ||
         interiorFinish.hasSpa ||
         interiorFinish.hasWaterproofing === false ||
@@ -603,26 +627,21 @@ function ProposalForm() {
         hasPositive(customFeatures.totalCost));
 
     return {
-      customerInfo: hasCustomerInfoData,
-      poolSpecs: hasPoolSpecsData,
-      excavation: hasExcavationData,
-      plumbing: hasPlumbingData,
-      electrical: hasElectricalData,
-      tileCopingDecking: hasTileData,
-      drainage: hasDrainageData,
-      equipment: hasEquipmentData,
-      waterFeatures: hasWaterFeaturesData,
-      interiorFinish: hasInteriorData,
-      customFeatures: hasCustomFeatures,
+      customerInfo: true,
+      poolSpecs: hasPoolSpecsData || completedByAdvance.poolSpecs,
+      excavation: hasExcavationData || completedByAdvance.excavation,
+      plumbing: hasPlumbingData || completedByAdvance.plumbing,
+      electrical: hasElectricalData || completedByAdvance.electrical,
+      tileCopingDecking: hasTileData || completedByAdvance.tileCopingDecking,
+      drainage: hasDrainageData || completedByAdvance.drainage,
+      equipment: hasEquipmentData || completedByAdvance.equipment,
+      waterFeatures: hasWaterFeaturesData || completedByAdvance.waterFeatures,
+      interiorFinish: hasInteriorData || completedByAdvance.interiorFinish,
+      customFeatures: hasCustomFeatures || completedByAdvance.customFeatures,
     };
-  }, [proposal]);
+  }, [proposal, completedByAdvance]);
 
   const progressSections = sections.filter(section => section.includeInProgress !== false);
-  const completedProgressCount = progressSections.filter(section => sectionCompletion[section.key]).length;
-  const progressPercent = progressSections.length
-    ? Math.round((completedProgressCount / progressSections.length) * 100)
-    : 0;
-
   if (isLoading) {
     return (
       <div className="proposal-form">
@@ -642,19 +661,26 @@ function ProposalForm() {
           <img src={ppasLogo} alt="PPAS Logo" className="form-logo" />
           <h1>Pool Proposal Builder</h1>
         </div>
-        <p className="proposal-number">Proposal #{proposal.proposalNumber?.replace('PROP-', '')}</p>
-      </header>
-
-      <div className={`progress-bar ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
+        <div className={`progress-bar ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
         <div className="progress-steps">
           {progressSections.map(section => {
             const isDone = sectionCompletion[section.key];
             const isCurrent = sections[currentSection]?.key === section.key;
+            const targetIndex = sections.findIndex(s => s.key === section.key);
             return (
               <div
                 key={section.key}
                 className={`progress-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}
                 title={section.label}
+                role="button"
+                tabIndex={0}
+                onClick={() => targetIndex >= 0 && setCurrentSection(targetIndex)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if (targetIndex >= 0) setCurrentSection(targetIndex);
+                  }
+                }}
               >
                 <div className="progress-step-box">
                   {isDone ? <span className="progress-check" aria-hidden="true">&#10003;</span> : null}
@@ -664,13 +690,8 @@ function ProposalForm() {
             );
           })}
         </div>
-        <div className="progress-summary">
-          <span className="progress-percent">{progressPercent}%</span>
-          <span className="progress-summary-text">
-            {completedProgressCount}/{progressSections.length} required sections
-          </span>
-        </div>
       </div>
+      </header>
 
       <div className="form-layout">
         {showLeftNav && (
@@ -752,7 +773,7 @@ function ProposalForm() {
         )}
 
         <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
-          <div className="section-content">
+          <div className="section-content" ref={sectionContentRef}>
             <h2 className="section-title">{sections[currentSection]?.label}</h2>
             {renderSection()}
           </div>
