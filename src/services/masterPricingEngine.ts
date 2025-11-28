@@ -51,6 +51,10 @@ export class MasterPricingEngine {
       waterfallCount,
     };
     const excavation = proposal.excavation!;
+    const normalizedExcavation = {
+      ...excavation,
+      totalRBBSqft: ExcavationCalculations.calculateTotalRBBSqft(excavation),
+    };
     const plumbing = proposal.plumbing!;
     const electrical = proposal.electrical!;
     const drainage = proposal.drainage!;
@@ -65,7 +69,7 @@ export class MasterPricingEngine {
     const plansItems = this.calculatePlansEngineering(poolSpecs, excavation, waterFeatures);
     const layoutItems = this.calculateLayout(poolSpecs);
     const permitItems = this.calculatePermit(poolSpecs);
-    let excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
+    let excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, normalizedExcavation);
     const plumbingWithElectrical = {
       ...plumbing,
       runs: {
@@ -87,10 +91,10 @@ export class MasterPricingEngine {
     const equipmentSetItems = CalculationModules.Equipment.calculateEquipmentSetCost(equipment, poolSpecs);
     const waterFeaturesItems = CalculationModules.WaterFeatures.calculateWaterFeaturesCost(waterFeatures);
     const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);
-    const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, excavation, tileCopingDecking);
+    const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, normalizedExcavation, tileCopingDecking);
     const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(poolSpecs);
     const fiberglassInstallItems = CalculationModules.Fiberglass.calculateFiberglassInstallCost(poolSpecs);
-    const masonryCalc = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, excavation);
+    const masonryCalc = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, normalizedExcavation);
     const rockworkLabor = masonryCalc.labor.concat(tileCoping.labor.filter(i => i.category.includes('Rockwork')));
     const rockworkMaterial = masonryCalc.material.concat(tileCoping.material.filter(i => i.category.includes('Rockwork')));
     const masonryMaterialSubtotal = masonryCalc.material.reduce((sum, i) => sum + i.total, 0);

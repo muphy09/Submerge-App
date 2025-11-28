@@ -62,6 +62,20 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
     }).format(amount);
   };
 
+  const isMaterialItem = (item: CostLineItem): boolean => {
+    const desc = (item.description || '').toLowerCase();
+    const cat = (item.category || '').toLowerCase();
+    if (desc.includes('pap discount')) return false;
+    return cat.includes('material') || desc.includes('material') || desc.includes('tax');
+  };
+
+  const isLaborItem = (item: CostLineItem): boolean => {
+    const desc = (item.description || '').toLowerCase();
+    if (desc.includes('pap discount')) return false;
+    const cat = (item.category || '').toLowerCase();
+    return cat.includes('labor') || (!isMaterialItem(item) && !desc.includes('tax'));
+  };
+
   // Define all categories with their data
   const categories: CategoryData[] = [
     { name: 'Plans & Engineering', items: costBreakdown.plansAndEngineering, showPAPInput: false },
@@ -146,21 +160,15 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
               const categoryTotal = category.items.reduce((sum, item) => sum + item.total, 0);
 
               // Calculate labor and material subtotals if applicable
-              const hasLabor = category.items.some(item => item.description.toLowerCase().includes('labor'));
-              const hasMaterial = category.items.some(item =>
-                item.description.toLowerCase().includes('material') ||
-                item.description.toLowerCase().includes('tax')
-              );
-              const laborSubtotal = hasLabor ? category.items
-                .filter(item => item.description.toLowerCase().includes('labor') ||
-                              (!item.description.toLowerCase().includes('material') &&
-                               !item.description.toLowerCase().includes('tax') &&
-                               !item.description.toLowerCase().includes('pap')))
-                .reduce((sum, item) => sum + item.total, 0) : 0;
-              const materialSubtotal = hasMaterial ? category.items
-                .filter(item => item.description.toLowerCase().includes('material') ||
-                              item.description.toLowerCase().includes('tax'))
-                .reduce((sum, item) => sum + item.total, 0) : 0;
+              const hasLabor = category.items.some(isLaborItem);
+              const hasMaterial = category.items.some(isMaterialItem);
+              const laborSubtotal = hasLabor
+                ? category.items.filter(isLaborItem).reduce((sum, item) => sum + item.total, 0)
+                : 0;
+              const materialSubtotal = hasMaterial
+                ? category.items.filter(isMaterialItem).reduce((sum, item) => sum + item.total, 0)
+                : 0;
+              const isWaterTruck = category.name === 'Water Truck';
 
               return (
                 <div key={category.name} className="cost-breakdown-category">
@@ -227,23 +235,43 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
                             <thead>
                               <tr>
                                 <th>Description</th>
-                                <th>Quantity</th>
+                                {isWaterTruck && <th>Quantity</th>}
+                                {isWaterTruck && <th>Total Gallons to Fill</th>}
+                                {isWaterTruck && <th>Truck Total</th>}
+                                {!isWaterTruck && <th>Quantity</th>}
                                 <th>Unit Price</th>
                                 <th>Total</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {category.items.map((item, idx) => (
-                                <tr
-                                  key={idx}
-                                  className={item.description.includes('PAP Discount') ? 'pap-discount-row' : ''}
-                                >
-                                  <td>{item.description}</td>
-                                  <td>{item.description.toLowerCase().includes('tax') ? '' : item.quantity.toFixed(2)}</td>
-                                  <td>{item.description.toLowerCase().includes('tax') ? '' : formatCurrency(item.unitPrice)}</td>
-                                  <td>{formatCurrency(item.total)}</td>
-                                </tr>
-                              ))}
+                              {category.items.map((item, idx) => {
+                                const isTaxLine = item.description.toLowerCase().includes('tax');
+                                const gallons = item.details?.totalGallons;
+                                const truckGallons = item.details?.truckTotalGallons ??
+                                  (isWaterTruck ? item.quantity * 7000 : undefined);
+                                return (
+                                  <tr
+                                    key={idx}
+                                    className={item.description.includes('PAP Discount') ? 'pap-discount-row' : ''}
+                                  >
+                                    <td>{item.description}</td>
+                                    {isWaterTruck && (
+                                      <td>{isTaxLine ? '' : item.quantity.toFixed(2)}</td>
+                                    )}
+                                    {isWaterTruck && (
+                                      <td>{gallons !== undefined ? Number(gallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
+                                    )}
+                                    {isWaterTruck && (
+                                      <td>{truckGallons !== undefined ? Number(truckGallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
+                                    )}
+                                    {!isWaterTruck && (
+                                      <td>{isTaxLine ? '' : item.quantity.toFixed(2)}</td>
+                                    )}
+                                    <td>{isTaxLine ? '' : formatCurrency(item.unitPrice)}</td>
+                                    <td>{formatCurrency(item.total)}</td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </>

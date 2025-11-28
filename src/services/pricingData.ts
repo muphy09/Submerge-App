@@ -282,7 +282,7 @@ const pricingData = {
     ],
     lights: {
       nicheLightPrice: 601, // 24 Watt - Jandy Nicheless LED (Excel)
-      spaLightAddon: 0,
+      spaLightAddon: 528,
       additionalLightPrice: 601,
       catalog: [],
     },

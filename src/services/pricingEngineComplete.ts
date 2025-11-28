@@ -106,7 +106,14 @@ export class TileCopingDeckingCalculations {
     const copingLnft =
       tileCopingDecking.copingLength ||
       Math.ceil(poolSpecs.perimeter * 1.1 + spaPerimeter * 2.15);
-    const deckingArea = tileCopingDecking.deckingArea * (tileCopingDecking.deckingType === 'concrete' ? 1 : 1.05);
+    const isConcreteDeck = tileCopingDecking.deckingType === 'concrete';
+    const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 * 1.1 : 0; // 4' band * 1.1 waste
+    const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? Math.ceil(concreteBandAreaRaw / 10) * 10 : 0;
+    const concreteAddlQtyRaw = isConcreteDeck ? Math.max(0, tileCopingDecking.deckingArea - concreteBandAreaRaw) : 0;
+    const concreteAddlQty = isConcreteDeck && concreteAddlQtyRaw > 0 ? Math.ceil(concreteAddlQtyRaw / 10) * 10 : 0;
+    const deckingArea = isConcreteDeck
+      ? concreteBaseQty + concreteAddlQty
+      : tileCopingDecking.deckingArea * 1.05; // 5% waste for non-concrete decking
 
     // TILE LABOR
     if (!isFiberglass) {
@@ -210,7 +217,18 @@ export class TileCopingDeckingCalculations {
 
     // DECKING LABOR
     const deckingLaborRate = this.getDeckingLaborRate(tileCopingDecking.deckingType, prices);
-    if (deckingLaborRate > 0) {
+    if (isConcreteDeck) {
+      // Excel only charges concrete deck labor when concrete coping (cantilever) is selected, per perimeter
+      if (tileCopingDecking.copingType === 'concrete' && deckingLaborRate > 0) {
+        laborItems.push({
+          category: 'Decking Labor',
+          description: 'Concrete Decking - Cantilever',
+          unitPrice: deckingLaborRate,
+          quantity: poolSpecs.perimeter,
+          total: deckingLaborRate * poolSpecs.perimeter,
+        });
+      }
+    } else if (deckingLaborRate > 0) {
       laborItems.push({
         category: 'Decking Labor',
         description: `${tileCopingDecking.deckingType} Decking Labor`,
@@ -233,7 +251,26 @@ export class TileCopingDeckingCalculations {
 
     // DECKING MATERIAL
     const deckingMaterialRate = this.getDeckingMaterialRate(tileCopingDecking.deckingType, prices);
-    if (deckingMaterialRate > 0) {
+    if (isConcreteDeck && deckingMaterialRate > 0) {
+      if (concreteBaseQty > 0) {
+        materialItems.push({
+          category: 'Decking Material',
+          description: 'Concrete Decking - Base',
+          unitPrice: deckingMaterialRate,
+          quantity: concreteBaseQty,
+          total: deckingMaterialRate * concreteBaseQty,
+        });
+      }
+      if (concreteAddlQty > 0) {
+        materialItems.push({
+          category: 'Decking Material',
+          description: 'Concrete Decking - Addl',
+          unitPrice: deckingMaterialRate,
+          quantity: concreteAddlQty,
+          total: deckingMaterialRate * concreteAddlQty,
+        });
+      }
+    } else if (deckingMaterialRate > 0) {
       materialItems.push({
         category: 'Decking Material',
         description: `${tileCopingDecking.deckingType} Decking Material`,
@@ -998,6 +1035,10 @@ export class InteriorFinishCalculations {
         unitPrice: prices.waterTruck.base,
         quantity: loads,
         total: prices.waterTruck.base * loads,
+        details: {
+          totalGallons: gallons,
+          truckTotalGallons: loads * loadSizeGallons,
+        },
       });
     }
 
@@ -1068,13 +1109,20 @@ export class CleanupCalculations {
       });
     }
 
-    if (excavation?.totalRBBSqft) {
+    const rbbSqft =
+      excavation?.totalRBBSqft ??
+      (excavation?.rbbLevels || []).reduce((total, level) => {
+        const heightInFeet = (level.height ?? 0) / 12;
+        return total + (level.length ?? 0) * heightInFeet;
+      }, 0);
+
+    if (rbbSqft > 0) {
       items.push({
         category: 'Cleanup',
         description: 'RBB Cleanup',
         unitPrice: prices.rbbPerSqft,
-        quantity: excavation.totalRBBSqft,
-        total: prices.rbbPerSqft * excavation.totalRBBSqft,
+        quantity: rbbSqft,
+        total: prices.rbbPerSqft * rbbSqft,
       });
     }
 

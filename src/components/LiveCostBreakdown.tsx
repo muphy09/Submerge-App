@@ -95,7 +95,15 @@ function LiveCostBreakdown({ costBreakdown, onToggle }: Props) {
     checkCategory('Tile Material', prev.tileMaterial, costBreakdown.tileMaterial);
     checkCategory('Coping/Decking Labor', prev.copingDeckingLabor, costBreakdown.copingDeckingLabor);
     checkCategory('Coping/Decking Material', prev.copingDeckingMaterial, costBreakdown.copingDeckingMaterial);
-    checkCategory('Stone/Rockwork', prev.stoneRockworkLabor, costBreakdown.stoneRockworkLabor);
+    const prevStone = [
+      ...(prev.stoneRockworkLabor || []),
+      ...(prev.stoneRockworkMaterial || []),
+    ];
+    const currentStone = [
+      ...(costBreakdown.stoneRockworkLabor || []),
+      ...(costBreakdown.stoneRockworkMaterial || []),
+    ];
+    checkCategory('Stone/Rockwork', prevStone, currentStone);
     checkCategory('Drainage', prev.drainage, costBreakdown.drainage);
     checkCategory('Equipment Ordered', prev.equipmentOrdered, costBreakdown.equipmentOrdered);
     checkCategory('Equipment Set', prev.equipmentSet, costBreakdown.equipmentSet);
@@ -219,6 +227,11 @@ function LiveCostBreakdown({ costBreakdown, onToggle }: Props) {
     );
   };
 
+  const stoneRockworkItems = [
+    ...(costBreakdown.stoneRockworkLabor || []),
+    ...(costBreakdown.stoneRockworkMaterial || []),
+  ];
+
   return (
     <div className="live-cost-breakdown">
       <div
@@ -256,7 +269,7 @@ function LiveCostBreakdown({ costBreakdown, onToggle }: Props) {
         {renderLineItems(costBreakdown.tileMaterial, 'Tile Material')}
         {renderLineItems(costBreakdown.copingDeckingLabor, 'Coping/Decking Labor')}
         {renderLineItems(costBreakdown.copingDeckingMaterial, 'Coping/Decking Material')}
-        {renderLineItems(costBreakdown.stoneRockworkLabor, 'Stone/Rockwork')}
+        {renderLineItems(stoneRockworkItems, 'Stone/Rockwork')}
         {renderLineItems(costBreakdown.drainage, 'Drainage')}
         {renderLineItems(costBreakdown.equipmentOrdered, 'Equipment Ordered')}
         {renderLineItems(costBreakdown.equipmentSet, 'Equipment Set')}
