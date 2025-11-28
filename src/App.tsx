@@ -1,5 +1,5 @@
 import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import HomePage from './pages/HomePage';
 import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
@@ -9,9 +9,20 @@ import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
 import PricingDataModal from './components/PricingDataModal';
-import { initPricingDataStore } from './services/pricingDataStore';
+import { initPricingDataStore, setActiveFranchiseId } from './services/pricingDataStore';
 import { ToastProvider } from './components/Toast';
+import LoginModal from './components/LoginModal';
 import './App.css';
+
+type UserSession = {
+  userName: string;
+  franchiseId: string;
+  franchiseName?: string;
+  franchiseCode: string;
+};
+
+const SESSION_STORAGE_KEY = 'ppas-user-session';
+const DEFAULT_FRANCHISE_ID = 'default';
 
 function AppContent() {
   const navigate = useNavigate();
@@ -19,10 +30,33 @@ function AppContent() {
   const [updateStatus, setUpdateStatus] = useState<'downloading' | 'ready' | 'error' | null>(null);
   const [updateError, setUpdateError] = useState<string>('');
   const [showPricingData, setShowPricingData] = useState(false);
+  const [session, setSession] = useState<UserSession | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+
+  const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
+    try {
+      await initPricingDataStore(franchiseId);
+      await setActiveFranchiseId(franchiseId);
+    } catch (error) {
+      console.warn('Unable to load pricing for franchise', franchiseId, error);
+    }
+  }, []);
 
   useEffect(() => {
-    // Load any saved pricing overrides
-    initPricingDataStore();
+    // Restore session if present
+    try {
+      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as UserSession;
+        setSession(saved);
+        void loadPricingForFranchise(saved.franchiseId);
+      } else {
+        setShowLogin(true);
+      }
+    } catch (error) {
+      console.warn('Unable to restore saved session:', error);
+      setShowLogin(true);
+    }
 
     // Listen for proposals opened from file system
     if (window.electron && window.electron.onOpenProposal) {
@@ -52,9 +86,48 @@ function AppContent() {
     }
   }, [navigate]);
 
+  useEffect(() => {
+    if (session?.franchiseId) {
+      void loadPricingForFranchise(session.franchiseId);
+    }
+  }, [session?.franchiseId, loadPricingForFranchise]);
+
   const handleInstallUpdate = () => {
     if (window.electron) {
       window.electron.installUpdate();
+    }
+  };
+
+  const handleLogin = async ({ userName, franchiseCode }: { userName: string; franchiseCode: string }) => {
+    if (!window.electron?.enterFranchiseCode) {
+      throw new Error('Franchise code login is not available.');
+    }
+    const response = await window.electron.enterFranchiseCode({
+      franchiseCode,
+      displayName: userName,
+    });
+
+    const nextSession: UserSession = {
+      userName,
+      franchiseId: response.franchiseId,
+      franchiseName: response.franchiseName,
+      franchiseCode: response.franchiseCode,
+    };
+
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+    setSession(nextSession);
+    setShowLogin(false);
+    await loadPricingForFranchise(response.franchiseId);
+  };
+
+  const handleLogout = async () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    setSession(null);
+    setShowLogin(true);
+    try {
+      await loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
+    } catch (error) {
+      console.warn('Unable to reset pricing to default on logout:', error);
     }
   };
 
@@ -63,7 +136,9 @@ function AppContent() {
 
   return (
     <div className="app">
-      {showNavigation && <NavigationBar />}
+      {showNavigation && (
+        <NavigationBar userName={session?.userName || 'User'} onLogout={session ? handleLogout : undefined} />
+      )}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/proposals" element={<ProposalsListPage />} />
@@ -81,6 +156,9 @@ function AppContent() {
       />
       {showPricingData && (
         <PricingDataModal onClose={() => setShowPricingData(false)} />
+      )}
+      {showLogin && (
+        <LoginModal onSubmit={handleLogin} existingName={session?.userName} />
       )}
     </div>
   );

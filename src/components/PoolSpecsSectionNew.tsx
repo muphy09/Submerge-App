@@ -9,6 +9,12 @@ interface Props {
   onChange: (data: PoolSpecs) => void;
   customerInfo: CustomerInfo;
   onChangeCustomerInfo: (info: CustomerInfo) => void;
+  pricingModels?: { id: string; name: string; isDefault?: boolean }[];
+  selectedPricingModelId?: string | null;
+  selectedPricingModelName?: string | null;
+  defaultPricingModelId?: string | null;
+  onSelectPricingModel?: (id: string) => void;
+  showStaleIndicator?: boolean;
 }
 
 // Helper component for compact inputs with inline unit labels
@@ -51,7 +57,18 @@ const CompactInput = ({
   );
 };
 
-function PoolSpecsSectionNew({ data, onChange, customerInfo, onChangeCustomerInfo }: Props) {
+function PoolSpecsSectionNew({
+  data,
+  onChange,
+  customerInfo,
+  onChangeCustomerInfo,
+  pricingModels = [],
+  selectedPricingModelId,
+  selectedPricingModelName,
+  defaultPricingModelId,
+  onSelectPricingModel,
+  showStaleIndicator,
+}: Props) {
   const dropdownStyle = { width: '100%', height: '38px', padding: '6px 10px', lineHeight: '20px', boxSizing: 'border-box' as const };
 
   // Auto-calculate gallons and spa perimeter when relevant fields change
@@ -105,6 +122,36 @@ function PoolSpecsSectionNew({ data, onChange, customerInfo, onChangeCustomerInf
 
   return (
     <div className="section-form">
+      <div className="spec-block pricing-model-bar">
+        <div className="pricing-model-bar__left">
+          <h2 className="spec-block-title">Pool Specifications</h2>
+        </div>
+        <div className="pricing-model-bar__right">
+          <label className="spec-label">Pricing Model</label>
+          <div className="pricing-model-select">
+            <select
+              value={selectedPricingModelId || ''}
+              onChange={(e) => onSelectPricingModel && onSelectPricingModel(e.target.value)}
+              className="compact-input"
+            >
+              {pricingModels.length === 0 && <option value="">No models</option>}
+              {pricingModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name} {model.isDefault ? '(Default)' : ''}
+                </option>
+              ))}
+            </select>
+            <div className="pricing-model-pill">
+              <span className="pill-name">
+                {selectedPricingModelName || 'Unnamed model'}
+                {showStaleIndicator ? '*' : ''}
+              </span>
+              {selectedPricingModelId === defaultPricingModelId && <span className="pill-default">Default</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ==================== CUSTOMER INFORMATION ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Customer Information</h2>

@@ -22,6 +22,11 @@ import ppasLogo from '../../PPAS Logo.png';
 import customerProposalIcon from '../../CustomerProposalIcon.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import {
+  getActivePricingModelMeta,
+  initPricingDataStore,
+  setActivePricingModel,
+} from '../services/pricingDataStore';
 
 const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
   if (waterFeatures && Array.isArray((waterFeatures as any).selections)) {
@@ -166,6 +171,59 @@ function ProposalForm() {
       return acc;
     }, {} as Record<SectionKey, boolean>);
   const [completedByAdvance, setCompletedByAdvance] = useState<Record<SectionKey, boolean>>(createCompletionMap());
+  const [pricingModels, setPricingModels] = useState<{ id: string; name: string; isDefault?: boolean }[]>([]);
+  const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
+  const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
+  const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
+  const SESSION_STORAGE_KEY = 'ppas-user-session';
+  const DEFAULT_FRANCHISE_ID = 'default';
+
+  const getSessionFranchiseId = () => {
+    try {
+      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return parsed?.franchiseId || DEFAULT_FRANCHISE_ID;
+      }
+    } catch (error) {
+      console.warn('Unable to read session franchise id', error);
+    }
+    return DEFAULT_FRANCHISE_ID;
+  };
+
+  const applyPricingModelSelection = async (modelId: string | null, modelName?: string | null, isDefault?: boolean) => {
+    if (modelId) {
+      await setActivePricingModel(modelId);
+    }
+    setSelectedPricingModelId(modelId);
+    setSelectedPricingModelName(modelName || null);
+    setProposal((prev) => ({
+      ...prev,
+      pricingModelId: modelId || undefined,
+      pricingModelName: modelName || undefined,
+      pricingModelIsDefault: isDefault ?? undefined,
+      franchiseId: prev.franchiseId || getSessionFranchiseId(),
+    }));
+  };
+
+  const loadPricingModels = async (franchiseId: string, desiredModelId?: string | null) => {
+    if (!window.electron?.listPricingModels) return;
+    try {
+      const rows = await window.electron.listPricingModels(franchiseId);
+      setPricingModels(rows || []);
+      const defaultModel = rows?.find((m: any) => m.isDefault) || rows?.[0];
+      setDefaultPricingModelId(defaultModel ? defaultModel.id : null);
+
+      const targetModelId = desiredModelId || selectedPricingModelId || defaultModel?.id || null;
+      const targetModel = rows?.find((m: any) => m.id === targetModelId) || defaultModel;
+
+      if (targetModel) {
+        await applyPricingModelSelection(targetModel.id, targetModel.name, Boolean(targetModel.isDefault));
+      }
+    } catch (error) {
+      console.warn('Unable to load pricing models for franchise', franchiseId, error);
+    }
+  };
 
   const computeHasEquipmentData = (equipment?: Proposal['equipment']) => {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
@@ -202,7 +260,18 @@ function ProposalForm() {
     }
   }, [currentSection]);
 
-  const getInitialProposal = (): Partial<Proposal> => getDefaultProposal();
+  const getInitialProposal = (): Partial<Proposal> => {
+    const base = getDefaultProposal();
+    const franchiseId = getSessionFranchiseId();
+    const modelMeta = getActivePricingModelMeta();
+    return {
+      ...base,
+      franchiseId,
+      pricingModelId: modelMeta.pricingModelId || undefined,
+      pricingModelName: modelMeta.pricingModelName || undefined,
+      pricingModelIsDefault: modelMeta.isDefault,
+    };
+  };
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(getInitialProposal());
 
@@ -222,12 +291,21 @@ function ProposalForm() {
     } else {
       const freshProposal = getInitialProposal();
       setProposal(freshProposal);
+      setSelectedPricingModelId(freshProposal.pricingModelId || null);
+      setSelectedPricingModelName(freshProposal.pricingModelName || null);
       setCurrentSection(0);
       setIsLoading(false);
       setCompletedByAdvance(createCompletionMap());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalNumber]);
+
+  useEffect(() => {
+    const franchiseId = proposal.franchiseId || getSessionFranchiseId();
+    const desiredModelId = proposal.pricingModelId || null;
+    void initPricingDataStore(franchiseId, desiredModelId || undefined);
+    void loadPricingModels(franchiseId, desiredModelId);
+  }, [proposal.franchiseId, proposal.pricingModelId]);
 
   const loadProposal = async (num: string, requestId: number) => {
     try {
@@ -239,8 +317,13 @@ function ProposalForm() {
         // Normalize water features to the new catalog-driven shape
         freshData.waterFeatures = normalizeWaterFeatures(freshData.waterFeatures);
 
+        // Ensure franchise + pricing model metadata are present
+        freshData.franchiseId = freshData.franchiseId || getSessionFranchiseId();
+
         if (loadRequestRef.current === requestId) {
           setProposal(freshData);
+          setSelectedPricingModelId(freshData.pricingModelId || null);
+          setSelectedPricingModelName(freshData.pricingModelName || null);
           setCompletedByAdvance(createCompletionMap());
           // Load PAP discounts if they exist
           if (freshData.papDiscounts) {
@@ -305,6 +388,10 @@ function ProposalForm() {
 
   const handleSave = async (submit: boolean = false) => {
     try {
+      if (!proposal.pricingModelId && defaultPricingModelId) {
+        const def = pricingModels.find((m) => m.id === defaultPricingModelId);
+        await applyPricingModelSelection(defaultPricingModelId, def?.name, def?.isDefault);
+      }
       // Validate if submitting
       if (submit) {
         const errors = validateProposal(proposal);
@@ -369,6 +456,19 @@ function ProposalForm() {
               customerInfo={proposal.customerInfo!}
               onChangeCustomerInfo={(info) => updateProposal('customerInfo', info)}
               onChange={(data) => updateProposal('poolSpecs', data)}
+              pricingModels={pricingModels}
+              selectedPricingModelId={selectedPricingModelId}
+              selectedPricingModelName={selectedPricingModelName}
+              defaultPricingModelId={defaultPricingModelId}
+              onSelectPricingModel={async (id) => {
+                const model = pricingModels.find((m) => m.id === id);
+                await applyPricingModelSelection(id, model?.name, model?.isDefault);
+              }}
+              showStaleIndicator={
+                Boolean(selectedPricingModelId) &&
+                Boolean(defaultPricingModelId) &&
+                selectedPricingModelId !== defaultPricingModelId
+              }
             />
           );
         case 'excavation':

@@ -27,6 +27,89 @@ declare global {
       getFinishRates: () => Promise<any[]>;
       getDrainageRates: () => Promise<any[]>;
 
+      // Franchise + pricing
+      listFranchises: () => Promise<
+        { id: string; name: string; isActive: number | boolean; createdAt?: string; updatedAt?: string }[]
+      >;
+      getActiveFranchise: () => Promise<{ id: string; name: string; isActive: boolean } | null>;
+      setActiveFranchise: (franchiseId: string) => Promise<{ id: string; name: string; isActive: boolean }>;
+      upsertFranchise: (franchise: { id: string; name?: string; franchiseCode?: string; code?: string; isActive?: boolean }) => Promise<{
+        id: string;
+        name: string;
+        isActive: boolean;
+      }>;
+      enterFranchiseCode: (payload: {
+        franchiseCode: string;
+        displayName?: string;
+      }) => Promise<{
+        userName: string;
+        franchiseId: string;
+        franchiseName: string;
+        franchiseCode: string;
+        isActive: boolean;
+      }>;
+      listPricingModels: (
+        franchiseId: string
+      ) => Promise<{ id: string; name: string; version: string; isDefault: boolean; createdAt?: string; updatedAt?: string }[]>;
+      loadFranchisePricing: (
+        franchiseId?: string
+      ) => Promise<{
+        franchiseId: string;
+        pricingModelId?: string;
+        pricingModelName?: string;
+        isDefault?: boolean;
+        version: string;
+        pricing: any;
+        updatedAt?: string;
+        updatedBy?: string;
+      } | null>;
+      loadPricingModel: (payload: {
+        franchiseId?: string;
+        pricingModelId?: string;
+      }) => Promise<{
+        franchiseId: string;
+        pricingModelId?: string;
+        pricingModelName?: string;
+        isDefault?: boolean;
+        version: string;
+        pricing: any;
+        updatedAt?: string;
+        updatedBy?: string;
+      } | null>;
+      savePricingModel: (payload: {
+        franchiseId: string;
+        franchiseName?: string;
+        franchiseCode?: string;
+        pricing: any;
+        pricingModelId?: string;
+        name: string;
+        version?: string;
+        updatedBy?: string | null;
+        setDefault?: boolean;
+        createNew?: boolean;
+      }) => Promise<{ franchiseId: string; pricingModelId: string; updatedAt: string; isDefault?: boolean }>;
+      saveFranchisePricing: (payload: {
+        franchiseId: string;
+        franchiseName?: string;
+        franchiseCode?: string;
+        pricing: any;
+        pricingModelId?: string;
+        name: string;
+        version?: string;
+        updatedBy?: string | null;
+        setDefault?: boolean;
+        createNew?: boolean;
+      }) => Promise<{ franchiseId: string; pricingModelId: string; updatedAt: string; isDefault?: boolean }>;
+      setDefaultPricingModel: (payload: { franchiseId?: string; pricingModelId: string }) => Promise<{
+        franchiseId: string;
+        pricingModelId: string;
+        updatedAt: string;
+      }>;
+      deletePricingModel: (payload: { franchiseId?: string; pricingModelId: string }) => Promise<{
+        franchiseId: string;
+        pricingModelId: string;
+      }>;
+
       // Update operations
       checkForUpdates: () => Promise<any>;
       installUpdate: () => Promise<void>;

@@ -30,6 +30,20 @@ contextBridge.exposeInMainWorld('electron', {
   getFinishRates: () => ipcRenderer.invoke('get-finish-rates'),
   getDrainageRates: () => ipcRenderer.invoke('get-drainage-rates'),
 
+  // Franchise + pricing
+  listFranchises: () => ipcRenderer.invoke('list-franchises'),
+  upsertFranchise: (franchise) => ipcRenderer.invoke('upsert-franchise', franchise),
+  getActiveFranchise: () => ipcRenderer.invoke('get-active-franchise'),
+  setActiveFranchise: (franchiseId) => ipcRenderer.invoke('set-active-franchise', franchiseId),
+  loadFranchisePricing: (franchiseId) => ipcRenderer.invoke('load-franchise-pricing', franchiseId),
+  loadPricingModel: (payload) => ipcRenderer.invoke('load-pricing-model', payload),
+  listPricingModels: (franchiseId) => ipcRenderer.invoke('list-pricing-models', franchiseId),
+  savePricingModel: (payload) => ipcRenderer.invoke('save-pricing-model', payload),
+  setDefaultPricingModel: (payload) => ipcRenderer.invoke('set-default-pricing-model', payload),
+  deletePricingModel: (payload) => ipcRenderer.invoke('delete-pricing-model', payload),
+  saveFranchisePricing: (payload) => ipcRenderer.invoke('save-pricing-model', payload), // backward compatibility alias
+  enterFranchiseCode: (payload) => ipcRenderer.invoke('enter-franchise-code', payload),
+
   // Update operations
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),

@@ -3,6 +3,11 @@ import {
   addPricingListItem,
   getPricingDataSnapshot,
   initPricingDataStore,
+  getActiveFranchiseId,
+  getActivePricingModelMeta,
+  clearActivePricingModelMeta,
+  savePricingModelSnapshot,
+  setActivePricingModel,
   removePricingListItem,
   resetPricingData,
   subscribeToPricingData,
@@ -66,12 +71,121 @@ interface PricingDataModalProps {
 const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
   const [data, setData] = useState(getPricingDataSnapshot());
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [pricingModels, setPricingModels] = useState<any[]>([]);
+  const [modelName, setModelName] = useState('');
+  const [savingModel, setSavingModel] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [setDefaultModel, setSetDefaultModel] = useState(true);
+  const [savingAsNew, setSavingAsNew] = useState(false);
 
   useEffect(() => {
     initPricingDataStore();
     const unsubscribe = subscribeToPricingData(setData);
+    void loadModels();
     return unsubscribe;
   }, []);
+
+  const loadModels = async () => {
+    const franchiseId = getActiveFranchiseId();
+    if (!window.electron?.listPricingModels) return;
+    try {
+      const rows = await window.electron.listPricingModels(franchiseId);
+      setPricingModels(rows || []);
+      const activeMeta = getActivePricingModelMeta();
+      if (activeMeta.pricingModelName && !modelName) {
+        setModelName(activeMeta.pricingModelName);
+      }
+    } catch (error) {
+      console.warn('Unable to load pricing models', error);
+    }
+  };
+
+  const handleLoadModel = async (modelId: string) => {
+    await setActivePricingModel(modelId);
+    const meta = getActivePricingModelMeta();
+    setModelName(meta.pricingModelName || '');
+    setPricingModels((prev) =>
+      prev.map((m) => ({ ...m, isDefault: m.id === modelId ? m.isDefault : m.isDefault }))
+    );
+  };
+
+  const handleSaveModel = async () => {
+    if (!modelName.trim()) {
+      setSaveError('Please provide a model name.');
+      return;
+    }
+    setSaveError(null);
+    setSavingModel(true);
+    try {
+      await savePricingModelSnapshot({
+        name: modelName.trim(),
+        setDefault: setDefaultModel,
+        updatedBy: 'admin',
+        createNew: savingAsNew,
+      });
+      setSavingAsNew(false);
+      await loadModels();
+    } catch (error: any) {
+      setSaveError(error?.message || 'Unable to save pricing model.');
+    } finally {
+      setSavingModel(false);
+    }
+  };
+
+  const handleCreateNewModel = async () => {
+    try {
+      const defaultModel = pricingModels.find((m) => m.isDefault) || pricingModels[0];
+      if (defaultModel) {
+        await setActivePricingModel(defaultModel.id);
+      } else {
+        await initPricingDataStore(getActiveFranchiseId());
+      }
+      clearActivePricingModelMeta();
+      setModelName('');
+      setSavingAsNew(true);
+      setSetDefaultModel(false);
+    } catch (error) {
+      console.warn('Unable to start new pricing model', error);
+    }
+  };
+
+  const handleDeleteModel = async (modelId: string, isDefault: boolean) => {
+    if (isDefault) {
+      setSaveError('Cannot delete the default pricing model. Set another model as default first.');
+      return;
+    }
+    if (!window.electron?.deletePricingModel) return;
+    try {
+      await window.electron.deletePricingModel({
+        franchiseId: getActiveFranchiseId(),
+        pricingModelId: modelId,
+      });
+      if (modelId === getActivePricingModelMeta().pricingModelId) {
+        const def = pricingModels.find((m) => m.isDefault && m.id !== modelId) || pricingModels.find((m) => m.id !== modelId);
+        if (def) {
+          await handleLoadModel(def.id);
+        }
+      }
+      await loadModels();
+    } catch (error: any) {
+      setSaveError(error?.message || 'Unable to delete pricing model.');
+    }
+  };
+
+  const handleSetDefault = async (modelId: string) => {
+    if (!window.electron?.setDefaultPricingModel) return;
+    try {
+      await window.electron.setDefaultPricingModel({
+        franchiseId: getActiveFranchiseId(),
+        pricingModelId: modelId,
+      });
+      await loadModels();
+      const meta = getActivePricingModelMeta();
+      setModelName(meta.pricingModelName || modelName);
+    } catch (error) {
+      console.warn('Unable to set default pricing model', error);
+    }
+  };
 
   const toggleSection = (title: string) => {
     setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
@@ -781,6 +895,73 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
             <button className="pricing-modal__close" onClick={onClose} aria-label="Close pricing data">
               x
             </button>
+          </div>
+        </div>
+
+        <div className="pricing-model-controls">
+          <div className="pricing-model-controls__row">
+            <div className="pricing-model-controls__left">
+              <label className="pricing-field">
+                <div className="pricing-field__label">Pricing Model Name</div>
+                <input
+                  type="text"
+                  className="pricing-field__input"
+                  value={modelName}
+                  placeholder="e.g., 4th of July Pricing"
+                  onChange={(e) => setModelName(e.target.value)}
+                />
+              </label>
+            </div>
+          <div className="pricing-model-controls__right">
+            <label className="pricing-checkbox">
+              <input
+                type="checkbox"
+                checked={setDefaultModel}
+                  onChange={(e) => setSetDefaultModel(e.target.checked)}
+                />
+                <span>Set as default after saving</span>
+            </label>
+            <button className="pricing-chip-button ghost" type="button" onClick={handleCreateNewModel}>
+              Create New Pricing Model
+            </button>
+            <button className="pricing-chip-button primary" onClick={handleSaveModel} disabled={savingModel}>
+              {savingModel ? 'Saving…' : 'Save Pricing Model'}
+            </button>
+          </div>
+        </div>
+          {saveError && <div className="pricing-model-error">{saveError}</div>}
+          <div className="pricing-model-list">
+            <div className="pricing-model-list__header">Existing Pricing Models</div>
+            <div className="pricing-model-list__items">
+              {pricingModels.length === 0 && <div className="pricing-empty">No models yet.</div>}
+              {pricingModels.map((model) => (
+                <div key={model.id} className={`pricing-model-chip ${model.isDefault ? 'default' : ''}`}>
+                  <div className="pricing-model-chip__main">
+                    <div className="pricing-model-chip__name">
+                      {model.name} {model.isDefault ? '(Default)' : ''}
+                    </div>
+                    <div className="pricing-model-chip__meta">
+                      Created {new Date(model.createdAt || model.updatedAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div className="pricing-model-chip__actions">
+                    <button className="pricing-chip-button ghost" onClick={() => handleLoadModel(model.id)}>
+                      Load
+                    </button>
+                    {!model.isDefault && (
+                      <button className="pricing-chip-button ghost" onClick={() => handleSetDefault(model.id)}>
+                        Make Default
+                      </button>
+                    )}
+                    {!model.isDefault && (
+                      <button className="pricing-chip-button danger" onClick={() => handleDeleteModel(model.id, model.isDefault)}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 

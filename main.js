@@ -36,6 +36,9 @@ const UPDATE_FEED = {
   owner: 'muphy09',
   repo: 'Premier-Pools',
 };
+const DEFAULT_FRANCHISE_ID = 'default';
+const DEFAULT_FRANCHISE_CODE = 'DEFAULT-CODE';
+const DEFAULT_PRICING_VERSION = 'v1';
 
 function getAutoUpdater() {
   if (isDev) {
@@ -96,10 +99,30 @@ function initializeDatabase() {
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
 
-  // Read and execute schema
   const schemaPath = path.join(appPath, 'src/database/schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf-8');
+
+  // For existing databases, add franchise_code before running schema (indexes depend on it).
+  if (!isNewDatabase) {
+    try {
+      const columns = db.prepare(`PRAGMA table_info('franchises')`).all() || [];
+      const hasFranchiseCode = columns.some((c) => c.name === 'franchise_code');
+      if (!hasFranchiseCode) {
+        db.exec(`ALTER TABLE franchises ADD COLUMN franchise_code TEXT NOT NULL DEFAULT '${DEFAULT_FRANCHISE_CODE}';`);
+        db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_franchises_code ON franchises(franchise_code);`);
+        console.log('Added franchise_code column to franchises table (migration).');
+      }
+      backfillFranchiseCodes();
+    } catch (error) {
+      console.warn('Failed to verify/alter franchises table before schema exec:', error);
+    }
+  }
+
+  // Read and execute schema (creates tables/indexes if missing)
   db.exec(schema);
+
+  // Migrate any legacy single-pricing rows into pricing models
+  migrateFranchisePricingToModels();
 
   // Load sample data if this is a new database
   if (isNewDatabase) {
@@ -113,7 +136,194 @@ function initializeDatabase() {
     }
   }
 
+  ensureDefaultFranchise();
+  ensureStarterFranchises();
   console.log('Database initialized successfully');
+}
+
+function ensureFranchiseExists(franchiseId, name = franchiseId, franchiseCode = DEFAULT_FRANCHISE_CODE) {
+  if (!db) return;
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT OR IGNORE INTO franchises (id, name, franchise_code, is_active, created_at, updated_at)
+     VALUES (@id, @name, @code, 0, @now, @now)`
+  ).run({ id: franchiseId, name, code: franchiseCode, now });
+}
+
+function backfillFranchiseCodes() {
+  if (!db) return;
+  try {
+    const rows = db
+      .prepare(`SELECT id, COALESCE(franchise_code, '') AS franchise_code FROM franchises WHERE franchise_code IS NULL OR franchise_code = ''`)
+      .all();
+    const now = new Date().toISOString();
+    const update = db.prepare(
+      `UPDATE franchises SET franchise_code = @code, updated_at = @now WHERE id = @id`
+    );
+    rows.forEach((row) => {
+      const generatedCode = `${row.id || DEFAULT_FRANCHISE_ID}-CODE`;
+      update.run({ id: row.id, code: generatedCode, now });
+    });
+  } catch (error) {
+    console.warn('Failed to backfill franchise codes:', error);
+  }
+}
+
+function ensureDefaultFranchise() {
+  if (!db) return null;
+  const now = new Date().toISOString();
+  const total = db.prepare('SELECT COUNT(*) AS count FROM franchises').get();
+  if (!total || total.count === 0) {
+    db.prepare(
+      `INSERT INTO franchises (id, name, franchise_code, is_active, created_at, updated_at)
+       VALUES (@id, @name, @code, 1, @now, @now)`
+    ).run({ id: DEFAULT_FRANCHISE_ID, name: 'Default Franchise', code: DEFAULT_FRANCHISE_CODE, now });
+  }
+  backfillFranchiseCodes();
+
+  const active = db
+    .prepare(
+      `SELECT id, name, franchise_code AS franchiseCode, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt
+       FROM franchises WHERE is_active = 1 LIMIT 1`
+    )
+    .get();
+
+  if (active) {
+    return active;
+  }
+
+  const first = db.prepare('SELECT id FROM franchises LIMIT 1').get();
+  if (first) {
+    db.prepare(
+      `UPDATE franchises
+       SET is_active = CASE WHEN id = @id THEN 1 ELSE 0 END,
+           updated_at = @now`
+    ).run({ id: first.id, now });
+  }
+
+  return db
+    .prepare(
+      `SELECT id, name, franchise_code AS franchiseCode, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt
+       FROM franchises WHERE is_active = 1 LIMIT 1`
+    )
+    .get();
+}
+
+function migrateFranchisePricingToModels() {
+  if (!db) return;
+  try {
+    const existingModels = db.prepare('SELECT COUNT(*) AS count FROM franchise_pricing_models').get();
+    if (existingModels && existingModels.count > 0) {
+      return;
+    }
+
+    const legacyRows =
+      db
+        .prepare(
+          `SELECT franchise_id, version, pricing_json, updated_at, updated_by
+           FROM franchise_pricing`
+        )
+        .all() || [];
+
+    const insertModel = db.prepare(
+      `INSERT INTO franchise_pricing_models
+       (id, franchise_id, name, version, pricing_json, is_default, created_at, updated_at, updated_by)
+       VALUES (@id, @franchise_id, @name, @version, @pricing_json, @is_default, @created_at, @updated_at, @updated_by)`
+    );
+
+    const now = new Date().toISOString();
+    const tx = db.transaction(() => {
+      legacyRows.forEach((row, idx) => {
+        const id = `${row.franchise_id || DEFAULT_FRANCHISE_ID}-legacy-${idx || 0}`;
+        insertModel.run({
+          id,
+          franchise_id: row.franchise_id || DEFAULT_FRANCHISE_ID,
+          name: 'Legacy Default',
+          version: row.version || DEFAULT_PRICING_VERSION,
+          pricing_json: row.pricing_json,
+          is_default: 1,
+          created_at: row.updated_at || now,
+          updated_at: row.updated_at || now,
+          updated_by: row.updated_by || null,
+        });
+      });
+    });
+    tx();
+    console.log('Migrated legacy franchise_pricing rows into franchise_pricing_models');
+  } catch (error) {
+    console.warn('Failed to migrate legacy franchise pricing:', error);
+  }
+}
+
+function ensureStarterFranchises() {
+  ensureFranchiseExists('franchise-1111', 'Franchise 1111', '1111');
+  ensureFranchiseExists('franchise-2222', 'Franchise 2222', '2222');
+}
+
+function getActiveFranchise() {
+  if (!db) throw new Error('Database not initialized');
+  const active = db
+    .prepare(
+      `SELECT id, name, franchise_code AS franchiseCode, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt
+       FROM franchises WHERE is_active = 1 LIMIT 1`
+    )
+    .get();
+  return active || ensureDefaultFranchise();
+}
+
+function setActiveFranchise(franchiseId) {
+  if (!db) throw new Error('Database not initialized');
+  const exists = db.prepare('SELECT COUNT(*) AS count FROM franchises WHERE id = ?').get(franchiseId);
+  if (!exists || exists.count === 0) {
+    throw new Error(`Franchise not found: ${franchiseId}`);
+  }
+
+  const now = new Date().toISOString();
+  const tx = db.transaction((id) => {
+    db.prepare('UPDATE franchises SET is_active = 0').run();
+    db.prepare('UPDATE franchises SET is_active = 1, updated_at = ? WHERE id = ?').run(now, id);
+  });
+
+  tx(franchiseId);
+  return getActiveFranchise();
+}
+
+function getFranchiseByCode(code) {
+  if (!db) throw new Error('Database not initialized');
+  return db
+    .prepare(
+      `SELECT id, name, franchise_code AS franchiseCode, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt
+       FROM franchises WHERE franchise_code = ?`
+    )
+    .get(code);
+}
+
+function getDefaultPricingModel(franchiseId) {
+  if (!db) throw new Error('Database not initialized');
+  return (
+    db
+      .prepare(
+        `SELECT id, name, version, pricing_json AS pricingJson, is_default AS isDefault, updated_at AS updatedAt, updated_by AS updatedBy
+         FROM franchise_pricing_models
+         WHERE franchise_id = ?
+         ORDER BY is_default DESC, updated_at DESC
+         LIMIT 1`
+      )
+      .get(franchiseId) || null
+  );
+}
+
+function getPricingModelById(franchiseId, modelId) {
+  if (!db) throw new Error('Database not initialized');
+  return (
+    db
+      .prepare(
+        `SELECT id, name, version, pricing_json AS pricingJson, is_default AS isDefault, updated_at AS updatedAt, updated_by AS updatedBy
+         FROM franchise_pricing_models
+         WHERE franchise_id = ? AND id = ?`
+      )
+      .get(franchiseId, modelId) || null
+  );
 }
 
 // Auto-updater configuration
@@ -262,7 +472,14 @@ app.whenReady().then(() => {
   // Check for file argument
   checkForFileArgument();
 
-  initializeDatabase();
+  try {
+    initializeDatabase();
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    dialog.showErrorBox('Database error', `Failed to initialize database:\n\n${error.message}`);
+    app.quit();
+    return;
+  }
   initializeProposalsDirectory();
   createWindow();
   setupAutoUpdater();
@@ -538,6 +755,240 @@ ipcMain.handle('get-finish-rates', async () => {
 ipcMain.handle('get-drainage-rates', async () => {
   if (!db) throw new Error('Database not initialized');
   return db.prepare('SELECT * FROM drainage_rates').all();
+});
+
+// Franchise + pricing handlers
+ipcMain.handle('list-franchises', async () => {
+  if (!db) throw new Error('Database not initialized');
+  ensureDefaultFranchise();
+  return db
+    .prepare(
+      `SELECT id, name, franchise_code AS franchiseCode, is_active AS isActive, created_at AS createdAt, updated_at AS updatedAt
+       FROM franchises
+       ORDER BY name`
+    )
+    .all();
+});
+
+ipcMain.handle('get-active-franchise', async () => {
+  return getActiveFranchise();
+});
+
+ipcMain.handle('set-active-franchise', async (_, franchiseId) => {
+  const targetId = franchiseId || DEFAULT_FRANCHISE_ID;
+  return setActiveFranchise(targetId);
+});
+
+ipcMain.handle('upsert-franchise', async (_, payload) => {
+  if (!db) throw new Error('Database not initialized');
+  const franchiseId = payload?.id || DEFAULT_FRANCHISE_ID;
+  const name = payload?.name || franchiseId;
+  const code = payload?.franchiseCode || payload?.code || franchiseId;
+  const isActive = payload?.isActive ? 1 : 0;
+  const now = new Date().toISOString();
+
+  const tx = db.transaction((id, displayName, activeFlag, franchiseCode) => {
+    db.prepare(
+      `INSERT INTO franchises (id, name, franchise_code, is_active, created_at, updated_at)
+       VALUES (@id, @name, @code, @is_active, @now, @now)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         franchise_code = excluded.franchise_code,
+         updated_at = excluded.updated_at,
+         is_active = CASE WHEN excluded.is_active = 1 THEN 1 ELSE franchises.is_active END`
+    ).run({ id, name: displayName, code: franchiseCode, is_active: activeFlag, now });
+
+    if (activeFlag) {
+      db.prepare('UPDATE franchises SET is_active = 0 WHERE id <> ?').run(id);
+      db.prepare('UPDATE franchises SET is_active = 1, updated_at = ? WHERE id = ?').run(now, id);
+    }
+  });
+
+  tx(franchiseId, name, isActive, code);
+  return getActiveFranchise();
+});
+
+ipcMain.handle('enter-franchise-code', async (_, payload) => {
+  if (!db) throw new Error('Database not initialized');
+  const code = payload?.franchiseCode || payload?.code;
+  const displayName = payload?.displayName || payload?.userName || 'User';
+  if (!code) {
+    throw new Error('Franchise code is required');
+  }
+
+  const franchise = getFranchiseByCode(code);
+  if (!franchise) {
+    throw new Error('Invalid franchise code');
+  }
+
+  setActiveFranchise(franchise.id);
+  return {
+    userName: displayName,
+    franchiseId: franchise.id,
+    franchiseName: franchise.name,
+    franchiseCode: franchise.franchiseCode,
+    isActive: true,
+  };
+});
+
+ipcMain.handle('list-pricing-models', async (_, franchiseId) => {
+  if (!db) throw new Error('Database not initialized');
+  const targetId = franchiseId || DEFAULT_FRANCHISE_ID;
+  return (
+    db
+      .prepare(
+        `SELECT id, name, version, is_default AS isDefault, created_at AS createdAt, updated_at AS updatedAt
+         FROM franchise_pricing_models
+         WHERE franchise_id = ?
+         ORDER BY is_default DESC, updated_at DESC`
+      )
+      .all(targetId) || []
+  );
+});
+
+ipcMain.handle('load-franchise-pricing', async (_, franchiseId) => {
+  if (!db) throw new Error('Database not initialized');
+  const targetId = franchiseId || DEFAULT_FRANCHISE_ID;
+  ensureFranchiseExists(targetId);
+
+  const model = getDefaultPricingModel(targetId);
+  if (!model) {
+    return null;
+  }
+
+  let pricing = null;
+  try {
+    pricing = model.pricingJson ? JSON.parse(model.pricingJson) : null;
+  } catch (error) {
+    console.warn('Failed to parse pricing JSON for franchise', targetId, error);
+  }
+
+  return {
+    franchiseId: targetId,
+    version: model.version,
+    pricing,
+    updatedAt: model.updatedAt,
+    updatedBy: model.updatedBy,
+    pricingModelId: model.id,
+    pricingModelName: model.name,
+    isDefault: Boolean(model.isDefault),
+  };
+});
+
+ipcMain.handle('load-pricing-model', async (_, payload) => {
+  if (!db) throw new Error('Database not initialized');
+  const franchiseId = payload?.franchiseId || DEFAULT_FRANCHISE_ID;
+  const modelId = payload?.pricingModelId || payload?.modelId;
+  ensureFranchiseExists(franchiseId);
+
+  const model = modelId ? getPricingModelById(franchiseId, modelId) : getDefaultPricingModel(franchiseId);
+  if (!model) return null;
+
+  let pricing = null;
+  try {
+    pricing = model.pricingJson ? JSON.parse(model.pricingJson) : null;
+  } catch (error) {
+    console.warn('Failed to parse pricing JSON for franchise', franchiseId, error);
+  }
+
+  return {
+    franchiseId,
+    pricingModelId: model.id,
+    pricingModelName: model.name,
+    isDefault: Boolean(model.isDefault),
+    version: model.version,
+    pricing,
+    updatedAt: model.updatedAt,
+    updatedBy: model.updatedBy,
+  };
+});
+
+ipcMain.handle('save-pricing-model', async (_, payload) => {
+  if (!db) throw new Error('Database not initialized');
+  const franchiseId = payload?.franchiseId || DEFAULT_FRANCHISE_ID;
+  const name = payload?.name || 'New Pricing Model';
+  const pricing = payload?.pricing ?? {};
+  const version = payload?.version || DEFAULT_PRICING_VERSION;
+  const updatedBy = payload?.updatedBy || null;
+  const setDefault = Boolean(payload?.setDefault);
+  ensureFranchiseExists(franchiseId, payload?.franchiseName, payload?.franchiseCode || DEFAULT_FRANCHISE_CODE);
+
+  const now = new Date().toISOString();
+  const createNew = Boolean(payload?.createNew);
+  const id = createNew ? `${franchiseId}-${Date.now()}` : payload?.pricingModelId || payload?.modelId || `${franchiseId}-${Date.now()}`;
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO franchise_pricing_models
+       (id, franchise_id, name, version, pricing_json, is_default, created_at, updated_at, updated_by)
+       VALUES (@id, @franchise_id, @name, @version, @pricing_json, @is_default, @created_at, @updated_at, @updated_by)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         version = excluded.version,
+         pricing_json = excluded.pricing_json,
+         updated_at = excluded.updated_at,
+         updated_by = excluded.updated_by,
+         is_default = CASE WHEN excluded.is_default = 1 THEN 1 ELSE franchise_pricing_models.is_default END`
+    ).run({
+      id,
+      franchise_id: franchiseId,
+      name,
+      version,
+      pricing_json: JSON.stringify(pricing),
+      is_default: setDefault ? 1 : 0,
+      created_at: now,
+      updated_at: now,
+      updated_by: updatedBy,
+    });
+
+    if (setDefault) {
+      db.prepare('UPDATE franchise_pricing_models SET is_default = 0 WHERE franchise_id = ? AND id <> ?').run(franchiseId, id);
+      db.prepare('UPDATE franchise_pricing_models SET is_default = 1, updated_at = ? WHERE id = ?').run(now, id);
+    }
+  });
+
+  tx();
+  return { franchiseId, pricingModelId: id, updatedAt: now, isDefault: setDefault };
+});
+
+ipcMain.handle('set-default-pricing-model', async (_, payload) => {
+  if (!db) throw new Error('Database not initialized');
+  const franchiseId = payload?.franchiseId || DEFAULT_FRANCHISE_ID;
+  const modelId = payload?.pricingModelId || payload?.modelId;
+  if (!modelId) throw new Error('pricingModelId is required');
+
+  const exists = db.prepare('SELECT COUNT(*) AS count FROM franchise_pricing_models WHERE franchise_id = ? AND id = ?').get(franchiseId, modelId);
+  if (!exists || exists.count === 0) {
+    throw new Error('Pricing model not found');
+  }
+
+  const now = new Date().toISOString();
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE franchise_pricing_models SET is_default = 0 WHERE franchise_id = ?').run(franchiseId);
+    db.prepare('UPDATE franchise_pricing_models SET is_default = 1, updated_at = ? WHERE id = ?').run(now, modelId);
+  });
+  tx();
+  return { franchiseId, pricingModelId: modelId, updatedAt: now };
+});
+
+ipcMain.handle('delete-pricing-model', async (_, payload) => {
+  if (!db) throw new Error('Database not initialized');
+  const franchiseId = payload?.franchiseId || DEFAULT_FRANCHISE_ID;
+  const modelId = payload?.pricingModelId || payload?.modelId;
+  if (!modelId) throw new Error('pricingModelId is required');
+
+  const row = db
+    .prepare('SELECT is_default AS isDefault FROM franchise_pricing_models WHERE franchise_id = ? AND id = ?')
+    .get(franchiseId, modelId);
+  if (!row) {
+    throw new Error('Pricing model not found');
+  }
+  if (row.isDefault) {
+    throw new Error('Cannot delete the default pricing model. Set another model as default first.');
+  }
+
+  db.prepare('DELETE FROM franchise_pricing_models WHERE franchise_id = ? AND id = ?').run(franchiseId, modelId);
+  return { franchiseId, pricingModelId: modelId };
 });
 
 // Auto-updater IPC handlers

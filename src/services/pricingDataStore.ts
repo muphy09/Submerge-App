@@ -3,12 +3,22 @@ import pricingData from './pricingData';
 type PricingData = typeof pricingData;
 
 const STORAGE_VERSION = '2025-02-water-features-catalog';
-const STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
+const LEGACY_STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
+const DEFAULT_FRANCHISE_ID = 'default';
 
 let initialized = false;
+let loadingPromise: Promise<void> | null = null;
+let activeFranchiseId = DEFAULT_FRANCHISE_ID;
+let activePricingModelId: string | null = null;
+let activePricingModelName: string | null = null;
+let activePricingModelIsDefault = true;
 const defaultSnapshot: PricingData = deepClone(pricingData);
 let pricingState: PricingData = deepClone(pricingData);
 const listeners = new Set<(data: PricingData) => void>();
+
+function getLocalStorageKey(franchiseId: string) {
+  return `pricingDataOverrides-${franchiseId}-${STORAGE_VERSION}`;
+}
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
@@ -64,13 +74,41 @@ function mergeDeep(target: any, source: any): any {
   return output;
 }
 
-function persistState() {
+async function fetchPersistedPricing(franchiseId: string): Promise<PricingData | null> {
   try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pricingState));
+    if (window?.electron?.loadFranchisePricing) {
+      const result = await window.electron.loadFranchisePricing(franchiseId);
+      if (result?.pricing) {
+        activePricingModelId = result.pricingModelId || null;
+        activePricingModelName = result.pricingModelName || null;
+        activePricingModelIsDefault = Boolean(result.isDefault);
+        return result.pricing as PricingData;
+      }
+    }
   } catch (error) {
-    console.warn('Unable to persist pricing data overrides:', error);
+    console.warn('Unable to load franchise pricing from database:', error);
   }
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const key = getLocalStorageKey(franchiseId);
+      let raw = localStorage.getItem(key);
+      if (!raw && franchiseId === DEFAULT_FRANCHISE_ID) {
+        raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (raw) {
+          localStorage.setItem(key, raw);
+          localStorage.removeItem(LEGACY_STORAGE_KEY);
+        }
+      }
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    }
+  } catch (error) {
+    console.warn('Unable to load saved pricing data overrides:', error);
+  }
+
+  return null;
 }
 
 function notify() {
@@ -78,23 +116,118 @@ function notify() {
   listeners.forEach((listener) => listener(snapshot));
 }
 
-export function initPricingDataStore() {
-  if (initialized) return;
-  initialized = true;
-
+async function loadPricingForFranchise(franchiseId: string, pricingModelId?: string) {
   try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        pricingState = mergeDeep(defaultSnapshot, saved);
+    if (pricingModelId && window?.electron?.loadPricingModel) {
+      const result = await window.electron.loadPricingModel({ franchiseId, pricingModelId });
+      if (result?.pricing) {
+        pricingState = mergeDeep(defaultSnapshot, result.pricing ?? {});
+        activeFranchiseId = franchiseId;
+        activePricingModelId = result.pricingModelId || pricingModelId;
+        activePricingModelName = result.pricingModelName || null;
+        activePricingModelIsDefault = Boolean(result.isDefault);
+        syncBaseFromState();
+        notify();
+        return;
       }
     }
   } catch (error) {
-    console.warn('Unable to load saved pricing data overrides:', error);
+    console.warn('Unable to load specific pricing model:', error);
   }
 
+  const saved = await fetchPersistedPricing(franchiseId);
+  pricingState = mergeDeep(defaultSnapshot, saved ?? {});
+  activeFranchiseId = franchiseId;
   syncBaseFromState();
+  notify();
+}
+
+export async function initPricingDataStore(franchiseId?: string, pricingModelId?: string) {
+  if (loadingPromise && !franchiseId && !pricingModelId) return loadingPromise;
+  initialized = true;
+
+  loadingPromise = (async () => {
+    let targetId = franchiseId || DEFAULT_FRANCHISE_ID;
+    if (!franchiseId && window?.electron?.getActiveFranchise) {
+      try {
+        const active = await window.electron.getActiveFranchise();
+        if (active?.id) {
+          targetId = active.id;
+        }
+      } catch (error) {
+        console.warn('Unable to read active franchise from database:', error);
+      }
+    }
+    await loadPricingForFranchise(targetId, pricingModelId);
+  })();
+
+  return loadingPromise;
+}
+
+export function getActiveFranchiseId() {
+  return activeFranchiseId;
+}
+
+export async function setActiveFranchiseId(franchiseId: string) {
+  const targetId = franchiseId || DEFAULT_FRANCHISE_ID;
+  if (window?.electron?.setActiveFranchise) {
+    try {
+      await window.electron.setActiveFranchise(targetId);
+    } catch (error) {
+      console.warn('Unable to set active franchise in database:', error);
+    }
+  }
+  await loadPricingForFranchise(targetId);
+}
+
+export function getActivePricingModelMeta() {
+  return {
+    pricingModelId: activePricingModelId,
+    pricingModelName: activePricingModelName,
+    isDefault: activePricingModelIsDefault,
+  };
+}
+
+export async function setActivePricingModel(pricingModelId: string) {
+  if (!pricingModelId) return;
+  await loadPricingForFranchise(activeFranchiseId, pricingModelId);
+}
+
+export function clearActivePricingModelMeta() {
+  activePricingModelId = null;
+  activePricingModelName = null;
+  activePricingModelIsDefault = false;
+}
+
+export async function savePricingModelSnapshot(options: {
+  name: string;
+  setDefault?: boolean;
+  updatedBy?: string | null;
+  createNew?: boolean;
+}) {
+  const payload = {
+    franchiseId: activeFranchiseId,
+    pricing: pricingState,
+    version: STORAGE_VERSION,
+    name: options.name,
+    pricingModelId: options.createNew ? undefined : activePricingModelId || undefined,
+    setDefault: options.setDefault ?? false,
+    updatedBy: options.updatedBy ?? null,
+    createNew: options.createNew ?? false,
+  };
+
+  if (window?.electron?.savePricingModel) {
+    return window.electron.savePricingModel(payload);
+  }
+
+  // Fallback: persist locally only
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(getLocalStorageKey(activeFranchiseId), JSON.stringify(pricingState));
+    }
+  } catch (error) {
+    console.warn('Unable to persist pricing data overrides:', error);
+  }
 }
 
 export function getPricingDataSnapshot(): PricingData {
@@ -104,7 +237,6 @@ export function getPricingDataSnapshot(): PricingData {
 export function updatePricingValue(path: (string | number)[], value: any) {
   setDeep(pricingState, path, value);
   setDeep(pricingData as any, path, deepClone(value));
-  persistState();
   notify();
 }
 
@@ -121,7 +253,6 @@ export function updatePricingListItem(
   nextList[index] = updated;
   setDeep(pricingState, path, nextList);
   setDeep(pricingData as any, path, deepClone(nextList));
-  persistState();
   notify();
 }
 
@@ -130,7 +261,6 @@ export function addPricingListItem(path: (string | number)[], item: any) {
   const nextList = [...list, item];
   setDeep(pricingState, path, nextList);
   setDeep(pricingData as any, path, deepClone(nextList));
-  persistState();
   notify();
 }
 
@@ -140,14 +270,12 @@ export function removePricingListItem(path: (string | number)[], index: number) 
   const nextList = list.filter((_: any, i: number) => i !== index);
   setDeep(pricingState, path, nextList);
   setDeep(pricingData as any, path, deepClone(nextList));
-  persistState();
   notify();
 }
 
 export function resetPricingData() {
   pricingState = deepClone(defaultSnapshot);
   syncBaseFromState();
-  persistState();
   notify();
 }
 

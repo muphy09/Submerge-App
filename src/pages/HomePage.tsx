@@ -9,6 +9,7 @@ function HomePage() {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -24,11 +25,28 @@ function HomePage() {
     try {
       const data = await window.electron.getAllProposals();
       setProposals(data);
+      await populateDefaultModels(data);
     } catch (error) {
       console.error('Failed to load proposals:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const populateDefaultModels = async (data: Proposal[]) => {
+    if (!window.electron?.listPricingModels) return;
+    const franchiseIds = Array.from(new Set(data.map((p) => p.franchiseId || 'default')));
+    const map: Record<string, string | null> = {};
+    for (const id of franchiseIds) {
+      try {
+        const rows = await window.electron.listPricingModels(id);
+        const def = rows?.find((r: any) => r.isDefault);
+        map[id] = def?.id || null;
+      } catch (error) {
+        map[id] = null;
+      }
+    }
+    setDefaultModelMap(map);
   };
 
   const handleNewProposal = () => {
@@ -130,6 +148,16 @@ function HomePage() {
                     </div>
                   </div>
                   <div className="proposal-item-footer">
+                    <span
+                      className={`proposal-item-model ${proposal.pricingModelId && defaultModelMap[(proposal.franchiseId || 'default')] && proposal.pricingModelId !== defaultModelMap[(proposal.franchiseId || 'default')] ? 'stale' : ''}`}
+                    >
+                      {(proposal.pricingModelName || 'Pricing Model') +
+                        (proposal.pricingModelId &&
+                        defaultModelMap[(proposal.franchiseId || 'default')] &&
+                        proposal.pricingModelId !== defaultModelMap[(proposal.franchiseId || 'default')]
+                          ? '*'
+                          : '')}
+                    </span>
                     <span
                       className="proposal-item-status"
                       style={{ backgroundColor: getStatusColor(proposal.status) }}

@@ -171,6 +171,22 @@
   align-items: center;
 }
 
+.proposal-item-model {
+  background: #e9f4ff;
+  color: #0f2a4f;
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: 1px solid #c8dcff;
+  font-size: clamp(0.7rem, 1.2vh, 0.8rem);
+}
+
+.proposal-item-model.stale {
+  background: #fff4e5;
+  border-color: #fbbf24;
+  color: #92400e;
+}
+
 .proposal-item-status {
   padding: clamp(0.2rem, 0.5vh, 0.25rem) clamp(0.5rem, 1vh, 0.75rem);
   border-radius: 12px;

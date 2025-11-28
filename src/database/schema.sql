@@ -94,3 +94,58 @@ CREATE INDEX IF NOT EXISTS idx_proposals_number ON proposals(proposal_number);
 CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
 CREATE INDEX IF NOT EXISTS idx_pool_models_type ON pool_models(type);
 CREATE INDEX IF NOT EXISTS idx_equipment_category ON equipment_catalog(category);
+
+-- Franchise multi-tenant support
+CREATE TABLE IF NOT EXISTS franchises (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    franchise_code TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(franchise_code)
+);
+
+CREATE TABLE IF NOT EXISTS franchise_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    franchise_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('admin','designer')),
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(franchise_id, email),
+    FOREIGN KEY(franchise_id) REFERENCES franchises(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS franchise_pricing (
+    franchise_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    pricing_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT,
+    PRIMARY KEY(franchise_id),
+    FOREIGN KEY(franchise_id) REFERENCES franchises(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_franchise_users_franchise ON franchise_users(franchise_id);
+CREATE INDEX IF NOT EXISTS idx_franchise_pricing_franchise ON franchise_pricing(franchise_id);
+CREATE INDEX IF NOT EXISTS idx_franchises_code ON franchises(franchise_code);
+
+-- Pricing models per franchise (versioned sets of pricing)
+CREATE TABLE IF NOT EXISTS franchise_pricing_models (
+    id TEXT PRIMARY KEY,
+    franchise_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    pricing_json TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by TEXT,
+    FOREIGN KEY(franchise_id) REFERENCES franchises(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pricing_models_franchise ON franchise_pricing_models(franchise_id);
+CREATE INDEX IF NOT EXISTS idx_pricing_models_default ON franchise_pricing_models(franchise_id, is_default);

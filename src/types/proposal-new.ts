@@ -508,6 +508,10 @@ export interface Proposal {
   createdDate: string;
   lastModified: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected';
+  franchiseId?: string;
+  pricingModelId?: string;
+  pricingModelName?: string;
+  pricingModelIsDefault?: boolean;
 
   // Main sections
   customerInfo: CustomerInfo;
