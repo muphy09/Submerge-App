@@ -27,7 +27,7 @@ jobs:
           node-version: 18
 
       - name: Validate Supabase env
-        run: node -e "const required=['https://jhllbqzdapjeuuuuzcxh.supabase.co','sb_publishable_NOLALMCyyVRTEfejLxb5wA_c9omHpBe'];const missing=required.filter(k=>!process.env[k]);if(missing.length){console.error('Missing required env vars: '+missing.join(', '));process.exit(1);}console.log('Supabase env present');"
+        run: node -e "const required=[https://jhllbqzdapjeuuuuzcxh.supabase.co,sb_publishable_NOLALMCyyVRTEfejLxb5wA_c9omHpBe];const missing=required.filter(k=>!process.env[k]);if(missing.length){console.error('Missing required env vars: '+missing.join(', '));process.exit(1);}console.log('Supabase env present');"
 
       - name: Install dependencies
         run: npm install
