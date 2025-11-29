@@ -13,6 +13,7 @@ import { initPricingDataStore, setActiveFranchiseId } from './services/pricingDa
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
+import { assertDesignerAllowed, ensureAdminUser } from './services/franchiseUsersAdapter';
 import './App.css';
 
 type UserSession = {
@@ -108,6 +109,15 @@ function AppContent() {
       franchiseCode,
       displayName: userName,
     });
+
+    const isAdminLogin = String(franchiseCode || '').trim().toUpperCase().endsWith('-A');
+
+    // Validate or create user in Supabase
+    if (isAdminLogin) {
+      await ensureAdminUser(response.franchiseId, userName);
+    } else {
+      await assertDesignerAllowed(response.franchiseId, userName);
+    }
 
     const nextSession: UserSession = {
       userName,

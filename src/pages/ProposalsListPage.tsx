@@ -6,6 +6,8 @@ import { useToast } from '../components/Toast';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import './ProposalsListPage.css';
+import { deleteProposal as deleteProposalRemote, listProposals } from '../services/proposalsAdapter';
+import { getSessionFranchiseId, getSessionUserName } from '../services/session';
 
 function ProposalsListPage() {
   const navigate = useNavigate();
@@ -24,14 +26,14 @@ function ProposalsListPage() {
   }, []);
 
   const loadProposals = async () => {
-    if (!window.electron?.getAllProposals) {
-      console.error('Electron bridge unavailable: cannot load proposals.');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
     try {
-      const data = await window.electron.getAllProposals();
-      const enriched = data.map((proposal) => {
+      const data = await listProposals(getSessionFranchiseId());
+      const userName = getSessionUserName();
+      const filtered = userName
+        ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === userName.toLowerCase())
+        : data || [];
+      const enriched = filtered.map((proposal) => {
         try {
           const calculated = MasterPricingEngine.calculateCompleteProposal(
             proposal,
@@ -181,7 +183,7 @@ function ProposalsListPage() {
   const confirmDelete = async () => {
     try {
       for (const proposalNumber of selectedProposals) {
-        await window.electron.deleteProposal(proposalNumber);
+        await deleteProposalRemote(proposalNumber, getSessionFranchiseId());
       }
       showToast({
         type: 'success',

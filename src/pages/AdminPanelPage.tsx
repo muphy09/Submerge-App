@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal-new';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels, setDefaultPricingModel } from '../services/pricingModelsAdapter';
+import { listProposals as listProposalsRemote } from '../services/proposalsAdapter';
 import './AdminPanelPage.css';
+import {
+  addFranchiseUser,
+  deleteFranchiseUser,
+  listFranchiseUsers,
+  markDesignerProposalsDeleted,
+} from '../services/franchiseUsersAdapter';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 
@@ -43,6 +50,15 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [pricingModels, setPricingModels] = useState<any[]>([]);
   const [loadingModels, setLoadingModels] = useState(true);
   const [activatingModelId, setActivatingModelId] = useState<string | null>(null);
+  const [franchiseUsers, setFranchiseUsers] = useState<
+    { id: string; name: string; role: 'admin' | 'designer'; isActive: boolean }[]
+  >([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [addingUser, setAddingUser] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [userError, setUserError] = useState<string | null>(null);
+  const userListRef = useRef<HTMLDivElement | null>(null);
+  const userWheelLockRef = useRef<number>(0);
 
   const franchiseId = session?.franchiseId || DEFAULT_FRANCHISE_ID;
   const isAdmin = (session?.role || '').toLowerCase() === 'admin';
@@ -51,10 +67,12 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     if (!isAdmin) {
       setLoadingProposals(false);
       setLoadingModels(false);
+      setLoadingUsers(false);
       return;
     }
     void loadProposals(franchiseId);
     void loadPricingModels(franchiseId);
+    void loadUsers(franchiseId);
   }, [franchiseId, isAdmin]);
 
   useEffect(() => {
@@ -66,17 +84,10 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   }, [franchiseId]);
 
   const loadProposals = async (targetFranchiseId: string) => {
-    if (!window.electron?.getAllProposals) {
-      setLoadingProposals(false);
-      return;
-    }
     setLoadingProposals(true);
     try {
-      const data = await window.electron.getAllProposals();
-      const filtered = (data || []).filter(
-        (proposal: Proposal) => (proposal.franchiseId || DEFAULT_FRANCHISE_ID) === (targetFranchiseId || DEFAULT_FRANCHISE_ID)
-      );
-      const enriched = filtered.map((proposal: Proposal) => {
+      const data = await listProposalsRemote(targetFranchiseId);
+      const enriched = (data || []).map((proposal: Proposal) => {
         try {
           const calculated = MasterPricingEngine.calculateCompleteProposal(
             proposal,
@@ -97,6 +108,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       setProposals(enriched);
     } catch (error) {
       console.error('Failed to load proposals for admin panel:', error);
+      setProposals([]);
     } finally {
       setLoadingProposals(false);
     }
@@ -112,6 +124,26 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       setPricingModels([]);
     } finally {
       setLoadingModels(false);
+    }
+  };
+
+  const loadUsers = async (targetFranchiseId: string) => {
+    setLoadingUsers(true);
+    try {
+      const rows = await listFranchiseUsers(targetFranchiseId);
+      setFranchiseUsers(
+        (rows || []).map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          role: row.role,
+          isActive: Boolean(row.isActive),
+        }))
+      );
+    } catch (error) {
+      console.error('Failed to load franchise users:', error);
+      setFranchiseUsers([]);
+    } finally {
+      setLoadingUsers(false);
     }
   };
 
@@ -132,15 +164,59 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     }
   };
 
-  const performanceData = useMemo(
-    () => [
-      { name: session?.userName || 'Designer One', proposals: 7 },
-      { name: 'Designer Two', proposals: 5 },
-      { name: 'Designer Three', proposals: 3 },
-      { name: 'Designer Four', proposals: 2 },
-    ],
-    [session?.userName]
-  );
+  const handleAddUser = async () => {
+    if (!newUserName.trim()) {
+      setUserError('Please enter a name.');
+      return;
+    }
+    setUserError(null);
+    setAddingUser(true);
+    try {
+      await addFranchiseUser({
+        franchiseId,
+        name: newUserName.trim(),
+        role: 'designer',
+        isActive: true,
+      });
+      setNewUserName('');
+      await loadUsers(franchiseId);
+    } catch (error: any) {
+      console.error('Failed to add user:', error);
+      setUserError(error?.message || 'Unable to add user.');
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
+  const handleRemoveUser = async (userId: string, role: string) => {
+    if (role === 'admin') {
+      console.warn('Skipping removal of admin user to prevent lockout.');
+      return;
+    }
+    try {
+      const targetName = franchiseUsers.find((u) => u.id === userId)?.name || '';
+      await deleteFranchiseUser(userId);
+      await markDesignerProposalsDeleted(franchiseId, targetName);
+      await loadUsers(franchiseId);
+      await loadProposals(franchiseId);
+    } catch (error) {
+      console.error('Failed to remove user:', error);
+    }
+  };
+
+  const performanceData = useMemo(() => {
+    if (!proposals.length) {
+      return [{ name: session?.userName || 'Designer', proposals: 0 }];
+    }
+    const counts: Record<string, number> = {};
+    proposals.forEach((proposal) => {
+      const name = proposal.designerName || session?.userName || 'Designer';
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, proposals: count }))
+      .sort((a, b) => b.proposals - a.proposals);
+  }, [proposals, session?.userName]);
 
   const maxPerformance = Math.max(...performanceData.map((item) => item.proposals), 1);
 
@@ -165,6 +241,33 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         .sort((a, b) => Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault))),
     [pricingModels]
   );
+
+  const defaultPricingModelId = useMemo(
+    () => pricingModels.find((m: any) => m.isDefault)?.id || null,
+    [pricingModels]
+  );
+
+  const availablePricingModelIds = useMemo(
+    () => new Set((pricingModels || []).map((m: any) => m.id)),
+    [pricingModels]
+  );
+
+  const handleUserListWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const container = userListRef.current;
+    if (!container) return;
+    const now = Date.now();
+    if (now - userWheelLockRef.current < 140) {
+      e.preventDefault();
+      return;
+    }
+    const firstRow = container.querySelector('.admin-user-row') as HTMLElement | null;
+    const styles = window.getComputedStyle(container);
+    const rowGap = parseFloat(styles.rowGap || '0') || 0;
+    const step = (firstRow?.offsetHeight || 60) + rowGap;
+    e.preventDefault();
+    userWheelLockRef.current = now;
+    container.scrollTop += e.deltaY > 0 ? step : -step;
+  };
 
   const totalProposalsSubmitted = proposals.length;
   const averageRetailCost = proposals.length
@@ -197,16 +300,62 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         <div className="admin-card">
           <div className="admin-card-header">
             <div>
-              <h2 className="admin-card-title">Notifications</h2>
-              <p className="admin-kicker">Franchise updates</p>
+              <h2 className="admin-card-title">Designers</h2>
+              <p className="admin-kicker">Allowed users for this franchise</p>
             </div>
           </div>
           <div className="admin-divider" />
-          <div className="admin-notifications">
-            <div className="admin-notification-item">
-              <div className="notification-title">Feature coming soon!</div>
-              <div className="notification-meta">Stay tuned for franchise-wide alerts.</div>
+          <div className="admin-users">
+            <div className="admin-users-form">
+              <input
+                type="text"
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+                placeholder="Designer name"
+              />
+              <button
+                className="admin-primary-btn"
+                type="button"
+                onClick={handleAddUser}
+                disabled={addingUser}
+              >
+                {addingUser ? 'Adding...' : 'Add Designer'}
+              </button>
             </div>
+            {userError && <div className="admin-error">{userError}</div>}
+            {loadingUsers ? (
+              <div className="admin-empty">Loading designers...</div>
+            ) : franchiseUsers.length === 0 ? (
+              <div className="admin-empty">No designers added yet.</div>
+            ) : (
+              <div
+                className="admin-users-list"
+                role="list"
+                ref={userListRef}
+                onWheel={handleUserListWheel}
+              >
+                {franchiseUsers.map((user) => (
+                  <div className="admin-user-row" key={user.id} role="listitem">
+                    <div className="admin-user-meta">
+                      <div className="admin-user-name">{user.name}</div>
+                      <div className="admin-user-role">{user.role === 'admin' ? 'Admin' : 'Designer'}</div>
+                    </div>
+                    <div className="admin-user-actions">
+                      {user.role !== 'admin' && (
+                        <button
+                          className="admin-remove-btn"
+                          type="button"
+                          onClick={() => handleRemoveUser(user.id, user.role)}
+                          title="Remove user"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -302,8 +451,8 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       <div className="admin-table-card">
         <div className="admin-table-header">
           <div>
-            <p className="admin-kicker">All franchise locations</p>
             <h2 className="admin-card-title">Franchise Proposals</h2>
+            <p className="admin-kicker">All Franchise Proposals</p>
           </div>
           <div className="admin-table-meta">{totalProposalsSubmitted} total</div>
         </div>
@@ -321,6 +470,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                   <th>Customer Name</th>
                   <th>Date Modified</th>
                   <th>Proposal Status</th>
+                  <th>Pricing Model</th>
                   <th className="th-right">Retail Price</th>
                   <th className="th-right">Total COGS</th>
                   <th className="th-right">Gross Profit %</th>
@@ -333,7 +483,22 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                   const totalCOGS = proposal.pricing?.totalCOGS || 0;
                   const grossProfitAmount = getGrossProfitAmount(proposal);
                   const grossProfitPercent = getGrossProfitPercent(proposal);
-                  const designerName = session?.userName || 'Designer';
+                  const designerName = proposal.designerName || session?.userName || 'Designer';
+                  const modelId = proposal.pricingModelId || '';
+                  const explicitRemoved = (proposal.pricingModelName || '').toLowerCase().includes('(removed)');
+                  const isRemoved = Boolean(modelId) && (!availablePricingModelIds.has(modelId) || explicitRemoved);
+                  const isActive =
+                    Boolean(modelId) &&
+                    defaultPricingModelId &&
+                    modelId === defaultPricingModelId &&
+                    availablePricingModelIds.has(modelId) &&
+                    !explicitRemoved;
+                  const isInactive = Boolean(modelId) && !isActive && !isRemoved;
+                  const modelClass = isActive
+                    ? 'proposal-model-pill active'
+                    : isRemoved
+                    ? 'proposal-model-pill removed'
+                    : 'proposal-model-pill inactive';
 
                   return (
                     <tr
@@ -350,6 +515,12 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                           style={{ backgroundColor: getStatusColor(proposal.status) }}
                         >
                           {proposal.status}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={modelClass}>
+                          {(proposal.pricingModelName || 'Pricing Model') +
+                            (isRemoved && !explicitRemoved ? ' (Removed)' : '')}
                         </span>
                       </td>
                       <td className="price-cell">

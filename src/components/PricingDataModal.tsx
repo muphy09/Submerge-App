@@ -96,6 +96,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   useEffect(() => {
     const targetFranchise = franchiseId || getActiveFranchiseId();
+    // Reset state when switching franchises to avoid leaking names/models between franchises
+    clearActivePricingModelMeta();
+    setModelName('');
+    setSelectedModelId(null);
+    setHasChanges(false);
     initPricingDataStore(targetFranchise);
     const unsubscribe = subscribeToPricingData(setData);
     void loadModels(targetFranchise);
@@ -112,14 +117,21 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       const rows = await listPricingModels(idToUse);
       setPricingModels(rows || []);
       const activeMeta = getActivePricingModelMeta();
-      if (activeMeta.pricingModelName && !modelName) {
-        setModelName(activeMeta.pricingModelName);
-      }
-      if (activeMeta.pricingModelId) {
-        setSelectedModelId(activeMeta.pricingModelId);
-      } else if (rows?.length) {
-        const fallback = rows.find((m) => m.isDefault) || rows[0];
-        setSelectedModelId(fallback?.id ?? null);
+      if (rows?.length) {
+        if (activeMeta.pricingModelId) {
+          setSelectedModelId(activeMeta.pricingModelId);
+          if (activeMeta.pricingModelName && !modelName) {
+            setModelName(activeMeta.pricingModelName);
+          }
+        } else {
+          const fallback = rows.find((m) => m.isDefault) || rows[0];
+          setSelectedModelId(fallback?.id ?? null);
+          setModelName(fallback?.name || '');
+        }
+      } else {
+        // New franchise: keep name empty, no selected model
+        setSelectedModelId(null);
+        setModelName('');
       }
       setHasChanges(false);
     } catch (error) {
@@ -1108,7 +1120,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 type="text"
                 className="pricing-input"
                 value={modelName}
-                placeholder="Another test of prices"
+                placeholder="'Black Friday', 'Summer Promo', etc."
                 onChange={(e) => {
                   setModelName(e.target.value);
                   setHasChanges(true);

@@ -8,6 +8,7 @@ import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import ppasLogo from '../../PPAS Logo.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
+import { getProposal as getProposalRemote } from '../services/proposalsAdapter';
 
 function ProposalView() {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ function ProposalView() {
 
   const loadProposal = async (num: string) => {
     try {
-      const data = await window.electron.getProposal(num);
+      const data = await getProposalRemote(num);
       setProposal(data);
     } catch (error) {
       console.error('Failed to load proposal:', error);

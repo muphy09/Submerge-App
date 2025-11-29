@@ -5,6 +5,8 @@ import { useToast } from '../components/Toast';
 import './HomePage.css';
 import heroImage from '../assets/homepagetestbck.jpg';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
+import { listProposals } from '../services/proposalsAdapter';
+import { getSessionFranchiseId, getSessionUserName } from '../services/session';
 
 function HomePage() {
   const navigate = useNavigate();
@@ -19,15 +21,15 @@ function HomePage() {
   }, []);
 
   const loadProposals = async () => {
-    if (!window.electron?.getAllProposals) {
-      console.error('Electron bridge unavailable: cannot load proposals.');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
     try {
-      const data = await window.electron.getAllProposals();
-      setProposals(data);
-      await populateDefaultModels(data);
+      const userName = getSessionUserName();
+      const data = await listProposals(getSessionFranchiseId());
+      const filtered = userName
+        ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === userName.toLowerCase())
+        : data || [];
+      setProposals(filtered);
+      await populateDefaultModels(filtered);
     } catch (error) {
       console.error('Failed to load proposals:', error);
     } finally {

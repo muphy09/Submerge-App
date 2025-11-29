@@ -107,6 +107,130 @@
   font-size: 0.9rem;
 }
 
+.admin-users {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-users-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.admin-users-form input {
+  flex: 1;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 0.95rem;
+}
+
+.admin-users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 0;
+  scrollbar-color: rgba(15, 42, 79, 0.7) rgba(15, 42, 79, 0.08);
+}
+
+.admin-users-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-users-list::-webkit-scrollbar-track {
+  background: rgba(15, 42, 79, 0.08);
+  border-radius: 999px;
+}
+
+.admin-users-list::-webkit-scrollbar-thumb {
+  background-color: rgba(15, 42, 79, 0.7);
+  border-radius: 999px;
+}
+
+.admin-users-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(15, 42, 79, 0.9);
+}
+
+.admin-user-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.admin-user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-user-name {
+  font-weight: 700;
+  color: #1e3a5f;
+}
+
+.admin-user-role {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.admin-user-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.admin-user-status {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.admin-user-status.active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #0f9a61;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.admin-user-status.inactive {
+  background: rgba(239, 68, 68, 0.1);
+  color: #c53030;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.admin-remove-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecdd3;
+  border-radius: 10px;
+  padding: 0.45rem 0.85rem;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-remove-btn:hover {
+  background: #fecdd3;
+  color: #7f1d1d;
+  border-color: #fca5a5;
+}
+
+.admin-error {
+  color: #b91c1c;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
 .admin-divider {
   border-top: 1px solid #e5e7eb;
   margin: 0.25rem 0;
@@ -118,7 +242,8 @@
   gap: 0.5rem;
   max-height: 260px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: 0;
+  scrollbar-color: rgba(15, 42, 79, 0.7) rgba(15, 42, 79, 0.08);
 }
 
 .admin-model-row {
@@ -170,6 +295,24 @@
   padding: 0.4rem 0.75rem;
   font-size: 0.85rem;
   border-radius: 999px;
+}
+
+.admin-models-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-models-list::-webkit-scrollbar-track {
+  background: rgba(15, 42, 79, 0.08);
+  border-radius: 999px;
+}
+
+.admin-models-list::-webkit-scrollbar-thumb {
+  background-color: rgba(15, 42, 79, 0.7);
+  border-radius: 999px;
+}
+
+.admin-models-list::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(15, 42, 79, 0.9);
 }
 
 .admin-primary-btn.ghost:disabled {

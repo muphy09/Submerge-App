@@ -509,6 +509,9 @@ export interface Proposal {
   lastModified: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected';
   franchiseId?: string;
+  designerName?: string;
+  designerRole?: 'admin' | 'designer';
+  designerCode?: string;
   pricingModelId?: string;
   pricingModelName?: string;
   pricingModelIsDefault?: boolean;

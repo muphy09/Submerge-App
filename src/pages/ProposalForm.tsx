@@ -28,6 +28,13 @@ import {
   setActivePricingModel,
 } from '../services/pricingDataStore';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
+import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import {
+  getSessionFranchiseCode,
+  getSessionFranchiseId,
+  getSessionRole,
+  getSessionUserName,
+} from '../services/session';
 
 const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
   if (waterFeatures && Array.isArray((waterFeatures as any).selections)) {
@@ -176,21 +183,6 @@ function ProposalForm() {
   const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
-  const SESSION_STORAGE_KEY = 'ppas-user-session';
-  const DEFAULT_FRANCHISE_ID = 'default';
-
-  const getSessionFranchiseId = () => {
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return parsed?.franchiseId || DEFAULT_FRANCHISE_ID;
-      }
-    } catch (error) {
-      console.warn('Unable to read session franchise id', error);
-    }
-    return DEFAULT_FRANCHISE_ID;
-  };
 
   const applyPricingModelSelection = async (
     modelId: string | null,
@@ -289,10 +281,16 @@ function ProposalForm() {
   const getInitialProposal = (): Partial<Proposal> => {
     const base = getDefaultProposal();
     const franchiseId = getSessionFranchiseId();
+    const designerName = getSessionUserName();
+    const designerRole = getSessionRole();
+    const designerCode = getSessionFranchiseCode();
     const modelMeta = getActivePricingModelMeta();
     return {
       ...base,
       franchiseId,
+      designerName,
+      designerRole,
+      designerCode,
       pricingModelId: modelMeta.pricingModelId || undefined,
       pricingModelName: modelMeta.pricingModelName || undefined,
       pricingModelIsDefault: modelMeta.isDefault,
@@ -336,7 +334,7 @@ function ProposalForm() {
 
   const loadProposal = async (num: string, requestId: number) => {
     try {
-      const data = await window.electron.getProposal(num);
+      const data = await getProposalRemote(num);
       if (data) {
         // Deep clone to ensure fresh object references
         const freshData = JSON.parse(JSON.stringify(data));
@@ -346,6 +344,9 @@ function ProposalForm() {
 
         // Ensure franchise + pricing model metadata are present
         freshData.franchiseId = freshData.franchiseId || getSessionFranchiseId();
+        freshData.designerName = freshData.designerName || getSessionUserName();
+        freshData.designerRole = freshData.designerRole || getSessionRole();
+        freshData.designerCode = freshData.designerCode || getSessionFranchiseCode();
 
         if (loadRequestRef.current === requestId) {
           setProposal(freshData);
@@ -388,6 +389,10 @@ function ProposalForm() {
 
     return {
       ...proposal,
+      franchiseId: proposal.franchiseId || getSessionFranchiseId(),
+      designerName: proposal.designerName || getSessionUserName(),
+      designerRole: proposal.designerRole || getSessionRole(),
+      designerCode: proposal.designerCode || getSessionFranchiseCode(),
       papDiscounts,
       costBreakdown: result.costBreakdown,
       pricing: result.pricing,
@@ -432,12 +437,20 @@ function ProposalForm() {
         }
       }
 
-      const finalProposal = calculateTotals();
-      if (submit) {
-        finalProposal.status = 'submitted';
-      }
+      const totals = calculateTotals();
+      const now = new Date().toISOString();
+      const finalProposal: Proposal = {
+        ...totals,
+        status: submit ? 'submitted' : totals.status || 'draft',
+        lastModified: now,
+        createdDate: totals.createdDate || now,
+        franchiseId: totals.franchiseId || getSessionFranchiseId(),
+        designerName: totals.designerName || getSessionUserName(),
+        designerRole: totals.designerRole || getSessionRole(),
+        designerCode: totals.designerCode || getSessionFranchiseCode(),
+      };
 
-      await window.electron.saveProposal(finalProposal);
+      await saveProposalRemote(finalProposal);
       showToast({
         type: 'success',
         message: submit ? 'Proposal submitted successfully!' : 'Proposal saved successfully!',
