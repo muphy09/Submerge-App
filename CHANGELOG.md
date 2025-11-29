@@ -1,5 +1,15 @@
 ---
 
+## [1.6.0]
+### Changed
+- Backend implementation of 'Franchises' and 'Roles'
+- Database now online for storing proposals and pricing models, per franchise
+- User accounts added
+- Admin panel introduced
+- Pricing aligned closer to excel workflow
+
+---
+
 ## [1.5.0]
 ### Changed
 - Numerous UI Changes to modernize the look and feel of the app
