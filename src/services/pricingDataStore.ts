@@ -1,4 +1,9 @@
 import pricingData from './pricingData';
+import {
+  loadPricingModel as loadPricingModelRemote,
+  loadDefaultFranchisePricing,
+  savePricingModel as savePricingModelRemote,
+} from './pricingModelsAdapter';
 
 type PricingData = typeof pricingData;
 
@@ -76,14 +81,12 @@ function mergeDeep(target: any, source: any): any {
 
 async function fetchPersistedPricing(franchiseId: string): Promise<PricingData | null> {
   try {
-    if (window?.electron?.loadFranchisePricing) {
-      const result = await window.electron.loadFranchisePricing(franchiseId);
-      if (result?.pricing) {
-        activePricingModelId = result.pricingModelId || null;
-        activePricingModelName = result.pricingModelName || null;
-        activePricingModelIsDefault = Boolean(result.isDefault);
-        return result.pricing as PricingData;
-      }
+    const result = await loadDefaultFranchisePricing(franchiseId);
+    if (result?.pricing) {
+      activePricingModelId = result.pricingModelId || null;
+      activePricingModelName = result.pricingModelName || null;
+      activePricingModelIsDefault = Boolean(result.isDefault);
+      return result.pricing as PricingData;
     }
   } catch (error) {
     console.warn('Unable to load franchise pricing from database:', error);
@@ -118,8 +121,8 @@ function notify() {
 
 async function loadPricingForFranchise(franchiseId: string, pricingModelId?: string) {
   try {
-    if (pricingModelId && window?.electron?.loadPricingModel) {
-      const result = await window.electron.loadPricingModel({ franchiseId, pricingModelId });
+    if (pricingModelId) {
+      const result = await loadPricingModelRemote(franchiseId, pricingModelId);
       if (result?.pricing) {
         pricingState = mergeDeep(defaultSnapshot, result.pricing ?? {});
         activeFranchiseId = franchiseId;
@@ -205,7 +208,7 @@ export async function savePricingModelSnapshot(options: {
   updatedBy?: string | null;
   createNew?: boolean;
 }) {
-  const payload = {
+  return savePricingModelRemote({
     franchiseId: activeFranchiseId,
     pricing: pricingState,
     version: STORAGE_VERSION,
@@ -214,20 +217,7 @@ export async function savePricingModelSnapshot(options: {
     setDefault: options.setDefault ?? false,
     updatedBy: options.updatedBy ?? null,
     createNew: options.createNew ?? false,
-  };
-
-  if (window?.electron?.savePricingModel) {
-    return window.electron.savePricingModel(payload);
-  }
-
-  // Fallback: persist locally only
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(getLocalStorageKey(activeFranchiseId), JSON.stringify(pricingState));
-    }
-  } catch (error) {
-    console.warn('Unable to persist pricing data overrides:', error);
-  }
+  });
 }
 
 export function getPricingDataSnapshot(): PricingData {

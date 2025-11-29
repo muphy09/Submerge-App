@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addPricingListItem,
   getPricingDataSnapshot,
@@ -14,6 +14,11 @@ import {
   updatePricingListItem,
   updatePricingValue,
 } from '../services/pricingDataStore';
+import {
+  listPricingModels,
+  setDefaultPricingModel,
+  deletePricingModel as deletePricingModelRemote,
+} from '../services/pricingModelsAdapter';
 import './PricingDataModal.css';
 
 type Path = (string | number)[];
@@ -66,47 +71,80 @@ const emptyFromFields = (fields: ListField[]) =>
 
 interface PricingDataModalProps {
   onClose: () => void;
+  franchiseId?: string | null;
 }
 
-const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
+const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseId }) => {
   const [data, setData] = useState(getPricingDataSnapshot());
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [pricingModels, setPricingModels] = useState<any[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(() => {
+    const meta = getActivePricingModelMeta();
+    return meta.pricingModelId || null;
+  });
   const [modelName, setModelName] = useState('');
   const [savingModel, setSavingModel] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [setDefaultModel, setSetDefaultModel] = useState(true);
   const [savingAsNew, setSavingAsNew] = useState(false);
+  const [activatedFlash, setActivatedFlash] = useState(false);
+  const activateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const backdropMouseDownRef = useRef(false);
+  const currentFranchiseId = franchiseId || getActiveFranchiseId() || 'N/A';
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [confirmDeleteModel, setConfirmDeleteModel] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
-    initPricingDataStore();
+    const targetFranchise = franchiseId || getActiveFranchiseId();
+    initPricingDataStore(targetFranchise);
     const unsubscribe = subscribeToPricingData(setData);
-    void loadModels();
+    void loadModels(targetFranchise);
     return unsubscribe;
-  }, []);
+  }, [franchiseId]);
 
-  const loadModels = async () => {
-    const franchiseId = getActiveFranchiseId();
-    if (!window.electron?.listPricingModels) return;
+  const emitModelsUpdated = () => {
+    window.dispatchEvent(new Event('pricing-models-updated'));
+  };
+
+  const loadModels = async (targetFranchiseId?: string) => {
+    const idToUse = targetFranchiseId || getActiveFranchiseId();
     try {
-      const rows = await window.electron.listPricingModels(franchiseId);
+      const rows = await listPricingModels(idToUse);
       setPricingModels(rows || []);
       const activeMeta = getActivePricingModelMeta();
       if (activeMeta.pricingModelName && !modelName) {
         setModelName(activeMeta.pricingModelName);
       }
+      if (activeMeta.pricingModelId) {
+        setSelectedModelId(activeMeta.pricingModelId);
+      } else if (rows?.length) {
+        const fallback = rows.find((m) => m.isDefault) || rows[0];
+        setSelectedModelId(fallback?.id ?? null);
+      }
+      setHasChanges(false);
     } catch (error) {
       console.warn('Unable to load pricing models', error);
     }
   };
 
   const handleLoadModel = async (modelId: string) => {
+    setSelectedModelId(modelId);
     await setActivePricingModel(modelId);
     const meta = getActivePricingModelMeta();
     setModelName(meta.pricingModelName || '');
     setPricingModels((prev) =>
       prev.map((m) => ({ ...m, isDefault: m.id === modelId ? m.isDefault : m.isDefault }))
     );
+    setHasChanges(false);
+  };
+
+  const handleSelectModel = async (modelId: string) => {
+    if (!modelId) {
+      setSelectedModelId(null);
+      return;
+    }
+    await handleLoadModel(modelId);
+    setHasChanges(false);
   };
 
   const handleSaveModel = async () => {
@@ -119,12 +157,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
     try {
       await savePricingModelSnapshot({
         name: modelName.trim(),
-        setDefault: setDefaultModel,
+        setDefault: false,
         updatedBy: 'admin',
         createNew: savingAsNew,
       });
       setSavingAsNew(false);
       await loadModels();
+      emitModelsUpdated();
+      setHasChanges(false);
     } catch (error: any) {
       setSaveError(error?.message || 'Unable to save pricing model.');
     } finally {
@@ -138,12 +178,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
       if (defaultModel) {
         await setActivePricingModel(defaultModel.id);
       } else {
-        await initPricingDataStore(getActiveFranchiseId());
+        await initPricingDataStore(franchiseId || getActiveFranchiseId());
       }
       clearActivePricingModelMeta();
+      setSelectedModelId(null);
       setModelName('');
       setSavingAsNew(true);
-      setSetDefaultModel(false);
+      setHasChanges(false);
     } catch (error) {
       console.warn('Unable to start new pricing model', error);
     }
@@ -151,13 +192,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
 
   const handleDeleteModel = async (modelId: string, isDefault: boolean) => {
     if (isDefault) {
-      setSaveError('Cannot delete the default pricing model. Set another model as default first.');
+      setSaveError('Cannot delete the active pricing model. Set another model as active first.');
       return;
     }
-    if (!window.electron?.deletePricingModel) return;
     try {
-      await window.electron.deletePricingModel({
-        franchiseId: getActiveFranchiseId(),
+      await deletePricingModelRemote({
+        franchiseId: franchiseId || getActiveFranchiseId(),
         pricingModelId: modelId,
       });
       if (modelId === getActivePricingModelMeta().pricingModelId) {
@@ -166,24 +206,25 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
           await handleLoadModel(def.id);
         }
       }
-      await loadModels();
+      await loadModels(franchiseId || getActiveFranchiseId());
     } catch (error: any) {
       setSaveError(error?.message || 'Unable to delete pricing model.');
     }
   };
 
   const handleSetDefault = async (modelId: string) => {
-    if (!window.electron?.setDefaultPricingModel) return;
     try {
-      await window.electron.setDefaultPricingModel({
-        franchiseId: getActiveFranchiseId(),
+      await setDefaultPricingModel({
+        franchiseId: franchiseId || getActiveFranchiseId(),
         pricingModelId: modelId,
       });
-      await loadModels();
+      await loadModels(franchiseId || getActiveFranchiseId());
+      emitModelsUpdated();
       const meta = getActivePricingModelMeta();
       setModelName(meta.pricingModelName || modelName);
+      setHasChanges(false);
     } catch (error) {
-      console.warn('Unable to set default pricing model', error);
+      console.warn('Unable to set active pricing model', error);
     }
   };
 
@@ -191,10 +232,19 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
     setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
   };
 
-  const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
+  const handleBackdropMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    backdropMouseDownRef.current = event.target === event.currentTarget;
+  };
+
+  const handleBackdropMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (backdropMouseDownRef.current && event.target === event.currentTarget) {
       onClose();
     }
+    backdropMouseDownRef.current = false;
+  };
+
+  const handleBackdropMouseLeave = () => {
+    backdropMouseDownRef.current = false;
   };
 
   const handleScalarChange = (field: ScalarField, value: string | boolean) => {
@@ -205,21 +255,146 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
     } else {
       updatePricingValue(field.path, value);
     }
+    setHasChanges(true);
   };
 
   const handleListChange = (list: ListConfig, index: number, field: ListField, raw: any) => {
     const parsed =
       field.type === 'number' ? toNumber(String(raw)) : field.type === 'boolean' ? Boolean(raw) : raw;
     updatePricingListItem(list.path, index, field.key, parsed);
+    setHasChanges(true);
   };
 
   const handleAddListItem = (list: ListConfig) => {
     addPricingListItem(list.path, emptyFromFields(list.fields));
+    setHasChanges(true);
   };
 
   const handleRemoveListItem = (list: ListConfig, index: number) => {
     removePricingListItem(list.path, index);
+    setHasChanges(true);
   };
+
+  const selectedModel = selectedModelId ? pricingModels.find((m) => m.id === selectedModelId) : null;
+  const selectedModelIsDefault = Boolean(selectedModel?.isDefault);
+  const getSectionGlyph = (title: string) => {
+    const parts = title.split(' ').filter(Boolean);
+    const abbreviation = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).trim();
+    return (abbreviation || title.slice(0, 2) || '•').toUpperCase().slice(0, 2);
+  };
+
+  const renderSectionIcon = (title: string) => {
+    const icons: Record<string, JSX.Element> = {
+      'Plans & Engineering': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="5" y="4" width="12" height="14" rx="2" />
+          <path d="M9 8h4M9 11h6M9 14h3" />
+        </svg>
+      ),
+      'Layout & Permit': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="6" y="5" width="12" height="14" rx="2" />
+          <path d="M9 3h6v4H9z" />
+          <path d="M9 10h6M9 13h6M9 16h4" />
+        </svg>
+      ),
+      Excavation: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 13l4-4 2 2-4 4-2 2-2-2z" />
+          <path d="M14 5l3-3 2 2-3 3z" />
+          <path d="M13 6l2 2" />
+        </svg>
+      ),
+      Plumbing: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 10h8a2 2 0 012 2v6" />
+          <path d="M12 6V4a2 2 0 012-2h4" />
+          <path d="M16 12h4" />
+          <circle cx="16" cy="18" r="2" />
+        </svg>
+      ),
+      'Water Features': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.5s5 5.2 5 9a5 5 0 11-10 0c0-3.8 5-9 5-9z" />
+        </svg>
+      ),
+      'Electrical & Gas': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M13 2L5 14h6l-2 8 8-12h-6z" />
+        </svg>
+      ),
+      Steel: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 8h14M5 12h14M5 16h14" />
+          <path d="M7 6v12M17 6v12" />
+        </svg>
+      ),
+      'Shotcrete Labor': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 8l5-4 3 3-2 2 6 6-2 2-6-6-2 2z" />
+        </svg>
+      ),
+      'Shotcrete Material': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 5l5-3 5 3v6l-5 3-5-3z" />
+          <path d="M12 11v6" />
+          <path d="M17 14l-5 3-5-3" />
+        </svg>
+      ),
+      'Tile, Coping & Decking': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z" />
+        </svg>
+      ),
+      'Water Treatment': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.5s5 5.2 5 9a5 5 0 11-10 0c0-3.8 5-9 5-9z" />
+          <path d="M9.5 14.5c.5 1 1.7 1.8 3 1.8a3 3 0 002.5-1.4" />
+        </svg>
+      ),
+      Lighting: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3a5 5 0 015 5 5 5 0 01-2.5 4.3L14 15h-4l-.5-2.7A5 5 0 017 8a5 5 0 015-5z" />
+          <path d="M10 18h4M11 21h2" />
+        </svg>
+      ),
+      Cleanup: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 19h14" />
+          <path d="M7 19l2-9h6l2 9" />
+          <path d="M9 7h6" />
+        </svg>
+      ),
+    };
+
+    return (
+      <span className="pricing-section__icon">
+        {icons[title] || <span className="pricing-section__glyph-letter">{getSectionGlyph(title)}</span>}
+      </span>
+    );
+  };
+
+  const handleActivateSelected = async () => {
+    if (!selectedModelId) return;
+    if (activateTimerRef.current) {
+      clearTimeout(activateTimerRef.current);
+    }
+    await handleSetDefault(selectedModelId);
+    setActivatedFlash(true);
+    activateTimerRef.current = setTimeout(() => setActivatedFlash(false), 1000);
+    setHasChanges(false);
+  };
+
+  const displayModelName = modelName || selectedModel?.name || 'New Pricing Model';
+  const showSetActiveButton = (Boolean(selectedModelId) && !selectedModelIsDefault) || activatedFlash;
+
+  useEffect(() => {
+    return () => {
+      if (activateTimerRef.current) {
+        clearTimeout(activateTimerRef.current);
+      }
+    };
+  }, []);
 
   const sections: Section[] = useMemo(
     () => [
@@ -879,103 +1054,156 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="pricing-modal-backdrop" onClick={handleBackdropClick}>
+    <div
+      className="pricing-modal-backdrop"
+      onMouseDown={handleBackdropMouseDown}
+      onMouseUp={handleBackdropMouseUp}
+      onMouseLeave={handleBackdropMouseLeave}
+    >
       <div className="pricing-modal">
-        <div className="pricing-modal__header">
+        <div className="pricing-hero">
           <div>
-            <h2>Pricing Data (Live Edit)</h2>
+            <p className="pricing-hero__eyebrow">{currentFranchiseId}</p>
+            <h2>Admin Pricing Model Editor</h2>
             <p className="pricing-modal__lede">
-              Adjust labor, material, and equipment costs without touching code. Changes persist locally and apply immediately to pricing calculations.
+              Adjust labor, material, equipment costs, and discounts for each Pricing Model. Select an existing model to edit or create a new one.
             </p>
           </div>
-          <div className="pricing-modal__actions">
-            <button className="pricing-chip-button ghost" onClick={resetPricingData}>
-              Reset to defaults
-            </button>
-            <button className="pricing-modal__close" onClick={onClose} aria-label="Close pricing data">
-              x
-            </button>
-          </div>
+          <button className="pricing-close" onClick={onClose} aria-label="Close pricing data">
+            Close
+          </button>
         </div>
 
-        <div className="pricing-model-controls">
-          <div className="pricing-model-controls__row">
-            <div className="pricing-model-controls__left">
-              <label className="pricing-field">
-                <div className="pricing-field__label">Pricing Model Name</div>
-                <input
-                  type="text"
-                  className="pricing-field__input"
-                  value={modelName}
-                  placeholder="e.g., 4th of July Pricing"
-                  onChange={(e) => setModelName(e.target.value)}
-                />
-              </label>
-            </div>
-          <div className="pricing-model-controls__right">
-            <label className="pricing-checkbox">
-              <input
-                type="checkbox"
-                checked={setDefaultModel}
-                  onChange={(e) => setSetDefaultModel(e.target.checked)}
-                />
-                <span>Set as default after saving</span>
+        <div className="pricing-card pricing-model-panel">
+          <div className="pricing-model-panel__header">
+            <label className="pricing-input-block grow">
+              <span className="pricing-input-block__label">Select Existing Model</span>
+              <div className="pricing-select">
+                <select value={selectedModelId || ''} onChange={(e) => void handleSelectModel(e.target.value)}>
+                  <option value="">Start a new pricing model</option>
+                  {pricingModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} {model.isDefault ? '(Active)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </label>
             <button className="pricing-chip-button ghost" type="button" onClick={handleCreateNewModel}>
-              Create New Pricing Model
+              Create New Model
             </button>
-            <button className="pricing-chip-button primary" onClick={handleSaveModel} disabled={savingModel}>
-              {savingModel ? 'Saving…' : 'Save Pricing Model'}
+            <button
+              className="pricing-chip-button ghost align-right"
+              onClick={() => setConfirmResetOpen(true)}
+              type="button"
+            >
+              Reset to Defaults
             </button>
           </div>
-        </div>
-          {saveError && <div className="pricing-model-error">{saveError}</div>}
-          <div className="pricing-model-list">
-            <div className="pricing-model-list__header">Existing Pricing Models</div>
-            <div className="pricing-model-list__items">
-              {pricingModels.length === 0 && <div className="pricing-empty">No models yet.</div>}
-              {pricingModels.map((model) => (
-                <div key={model.id} className={`pricing-model-chip ${model.isDefault ? 'default' : ''}`}>
-                  <div className="pricing-model-chip__main">
-                    <div className="pricing-model-chip__name">
-                      {model.name} {model.isDefault ? '(Default)' : ''}
-                    </div>
-                    <div className="pricing-model-chip__meta">
-                      Created {new Date(model.createdAt || model.updatedAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <div className="pricing-model-chip__actions">
-                    <button className="pricing-chip-button ghost" onClick={() => handleLoadModel(model.id)}>
-                      Load
-                    </button>
-                    {!model.isDefault && (
-                      <button className="pricing-chip-button ghost" onClick={() => handleSetDefault(model.id)}>
-                        Make Default
-                      </button>
-                    )}
-                    {!model.isDefault && (
-                      <button className="pricing-chip-button danger" onClick={() => handleDeleteModel(model.id, model.isDefault)}>
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+
+          <div className="pricing-model-panel__row">
+            <label className="pricing-input-block grow">
+              <span className="pricing-input-block__label">Model Name</span>
+              <input
+                type="text"
+                className="pricing-input"
+                value={modelName}
+                placeholder="Another test of prices"
+                onChange={(e) => {
+                  setModelName(e.target.value);
+                  setHasChanges(true);
+                }}
+              />
+            </label>
+            <div className="pricing-model-panel__actions">
+              <div
+                className="pricing-tooltip"
+                data-tooltip={!hasChanges ? 'No changes made' : 'Save recently made changes'}
+              >
+                <button
+                  className={`pricing-chip-button primary ${!hasChanges ? 'disabled' : ''}`}
+                  onClick={handleSaveModel}
+                  disabled={!hasChanges || savingModel}
+                >
+                  {savingModel ? 'Saving...' : 'Save Model'}
+                </button>
+              </div>
             </div>
           </div>
+
+          <div className="pricing-model-panel__info-bar">
+            <div className="pricing-model-panel__info-text">
+              <span className="pricing-label muted">Editing Pricing Model:</span>{' '}
+              <span className="pricing-model-panel__name">{displayModelName}</span>
+              {selectedModelIsDefault && <span className="pricing-pill success">Active</span>}
+            </div>
+            <div className="pricing-model-panel__meta-actions">
+              <div
+                className="pricing-tooltip"
+                data-tooltip={!hasChanges ? 'No changes made' : 'Reset recently made changes'}
+              >
+                <button
+                  className={`pricing-chip-button ${!hasChanges ? 'disabled' : ''}`}
+                  type="button"
+                  disabled={!selectedModelId || !hasChanges}
+                  onClick={() => selectedModelId && void handleLoadModel(selectedModelId)}
+                >
+                  Reset Changes
+                </button>
+              </div>
+              {showSetActiveButton && (
+                <button
+                  className="pricing-chip-button"
+                  type="button"
+                  disabled={!selectedModelId || activatedFlash}
+                  onClick={handleActivateSelected}
+                >
+                  {activatedFlash ? 'Activated!' : 'Set Active'}
+                </button>
+              )}
+              <div
+                className="pricing-tooltip"
+                data-tooltip={selectedModelIsDefault ? 'Cannot delete active model' : undefined}
+              >
+                <button
+                  className={`pricing-chip-button danger ${selectedModelIsDefault ? 'disabled' : ''}`}
+                  type="button"
+                  disabled={!selectedModelId || selectedModelIsDefault}
+                  onClick={() => {
+                    if (!selectedModelId || selectedModelIsDefault) return;
+                    setConfirmDeleteModel({
+                      id: selectedModelId,
+                      name: selectedModel?.name || displayModelName,
+                    });
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
         </div>
+        {saveError && <div className="pricing-model-error">{saveError}</div>}
+        </div>
+
 
         <div className="pricing-modal__content">
           {sections.map((section) => {
-            const open = openSections[section.title] ?? true;
+            const open = openSections[section.title] ?? false;
             return (
               <section key={section.title} className={`pricing-section ${open ? 'open' : ''}`}>
                 <button className="pricing-section__header" onClick={() => toggleSection(section.title)}>
-                  <span>{section.title}</span>
-                  <span className="chevron">{open ? 'v' : '>'}</span>
+                  <div className="pricing-section__header-left">
+                    {renderSectionIcon(section.title)}
+                    <span className="pricing-section__title">{section.title}</span>
+                  </div>
+                  <span className={`chevron ${open ? 'open' : ''}`}>{'>'}</span>
                 </button>
-                {open && (
-                  <div className="pricing-section__body">
+                <div
+                  className={`pricing-section__body ${
+                    open ? 'pricing-section__body--open' : 'pricing-section__body--closed'
+                  }`}
+                >
+                  <div className="pricing-section__body-content">
                     {section.groups.map((group) => (
                       <div key={group.title} className="pricing-group">
                         <div className="pricing-group__heading">
@@ -1002,12 +1230,52 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose }) => {
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
               </section>
             );
           })}
         </div>
       </div>
+      {(confirmDeleteModel || confirmResetOpen) && (
+        <div className="pricing-confirm-backdrop">
+          <div className="pricing-confirm-card">
+            <div className="pricing-confirm-message">
+              {confirmDeleteModel
+                ? `Are you sure you want to remove the '${confirmDeleteModel.name}' price model?`
+                : `Are you sure you want to reset '${displayModelName}' back to default?`}
+            </div>
+            <div className="pricing-confirm-actions">
+              <button
+                className="pricing-chip-button danger"
+                type="button"
+                onClick={() => {
+                  if (confirmDeleteModel) {
+                    void handleDeleteModel(confirmDeleteModel.id, false);
+                    setConfirmDeleteModel(null);
+                    setHasChanges(false);
+                  } else {
+                    resetPricingData();
+                    setConfirmResetOpen(false);
+                    setHasChanges(true);
+                  }
+                }}
+              >
+                I'm sure
+              </button>
+              <button
+                className="pricing-chip-button ghost"
+                type="button"
+                onClick={() => {
+                  setConfirmDeleteModel(null);
+                  setConfirmResetOpen(false);
+                }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

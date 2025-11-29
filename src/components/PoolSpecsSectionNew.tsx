@@ -68,6 +68,7 @@ function PoolSpecsSectionNew({
   defaultPricingModelId,
   onSelectPricingModel,
   showStaleIndicator,
+  showRemovedIndicator,
 }: Props) {
   const dropdownStyle = { width: '100%', height: '38px', padding: '6px 10px', lineHeight: '20px', boxSizing: 'border-box' as const };
 
@@ -122,32 +123,56 @@ function PoolSpecsSectionNew({
 
   return (
     <div className="section-form">
-      <div className="spec-block pricing-model-bar">
-        <div className="pricing-model-bar__left">
-          <h2 className="spec-block-title">Pool Specifications</h2>
-        </div>
-        <div className="pricing-model-bar__right">
-          <label className="spec-label">Pricing Model</label>
-          <div className="pricing-model-select">
-            <select
-              value={selectedPricingModelId || ''}
-              onChange={(e) => onSelectPricingModel && onSelectPricingModel(e.target.value)}
-              className="compact-input"
-            >
-              {pricingModels.length === 0 && <option value="">No models</option>}
-              {pricingModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name} {model.isDefault ? '(Default)' : ''}
-                </option>
-              ))}
-            </select>
-            <div className="pricing-model-pill">
-              <span className="pill-name">
-                {selectedPricingModelName || 'Unnamed model'}
-                {showStaleIndicator ? '*' : ''}
-              </span>
-              {selectedPricingModelId === defaultPricingModelId && <span className="pill-default">Default</span>}
+      <div className="spec-block">
+        <h2 className="spec-block-title">Pricing Information</h2>
+        <div className="pricing-info-row">
+          <div className="spec-field spec-full-width">
+            <label className="spec-label">Pricing Model</label>
+            <div className="pricing-model-select">
+              <select
+                value={selectedPricingModelId || ''}
+                onChange={(e) => onSelectPricingModel && onSelectPricingModel(e.target.value)}
+                className="compact-input"
+              >
+                {pricingModels.length === 0 && <option value="">No models</option>}
+                {pricingModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} {model.isDefault ? '(Active)' : ''}
+                  </option>
+                ))}
+              </select>
+              <div
+                className={`pricing-model-pill ${
+                  showRemovedIndicator ? 'removed' : showStaleIndicator ? 'inactive' : ''
+                }`}
+              >
+                <span className="pill-name">
+                  {selectedPricingModelName || 'Unnamed model'}
+                  {showRemovedIndicator &&
+                    !(selectedPricingModelName || '').toLowerCase().includes('(removed)') &&
+                    ' (Removed)'}
+                </span>
+                {selectedPricingModelId === defaultPricingModelId ? (
+                  <span className="pill-default">Active</span>
+                ) : (
+                  <>
+                    {showStaleIndicator && !showRemovedIndicator && <span className="pill-inactive">Inactive</span>}
+                    {showRemovedIndicator && <span className="pill-removed">Removed</span>}
+                  </>
+                )}
+              </div>
             </div>
+            {showRemovedIndicator ? (
+              <div className="pricing-model-warning">
+                Warning: The Pricing Model that is being used no longer exists. Consider switching to a new Price Model
+              </div>
+            ) : (
+              showStaleIndicator && (
+                <div className="pricing-model-warning">
+                  Pricing Warning: You have selected an alternate Pricing Model
+                </div>
+              )
+            )}
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ import PricingDataModal from './components/PricingDataModal';
 import { initPricingDataStore, setActiveFranchiseId } from './services/pricingDataStore';
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
+import AdminPanelPage from './pages/AdminPanelPage';
 import './App.css';
 
 type UserSession = {
@@ -19,6 +20,7 @@ type UserSession = {
   franchiseId: string;
   franchiseName?: string;
   franchiseCode: string;
+  role?: 'admin' | 'designer';
 };
 
 const SESSION_STORAGE_KEY = 'ppas-user-session';
@@ -112,6 +114,7 @@ function AppContent() {
       franchiseId: response.franchiseId,
       franchiseName: response.franchiseName,
       franchiseCode: response.franchiseCode,
+      role: response.role || 'designer',
     };
 
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
@@ -137,13 +140,29 @@ function AppContent() {
   return (
     <div className="app">
       {showNavigation && (
-        <NavigationBar userName={session?.userName || 'User'} onLogout={session ? handleLogout : undefined} />
+        <NavigationBar
+          userName={session?.userName || 'User'}
+          onLogout={session ? handleLogout : undefined}
+          isAdmin={(session?.role || '').toLowerCase() === 'admin'}
+        />
       )}
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/"
+          element={<HomePage />}
+        />
+        <Route
+          path="/admin"
+          element={
+            <AdminPanelPage
+              onOpenPricingData={() => setShowPricingData(true)}
+              session={session}
+            />
+          }
+        />
         <Route path="/proposals" element={<ProposalsListPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
-        <Route path="/settings" element={<SettingsPage onOpenPricingData={() => setShowPricingData(true)} />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/proposal/new" element={<ProposalForm key="new" />} />
         <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm key={location.pathname} />} />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
@@ -154,8 +173,19 @@ function AppContent() {
         onInstall={handleInstallUpdate}
         errorMessage={updateError}
       />
+      {session && (
+        <div className="app-session-meta">
+          <div className="app-session-line">Role: {session.role ? session.role.charAt(0).toUpperCase() + session.role.slice(1) : 'Designer'}</div>
+          <div className="app-session-line">
+            {session.franchiseName || session.franchiseCode || session.franchiseId || 'Unknown'}
+          </div>
+        </div>
+      )}
       {showPricingData && (
-        <PricingDataModal onClose={() => setShowPricingData(false)} />
+        <PricingDataModal
+          onClose={() => setShowPricingData(false)}
+          franchiseId={session?.franchiseId}
+        />
       )}
       {showLogin && (
         <LoginModal onSubmit={handleLogin} existingName={session?.userName} />

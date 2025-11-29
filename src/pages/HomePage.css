@@ -171,20 +171,30 @@
   align-items: center;
 }
 
-.proposal-item-model {
-  background: #e9f4ff;
-  color: #0f2a4f;
-  padding: 4px 8px;
-  border-radius: 10px;
-  font-weight: 600;
-  border: 1px solid #c8dcff;
+.proposal-model-pill {
+  padding: clamp(0.25rem, 0.5vh, 0.4rem) clamp(0.6rem, 1vh, 0.8rem);
+  border-radius: 12px;
+  font-weight: 700;
   font-size: clamp(0.7rem, 1.2vh, 0.8rem);
+  border: 1px solid transparent;
 }
 
-.proposal-item-model.stale {
-  background: #fff4e5;
-  border-color: #fbbf24;
-  color: #92400e;
+.proposal-model-pill.active {
+  background: #08b80b;
+  color: #ffffff;
+  border-color: #0f9a6a;
+}
+
+.proposal-model-pill.inactive {
+  background: #fef3c7;
+  color: #e3c411;
+  border-color: #fcd34d;
+}
+
+.proposal-model-pill.removed {
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-color: #fecdd3;
 }
 
 .proposal-item-status {
@@ -233,6 +243,37 @@
   background-color: #a0d2e2;
   transform: translateY(-2px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.admin-card {
+  padding: 16px;
+  background: #f0f6ff;
+  border: 1px solid #c8dcff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-note {
+  margin: 0;
+  color: #0f2a4f;
+  font-weight: 600;
+}
+
+.admin-action-btn {
+  padding: 10px;
+  background: #0f2a4f;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.admin-action-btn:hover {
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
 }
 
 /* Performance Overview */

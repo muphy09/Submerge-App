@@ -236,6 +236,34 @@
   display: inline-block;
 }
 
+.proposal-model-pill {
+  padding: clamp(0.25rem, 0.5vh, 0.4rem) clamp(0.6rem, 1vh, 0.8rem);
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: clamp(0.7rem, 1.2vh, 0.8rem);
+  border: 1px solid transparent;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.proposal-model-pill.active {
+  background: #08b80b;
+  color: #ffffff;
+  border-color: #0f9a6a;
+}
+
+.proposal-model-pill.inactive {
+  background: #fef3c7;
+  color: #e3c411;
+  border-color: #fcd34d;
+}
+
+.proposal-model-pill.removed {
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-color: #fecdd3;
+}
+
 .price-cell {
   font-weight: 600;
   text-align: right;

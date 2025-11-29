@@ -4,6 +4,7 @@ import { Proposal } from '../types/proposal-new';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import MasterPricingEngine from '../services/masterPricingEngine';
+import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import './ProposalsListPage.css';
 
 function ProposalsListPage() {
@@ -11,10 +12,12 @@ function ProposalsListPage() {
   const { showToast } = useToast();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortField, setSortField] = useState<'customerName' | 'lastModified' | 'status' | 'retailPrice' | 'totalCOGS' | 'grossProfitPercent' | 'grossProfitAmount'>('lastModified');
+  const [sortField, setSortField] = useState<'customerName' | 'lastModified' | 'status' | 'pricingModel' | 'retailPrice' | 'totalCOGS' | 'grossProfitPercent' | 'grossProfitAmount'>('lastModified');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedProposals, setSelectedProposals] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
+  const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
 
   useEffect(() => {
     loadProposals();
@@ -52,6 +55,25 @@ function ProposalsListPage() {
       });
 
       setProposals(enriched);
+
+      // Build maps for pricing model status by franchise to drive the pill UI
+      const franchiseIds = Array.from(new Set((enriched || []).map((p) => p.franchiseId || 'default')));
+      const defaultMap: Record<string, string | null> = {};
+      const availableMap: Record<string, Set<string>> = {};
+      for (const id of franchiseIds) {
+        try {
+          const rows = await listPricingModelsRemote(id);
+          const def = rows?.find((r: any) => r.isDefault);
+          defaultMap[id] = def?.id || null;
+          availableMap[id] = new Set((rows || []).map((r: any) => r.id));
+        } catch (error) {
+          console.warn('Unable to load pricing models for franchise', id, error);
+          defaultMap[id] = null;
+          availableMap[id] = new Set();
+        }
+      }
+      setDefaultModelMap(defaultMap);
+      setAvailableModelMap(availableMap);
     } catch (error) {
       console.error('Failed to load proposals:', error);
     } finally {
@@ -94,6 +116,10 @@ function ProposalsListPage() {
       case 'status':
         aValue = a.status;
         bValue = b.status;
+        break;
+      case 'pricingModel':
+        aValue = (a.pricingModelName || '').toLowerCase();
+        bValue = (b.pricingModelName || '').toLowerCase();
         break;
       case 'retailPrice':
         aValue = a.pricing?.retailPrice || a.totalCost || 0;
@@ -220,6 +246,17 @@ function ProposalsListPage() {
       ) : (
         <div className="proposals-table-container">
           <table className="proposals-table">
+            <colgroup>
+              <col style={{ width: '40px' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="checkbox-header">
@@ -238,6 +275,9 @@ function ProposalsListPage() {
                 </th>
                 <th onClick={() => handleSort('status')}>
                   Proposal Status <SortIcon field="status" />
+                </th>
+                <th onClick={() => handleSort('pricingModel')}>
+                  Pricing Model <SortIcon field="pricingModel" />
                 </th>
                 <th className="th-right" onClick={() => handleSort('retailPrice')}>
                   Retail Price <SortIcon field="retailPrice" />
@@ -283,6 +323,34 @@ function ProposalsListPage() {
                       >
                         {proposal.status}
                       </span>
+                    </td>
+                    <td>
+                      {(() => {
+                        const fid = proposal.franchiseId || 'default';
+                        const modelId = proposal.pricingModelId || '';
+                        const defaultId = defaultModelMap[fid];
+                        const availableSet = availableModelMap[fid] || new Set<string>();
+                        const explicitRemoved = (proposal.pricingModelName || '').toLowerCase().includes('(removed)');
+                        const isRemoved = Boolean(modelId) && (!availableSet.has(modelId) || explicitRemoved);
+                        const isActive =
+                          Boolean(modelId) &&
+                          defaultId &&
+                          modelId === defaultId &&
+                          availableSet.has(modelId) &&
+                          !explicitRemoved;
+                        const isInactive = Boolean(modelId) && !isActive && !isRemoved;
+                        const className = isActive
+                          ? 'proposal-model-pill active'
+                          : isRemoved
+                          ? 'proposal-model-pill removed'
+                          : 'proposal-model-pill inactive';
+                        return (
+                          <span className={className}>
+                            {(proposal.pricingModelName || 'Pricing Model') +
+                              (isRemoved && !explicitRemoved ? ' (Removed)' : '')}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="price-cell">
                       ${retailPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}

@@ -4,12 +4,14 @@ import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
 import heroImage from '../assets/homepagetestbck.jpg';
+import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 
 function HomePage() {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
+  const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -34,19 +36,22 @@ function HomePage() {
   };
 
   const populateDefaultModels = async (data: Proposal[]) => {
-    if (!window.electron?.listPricingModels) return;
     const franchiseIds = Array.from(new Set(data.map((p) => p.franchiseId || 'default')));
-    const map: Record<string, string | null> = {};
+    const defaultMap: Record<string, string | null> = {};
+    const availableMap: Record<string, Set<string>> = {};
     for (const id of franchiseIds) {
       try {
-        const rows = await window.electron.listPricingModels(id);
+        const rows = await listPricingModelsRemote(id);
         const def = rows?.find((r: any) => r.isDefault);
-        map[id] = def?.id || null;
+        defaultMap[id] = def?.id || null;
+        availableMap[id] = new Set((rows || []).map((r: any) => r.id));
       } catch (error) {
-        map[id] = null;
+        defaultMap[id] = null;
+        availableMap[id] = new Set();
       }
     }
-    setDefaultModelMap(map);
+    setDefaultModelMap(defaultMap);
+    setAvailableModelMap(availableMap);
   };
 
   const handleNewProposal = () => {
@@ -148,16 +153,32 @@ function HomePage() {
                     </div>
                   </div>
                   <div className="proposal-item-footer">
-                    <span
-                      className={`proposal-item-model ${proposal.pricingModelId && defaultModelMap[(proposal.franchiseId || 'default')] && proposal.pricingModelId !== defaultModelMap[(proposal.franchiseId || 'default')] ? 'stale' : ''}`}
-                    >
-                      {(proposal.pricingModelName || 'Pricing Model') +
-                        (proposal.pricingModelId &&
-                        defaultModelMap[(proposal.franchiseId || 'default')] &&
-                        proposal.pricingModelId !== defaultModelMap[(proposal.franchiseId || 'default')]
-                          ? '*'
-                          : '')}
-                    </span>
+                  {(() => {
+                    const fid = proposal.franchiseId || 'default';
+                    const modelId = proposal.pricingModelId || '';
+                    const defaultId = defaultModelMap[fid];
+                    const availableSet = availableModelMap[fid] || new Set<string>();
+                    const explicitRemoved = (proposal.pricingModelName || '').toLowerCase().includes('(removed)');
+                    const isRemoved = Boolean(modelId) && (!availableSet.has(modelId) || explicitRemoved);
+                    const isActive =
+                      Boolean(modelId) &&
+                      defaultId &&
+                      modelId === defaultId &&
+                      availableSet.has(modelId) &&
+                      !explicitRemoved;
+                    const isInactive = Boolean(modelId) && !isActive && !isRemoved;
+                    const className = isActive
+                      ? 'proposal-model-pill active'
+                      : isRemoved
+                      ? 'proposal-model-pill removed'
+                      : 'proposal-model-pill inactive';
+                    return (
+                      <span className={className}>
+                        {(proposal.pricingModelName || 'Pricing Model') +
+                          (isRemoved && !explicitRemoved ? ' (Removed)' : '')}
+                      </span>
+                    );
+                  })()}
                     <span
                       className="proposal-item-status"
                       style={{ backgroundColor: getStatusColor(proposal.status) }}
@@ -174,13 +195,12 @@ function HomePage() {
           </div>
         </div>
 
-        {/* Quick Actions Column */}
+        {/* Quick Actions */}
         <div className="dashboard-column">
           <h2 className="column-title">Quick Actions</h2>
           <div className="quick-actions-list">
-            <button className="quick-action-btn">Placeholder</button>
-            <button className="quick-action-btn">Placeholder</button>
-            <button className="quick-action-btn">Placeholder</button>
+            <button className="quick-action-btn" onClick={handleNewProposal}>New Proposal</button>
+            <button className="quick-action-btn" onClick={handlePresentationMode}>Presentation Mode</button>
           </div>
         </div>
 

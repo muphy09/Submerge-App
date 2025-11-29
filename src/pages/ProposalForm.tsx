@@ -27,6 +27,7 @@ import {
   initPricingDataStore,
   setActivePricingModel,
 } from '../services/pricingDataStore';
+import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 
 const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
   if (waterFeatures && Array.isArray((waterFeatures as any).selections)) {
@@ -139,7 +140,7 @@ const sectionIcons: Record<SectionKey, () => JSX.Element> = {
 };
 
 const sections: SectionConfig[] = [
-  { key: 'poolSpecs', label: 'Pool Specifications', shortLabel: 'Pool Specs' },
+  { key: 'poolSpecs', label: 'Pricing Information', shortLabel: 'Pricing' },
   { key: 'excavation', label: 'Excavation', shortLabel: 'Excavation' },
   { key: 'plumbing', label: 'Plumbing', shortLabel: 'Plumbing' },
   { key: 'electrical', label: 'Gas / Electrical', shortLabel: 'Gas/Electrical' },
@@ -171,7 +172,7 @@ function ProposalForm() {
       return acc;
     }, {} as Record<SectionKey, boolean>);
   const [completedByAdvance, setCompletedByAdvance] = useState<Record<SectionKey, boolean>>(createCompletionMap());
-  const [pricingModels, setPricingModels] = useState<{ id: string; name: string; isDefault?: boolean }[]>([]);
+  const [pricingModels, setPricingModels] = useState<{ id: string; name: string; isDefault?: boolean; removed?: boolean }[]>([]);
   const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
@@ -191,8 +192,13 @@ function ProposalForm() {
     return DEFAULT_FRANCHISE_ID;
   };
 
-  const applyPricingModelSelection = async (modelId: string | null, modelName?: string | null, isDefault?: boolean) => {
-    if (modelId) {
+  const applyPricingModelSelection = async (
+    modelId: string | null,
+    modelName?: string | null,
+    isDefault?: boolean,
+    skipRemote?: boolean
+  ) => {
+    if (modelId && !skipRemote) {
       await setActivePricingModel(modelId);
     }
     setSelectedPricingModelId(modelId);
@@ -207,18 +213,38 @@ function ProposalForm() {
   };
 
   const loadPricingModels = async (franchiseId: string, desiredModelId?: string | null) => {
-    if (!window.electron?.listPricingModels) return;
     try {
-      const rows = await window.electron.listPricingModels(franchiseId);
-      setPricingModels(rows || []);
+      const rows = await listPricingModelsRemote(franchiseId);
+      let models = rows || [];
       const defaultModel = rows?.find((m: any) => m.isDefault) || rows?.[0];
       setDefaultPricingModelId(defaultModel ? defaultModel.id : null);
 
       const targetModelId = desiredModelId || selectedPricingModelId || defaultModel?.id || null;
-      const targetModel = rows?.find((m: any) => m.id === targetModelId) || defaultModel;
+      const targetModel = rows?.find((m: any) => m.id === targetModelId) || null;
+
+      const missingModelId = desiredModelId || selectedPricingModelId;
+      const missingModelKnown = missingModelId && rows?.some((m: any) => m.id === missingModelId);
+      if (missingModelId && !missingModelKnown) {
+        const placeholderName = proposal.pricingModelName || selectedPricingModelName || 'Unknown Pricing Model';
+        const removedModel = { id: missingModelId, name: `${placeholderName} (Removed)`, isDefault: false, removed: true };
+        models = [...models, removedModel];
+        setSelectedPricingModelId(missingModelId);
+        setSelectedPricingModelName(removedModel.name);
+        setProposal((prev) => ({
+          ...prev,
+          pricingModelId: missingModelId || undefined,
+          pricingModelName: placeholderName || undefined,
+          pricingModelIsDefault: false,
+        }));
+        setPricingModels(models);
+        return;
+      }
+      setPricingModels(models);
 
       if (targetModel) {
         await applyPricingModelSelection(targetModel.id, targetModel.name, Boolean(targetModel.isDefault));
+      } else if (!desiredModelId && defaultModel) {
+        await applyPricingModelSelection(defaultModel.id, defaultModel.name, Boolean(defaultModel.isDefault));
       }
     } catch (error) {
       console.warn('Unable to load pricing models for franchise', franchiseId, error);
@@ -273,7 +299,7 @@ function ProposalForm() {
     };
   };
 
-  const [proposal, setProposal] = useState<Partial<Proposal>>(getInitialProposal());
+  const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
 
   useEffect(() => {
     const hasContent =
@@ -301,11 +327,12 @@ function ProposalForm() {
   }, [proposalNumber]);
 
   useEffect(() => {
+    if (proposalNumber && isLoading) return;
     const franchiseId = proposal.franchiseId || getSessionFranchiseId();
     const desiredModelId = proposal.pricingModelId || null;
     void initPricingDataStore(franchiseId, desiredModelId || undefined);
     void loadPricingModels(franchiseId, desiredModelId);
-  }, [proposal.franchiseId, proposal.pricingModelId]);
+  }, [proposal.franchiseId, proposal.pricingModelId, proposalNumber, isLoading]);
 
   const loadProposal = async (num: string, requestId: number) => {
     try {
@@ -324,6 +351,7 @@ function ProposalForm() {
           setProposal(freshData);
           setSelectedPricingModelId(freshData.pricingModelId || null);
           setSelectedPricingModelName(freshData.pricingModelName || null);
+          setCurrentSection(0);
           setCompletedByAdvance(createCompletionMap());
           // Load PAP discounts if they exist
           if (freshData.papDiscounts) {
@@ -462,12 +490,16 @@ function ProposalForm() {
               defaultPricingModelId={defaultPricingModelId}
               onSelectPricingModel={async (id) => {
                 const model = pricingModels.find((m) => m.id === id);
-                await applyPricingModelSelection(id, model?.name, model?.isDefault);
+                await applyPricingModelSelection(id, model?.name, model?.isDefault, Boolean(model?.removed));
               }}
               showStaleIndicator={
                 Boolean(selectedPricingModelId) &&
                 Boolean(defaultPricingModelId) &&
-                selectedPricingModelId !== defaultPricingModelId
+                selectedPricingModelId !== defaultPricingModelId &&
+                !pricingModels.some((m) => m.id === selectedPricingModelId && m.removed)
+              }
+              showRemovedIndicator={
+                Boolean(selectedPricingModelId) && pricingModels.some((m) => m.id === selectedPricingModelId && m.removed)
               }
             />
           );

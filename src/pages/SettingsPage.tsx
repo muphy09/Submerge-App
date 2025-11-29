@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 import './SettingsPage.css';
 
-interface SettingsPageProps {
-  onOpenPricingData?: () => void;
-}
-
-const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenPricingData }) => {
+const SettingsPage: React.FC = () => {
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
   const [showChangelog, setShowChangelog] = useState(false);
@@ -200,19 +196,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onOpenPricingData }) => {
       </div>
 
       <div className="settings-page-content">
-        <div className="settings-card">
-          <h2>Pricing Data</h2>
-          <p className="settings-description">
-            Manage pricing configurations for proposals
-          </p>
-          <button
-            className="settings-button pricing-button"
-            onClick={onOpenPricingData}
-          >
-            Open Pricing Data
-          </button>
-        </div>
-
         <div className="settings-card">
           <h2>Updates</h2>
           <p className="settings-description">

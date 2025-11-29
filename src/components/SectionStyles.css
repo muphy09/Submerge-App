@@ -311,24 +311,11 @@ select.compact-input {
   width: 100%;
 }
 
-.pricing-model-bar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.pricing-model-bar__right {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 260px;
-}
-
 .pricing-model-select {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .pricing-model-pill {
@@ -343,12 +330,57 @@ select.compact-input {
   font-weight: 600;
 }
 
+.pricing-model-pill.inactive {
+  background: #fff4f4;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
 .pricing-model-pill .pill-default {
   background: #1e88e5;
   color: white;
   padding: 2px 6px;
   border-radius: 8px;
   font-size: 12px;
+}
+
+.pricing-model-pill .pill-inactive {
+  background: #ef4444;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.pricing-model-pill.removed {
+  background: #fef2f2;
+  border-color: #fecdd3;
+  color: #7f1d1d;
+}
+
+.pricing-model-pill .pill-removed {
+  background: #b91c1c;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.pricing-info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pricing-model-warning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff7ed;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .spec-block-header {

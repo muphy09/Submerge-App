@@ -810,13 +810,16 @@ ipcMain.handle('upsert-franchise', async (_, payload) => {
 
 ipcMain.handle('enter-franchise-code', async (_, payload) => {
   if (!db) throw new Error('Database not initialized');
-  const code = payload?.franchiseCode || payload?.code;
+  const rawCode = payload?.franchiseCode || payload?.code;
   const displayName = payload?.displayName || payload?.userName || 'User';
-  if (!code) {
+  if (!rawCode) {
     throw new Error('Franchise code is required');
   }
 
-  const franchise = getFranchiseByCode(code);
+  // Treat codes ending with "-A" as admin codes for the same franchise
+  const adminMatch = String(rawCode).trim().toUpperCase().endsWith('-A');
+  const normalizedCode = adminMatch ? String(rawCode).trim().slice(0, -2) : String(rawCode).trim();
+  const franchise = getFranchiseByCode(normalizedCode);
   if (!franchise) {
     throw new Error('Invalid franchise code');
   }
@@ -827,6 +830,7 @@ ipcMain.handle('enter-franchise-code', async (_, payload) => {
     franchiseId: franchise.id,
     franchiseName: franchise.name,
     franchiseCode: franchise.franchiseCode,
+    role: adminMatch ? 'admin' : 'designer',
     isActive: true,
   };
 });
