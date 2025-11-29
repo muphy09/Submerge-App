@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+env:
+  VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+  VITE_SUPABASE_ONLY: true
+
 jobs:
   release-windows:
     runs-on: windows-latest
@@ -20,6 +25,9 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 18
+
+      - name: Validate Supabase env
+        run: node -e "const required=['VITE_SUPABASE_URL','VITE_SUPABASE_ANON_KEY'];const missing=required.filter(k=>!process.env[k]);if(missing.length){console.error('Missing required env vars: '+missing.join(', '));process.exit(1);}console.log('Supabase env present');"
 
       - name: Install dependencies
         run: npm install
@@ -51,6 +59,9 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 18
+
+      - name: Validate Supabase env
+        run: node -e "const required=['VITE_SUPABASE_URL','VITE_SUPABASE_ANON_KEY'];const missing=required.filter(k=>!process.env[k]);if(missing.length){console.error('Missing required env vars: '+missing.join(', '));process.exit(1);}console.log('Supabase env present');"
 
       - name: Install dependencies
         run: npm install
