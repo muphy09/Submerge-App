@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast';
 import './HomePage.css';
 import heroImage from '../assets/homepagetestbck.jpg';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
-import { listProposals } from '../services/proposalsAdapter';
+import { listProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, getSessionUserName } from '../services/session';
 
 function HomePage() {
@@ -14,6 +14,7 @@ function HomePage() {
   const [loading, setLoading] = useState(true);
   const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
   const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; proposalNumber: string } | null>(null);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -66,6 +67,18 @@ function HomePage() {
 
   const handleOpenProposal = (proposalNumber: string) => {
     navigate(`/proposal/view/${proposalNumber}`);
+  };
+
+  const handleDeleteProposal = async (proposalNumber: string) => {
+    try {
+      await deleteProposal(proposalNumber, getSessionFranchiseId());
+      setProposals(prev => prev.filter(p => p.proposalNumber !== proposalNumber));
+      setContextMenu(null);
+      showToast({ type: 'success', message: 'Proposal deleted.' });
+    } catch (error) {
+      console.error('Failed to delete proposal', error);
+      showToast({ type: 'error', message: 'Failed to delete proposal. Please try again.' });
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -147,6 +160,10 @@ function HomePage() {
                   key={proposal.proposalNumber}
                   className="recent-proposal-item"
                   onClick={() => handleOpenProposal(proposal.proposalNumber)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, proposalNumber: proposal.proposalNumber });
+                  }}
                 >
                   <div className="proposal-item-header">
                     <div className="proposal-item-name">{proposal.customerInfo.customerName}</div>
@@ -239,6 +256,26 @@ function HomePage() {
           </div>
         </div>
       </div>
+
+      {contextMenu && (
+        <>
+          <div
+            className="context-menu-backdrop"
+            onClick={() => setContextMenu(null)}
+          />
+          <div
+            className="proposal-context-menu"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button
+              className="context-menu-item delete"
+              onClick={() => handleDeleteProposal(contextMenu.proposalNumber)}
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

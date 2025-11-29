@@ -42,52 +42,115 @@ function ensureProposalMetadata(proposal: Proposal, session?: UserSession | null
   };
 }
 
+function coerceTimestamp(value?: string | null): number {
+  const ts = value ? Date.parse(value) : NaN;
+  return Number.isFinite(ts) ? ts : 0;
+}
+
 export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   const session = readSession();
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
 
-  return withFallback(async () => {
-    const supabase = getSupabaseClient();
-    if (!supabase) return [];
-    const { data, error } = await supabase
-      .from('franchise_proposals')
-      .select('proposal_json')
-      .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
-      .order('updated_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row: any) =>
-      ensureProposalMetadata((row?.proposal_json || {}) as Proposal, session)
-    );
-  }, async () => {
-    if (!window.electron?.getAllProposals) return [];
-    const rows = await window.electron.getAllProposals();
-    return (rows || [])
-      .filter(
-        (proposal: Proposal) =>
-          (proposal.franchiseId || DEFAULT_FRANCHISE_ID) === (targetFranchiseId || DEFAULT_FRANCHISE_ID)
-      )
-      .map((proposal: Proposal) => ensureProposalMetadata(proposal, session));
-  });
+  const supabasePromise = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      if (!supabase) return [] as Proposal[];
+      const { data, error } = await supabase
+        .from('franchise_proposals')
+        .select('proposal_json')
+        .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((row: any) =>
+        ensureProposalMetadata((row?.proposal_json || {}) as Proposal, session)
+      );
+    } catch (error) {
+      console.warn('Failed to list proposals from Supabase, will fall back to local only.', error);
+      return [] as Proposal[];
+    }
+  })();
+
+  const localPromise = (async () => {
+    try {
+      if (!window.electron?.getAllProposals) return [] as Proposal[];
+      const rows = await window.electron.getAllProposals();
+      return (rows || [])
+        .filter(
+          (proposal: Proposal) =>
+            (proposal.franchiseId || DEFAULT_FRANCHISE_ID) === (targetFranchiseId || DEFAULT_FRANCHISE_ID)
+        )
+        .map((proposal: Proposal) => ensureProposalMetadata(proposal, session));
+    } catch (error) {
+      console.warn('Failed to list proposals from local store.', error);
+      return [] as Proposal[];
+    }
+  })();
+
+  const [supabaseRows, localRows] = await Promise.all([supabasePromise, localPromise]);
+
+  // Merge by proposalNumber, prefer newest lastModified
+  const merged = new Map<string, Proposal>();
+  const upsert = (p: Proposal) => {
+    if (!p?.proposalNumber) return;
+    const existing = merged.get(p.proposalNumber);
+    if (!existing) {
+      merged.set(p.proposalNumber, p);
+      return;
+    }
+    const a = coerceTimestamp(existing.lastModified || existing.createdDate);
+    const b = coerceTimestamp(p.lastModified || p.createdDate);
+    merged.set(p.proposalNumber, b > a ? p : existing);
+  };
+
+  supabaseRows.forEach(upsert);
+  localRows.forEach(upsert);
+
+  // Return newest first
+  return Array.from(merged.values()).sort(
+    (a, b) => coerceTimestamp(b.lastModified || b.createdDate) - coerceTimestamp(a.lastModified || a.createdDate)
+  );
 }
 
 export async function getProposal(proposalNumber: string): Promise<Proposal | null> {
   const session = readSession();
-  return withFallback(async () => {
-    const supabase = getSupabaseClient();
-    if (!supabase) return null;
-    const { data, error } = await supabase
-      .from('franchise_proposals')
-      .select('proposal_json')
-      .eq('proposal_number', proposalNumber)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data?.proposal_json) return null;
-    return ensureProposalMetadata(data.proposal_json as Proposal, session);
-  }, async () => {
-    if (!window.electron?.getProposal) return null;
-    const proposal = await window.electron.getProposal(proposalNumber);
-    return proposal ? ensureProposalMetadata(proposal as Proposal, session) : null;
-  });
+
+  const supabasePromise = (async () => {
+    try {
+      const supabase = getSupabaseClient();
+      if (!supabase) return null;
+      const { data, error } = await supabase
+        .from('franchise_proposals')
+        .select('proposal_json')
+        .eq('proposal_number', proposalNumber)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data?.proposal_json) return null;
+      return ensureProposalMetadata(data.proposal_json as Proposal, session);
+    } catch (error) {
+      console.warn('Failed to load proposal from Supabase, will try local.', error);
+      return null;
+    }
+  })();
+
+  const localPromise = (async () => {
+    try {
+      if (!window.electron?.getProposal) return null;
+      const proposal = await window.electron.getProposal(proposalNumber);
+      return proposal ? ensureProposalMetadata(proposal as Proposal, session) : null;
+    } catch (error) {
+      console.warn('Failed to load proposal from local store.', error);
+      return null;
+    }
+  })();
+
+  const [cloud, local] = await Promise.all([supabasePromise, localPromise]);
+
+  if (cloud && local) {
+    const cloudTs = coerceTimestamp(cloud.lastModified || cloud.createdDate);
+    const localTs = coerceTimestamp(local.lastModified || local.createdDate);
+    return localTs > cloudTs ? local : cloud;
+  }
+  return cloud || local;
 }
 
 export async function saveProposal(proposal: Proposal): Promise<SaveResult> {

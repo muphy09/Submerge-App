@@ -2,6 +2,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Prefer the version supplied by the main process to avoid bundle path issues
 const appVersion = process.env.PPAS_APP_VERSION || process.env.npm_package_version || 'dev';
 
+const setIpcListener = (channel, callback) => {
+  ipcRenderer.removeAllListeners(channel);
+  ipcRenderer.on(channel, (_, payload) => callback(payload));
+};
+
 contextBridge.exposeInMainWorld('electron', {
   // App info
   appVersion,
@@ -14,9 +19,7 @@ contextBridge.exposeInMainWorld('electron', {
   readChangelog: () => ipcRenderer.invoke('read-changelog'),
 
   // Listen for opening proposals from file system
-  onOpenProposal: (callback) => {
-    ipcRenderer.on('open-proposal', (_, proposal) => callback(proposal));
-  },
+  onOpenProposal: (callback) => setIpcListener('open-proposal', callback),
 
   // Reference data
   getPoolModels: () => ipcRenderer.invoke('get-pool-models'),
@@ -47,19 +50,9 @@ contextBridge.exposeInMainWorld('electron', {
   // Update operations
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  onUpdateAvailable: (callback) => {
-    ipcRenderer.on('update-available', (_, info) => callback(info));
-  },
-  onUpdateNotAvailable: (callback) => {
-    ipcRenderer.on('update-not-available', (_, info) => callback(info));
-  },
-  onDownloadProgress: (callback) => {
-    ipcRenderer.on('download-progress', (_, progress) => callback(progress));
-  },
-  onUpdateDownloaded: (callback) => {
-    ipcRenderer.on('update-downloaded', (_, info) => callback(info));
-  },
-  onUpdateError: (callback) => {
-    ipcRenderer.on('update-error', (_, error) => callback(error));
-  },
+  onUpdateAvailable: (callback) => setIpcListener('update-available', callback),
+  onUpdateNotAvailable: (callback) => setIpcListener('update-not-available', callback),
+  onDownloadProgress: (callback) => setIpcListener('download-progress', callback),
+  onUpdateDownloaded: (callback) => setIpcListener('update-downloaded', callback),
+  onUpdateError: (callback) => setIpcListener('update-error', callback),
 });

@@ -1,7 +1,20 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Proposal, WaterFeatures, PAPDiscounts } from '../types/proposal-new';
-import { getDefaultProposal, getDefaultPAPDiscounts } from '../utils/proposalDefaults';
+import {
+  getDefaultProposal,
+  getDefaultPAPDiscounts,
+  getDefaultPoolSpecs,
+  getDefaultExcavation,
+  getDefaultPlumbing,
+  getDefaultElectrical,
+  getDefaultTileCopingDecking,
+  getDefaultDrainage,
+  getDefaultEquipment,
+  getDefaultWaterFeatures,
+  getDefaultCustomFeatures,
+  getDefaultInteriorFinish,
+} from '../utils/proposalDefaults';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { validateProposal } from '../utils/validation';
 import PoolSpecsSectionNew from '../components/PoolSpecsSectionNew';
@@ -159,6 +172,32 @@ const sections: SectionConfig[] = [
   { key: 'customFeatures', label: 'Custom Features', shortLabel: 'Custom', includeInProgress: false },
 ];
 
+const toFiniteNumber = (value: any): number => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
+  const base = getDefaultProposal();
+  return {
+    ...base,
+    ...input,
+    customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+    poolSpecs: { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) },
+    excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
+    plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
+    electrical: { ...getDefaultElectrical(), ...(input.electrical || {}) },
+    tileCopingDecking: { ...getDefaultTileCopingDecking(), ...(input.tileCopingDecking || {}) },
+    drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
+    equipment: { ...getDefaultEquipment(), ...(input.equipment || {}) },
+    waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
+    interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
+    customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+    papDiscounts: input.papDiscounts || base.papDiscounts,
+    costBreakdown: input.costBreakdown || base.costBreakdown,
+  };
+};
+
 function ProposalForm() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
@@ -171,6 +210,9 @@ function ProposalForm() {
   const [showRightCost, setShowRightCost] = useState(true);
   const [showCostModal, setShowCostModal] = useState(false);
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
+  const [hasEdits, setHasEdits] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(getDefaultPAPDiscounts());
   const sectionContentRef = useRef<HTMLDivElement | null>(null);
   const createCompletionMap = () =>
@@ -188,7 +230,8 @@ function ProposalForm() {
     modelId: string | null,
     modelName?: string | null,
     isDefault?: boolean,
-    skipRemote?: boolean
+    skipRemote?: boolean,
+    markDirty?: boolean
   ) => {
     if (modelId && !skipRemote) {
       await setActivePricingModel(modelId);
@@ -202,6 +245,9 @@ function ProposalForm() {
       pricingModelIsDefault: isDefault ?? undefined,
       franchiseId: prev.franchiseId || getSessionFranchiseId(),
     }));
+    if (markDirty) {
+      setHasEdits(true);
+    }
   };
 
   const loadPricingModels = async (franchiseId: string, desiredModelId?: string | null) => {
@@ -320,6 +366,7 @@ function ProposalForm() {
       setCurrentSection(0);
       setIsLoading(false);
       setCompletedByAdvance(createCompletionMap());
+      setHasEdits(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalNumber]);
@@ -337,7 +384,7 @@ function ProposalForm() {
       const data = await getProposalRemote(num);
       if (data) {
         // Deep clone to ensure fresh object references
-        const freshData = JSON.parse(JSON.stringify(data));
+        const freshData = mergeWithDefaults(JSON.parse(JSON.stringify(data)));
 
         // Normalize water features to the new catalog-driven shape
         freshData.waterFeatures = normalizeWaterFeatures(freshData.waterFeatures);
@@ -347,6 +394,9 @@ function ProposalForm() {
         freshData.designerName = freshData.designerName || getSessionUserName();
         freshData.designerRole = freshData.designerRole || getSessionRole();
         freshData.designerCode = freshData.designerCode || getSessionFranchiseCode();
+        freshData.proposalNumber = freshData.proposalNumber || num;
+        freshData.createdDate = freshData.createdDate || new Date().toISOString();
+        freshData.lastModified = freshData.lastModified || new Date().toISOString();
 
         if (loadRequestRef.current === requestId) {
           setProposal(freshData);
@@ -358,6 +408,7 @@ function ProposalForm() {
           if (freshData.papDiscounts) {
             setPapDiscounts(freshData.papDiscounts);
           }
+          setHasEdits(false);
         }
       }
     } catch (error) {
@@ -379,20 +430,22 @@ function ProposalForm() {
       [section]: data,
       lastModified: new Date().toISOString(),
     }));
+    setHasEdits(true);
     if (section === 'poolSpecs') {
       setCompletedByAdvance(prev => ({ ...prev, poolSpecs: true }));
     }
   };
 
   const calculateTotals = (): Proposal => {
-    const result = MasterPricingEngine.calculateCompleteProposal(proposal, papDiscounts);
+    const normalized = mergeWithDefaults(proposal);
+    const result = MasterPricingEngine.calculateCompleteProposal(normalized, papDiscounts);
 
     return {
-      ...proposal,
-      franchiseId: proposal.franchiseId || getSessionFranchiseId(),
-      designerName: proposal.designerName || getSessionUserName(),
-      designerRole: proposal.designerRole || getSessionRole(),
-      designerCode: proposal.designerCode || getSessionFranchiseCode(),
+      ...normalized,
+      franchiseId: normalized.franchiseId || getSessionFranchiseId(),
+      designerName: normalized.designerName || getSessionUserName(),
+      designerRole: normalized.designerRole || getSessionRole(),
+      designerCode: normalized.designerCode || getSessionFranchiseCode(),
       papDiscounts,
       costBreakdown: result.costBreakdown,
       pricing: result.pricing,
@@ -419,21 +472,23 @@ function ProposalForm() {
     }
   };
 
-  const handleSave = async (submit: boolean = false) => {
+  const handleSave = async (mode: 'draft' | 'submit'): Promise<boolean> => {
+    if (isSaving) return false;
+    setIsSaving(true);
     try {
       if (!proposal.pricingModelId && defaultPricingModelId) {
         const def = pricingModels.find((m) => m.id === defaultPricingModelId);
         await applyPricingModelSelection(defaultPricingModelId, def?.name, def?.isDefault);
       }
       // Validate if submitting
-      if (submit) {
+      if (mode === 'submit') {
         const errors = validateProposal(proposal);
         if (errors.length > 0) {
           showToast({
             type: 'error',
             message: `Validation errors: ${errors.map(e => e.message).join(', ')}`,
           });
-          return;
+          return false;
         }
       }
 
@@ -441,37 +496,73 @@ function ProposalForm() {
       const now = new Date().toISOString();
       const finalProposal: Proposal = {
         ...totals,
-        status: submit ? 'submitted' : totals.status || 'draft',
+        proposalNumber: proposal.proposalNumber || proposalNumber || `PROP-${Date.now()}`,
+        status: mode === 'submit' ? 'submitted' : 'draft',
         lastModified: now,
         createdDate: totals.createdDate || now,
         franchiseId: totals.franchiseId || getSessionFranchiseId(),
         designerName: totals.designerName || getSessionUserName(),
         designerRole: totals.designerRole || getSessionRole(),
         designerCode: totals.designerCode || getSessionFranchiseCode(),
+        subtotal: toFiniteNumber(totals.subtotal),
+        taxRate: toFiniteNumber(totals.taxRate),
+        taxAmount: toFiniteNumber(totals.taxAmount),
+        totalCost: toFiniteNumber(totals.totalCost),
       };
 
-      await saveProposalRemote(finalProposal);
+      let persisted = false;
+      try {
+        await saveProposalRemote(finalProposal);
+        persisted = true;
+      } catch (primaryError) {
+        if (window.electron?.saveProposal) {
+          try {
+            await window.electron.saveProposal(finalProposal);
+            persisted = true;
+            console.warn('Supabase save failed; fell back to local save.', primaryError);
+          } catch (fallbackError) {
+            console.error('Failed to save proposal (primary and fallback):', primaryError, fallbackError);
+            throw fallbackError;
+          }
+        } else {
+          throw primaryError;
+        }
+      }
+
+      if (!persisted) {
+        throw new Error('Save failed');
+      }
+      setProposal(finalProposal);
+      setHasEdits(false);
       showToast({
         type: 'success',
-        message: submit ? 'Proposal submitted successfully!' : 'Proposal saved successfully!',
+        message: mode === 'submit' ? 'Proposal submitted successfully!' : 'Proposal saved successfully!',
       });
 
-      if (submit) {
+      if (mode === 'submit') {
         navigate(`/proposal/view/${finalProposal.proposalNumber}`);
       } else {
         navigate('/');
       }
+      return true;
     } catch (error) {
       console.error('Failed to save proposal:', error);
       showToast({
         type: 'error',
         message: 'Failed to save proposal. Please try again.',
       });
+      return false;
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleCancel = () => {
-    setShowCancelConfirm(true);
+  const handleHome = () => {
+    if (hasEdits) {
+      setShowCancelConfirm(true);
+      return;
+    }
+    navigate('/');
   };
 
   const renderSection = () => {
@@ -503,7 +594,7 @@ function ProposalForm() {
               defaultPricingModelId={defaultPricingModelId}
               onSelectPricingModel={async (id) => {
                 const model = pricingModels.find((m) => m.id === id);
-                await applyPricingModelSelection(id, model?.name, model?.isDefault, Boolean(model?.removed));
+                await applyPricingModelSelection(id, model?.name, model?.isDefault, Boolean(model?.removed), true);
               }}
               showStaleIndicator={
                 Boolean(selectedPricingModelId) &&
@@ -797,7 +888,14 @@ function ProposalForm() {
     );
   }
 
-  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(proposal, papDiscounts);
+  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(mergeWithDefaults(proposal), papDiscounts);
+  const canSubmit = Boolean(proposal.customerInfo?.customerName?.trim());
+  const submitTooltip = !canSubmit ? 'Must include Customer Name' : undefined;
+
+  const handleSubmitClick = () => {
+    if (!canSubmit || isSaving) return;
+    setShowSubmitConfirm(true);
+  };
 
   return (
     <div className="proposal-form">
@@ -919,32 +1017,44 @@ function ProposalForm() {
 
         <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
           <div className="section-content" ref={sectionContentRef}>
-            <h2 className="section-title">{sections[currentSection]?.label}</h2>
+            <div className="section-title-row">
+              <h2 className="section-title">{sections[currentSection]?.label}</h2>
+              <div className="section-title-actions" title={submitTooltip}>
+                <button
+                  className="btn btn-success"
+                  onClick={handleSubmitClick}
+                  disabled={!canSubmit || isSaving}
+                  title={submitTooltip}
+                >
+                  Submit Proposal
+                </button>
+              </div>
+            </div>
             {renderSection()}
           </div>
 
           <div className="form-actions">
             <div className="left-actions">
-              <button className="btn btn-secondary" onClick={handleCancel}>
-                Cancel
+              <button className="btn btn-secondary" onClick={handleHome} disabled={isSaving}>
+                Home
               </button>
-              <button className="btn btn-secondary" onClick={() => handleSave(false)}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { void handleSave('draft'); }}
+                disabled={isSaving}
+              >
                 Save Draft
               </button>
             </div>
             <div className="right-actions">
               {currentSection > 0 && (
-                <button className="btn btn-secondary" onClick={handlePrevious}>
+                <button className="btn btn-secondary" onClick={handlePrevious} disabled={isSaving}>
                   Previous
                 </button>
               )}
-              {currentSection < sections.length - 1 ? (
-                <button className="btn btn-primary" onClick={handleNext}>
+              {currentSection < sections.length - 1 && (
+                <button className="btn btn-primary" onClick={handleNext} disabled={isSaving}>
                   Next
-                </button>
-              ) : (
-                <button className="btn btn-success" onClick={() => handleSave(true)}>
-                  Submit Proposal
                 </button>
               )}
             </div>
@@ -998,16 +1108,33 @@ function ProposalForm() {
       )}
 
       <ConfirmDialog
+        open={showSubmitConfirm}
+        title="Ready to Submit?"
+        message="You can still make changes later."
+        confirmLabel="Submit"
+        cancelLabel="Keep Editing"
+        onConfirm={async () => {
+          setShowSubmitConfirm(false);
+          await handleSave('submit');
+        }}
+        onCancel={() => setShowSubmitConfirm(false)}
+      />
+
+      <ConfirmDialog
         open={showCancelConfirm}
         title="Cancel changes?"
         message="Unsaved changes will be lost."
-        confirmLabel="Discard"
-        cancelLabel="Keep editing"
-        onConfirm={() => {
+        confirmLabel="Save to Drafts"
+        cancelLabel="Discard"
+        onConfirm={async () => {
           setShowCancelConfirm(false);
+          await handleSave('draft');
+        }}
+        onCancel={() => {
+          setShowCancelConfirm(false);
+          setHasEdits(false);
           navigate('/');
         }}
-        onCancel={() => setShowCancelConfirm(false)}
       />
     </div>
   );

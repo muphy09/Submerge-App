@@ -362,6 +362,48 @@
   color: #1e3a5f;
 }
 
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 1100;
+}
+
+.proposal-context-menu {
+  position: fixed;
+  z-index: 1101;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  min-width: 140px;
+  padding: 6px;
+}
+
+.context-menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.context-menu-item:hover {
+  background: #f3f4f6;
+}
+
+.context-menu-item.delete {
+  color: #b91c1c;
+}
+
+.context-menu-item.delete:hover {
+  background: #fee2e2;
+}
+
 /* Responsive Design for smaller widths */
 @media (max-width: 1200px) {
   .dashboard-columns {

@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { Proposal } from './src/types/proposal';
 
+const setIpcListener = (channel: string, callback: (payload: any) => void) => {
+  ipcRenderer.removeAllListeners(channel);
+  ipcRenderer.on(channel, (_, payload) => callback(payload));
+};
+
 contextBridge.exposeInMainWorld('electron', {
   // Proposal operations
   saveProposal: (proposal: Proposal) => ipcRenderer.invoke('save-proposal', proposal),
@@ -24,21 +29,11 @@ contextBridge.exposeInMainWorld('electron', {
   // Update operations
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  onUpdateAvailable: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-available', (_, info) => callback(info));
-  },
-  onUpdateNotAvailable: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-not-available', (_, info) => callback(info));
-  },
-  onDownloadProgress: (callback: (progress: any) => void) => {
-    ipcRenderer.on('download-progress', (_, progress) => callback(progress));
-  },
-  onUpdateDownloaded: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-downloaded', (_, info) => callback(info));
-  },
-  onUpdateError: (callback: (error: string) => void) => {
-    ipcRenderer.on('update-error', (_, error) => callback(error));
-  },
+  onUpdateAvailable: (callback: (info: any) => void) => setIpcListener('update-available', callback),
+  onUpdateNotAvailable: (callback: (info: any) => void) => setIpcListener('update-not-available', callback),
+  onDownloadProgress: (callback: (progress: any) => void) => setIpcListener('download-progress', callback),
+  onUpdateDownloaded: (callback: (info: any) => void) => setIpcListener('update-downloaded', callback),
+  onUpdateError: (callback: (error: string) => void) => setIpcListener('update-error', callback),
 });
 
 declare global {
