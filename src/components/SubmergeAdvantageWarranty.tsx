@@ -1,6 +1,6 @@
 import { Proposal, InteriorFinishType } from '../types/proposal-new';
 import ppasLogo from '../../PPAS Logo.png';
-import './PremierAdvantageWarranty.css';
+import './SubmergeAdvantageWarranty.css';
 
 interface WarrantyItem {
   label: string;
@@ -186,7 +186,7 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
 
   const lightsCount = equipment.numberOfLights ?? 0;
   const lightsText = lightsCount > 0
-    ? `${lightsCount} low-voltage Premier colored LED light${lightsCount === 1 ? '' : 's'}${equipment.hasSpaLight ? ' (spa light included)' : ''}`
+    ? `${lightsCount} low-voltage Submerge colored LED light${lightsCount === 1 ? '' : 's'}${equipment.hasSpaLight ? ' (spa light included)' : ''}`
     : 'No pool lights specified yet';
 
   items.push({
@@ -271,7 +271,7 @@ const buildWarrantySections = (proposal?: Partial<Proposal>): WarrantySection[] 
         { label: 'Employees covered by Workers Compensation Insurance' },
         { label: 'Taxes on all materials and equipment included in contract price' },
         { label: 'Lien releases available throughout construction' },
-        { label: 'Premier is licensed and bonded in accordance with State Contractors Board Regulations' },
+        { label: 'Submerge is licensed and bonded in accordance with State Contractors Board Regulations' },
       ],
     },
     {
@@ -303,9 +303,9 @@ const buildWarrantySections = (proposal?: Partial<Proposal>): WarrantySection[] 
       title: 'Plumbing',
       icon: 'plumbing',
       items: [
-        { label: '2 1/2 inch suction line', advantage: 'Premier Stealth Series pump' },
-        { label: '2 1/2 inch suction line for all pump motors larger than 1.0 HP', advantage: 'Premier High-Performance circulation pump' },
-        { label: '2 inch return line (to 1st tee)', advantage: 'Premier booster pump' },
+        { label: '2 1/2 inch suction line', advantage: 'Submerge Stealth Series pump' },
+        { label: '2 1/2 inch suction line for all pump motors larger than 1.0 HP', advantage: 'Submerge High-Performance circulation pump' },
+        { label: '2 inch return line (to 1st tee)', advantage: 'Submerge booster pump' },
         { label: 'When possible 45-degree elbows are used rather than 90-degree to improve efficiency and performance' },
         { label: 'Separate skimmer and main drain suction - allows for maximum performance' },
         { label: 'Heavy duty surface skimmer' },
@@ -323,7 +323,7 @@ const buildWarrantySections = (proposal?: Partial<Proposal>): WarrantySection[] 
         { label: '220 volt pump circuit' },
         { label: 'Jandy IQ20 pump controller', advantage: 'Control your pump from your phone' },
         { label: 'Bonding as per N.E.C. Code' },
-        { label: '(2) Low-voltage Premier colored LED lights' },
+        { label: '(2) Low-voltage Submerge colored LED lights' },
       ],
     },
     {
@@ -383,7 +383,7 @@ interface Props {
   proposal?: Partial<Proposal>;
 }
 
-function PremierAdvantageWarranty({ proposal }: Props) {
+function SubmergeAdvantageWarranty({ proposal }: Props) {
   const sections = buildWarrantySections(proposal);
   const customerName = (proposal?.customerInfo?.customerName || '').trim();
 
@@ -398,7 +398,7 @@ function PremierAdvantageWarranty({ proposal }: Props) {
           </p>
         </div>
         <div className="warranty-logo">
-          <img src={ppasLogo} alt="PPAS Logo" />
+          <img src={ppasLogo} alt="Submerge Logo" />
         </div>
       </div>
 
@@ -414,8 +414,8 @@ function PremierAdvantageWarranty({ proposal }: Props) {
                     <SectionIcon name={section.icon} />
                     <span className="warranty-section-title">{section.title}</span>
                   </div>
-                  <div className="premier-chip">
-                    <span className="premier-chip-icon" aria-hidden="true">
+                  <div className="submerge-chip">
+                    <span className="submerge-chip-icon" aria-hidden="true">
                       <svg viewBox="0 0 24 24">
                         <path
                           d="M9 3h6l4 4v6l-4 4H9l-4-4V7z"
@@ -434,7 +434,7 @@ function PremierAdvantageWarranty({ proposal }: Props) {
                         />
                       </svg>
                     </span>
-                    Premier Advantage
+                    Warranty Advantage
                   </div>
                 </div>
 
@@ -459,7 +459,7 @@ function PremierAdvantageWarranty({ proposal }: Props) {
                         </div>
                       ))
                     ) : (
-                      <div className="warranty-advantage-card muted">No premier advantages listed.</div>
+                      <div className="warranty-advantage-card muted">No Submerge advantages listed.</div>
                     )}
                   </div>
                 </div>
@@ -472,4 +472,4 @@ function PremierAdvantageWarranty({ proposal }: Props) {
   );
 }
 
-export default PremierAdvantageWarranty;
+export default SubmergeAdvantageWarranty;

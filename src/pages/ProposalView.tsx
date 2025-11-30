@@ -127,7 +127,7 @@ function ProposalView() {
       <div ref={proposalRef} className="proposal-document">
         {/* Header */}
         <header className="doc-header">
-          <img src={ppasLogo} alt="PPAS Logo" className="doc-logo" />
+          <img src={ppasLogo} alt="Submerge Logo" className="doc-logo" />
           <div className="doc-title-section">
             <h1>Pool Proposal</h1>
             <p className="proposal-meta">
@@ -214,7 +214,7 @@ function ProposalView() {
           }}>
             Status: {proposal.status.toUpperCase()}
           </p>
-          <p>Premier Pools and Spas - A passion for splashin'</p>
+          <p>Submerge - A passion for splashin'</p>
         </footer>
       </div>
     </div>

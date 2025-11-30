@@ -4,7 +4,6 @@ import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
 import heroImage from '../assets/homepagetestbck.jpg';
-import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { listProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, getSessionUserName } from '../services/session';
 
@@ -12,8 +11,6 @@ function HomePage() {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
-  const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; proposalNumber: string } | null>(null);
   const { showToast } = useToast();
 
@@ -30,31 +27,11 @@ function HomePage() {
         ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === userName.toLowerCase())
         : data || [];
       setProposals(filtered);
-      await populateDefaultModels(filtered);
     } catch (error) {
       console.error('Failed to load proposals:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const populateDefaultModels = async (data: Proposal[]) => {
-    const franchiseIds = Array.from(new Set(data.map((p) => p.franchiseId || 'default')));
-    const defaultMap: Record<string, string | null> = {};
-    const availableMap: Record<string, Set<string>> = {};
-    for (const id of franchiseIds) {
-      try {
-        const rows = await listPricingModelsRemote(id);
-        const def = rows?.find((r: any) => r.isDefault);
-        defaultMap[id] = def?.id || null;
-        availableMap[id] = new Set((rows || []).map((r: any) => r.id));
-      } catch (error) {
-        defaultMap[id] = null;
-        availableMap[id] = new Set();
-      }
-    }
-    setDefaultModelMap(defaultMap);
-    setAvailableModelMap(availableMap);
   };
 
   const handleNewProposal = () => {
@@ -82,12 +59,19 @@ function HomePage() {
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'draft': return '#ddc720ff';
-      case 'submitted': return '#04bc17ff';
-      case 'approved': return '#10b981';
-      case 'rejected': return '#ef4444';
-      default: return '#6b7280';
+    const key = (status || '').toLowerCase();
+    switch (key) {
+      case 'submitted':
+      case 'approved':
+      case 'sent':
+        return '#c8ead3'; // slightly darker light green
+      case 'draft':
+        return '#f7e08a'; // slightly darker light yellow
+      case 'modified':
+      case 'rejected':
+        return '#f6baba'; // slightly darker light red
+      default:
+        return '#e5e7eb';
     }
   };
 
@@ -128,20 +112,27 @@ function HomePage() {
 
   const proposalsByMonth = getProposalsByMonth();
   const maxProposals = Math.max(...Object.values(proposalsByMonth), 1);
+  const yAxisSteps = 5;
+  const yAxisMax = Math.max(5, Math.ceil(maxProposals / 10) * 10 || 10);
+  const yAxisTicks = Array.from({ length: yAxisSteps + 1 }, (_, i) => Math.round((yAxisMax / yAxisSteps) * i));
 
   return (
     <div className="dashboard-page">
       <div className="hero-section">
         <img src={heroImage} alt="Pool Design" className="hero-image" />
         <div className="hero-content">
-          <h1 className="hero-title">Design, Build, Present.</h1>
-          <p className="hero-subtitle">A passion for splashin'</p>
-          <button className="btn-create-proposal" onClick={handleNewProposal}>
-            Create New Proposal
-          </button>
-          <button className="btn-presentation-mode" onClick={handlePresentationMode}>
-            Presentation Mode
-          </button>
+          <div className="hero-text">
+            <h1 className="hero-title">Design, Build, Present.</h1>
+            <p className="hero-subtitle">A passion for splashin'</p>
+          </div>
+          <div className="hero-buttons">
+            <button className="btn-create-proposal" onClick={handleNewProposal}>
+              Create New Proposal
+            </button>
+            <button className="btn-presentation-mode" onClick={handlePresentationMode}>
+              Presentation Mode
+            </button>
+          </div>
         </div>
       </div>
 
@@ -165,48 +156,49 @@ function HomePage() {
                     setContextMenu({ x: e.clientX, y: e.clientY, proposalNumber: proposal.proposalNumber });
                   }}
                 >
-                  <div className="proposal-item-header">
-                    <div className="proposal-item-name">{proposal.customerInfo.customerName}</div>
-                    <div className="proposal-item-price">
-                      ${(proposal.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  <div className="proposal-item-body">
+                    <div className="proposal-avatar" aria-hidden="true">
+                      <svg viewBox="0 0 32 32" focusable="false" className="proposal-avatar-icon">
+                        <path
+                          d="M9 12.5c0-3.59 2.91-6.5 6.5-6.5S22 8.91 22 12.5 19.09 19 15.5 19 9 16.09 9 12.5Z"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                        />
+                        <path
+                          d="M7 22.5c1.5 1 4.5 1 6 0s4.5-1 6 0 4.5 1 6 0"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M7 18.5c1.5 1 4.5 1 6 0s4.5-1 6 0 4.5 1 6 0"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                        />
+                      </svg>
                     </div>
-                  </div>
-                  <div className="proposal-item-footer">
-                  {(() => {
-                    const fid = proposal.franchiseId || 'default';
-                    const modelId = proposal.pricingModelId || '';
-                    const defaultId = defaultModelMap[fid];
-                    const availableSet = availableModelMap[fid] || new Set<string>();
-                    const explicitRemoved = (proposal.pricingModelName || '').toLowerCase().includes('(removed)');
-                    const isRemoved = Boolean(modelId) && (!availableSet.has(modelId) || explicitRemoved);
-                    const isActive =
-                      Boolean(modelId) &&
-                      defaultId &&
-                      modelId === defaultId &&
-                      availableSet.has(modelId) &&
-                      !explicitRemoved;
-                    const isInactive = Boolean(modelId) && !isActive && !isRemoved;
-                    const className = isActive
-                      ? 'proposal-model-pill active'
-                      : isRemoved
-                      ? 'proposal-model-pill removed'
-                      : 'proposal-model-pill inactive';
-                    return (
-                      <span className={className}>
-                        {(proposal.pricingModelName || 'Pricing Model') +
-                          (isRemoved && !explicitRemoved ? ' (Removed)' : '')}
+                    <div className="proposal-item-content">
+                      <div className="proposal-item-header-line">
+                        <div className="proposal-item-name">{proposal.customerInfo.customerName}</div>
+                      </div>
+                      <div className="proposal-item-meta">
+                        <span className="proposal-item-date">
+                          {new Date(proposal.lastModified || proposal.createdDate).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="proposal-status-right">
+                      <span
+                        className="proposal-item-status"
+                        style={{ backgroundColor: getStatusColor(proposal.status), borderColor: getStatusColor(proposal.status) }}
+                      >
+                        {proposal.status}
                       </span>
-                    );
-                  })()}
-                    <span
-                      className="proposal-item-status"
-                      style={{ backgroundColor: getStatusColor(proposal.status) }}
-                    >
-                      {proposal.status}
-                    </span>
-                    <span className="proposal-item-date">
-                      {new Date(proposal.lastModified || proposal.createdDate).toLocaleDateString()}
-                    </span>
+                    </div>
                   </div>
                 </div>
               ))
@@ -218,39 +210,70 @@ function HomePage() {
         <div className="dashboard-column">
           <h2 className="column-title">Quick Actions</h2>
           <div className="quick-actions-list">
-            <button className="quick-action-btn" onClick={handleNewProposal}>New Proposal</button>
-            <button className="quick-action-btn" onClick={handlePresentationMode}>Presentation Mode</button>
+            <button className="quick-action-btn" onClick={handleNewProposal}>
+              <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              New Proposal
+            </button>
+            <button className="quick-action-btn" onClick={handlePresentationMode}>
+              <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              Presentation Mode
+            </button>
           </div>
         </div>
 
         {/* Performance Overview Column */}
-        <div className="dashboard-column">
+        <div className="dashboard-column performance-card">
           <h2 className="column-title">Performance Overview</h2>
           <div className="performance-chart">
             <div className="chart-title">Proposals Created</div>
-            <div className="bar-chart">
-              {Object.entries(proposalsByMonth).map(([month, count]) => (
-                <div key={month} className="bar-container">
-                  <div
-                    className="bar"
-                    style={{ height: `${(count / maxProposals) * 100}%` }}
-                  >
-                    <span className="bar-value">{count}</span>
-                  </div>
-                  <div className="bar-label">{month}</div>
+            <div className="chart-wrapper">
+              <div className="chart-body">
+                <div className="y-axis">
+                  {[...yAxisTicks].reverse().map((tick) => (
+                    <span key={tick} className="y-axis-tick">{tick}</span>
+                  ))}
                 </div>
-              ))}
+                <div className="bar-chart">
+                  {Object.entries(proposalsByMonth).map(([month, count]) => (
+                    <div key={month} className="bar-container">
+                      <div
+                        className="bar"
+                        style={{ height: `${(count / yAxisMax) * 100}%` }}
+                        aria-label={`${count} proposals in ${month}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bar-label-row">
+                {Object.keys(proposalsByMonth).map((month) => (
+                  <div key={month} className="bar-label">{month}</div>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="performance-stats">
-            <div className="stat-item">
+          <div className="performance-stats-inline">
+            <div className="stat-block">
               <div className="stat-label">Total Proposals Created:</div>
-              <div className="stat-value">{totalProposalsCreated}</div>
+              <div className="stat-value-row">
+                <div className="stat-value">{totalProposalsCreated}</div>
+                <svg className="stat-trend-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="18 15 12 9 6 15"/>
+                </svg>
+              </div>
             </div>
-            <div className="stat-item">
+            <div className="stat-divider" aria-hidden="true" />
+            <div className="stat-block">
               <div className="stat-label">Average Retail Cost:</div>
               <div className="stat-value">
-                ${averageRetailCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                ${averageRetailCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
           </div>

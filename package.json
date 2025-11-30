@@ -1,7 +1,7 @@
 {
-  "name": "ppas-proposal-builder",
+  "name": "submerge-proposal-builder",
   "version": "1.6.4",
-  "description": "PPAS Proposal Builder",
+  "description": "Submerge Proposal Builder",
   "main": "main.js",
   "scripts": {
     "dev": "node dev-start.js",
@@ -50,15 +50,15 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.ppas.proposalbuilder",
-    "productName": "PPAS Proposal Builder",
+    "appId": "com.submerge.proposalbuilder",
+    "productName": "Submerge Proposal Builder",
     "artifactName": "${productName} v${version}-${arch}.${ext}",
     "afterSign": "scripts/notarize.js",
     "publish": [
       {
         "provider": "github",
         "owner": "muphy09",
-        "repo": "Premier-Pools",
+        "repo": "Submerge-Proposal-Builder",
         "releaseType": "release"
       }
     ],
@@ -84,9 +84,9 @@
     "asar": true,
     "fileAssociations": [
       {
-        "ext": "ppas",
-        "name": "PPAS Proposal File",
-        "description": "PPAS Pool Proposal",
+        "ext": "submerge",
+        "name": "Submerge Proposal File",
+        "description": "Submerge Pool Proposal",
         "icon": "icon.png",
         "role": "Editor"
       }

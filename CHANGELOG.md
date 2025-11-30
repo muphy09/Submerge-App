@@ -44,11 +44,11 @@
     - Sticky headers & footers
     - Removed redundant section titles within tabs
     - Green text & an arrow now appear if an input increases the cost amount of a particular category
-    - Mapped most blue colors to match the PPAS blue
+- Mapped most blue colors to match the Submerge palette
     
 - Customer Proposal Button
     - Reworked Cost Breakdown Tab into a Customer Proposal button in the Nav panel
-    - Now includes a customer facing Job Cost Summary and the Premier Advantage Warranty Summary
+- Now includes a customer facing Job Cost Summary and the Submerge Advantage Warranty Summary
         - *Editing these pages is being implemented*
 
 - Pool Specifications Tab

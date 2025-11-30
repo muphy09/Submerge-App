@@ -12,7 +12,7 @@ function maybeWriteApiKeyFile() {
     return process.env.APPLE_API_KEY_PATH;
   }
 
-  const keyPath = path.join(os.tmpdir(), `ppas-notary-${apiKeyId}.p8`);
+  const keyPath = path.join(os.tmpdir(), `submerge-notary-${apiKeyId}.p8`);
   if (!fs.existsSync(keyPath)) {
     const rawKey = apiKeyBase64.includes('BEGIN PRIVATE KEY')
       ? apiKeyBase64

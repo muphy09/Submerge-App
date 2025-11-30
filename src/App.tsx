@@ -24,7 +24,7 @@ type UserSession = {
   role?: 'admin' | 'designer';
 };
 
-const SESSION_STORAGE_KEY = 'ppas-user-session';
+const SESSION_STORAGE_KEY = 'submerge-user-session';
 const DEFAULT_FRANCHISE_ID = 'default';
 
 function AppContent() {

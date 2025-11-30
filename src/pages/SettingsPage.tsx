@@ -199,7 +199,7 @@ const SettingsPage: React.FC = () => {
         <div className="settings-card">
           <h2>Updates</h2>
           <p className="settings-description">
-            Check for the latest version of PPAS Proposal Builder
+            Check for the latest version of Submerge Proposal Builder
           </p>
           <button
             className="settings-button check-updates-button"
@@ -230,9 +230,9 @@ const SettingsPage: React.FC = () => {
 
         <div className="settings-card">
           <h2>About</h2>
-          <p className="about-text">PPAS Proposal Builder</p>
+          <p className="about-text">Submerge Proposal Builder</p>
           <p className="about-text">Version {window.electron?.appVersion || '1.0.5'}</p>
-          <p className="about-text">© {new Date().getFullYear()} Designed by Brian Kummer for Premier Pools and Spas</p>
+          <p className="about-text">(c) {new Date().getFullYear()} Designed by Brian Kummer for Submerge</p>
         </div>
       </div>
 

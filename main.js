@@ -15,16 +15,18 @@ try {
   } catch (_) {
     // ignore log write issues
   }
-  dialog.showErrorBox('Startup error', `Failed to start PPAS Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
+  dialog.showErrorBox('Startup error', `Failed to start Submerge Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
   app.quit();
 }
 
 // Handle ASAR paths correctly
 const isDev = process.env.NODE_ENV === 'development';
 // Surface the app version to the preload script without requiring package.json there
-process.env.PPAS_APP_VERSION = app.getVersion();
+process.env.SUBMERGE_APP_VERSION = app.getVersion();
 let appPath = __dirname;
 let iconPath = path.join(__dirname, 'icon.ico');
+const APP_NAME = 'Submerge Proposal Builder';
+const PROPOSAL_FILE_EXTENSION = '.submerge';
 
 let mainWindow = null;
 let db = null;
@@ -34,7 +36,7 @@ let updateClient = null;
 const UPDATE_FEED = {
   provider: 'github',
   owner: 'muphy09',
-  repo: 'Premier-Pools',
+  repo: 'Submerge-Proposal-Builder',
 };
 const DEFAULT_FRANCHISE_ID = 'default';
 const DEFAULT_FRANCHISE_CODE = 'DEFAULT-CODE';
@@ -76,7 +78,7 @@ function sendUpdateError(message = 'Error checking for updates') {
 // Initialize proposals directory
 function initializeProposalsDirectory() {
   const documentsPath = app.getPath('documents');
-  proposalsDir = path.join(documentsPath, 'PPAS Proposal Builder');
+  proposalsDir = path.join(documentsPath, APP_NAME);
 
   // Create directory if it doesn't exist
   if (!fs.existsSync(proposalsDir)) {
@@ -395,7 +397,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: 'PPAS Proposal Builder',
+    title: APP_NAME,
     icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
@@ -455,7 +457,7 @@ function openProposalFile(filePath) {
 // Get file path from command line args on Windows (only when running in Electron context)
 function checkForFileArgument() {
   if (process.platform === 'win32' && process.argv.length >= 2) {
-    const filePath = process.argv.find(arg => arg.endsWith('.ppas'));
+    const filePath = process.argv.find(arg => arg.endsWith(PROPOSAL_FILE_EXTENSION));
     if (filePath) {
       fileToOpen = filePath;
     }
@@ -499,7 +501,7 @@ app.whenReady().then(() => {
 // Handle opening files on Windows
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
-  if (filePath.endsWith('.ppas')) {
+  if (filePath.endsWith(PROPOSAL_FILE_EXTENSION)) {
     if (mainWindow) {
       openProposalFile(filePath);
     } else {
@@ -532,7 +534,7 @@ ipcMain.handle('save-proposal', async (_, proposal) => {
 
     // Look for existing file by proposal number
     for (const file of files) {
-      if (file.endsWith('.ppas')) {
+      if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         try {
           const filePath = path.join(proposalsDir, file);
           const data = fs.readFileSync(filePath, 'utf-8');
@@ -558,10 +560,10 @@ ipcMain.handle('save-proposal', async (_, proposal) => {
       if (proposal.customerInfo && proposal.customerInfo.customerName && proposal.customerInfo.customerName.trim()) {
         // Use customer name, remove special characters, limit length
         const safeName = proposal.customerInfo.customerName.trim().replace(/[^a-zA-Z0-9]/g, '-').substring(0, 50);
-        fileName = `${safeName}.ppas`;
+        fileName = `${safeName}${PROPOSAL_FILE_EXTENSION}`;
       } else {
         // Fallback to proposal number
-        fileName = `${proposal.proposalNumber}.ppas`;
+        fileName = `${proposal.proposalNumber}${PROPOSAL_FILE_EXTENSION}`;
       }
       filePath = path.join(proposalsDir, fileName);
       console.log('Creating new file:', filePath);
@@ -589,7 +591,7 @@ ipcMain.handle('get-proposal', async (_, proposalNumber) => {
     console.log('Files in proposals dir:', files);
 
     for (const file of files) {
-      if (file.endsWith('.ppas')) {
+      if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         try {
           const filePath = path.join(proposalsDir, file);
           const data = fs.readFileSync(filePath, 'utf-8');
@@ -623,7 +625,7 @@ ipcMain.handle('get-all-proposals', async () => {
     const proposals = [];
 
     for (const file of files) {
-      if (file.endsWith('.ppas')) {
+      if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         const filePath = path.join(proposalsDir, file);
         try {
           const data = fs.readFileSync(filePath, 'utf-8');
@@ -653,7 +655,7 @@ ipcMain.handle('delete-proposal', async (_, proposalNumber) => {
     const files = fs.readdirSync(proposalsDir);
 
     for (const file of files) {
-      if (file.endsWith('.ppas')) {
+      if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         try {
           const filePath = path.join(proposalsDir, file);
           const data = fs.readFileSync(filePath, 'utf-8');

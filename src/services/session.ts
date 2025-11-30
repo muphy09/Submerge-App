@@ -6,7 +6,7 @@ export type UserSession = {
   role?: 'admin' | 'designer';
 };
 
-export const SESSION_STORAGE_KEY = 'ppas-user-session';
+export const SESSION_STORAGE_KEY = 'submerge-user-session';
 export const DEFAULT_FRANCHISE_ID = 'default';
 
 export function readSession(): UserSession | null {

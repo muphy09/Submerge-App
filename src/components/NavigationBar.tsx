@@ -28,8 +28,11 @@ function NavigationBar({ userName = 'User', onLogout, isAdmin = false }: Navigat
   return (
     <nav className="navigation-bar">
       <div className="nav-left">
-        <img src={ppasLogo} alt="PPAS Logo" className="nav-logo" />
-        <div className="nav-title">Proposal Builder</div>
+        <img src={ppasLogo} alt="Submerge Logo" className="nav-logo" />
+        <div className="nav-title-container">
+          <div className="nav-brand">Submerge</div>
+          <div className="nav-title">Proposal Builder</div>
+        </div>
       </div>
 
       <div className="nav-center">

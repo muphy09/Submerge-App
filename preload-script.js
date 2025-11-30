@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // Prefer the version supplied by the main process to avoid bundle path issues
-const appVersion = process.env.PPAS_APP_VERSION || process.env.npm_package_version || 'dev';
+const appVersion = process.env.SUBMERGE_APP_VERSION || process.env.npm_package_version || 'dev';
 
 const setIpcListener = (channel, callback) => {
   ipcRenderer.removeAllListeners(channel);

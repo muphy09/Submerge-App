@@ -940,7 +940,7 @@ function ProposalForm() {
     <div className="proposal-form">
       <header className="form-header">
         <div className="form-header-title">
-          <img src={ppasLogo} alt="PPAS Logo" className="form-logo" />
+          <img src={ppasLogo} alt="Submerge Logo" className="form-logo" />
           <h1>{headerTitle}</h1>
         </div>
       </header>

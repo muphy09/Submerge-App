@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CostBreakdown, CostLineItem, Proposal } from '../types/proposal-new';
-import PremierAdvantageWarranty from './PremierAdvantageWarranty';
+import SubmergeAdvantageWarranty from './SubmergeAdvantageWarranty';
 import ppasLogo from '../../PPAS Logo.png';
 import './CostBreakdownView.css';
 
@@ -144,9 +144,9 @@ function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
                 Prepared for: <span className="breakdown-customer">{customerName}</span>
               </p>
             </div>
-            <div className="breakdown-logo">
-              <img src={ppasLogo} alt="PPAS Logo" />
-            </div>
+          <div className="breakdown-logo">
+            <img src={ppasLogo} alt="Submerge Logo" />
+          </div>
           </div>
 
         <div className="breakdown-summary">
@@ -269,7 +269,7 @@ function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
 
         {proposal && (
           <div className="warranty-shell">
-            <PremierAdvantageWarranty proposal={proposal} />
+            <SubmergeAdvantageWarranty proposal={proposal} />
           </div>
         )}
       </div>
