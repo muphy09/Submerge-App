@@ -249,7 +249,7 @@ function LiveCostBreakdown({ costBreakdown, onToggle }: Props) {
             }}
             title="Hide cost breakdown"
           >
-            ▶
+            Hide
           </button>
         )}
       </div>

@@ -1,3 +1,1 @@
 - MacOS Release is broken
-- Labeling of inputs
-- Auto Update doesnt work ?

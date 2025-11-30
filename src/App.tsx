@@ -177,13 +177,15 @@ function AppContent() {
         <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm key={location.pathname} />} />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
       </Routes>
-      <div className="app-version">v{window.electron?.appVersion || '1.0.5'}</div>
+      {location.pathname === '/' && (
+        <div className="app-version">v{window.electron?.appVersion || '1.0.5'}</div>
+      )}
       <UpdateNotification
         status={updateStatus}
         onInstall={handleInstallUpdate}
         errorMessage={updateError}
       />
-      {session && (
+      {session && location.pathname === '/' && (
         <div className="app-session-meta">
           <div className="app-session-line">Role: {session.role ? session.role.charAt(0).toUpperCase() + session.role.slice(1) : 'Designer'}</div>
           <div className="app-session-line">

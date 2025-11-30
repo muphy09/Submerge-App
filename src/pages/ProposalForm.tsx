@@ -160,7 +160,7 @@ const sectionIcons: Record<SectionKey, () => JSX.Element> = {
 };
 
 const sections: SectionConfig[] = [
-  { key: 'poolSpecs', label: 'Pricing Information', shortLabel: 'Pricing' },
+  { key: 'poolSpecs', label: 'Pool Specifications', shortLabel: 'Pool Specs' },
   { key: 'excavation', label: 'Excavation', shortLabel: 'Excavation' },
   { key: 'plumbing', label: 'Plumbing', shortLabel: 'Plumbing' },
   { key: 'electrical', label: 'Gas / Electrical', shortLabel: 'Gas/Electrical' },
@@ -202,12 +202,24 @@ function ProposalForm() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
+  const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
+  const getInitialLeftNav = () => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth >= 1100;
+  };
+  const getInitialRightCost = () => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth >= 1250;
+  };
   const [currentSection, setCurrentSection] = useState(0);
   const [isLoading, setIsLoading] = useState(!!proposalNumber);
   const loadRequestRef = useRef(0);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [showLeftNav, setShowLeftNav] = useState(true);
-  const [showRightCost, setShowRightCost] = useState(true);
+  const [showLeftNav, setShowLeftNav] = useState<boolean>(getInitialLeftNav);
+  const [showRightCost, setShowRightCost] = useState<boolean>(getInitialRightCost);
+  const [navManuallyToggled, setNavManuallyToggled] = useState(false);
+  const [costManuallyToggled, setCostManuallyToggled] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState<number>(getViewportWidth);
   const [showCostModal, setShowCostModal] = useState(false);
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
@@ -323,6 +335,29 @@ function ProposalForm() {
       sectionContentRef.current.scrollTo({ top: 0, behavior: 'auto' });
     }
   }, [currentSection]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const width = getViewportWidth();
+      setViewportWidth(width);
+      const forceHideNav = width < 960;
+      const forceHideCost = width < 1150;
+      if (forceHideNav && showLeftNav) {
+        setShowLeftNav(false);
+      } else if (!navManuallyToggled && width > 1200 && !showLeftNav) {
+        setShowLeftNav(true);
+      }
+      if (forceHideCost && showRightCost) {
+        setShowRightCost(false);
+      } else if (!costManuallyToggled && width > 1280 && !showRightCost) {
+        setShowRightCost(true);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [costManuallyToggled, navManuallyToggled, showLeftNav, showRightCost]);
 
   const getInitialProposal = (): Partial<Proposal> => {
     const base = getDefaultProposal();
@@ -891,6 +926,10 @@ function ProposalForm() {
   const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(mergeWithDefaults(proposal), papDiscounts);
   const canSubmit = Boolean(proposal.customerInfo?.customerName?.trim());
   const submitTooltip = !canSubmit ? 'Must include Customer Name' : undefined;
+  const isCompactLayout = viewportWidth < 1300;
+  const isMobileLayout = viewportWidth < 1024;
+  const customerTitle = (proposal.customerInfo?.customerName || '').trim();
+  const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
 
   const handleSubmitClick = () => {
     if (!canSubmit || isSaving) return;
@@ -902,46 +941,21 @@ function ProposalForm() {
       <header className="form-header">
         <div className="form-header-title">
           <img src={ppasLogo} alt="PPAS Logo" className="form-logo" />
-          <h1>Pool Proposal Builder</h1>
+          <h1>{headerTitle}</h1>
         </div>
-        <div className={`progress-bar ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
-        <div className="progress-steps">
-          {progressSections.map(section => {
-            const isDone = sectionCompletion[section.key];
-            const isCurrent = sections[currentSection]?.key === section.key;
-            const targetIndex = sections.findIndex(s => s.key === section.key);
-            return (
-              <div
-                key={section.key}
-                className={`progress-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}
-                title={section.label}
-                role="button"
-                tabIndex={0}
-                onClick={() => targetIndex >= 0 && setCurrentSection(targetIndex)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    if (targetIndex >= 0) setCurrentSection(targetIndex);
-                  }
-                }}
-              >
-                <div className="progress-step-box">
-                  {isDone ? <span className="progress-check" aria-hidden="true">&#10003;</span> : null}
-                </div>
-                <span className="progress-step-label">{section.shortLabel}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
       </header>
 
-      <div className="form-layout">
+      <div
+        className={`form-layout ${isCompactLayout ? 'is-compact' : ''} ${isMobileLayout ? 'is-mobile' : ''} ${!showRightCost ? 'no-cost' : ''} ${!showLeftNav ? 'no-nav' : ''}`}
+      >
         {showLeftNav && (
-          <nav className="section-nav">
+          <nav className={`section-nav ${showLeftNav ? 'open' : ''}`}>
             <div
               className="nav-header"
-              onClick={() => setShowLeftNav(false)}
+              onClick={() => {
+                setNavManuallyToggled(true);
+                setShowLeftNav(false);
+              }}
               title="Hide navigation"
             >
               <h3>Proposal Navigation</h3>
@@ -949,11 +963,12 @@ function ProposalForm() {
                 className="sidebar-toggle left-toggle"
                 onClick={(e) => {
                   e.stopPropagation();
+                  setNavManuallyToggled(true);
                   setShowLeftNav(false);
                 }}
                 title="Hide navigation"
               >
-                ◀
+                Hide
               </button>
             </div>
             <div className="nav-action-space" aria-hidden="true">
@@ -967,7 +982,7 @@ function ProposalForm() {
                   }}
                   title="View Cost Breakdown"
                 >
-                  <span className="button-icon">💰</span>
+                  <span className="button-icon" aria-hidden="true">$</span>
                   <span className="cost-modal-label">Cost Breakdown</span>
                 </button>
                 <button
@@ -1008,10 +1023,14 @@ function ProposalForm() {
         {!showLeftNav && (
           <button
             className="sidebar-show-button left-show"
-            onClick={() => setShowLeftNav(true)}
+            onClick={() => {
+              setNavManuallyToggled(true);
+              setShowLeftNav(true);
+            }}
             title="Show navigation"
+            data-tooltip="Click to reveal Navigation"
           >
-            ▶
+            &gt;
           </button>
         )}
 
@@ -1065,7 +1084,10 @@ function ProposalForm() {
           <aside className="cost-sidebar">
             <LiveCostBreakdown
               costBreakdown={currentCostBreakdown.costBreakdown}
-              onToggle={() => setShowRightCost(false)}
+              onToggle={() => {
+                setCostManuallyToggled(true);
+                setShowRightCost(false);
+              }}
             />
           </aside>
         )}
@@ -1073,10 +1095,14 @@ function ProposalForm() {
         {!showRightCost && (
           <button
             className="sidebar-show-button right-show"
-            onClick={() => setShowRightCost(true)}
+            onClick={() => {
+              setCostManuallyToggled(true);
+              setShowRightCost(true);
+            }}
             title="Show cost breakdown"
+            data-tooltip="Click to reveal Cost Breakdown"
           >
-            ◀
+            &lt;
           </button>
         )}
       </div>
@@ -1085,7 +1111,7 @@ function ProposalForm() {
         <div className="cost-modal-overlay" onClick={() => setShowCostModal(false)}>
           <div className="cost-modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="cost-modal-close" onClick={() => setShowCostModal(false)}>
-              ✕
+              X
             </button>
             <CostBreakdownView
               costBreakdown={currentCostBreakdown.costBreakdown}

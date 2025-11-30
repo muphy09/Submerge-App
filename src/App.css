@@ -30,16 +30,22 @@
   }
 }
 
-/* Adjust header offset for smaller screens */
-@media (max-width: 900px) {
+/* Adjust header offset for smaller screens and wrapped nav */
+@media (max-width: 1100px) {
   :root {
-    --header-offset: 70px;
+    --header-offset: 96px;
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 820px) {
   :root {
-    --header-offset: 60px;
+    --header-offset: 128px;
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --header-offset: 150px;
   }
 }
 

@@ -1,10 +1,14 @@
 .live-cost-breakdown {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
   height: 100%;
   background: white;
   font-size: 0.85rem;
   padding: 10px 0;
+  border-radius: 12px;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 .live-breakdown-header {
@@ -13,9 +17,12 @@
   color: white;
   text-align: center;
   border-bottom: 2px solid #e5e7eb;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   cursor: pointer;
   transition: background 0.2s;
+  border-radius: 12px 12px 0 0;
 }
 
 .live-breakdown-header:hover {
@@ -30,12 +37,14 @@
 }
 
 .live-breakdown-content {
-  flex: 1;
   overflow-y: auto;
   padding: 10px;
+  min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 0.2s ease;
+  padding-bottom: 10px;
+  overscroll-behavior: contain;
 }
 
 .live-breakdown-content:hover {
@@ -165,12 +174,14 @@
 .live-grand-total {
   display: flex;
   justify-content: space-between;
-  padding: 15px 15px 20px 15px;
+  padding: 12px 14px 14px 14px;
   background: #0c2243;
   color: white;
   font-weight: 700;
   font-size: 1rem;
   border-top: 2px solid #e5e7eb;
+  border-radius: 0 0 12px 12px;
+  flex-shrink: 0;
 }
 
 .live-grand-total span:last-child {
