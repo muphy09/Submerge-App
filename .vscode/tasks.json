@@ -1,0 +1,97 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Test App",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Runs the app via npm run dev (starts Vite + Electron). Stop the task to clean up processes."
+    },
+    {
+      "label": "Create EXE",
+      "type": "shell",
+      "command": "npm run build:exe",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Builds a portable EXE named 'PPAS Proposal Builder v__' in the 'portable builds' folder"
+    },
+    {
+      "label": "Release Patch x.x.0",
+      "type": "shell",
+      "command": "npm version patch; git push; git push --tags",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "powershell.exe",
+          "args": ["-Command"]
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Increments patch version (1.0.9 → 1.0.10) and pushes tag to GitHub. GitHub Actions will automatically build Windows NSIS installer and Mac DMG, then publish to Releases."
+    },
+    {
+      "label": "Release Minor x.0.x",
+      "type": "shell",
+      "command": "npm version minor; git push; git push --tags",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "powershell.exe",
+          "args": ["-Command"]
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Increments minor version (1.0.9 → 1.1.0) and pushes tag to GitHub. GitHub Actions will automatically build Windows NSIS installer and Mac DMG, then publish to Releases."
+    },
+    {
+      "label": "Release Major 0.x.x",
+      "type": "shell",
+      "command": "npm version major; git push; git push --tags",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "powershell.exe",
+          "args": ["-Command"]
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Increments major version (1.0.9 → 2.0.0) and pushes tag to GitHub. GitHub Actions will automatically build Windows NSIS installer and Mac DMG, then publish to Releases."
+    }
+  ]
+}
