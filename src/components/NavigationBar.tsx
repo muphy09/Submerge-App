@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import ppasLogo from '../../PPAS Logo.png';
+import submergeLogo from '../../Submerge Logo.png';
 import './NavigationBar.css';
 
 interface NavigationBarProps {
@@ -28,7 +28,7 @@ function NavigationBar({ userName = 'User', onLogout, isAdmin = false }: Navigat
   return (
     <nav className="navigation-bar">
       <div className="nav-left">
-        <img src={ppasLogo} alt="Submerge Logo" className="nav-logo" />
+        <img src={submergeLogo} alt="Submerge Logo" className="nav-logo" />
         <div className="nav-title-container">
           <div className="nav-brand">Submerge</div>
           <div className="nav-title">Proposal Builder</div>

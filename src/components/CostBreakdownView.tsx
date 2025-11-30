@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CostBreakdown, CostLineItem, Proposal } from '../types/proposal-new';
 import SubmergeAdvantageWarranty from './SubmergeAdvantageWarranty';
-import ppasLogo from '../../PPAS Logo.png';
+import submergeLogo from '../../Submerge Logo.png';
 import './CostBreakdownView.css';
 
 interface Props {
@@ -145,7 +145,7 @@ function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
               </p>
             </div>
           <div className="breakdown-logo">
-            <img src={ppasLogo} alt="Submerge Logo" />
+            <img src={submergeLogo} alt="Submerge Logo" />
           </div>
           </div>
 

@@ -36,7 +36,7 @@ let updateClient = null;
 const UPDATE_FEED = {
   provider: 'github',
   owner: 'muphy09',
-  repo: 'Submerge-Proposal-Builder',
+  repo: 'Submerge-App',
 };
 const DEFAULT_FRANCHISE_ID = 'default';
 const DEFAULT_FRANCHISE_CODE = 'DEFAULT-CODE';

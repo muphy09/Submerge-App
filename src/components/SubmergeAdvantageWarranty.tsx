@@ -1,5 +1,5 @@
 import { Proposal, InteriorFinishType } from '../types/proposal-new';
-import ppasLogo from '../../PPAS Logo.png';
+import submergeLogo from '../../Submerge Logo.png';
 import './SubmergeAdvantageWarranty.css';
 
 interface WarrantyItem {
@@ -398,7 +398,7 @@ function SubmergeAdvantageWarranty({ proposal }: Props) {
           </p>
         </div>
         <div className="warranty-logo">
-          <img src={ppasLogo} alt="Submerge Logo" />
+          <img src={submergeLogo} alt="Submerge Logo" />
         </div>
       </div>
 

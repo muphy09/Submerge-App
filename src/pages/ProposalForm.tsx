@@ -31,7 +31,7 @@ import CostBreakdownView from '../components/CostBreakdownView';
 import LiveCostBreakdown from '../components/LiveCostBreakdown';
 import CostBreakdownPage from '../components/CostBreakdownPage';
 import './ProposalForm.css';
-import ppasLogo from '../../PPAS Logo.png';
+import submergeLogo from '../../Submerge Logo.png';
 import customerProposalIcon from '../../CustomerProposalIcon.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -940,7 +940,7 @@ function ProposalForm() {
     <div className="proposal-form">
       <header className="form-header">
         <div className="form-header-title">
-          <img src={ppasLogo} alt="Submerge Logo" className="form-logo" />
+          <img src={submergeLogo} alt="Submerge Logo" className="form-logo" />
           <h1>{headerTitle}</h1>
         </div>
       </header>

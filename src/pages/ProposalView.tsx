@@ -6,7 +6,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useToast } from '../components/Toast';
 import './ProposalView.css';
-import ppasLogo from '../../PPAS Logo.png';
+import submergeLogo from '../../Submerge Logo.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote } from '../services/proposalsAdapter';
 
@@ -127,7 +127,7 @@ function ProposalView() {
       <div ref={proposalRef} className="proposal-document">
         {/* Header */}
         <header className="doc-header">
-          <img src={ppasLogo} alt="Submerge Logo" className="doc-logo" />
+          <img src={submergeLogo} alt="Submerge Logo" className="doc-logo" />
           <div className="doc-title-section">
             <h1>Pool Proposal</h1>
             <p className="proposal-meta">
