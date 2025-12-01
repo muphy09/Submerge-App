@@ -1,13 +1,14 @@
 .dashboard-page {
   background-color: #e5e7eb;
-  height: 100vh;
+  min-height: 100vh;
   padding-top: var(--header-offset);
   padding-bottom: clamp(1rem, 2vh, 1.5rem);
   animation: slideInFromLeft 0.3s ease-out;
   zoom: var(--scale-factor);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 @keyframes slideInFromLeft {
@@ -118,8 +119,8 @@
   padding: 0 clamp(1.5rem, 3vw, 3rem) clamp(1.5rem, 3vh, 2rem);
   max-width: 1600px;
   margin: 0 auto;
-  flex: 1;
-  overflow: hidden;
+  flex: 0 0 auto;
+  overflow: visible;
   align-items: start;
 }
 
@@ -130,8 +131,8 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  max-height: 100%;
+  overflow: visible;
+  max-height: none;
 }
 
 .column-title {
@@ -144,12 +145,26 @@
 }
 
 /* Recent Proposals */
+.recent-column {
+  --recent-max: min(60vh, calc(100vh - var(--header-offset) - 280px));
+  max-height: var(--recent-max);
+  overflow: hidden;
+}
+
 .recent-proposals-list {
   display: flex;
   flex-direction: column;
   gap: clamp(0.4rem, 0.9vh, 0.65rem);
   flex: 1;
+  max-height: calc(var(--recent-max) - clamp(3.75rem, 6vh, 4.5rem));
   overflow-y: auto;
+  padding-right: 2px; /* ensure scrollbar doesn't clip content */
+}
+
+@media (max-height: 860px) {
+  .recent-column {
+    --recent-max: min(55vh, calc(100vh - var(--header-offset) - 240px));
+  }
 }
 
 .recent-proposal-item {
@@ -379,7 +394,7 @@
 }
 
 .performance-card {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .chart-wrapper {
@@ -411,6 +426,10 @@
 
 .y-axis-tick {
   line-height: 1;
+}
+
+.y-axis-tick:last-child {
+  transform: translateY(calc(var(--chart-pad-bottom) * 0.6));
 }
 
 .bar-chart {
@@ -521,6 +540,52 @@
   height: clamp(1.25rem, 2vh, 1.5rem);
   color: #10b981;
   flex-shrink: 0;
+}
+
+/* Compact height adjustments for windowed views */
+@media (max-height: 860px) {
+  .hero-section {
+    height: clamp(180px, 28vh, 260px);
+    margin: clamp(0.75rem, 1.5vh, 1rem) clamp(1.25rem, 2.5vw, 2.25rem) clamp(0.75rem, 1.5vh, 1rem) clamp(1.25rem, 2.5vw, 2.25rem);
+  }
+
+  .dashboard-columns {
+    padding: 0 clamp(1.25rem, 2.5vw, 2rem) clamp(1.25rem, 2vh, 1.75rem);
+    gap: clamp(0.85rem, 1.8vh, 1.1rem);
+  }
+
+  .dashboard-column {
+    padding: clamp(1rem, 2vh, 1.25rem);
+  }
+
+  .performance-chart {
+    margin-bottom: clamp(0.6rem, 1.2vh, 0.85rem);
+  }
+
+  .bar-chart {
+    height: clamp(110px, 18vh, 150px);
+    --chart-pad-top: clamp(0.5rem, 0.9vh, 0.7rem);
+    --chart-pad-bottom: clamp(0.25rem, 0.6vh, 0.45rem);
+    --chart-pad-x: clamp(0.55rem, 0.9vh, 0.75rem);
+  }
+
+  .performance-stats-inline {
+    padding: clamp(0.6rem, 1.2vh, 0.75rem) clamp(0.6rem, 1.2vh, 0.75rem);
+    gap: clamp(0.35rem, 0.7vh, 0.5rem);
+  }
+
+  .stat-label {
+    margin-bottom: clamp(0.2rem, 0.4vh, 0.3rem);
+  }
+
+  .stat-value {
+    font-size: clamp(1.3rem, 2.4vh, 1.6rem);
+  }
+
+  .stat-trend-icon {
+    width: clamp(1.1rem, 1.8vh, 1.35rem);
+    height: clamp(1.1rem, 1.8vh, 1.35rem);
+  }
 }
 
 .context-menu-backdrop {

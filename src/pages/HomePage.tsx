@@ -138,7 +138,7 @@ function HomePage() {
 
       <div className="dashboard-columns">
         {/* Recent Proposals Column */}
-        <div className="dashboard-column">
+        <div className="dashboard-column recent-column">
           <h2 className="column-title">Recent Proposals</h2>
           <div className="recent-proposals-list">
             {loading ? (
