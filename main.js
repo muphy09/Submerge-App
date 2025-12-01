@@ -2,6 +2,24 @@ const { app, BrowserWindow, ipcMain, shell, Menu, dialog } = require('electron')
 const path = require('path');
 const fs = require('fs');
 
+// Lightweight env loader so dev runs pick up Supabase config from .env/.env.local
+function loadLocalEnv() {
+  const envFiles = ['.env.local', '.env'];
+  envFiles.forEach((file) => {
+    const fullPath = path.join(__dirname, file);
+    if (!fs.existsSync(fullPath)) return;
+    const lines = fs.readFileSync(fullPath, 'utf-8').split(/\r?\n/);
+    lines.forEach((line) => {
+      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (!match) return;
+      const [, key, raw] = match;
+      if (process.env[key]) return; // keep explicit env overrides
+      const value = raw.replace(/^['"]|['"]$/g, '');
+      process.env[key] = value;
+    });
+  });
+}
+
 // Load native dependency with a guard so startup failures surface a readable error instead of "application can't be opened"
 let Database;
 try {
@@ -18,6 +36,9 @@ try {
   dialog.showErrorBox('Startup error', `Failed to start Submerge Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
   app.quit();
 }
+
+// Ensure env vars are available before any renderer/preload needs them
+loadLocalEnv();
 
 // Handle ASAR paths correctly
 const isDev = process.env.NODE_ENV === 'development';

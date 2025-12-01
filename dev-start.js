@@ -44,6 +44,34 @@ function killPort5173() {
     } catch (err) {
       // No process on port 5173, which is fine
     }
+  } else {
+    try {
+      const stdout = execSync('lsof -ti tcp:5173', { encoding: 'utf-8' });
+      const pids = Array.from(new Set(stdout.split('\n').map(line => line.trim()).filter(Boolean)));
+      pids.forEach(pid => {
+        console.log(`Killing process ${pid} on port 5173...`);
+        try {
+          process.kill(parseInt(pid, 10), 'SIGKILL');
+        } catch (err) {
+          // Process might already be dead
+        }
+      });
+
+      if (pids.length > 0) {
+        console.log('Waiting for port to be released...');
+        const start = Date.now();
+        while (Date.now() - start < 2000) {
+          try {
+            execSync('lsof -ti tcp:5173', { stdio: 'ignore' });
+          } catch (err) {
+            // Port is now free
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      // No process on port 5173, which is fine
+    }
   }
 }
 

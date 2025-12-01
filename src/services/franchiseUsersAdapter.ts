@@ -1,5 +1,6 @@
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
 import { Proposal } from '../types/proposal-new';
+import { isEnvFlagTrue } from './env';
 
 type FranchiseUser = {
   id: string;
@@ -11,10 +12,7 @@ type FranchiseUser = {
   updatedAt?: string;
 };
 
-const SUPABASE_REQUIRED =
-  (import.meta.env.VITE_SUPABASE_ONLY || process.env.VITE_SUPABASE_ONLY || '')
-    .toString()
-    .toLowerCase() === 'true';
+const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
 function normalizeName(name: string) {
   return name?.trim();

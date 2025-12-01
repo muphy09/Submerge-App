@@ -1,19 +1,20 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getEnvVar } from './env';
 
 let client: SupabaseClient | null = null;
 let loggedMissing = false;
 let loggedEnabled = false;
 
 export function isSupabaseEnabled() {
-  const url = import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const url = getEnvVar('VITE_SUPABASE_URL');
+  const key = getEnvVar('VITE_SUPABASE_ANON_KEY');
   return Boolean(url && key);
 }
 
 export function getSupabaseClient() {
   if (client) return client;
-  const url = import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const url = getEnvVar('VITE_SUPABASE_URL');
+  const key = getEnvVar('VITE_SUPABASE_ANON_KEY');
   if (!url || !key) {
     if (!loggedMissing) {
       console.info('Supabase not configured (missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY); falling back to local/IPC.');

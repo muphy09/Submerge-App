@@ -1,4 +1,5 @@
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
+import { isEnvFlagTrue } from './env';
 
 export type PricingModelRow = {
   id: string;
@@ -14,7 +15,7 @@ export type PricingModelRow = {
 
 const DEFAULT_VERSION = 'v1';
 const DEFAULT_FRANCHISE_ID = 'default';
-const SUPABASE_REQUIRED = (import.meta.env.VITE_SUPABASE_ONLY || process.env.VITE_SUPABASE_ONLY || '').toString().toLowerCase() === 'true';
+const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
 function withFallback<T>(supabaseFn: () => Promise<T>, fallbackFn: () => Promise<T>) {
   const enabled = isSupabaseEnabled();

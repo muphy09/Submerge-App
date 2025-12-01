@@ -9,11 +9,9 @@ import {
   getSessionUserName,
   readSession,
 } from './session';
+import { isEnvFlagTrue } from './env';
 
-const SUPABASE_REQUIRED =
-  (import.meta.env.VITE_SUPABASE_ONLY || process.env.VITE_SUPABASE_ONLY || '')
-    .toString()
-    .toLowerCase() === 'true';
+const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
 type SaveResult = Proposal & { lastModified: string };
 

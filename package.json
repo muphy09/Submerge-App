@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node dev-start.js",
     "dev:react": "vite",
-    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development node_modules/electron/dist/electron.exe .",
+    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development electron .",
     "build:renderer": "vite build",
     "test:electron": "cross-env NODE_ENV=production npx electron .",
     "build": "tsc && vite build && electron-builder",

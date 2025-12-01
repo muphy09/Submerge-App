@@ -1,6 +1,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // Prefer the version supplied by the main process to avoid bundle path issues
 const appVersion = process.env.SUBMERGE_APP_VERSION || process.env.npm_package_version || 'dev';
+// Expose env so renderer can read Supabase config even when import.meta.env is unavailable
+contextBridge.exposeInMainWorld('__APP_ENV__', {
+  VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL,
+  VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY,
+  VITE_SUPABASE_ONLY: process.env.VITE_SUPABASE_ONLY,
+});
 
 const setIpcListener = (channel, callback) => {
   ipcRenderer.removeAllListeners(channel);
