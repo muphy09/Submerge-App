@@ -53,6 +53,7 @@ import {
 } from '../services/pricingDataStore';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { isSupabaseEnabled } from '../services/supabaseClient';
 import {
   getSessionFranchiseCode,
   getSessionFranchiseId,
@@ -513,10 +514,16 @@ function ProposalForm() {
       };
 
       let persisted = false;
+      const supabaseAvailable = isSupabaseEnabled();
       try {
         await saveProposalRemote(finalProposal);
         persisted = true;
       } catch (primaryError) {
+        // If Supabase is configured, don't silently fall back to local-only saves.
+        if (supabaseAvailable) {
+          throw primaryError;
+        }
+
         if (window.electron?.saveProposal) {
           try {
             await window.electron.saveProposal(finalProposal);
