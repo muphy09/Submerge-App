@@ -318,6 +318,12 @@ select.compact-input {
   flex-wrap: wrap;
 }
 
+.pricing-model-select select.compact-input {
+  flex: 0 0 25%;
+  max-width: 25%;
+  min-width: 160px;
+}
+
 .pricing-model-pill {
   display: inline-flex;
   align-items: center;

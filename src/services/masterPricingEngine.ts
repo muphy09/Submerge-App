@@ -461,6 +461,27 @@ export class MasterPricingEngine {
       });
     }
 
+    // Water features (non-waterfall) counted directly from selections
+    const waterFeatureCount = (waterFeatures?.selections || []).reduce((sum: number, sel: any) => {
+      const catalog = pricingData.waterFeatures?.catalog ?? [];
+      const feature = catalog.find((f: any) => f.id === sel.featureId);
+      const isWaterfall =
+        feature?.name?.toLowerCase().includes('waterfall') ||
+        feature?.category?.toLowerCase().includes('waterfall');
+      if (isWaterfall) return sum;
+      return sum + (sel?.quantity ?? 0);
+    }, 0);
+
+    if (waterFeatureCount > 0) {
+      items.push({
+        category: 'Plans & Engineering',
+        description: 'Water Features',
+        unitPrice: prices.waterFeature,
+        quantity: waterFeatureCount,
+        total: prices.waterFeature * waterFeatureCount,
+      });
+    }
+
     if (excavation?.needsSoilSampleEngineer) {
       items.push({
         category: 'Plans & Engineering',

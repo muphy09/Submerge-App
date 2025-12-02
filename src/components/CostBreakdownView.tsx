@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CostBreakdown, CostLineItem, Proposal } from '../types/proposal-new';
+import { CostBreakdown, CostLineItem, PricingCalculations, Proposal } from '../types/proposal-new';
 import SubmergeAdvantageWarranty from './SubmergeAdvantageWarranty';
 import submergeLogo from '../../Submerge Logo.png';
 import './CostBreakdownView.css';
@@ -8,14 +8,94 @@ interface Props {
   costBreakdown: CostBreakdown;
   customerName: string;
   proposal?: Partial<Proposal>;
+  pricing?: PricingCalculations;
 }
 
 const isPapDiscount = (item: CostLineItem): boolean =>
   item.description?.toLowerCase().includes('pap discount') ?? false;
 
-function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
+function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [zoomLevel, setZoomLevel] = useState(0.5); // Start at 50% (0.5 scale)
+
+  const formatCurrency = (value: number): string =>
+    `$${(Number.isFinite(value) ? value : 0).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const roundToTwo = (value: number): number =>
+    Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+
+  const baseTotals = costBreakdown?.totals || ({} as CostBreakdown['totals']);
+  const costBasis =
+    pricing?.totalCostsBeforeOverhead ??
+    proposal?.pricing?.totalCostsBeforeOverhead ??
+    baseTotals.grandTotal ??
+    0;
+
+  let retailPrice =
+    pricing?.retailPrice ??
+    proposal?.pricing?.retailPrice ??
+    proposal?.totalCost ??
+    0;
+
+  if (!retailPrice && costBasis) {
+    retailPrice = costBasis;
+  }
+
+  const retailFactor = costBasis > 0 ? retailPrice / costBasis : 1;
+
+  // Map cost totals into retail-valued rows that sum to the retail price.
+  const categoryRows = [
+    { label: 'Plans & Engineering', cost: baseTotals.plansAndEngineering ?? 0 },
+    { label: 'Layout', cost: baseTotals.layout ?? 0 },
+    { label: 'Permit', cost: baseTotals.permit ?? 0 },
+    { label: 'Excavation', cost: baseTotals.excavation ?? 0 },
+    { label: 'Plumbing', cost: baseTotals.plumbing ?? 0 },
+    { label: 'Gas', cost: baseTotals.gas ?? 0 },
+    { label: 'Steel', cost: baseTotals.steel ?? 0 },
+    { label: 'Electrical', cost: baseTotals.electrical ?? 0 },
+    { label: 'Shotcrete Labor', cost: baseTotals.shotcreteLabor ?? 0 },
+    { label: 'Shotcrete Material', cost: baseTotals.shotcreteMaterial ?? 0 },
+    { label: 'Tile Labor', cost: baseTotals.tileLabor ?? 0 },
+    { label: 'Tile Material', cost: baseTotals.tileMaterial ?? 0 },
+    { label: 'Coping/Decking Labor', cost: baseTotals.copingDeckingLabor ?? 0 },
+    { label: 'Coping/Decking Material', cost: baseTotals.copingDeckingMaterial ?? 0 },
+    {
+      label: 'Stone/Rockwork',
+      cost: (baseTotals.stoneRockworkLabor ?? 0) + (baseTotals.stoneRockworkMaterial ?? 0),
+    },
+    { label: 'Drainage', cost: baseTotals.drainage ?? 0 },
+    { label: 'Equipment Ordered', cost: baseTotals.equipmentOrdered ?? 0 },
+    { label: 'Equipment Set', cost: baseTotals.equipmentSet ?? 0 },
+    { label: 'Water Features', cost: baseTotals.waterFeatures ?? 0 },
+    { label: 'Cleanup', cost: baseTotals.cleanup ?? 0 },
+    { label: 'Interior Finish', cost: baseTotals.interiorFinish ?? 0 },
+    { label: 'Water Truck', cost: baseTotals.waterTruck ?? 0 },
+    { label: 'Fiberglass Shell', cost: baseTotals.fiberglassShell ?? 0 },
+    { label: 'Fiberglass Install', cost: baseTotals.fiberglassInstall ?? 0 },
+    { label: 'Startup/Orientation', cost: baseTotals.startupOrientation ?? 0 },
+    { label: 'Custom Features', cost: baseTotals.customFeatures ?? 0 },
+  ];
+
+  let runningRetailTotal = 0;
+  const retailRows = categoryRows.map((row, idx) => {
+    const isLastRow = idx === categoryRows.length - 1;
+    let retailValue = roundToTwo(row.cost * retailFactor);
+
+    if (isLastRow) {
+      // Nudge the final row to absorb any rounding difference.
+      const targetTotal = retailPrice || runningRetailTotal + retailValue;
+      const adjustment = roundToTwo(targetTotal - (runningRetailTotal + retailValue));
+      retailValue = roundToTwo(retailValue + adjustment);
+    }
+
+    runningRetailTotal += retailValue;
+    return { ...row, retail: retailValue };
+  });
+
+  const displayRetailPrice = roundToTwo(retailPrice || runningRetailTotal);
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -151,117 +231,19 @@ function CostBreakdownView({ costBreakdown, customerName, proposal }: Props) {
 
         <div className="breakdown-summary">
           <div className="summary-grid">
-            <div className="summary-row">
-              <span>Plans & Engineering:</span>
-              <span>${costBreakdown.totals.plansAndEngineering.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Layout:</span>
-              <span>${costBreakdown.totals.layout.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Permit:</span>
-              <span>${costBreakdown.totals.permit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Excavation:</span>
-              <span>${costBreakdown.totals.excavation.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Plumbing:</span>
-              <span>${costBreakdown.totals.plumbing.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Gas:</span>
-              <span>${costBreakdown.totals.gas.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Steel:</span>
-              <span>${costBreakdown.totals.steel.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Electrical:</span>
-              <span>${costBreakdown.totals.electrical.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Shotcrete Labor:</span>
-              <span>${costBreakdown.totals.shotcreteLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Shotcrete Material:</span>
-              <span>${costBreakdown.totals.shotcreteMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Tile Labor:</span>
-              <span>${costBreakdown.totals.tileLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Tile Material:</span>
-              <span>${costBreakdown.totals.tileMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Coping/Decking Labor:</span>
-              <span>${costBreakdown.totals.copingDeckingLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Coping/Decking Material:</span>
-              <span>${costBreakdown.totals.copingDeckingMaterial.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Stone/Rockwork:</span>
-              <span>${costBreakdown.totals.stoneRockworkLabor.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Drainage:</span>
-              <span>${costBreakdown.totals.drainage.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Equipment Ordered:</span>
-              <span>${costBreakdown.totals.equipmentOrdered.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Equipment Set:</span>
-              <span>${costBreakdown.totals.equipmentSet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Water Features:</span>
-              <span>${costBreakdown.totals.waterFeatures.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Cleanup:</span>
-              <span>${costBreakdown.totals.cleanup.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Interior Finish:</span>
-              <span>${costBreakdown.totals.interiorFinish.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Water Truck:</span>
-              <span>${costBreakdown.totals.waterTruck.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Fiberglass Shell:</span>
-              <span>${costBreakdown.totals.fiberglassShell.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Fiberglass Install:</span>
-              <span>${costBreakdown.totals.fiberglassInstall.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Startup/Orientation:</span>
-              <span>${costBreakdown.totals.startupOrientation.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="summary-row">
-              <span>Custom Features:</span>
-              <span>${costBreakdown.totals.customFeatures.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
+            {retailRows.map((row) => (
+              <div className="summary-row" key={row.label}>
+                <span>{row.label}:</span>
+                <span>{formatCurrency(row.retail)}</span>
+              </div>
+            ))}
           </div>
 
           {/* Cost Summary Section */}
           <div className="cost-summary-section">
             <div className="summary-row subtotal-row">
-              <span>TOTAL COSTS:</span>
-              <span>${costBreakdown.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span>RETAIL PRICE:</span>
+              <span>{formatCurrency(displayRetailPrice)}</span>
             </div>
           </div>
         </div>

@@ -187,11 +187,23 @@ export class TileCopingDeckingCalculations {
     }
 
     // COPING LABOR & MATERIAL
+    const copingLabelMap: Record<string, string> = {
+      'travertine-level1': 'Level 1 Coping - Travertine',
+      'travertine-level2': 'Level 2 Coping - Travertine',
+    };
+    const deckingLabelMap: Record<string, string> = {
+      'travertine-level1': 'Level 1 Decking - Travertine',
+      'travertine-level2': 'Level 2 Decking - Travertine',
+    };
+    const formatCopingLabel = (type: string, suffix: string) =>
+      copingLabelMap[type] ? copingLabelMap[type] : `${type} ${suffix}`;
+    const formatDeckingLabel = (type: string, suffix: string) =>
+      deckingLabelMap[type] ? deckingLabelMap[type] : `${type} ${suffix}`;
     const copingRate = this.getCopingRate(tileCopingDecking.copingType, prices);
     if (copingRate > 0) {
       laborItems.push({
         category: 'Coping Labor',
-        description: `${tileCopingDecking.copingType} Coping`,
+        description: formatCopingLabel(tileCopingDecking.copingType, 'Coping'),
         unitPrice: copingRate,
         quantity: copingLnft,
         total: copingRate * copingLnft,
@@ -208,7 +220,7 @@ export class TileCopingDeckingCalculations {
 
       materialItems.push({
         category: 'Coping Material',
-        description: `${tileCopingDecking.copingType} Coping Material`,
+        description: formatCopingLabel(tileCopingDecking.copingType, 'Coping Material'),
         unitPrice: copingMaterialRate,
         quantity: copingMaterialQty,
         total: copingMaterialRate * copingMaterialQty,
@@ -231,7 +243,7 @@ export class TileCopingDeckingCalculations {
     } else if (deckingLaborRate > 0) {
       laborItems.push({
         category: 'Decking Labor',
-        description: `${tileCopingDecking.deckingType} Decking Labor`,
+        description: formatDeckingLabel(tileCopingDecking.deckingType, 'Decking Labor'),
         unitPrice: deckingLaborRate,
         quantity: deckingArea,
         total: deckingLaborRate * deckingArea,
@@ -273,7 +285,7 @@ export class TileCopingDeckingCalculations {
     } else if (deckingMaterialRate > 0) {
       materialItems.push({
         category: 'Decking Material',
-        description: `${tileCopingDecking.deckingType} Decking Material`,
+        description: formatDeckingLabel(tileCopingDecking.deckingType, 'Decking Material'),
         unitPrice: deckingMaterialRate,
         quantity: deckingArea,
         total: deckingMaterialRate * deckingArea,

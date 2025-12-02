@@ -33,6 +33,17 @@ import CostBreakdownPage from '../components/CostBreakdownPage';
 import './ProposalForm.css';
 import submergeLogo from '../../Submerge Logo.png';
 import customerProposalIcon from '../../CustomerProposalIcon.png';
+import poolSpecsIconImg from '../../docs/img/poolspecifications.png';
+import excavationIconImg from '../../docs/img/excavation.png';
+import plumbingIconImg from '../../docs/img/plumbing.png';
+import electricIconImg from '../../docs/img/Electric.png';
+import tileIconImg from '../../docs/img/tile.png';
+import drainageIconImg from '../../docs/img/drainage.png';
+import waterFeatureIconImg from '../../docs/img/waterfeature.png';
+import interiorIconImg from '../../docs/img/interior.png';
+import equipmentIconImg from '../../docs/img/equip.png';
+import customIconImg from '../../docs/img/custom.png';
+import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import {
@@ -84,78 +95,34 @@ interface SectionConfig {
 
 const sectionIcons: Record<SectionKey, () => JSX.Element> = {
   poolSpecs: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <rect x="10" y="18" width="44" height="28" rx="12" ry="12" fill="none" stroke="currentColor" strokeWidth="4" />
-      <path
-        d="M14 36c4-2 8-2 12 0s8 2 12 0 8-2 12 0"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="4"
-        strokeLinecap="round"
-      />
-      <path d="M14 28c4-2 8-2 12 0s8 2 12 0 8-2 12 0" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-    </svg>
+    <img src={poolSpecsIconImg} alt="Pool Specifications" className="nav-icon-img" />
   ),
   excavation: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <path d="M16 40 34 22l6 6-18 18-10 2z" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M40 24 46 18l8 8-6 6" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M28 38 16 50" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-    </svg>
+    <img src={excavationIconImg} alt="Excavation" className="nav-icon-img" />
   ),
   plumbing: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <path d="M12 20h20v10H12zM32 24h12a8 8 0 0 1 0 16H22" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M12 34h12v10h-8a4 4 0 0 1-4-4z" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <circle cx="46" cy="32" r="4" fill="currentColor" />
-    </svg>
+    <img src={plumbingIconImg} alt="Plumbing" className="nav-icon-img" />
   ),
   electrical: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <path d="M30 10 16 36h12l-6 18 24-28h-14l8-16z" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-    </svg>
+    <img src={electricIconImg} alt="Gas / Electrical" className="nav-icon-img" />
   ),
   tileCopingDecking: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <rect x="10" y="14" width="16" height="36" rx="2" fill="none" stroke="currentColor" strokeWidth="4" />
-      <rect x="26" y="18" width="16" height="32" rx="2" fill="none" stroke="currentColor" strokeWidth="4" />
-      <rect x="42" y="14" width="12" height="36" rx="2" fill="none" stroke="currentColor" strokeWidth="4" />
-      <path d="M10 28h44M10 36h44" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
+    <img src={tileIconImg} alt="Tile/Coping/Decking" className="nav-icon-img" />
   ),
   drainage: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <path d="M14 20h22a8 8 0 0 1 8 8v16h-6" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
-      <path d="M38 44c0 6-6 10-6 14 0-4-6-8-6-14a6 6 0 1 1 12 0Z" fill="none" stroke="currentColor" strokeWidth="4" />
-      <path d="M14 28h10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-    </svg>
+    <img src={drainageIconImg} alt="Drainage" className="nav-icon-img" />
   ),
   equipment: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <rect x="22" y="10" width="20" height="44" rx="8" fill="none" stroke="currentColor" strokeWidth="4" />
-      <circle cx="32" cy="22" r="4" fill="currentColor" />
-      <path d="M26 32h12M26 40h12" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-      <path d="M24 16c4-4 12-4 16 0" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
+    <img src={equipmentIconImg} alt="Equipment" className="nav-icon-img" />
   ),
   waterFeatures: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <path d="M18 36c6-4 10-10 14-18 4 8 8 14 14 18 0 8-6 14-14 14s-14-6-14-14Z" fill="none" stroke="currentColor" strokeWidth="4" />
-      <path d="M22 46c2-2 6-3 10-3s8 1 10 3" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
+    <img src={waterFeatureIconImg} alt="Water Features" className="nav-icon-img" />
   ),
   interiorFinish: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <rect x="12" y="12" width="40" height="40" rx="4" fill="none" stroke="currentColor" strokeWidth="4" />
-      <path d="M12 32h40M32 12v40" stroke="currentColor" strokeWidth="3" />
-      <path d="M12 22h20M12 42h20M32 22h20M32 42h20" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
-    </svg>
+    <img src={interiorIconImg} alt="Interior Finish" className="nav-icon-img" />
   ),
   customFeatures: () => (
-    <svg viewBox="0 0 64 64" className="nav-icon-svg" aria-hidden="true">
-      <circle cx="32" cy="32" r="18" fill="none" stroke="#16a34a" strokeWidth="4" />
-      <path d="M32 22v20M22 32h20" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" />
-    </svg>
+    <img src={customIconImg} alt="Custom Features" className="nav-icon-img" />
   ),
 };
 
@@ -164,7 +131,7 @@ const sections: SectionConfig[] = [
   { key: 'excavation', label: 'Excavation', shortLabel: 'Excavation' },
   { key: 'plumbing', label: 'Plumbing', shortLabel: 'Plumbing' },
   { key: 'electrical', label: 'Gas / Electrical', shortLabel: 'Gas/Electrical' },
-  { key: 'tileCopingDecking', label: 'Tile/Coping/Decking', shortLabel: 'Tile/Coping' },
+  { key: 'tileCopingDecking', label: 'Tile / Coping /\nDecking', shortLabel: 'Tile/Coping' },
   { key: 'drainage', label: 'Drainage', shortLabel: 'Drainage' },
   { key: 'equipment', label: 'Equipment', shortLabel: 'Equipment' },
   { key: 'waterFeatures', label: 'Water Features', shortLabel: 'Water Features', includeInProgress: false },
@@ -958,19 +925,20 @@ function ProposalForm() {
               }}
               title="Hide navigation"
             >
-              <h3>Proposal Navigation</h3>
-              <button
-                className="sidebar-toggle left-toggle"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setNavManuallyToggled(true);
-                  setShowLeftNav(false);
-                }}
-                title="Hide navigation"
-              >
-                Hide
-              </button>
+              <h3>Navigation</h3>
             </div>
+            <button
+              className="sidebar-toggle left-toggle"
+              onClick={(e) => {
+                e.stopPropagation();
+                setNavManuallyToggled(true);
+                setShowLeftNav(false);
+              }}
+              title="Hide navigation"
+              aria-label="Hide navigation"
+            >
+              {'<'}
+            </button>
             <div className="nav-action-space" aria-hidden="true">
               <span className="nav-divider" />
               <div className="nav-action-buttons">
@@ -982,7 +950,7 @@ function ProposalForm() {
                   }}
                   title="View Cost Breakdown"
                 >
-                  <span className="button-icon" aria-hidden="true">$</span>
+                  <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
                   <span className="cost-modal-label">Cost Breakdown</span>
                 </button>
                 <button
@@ -1006,7 +974,7 @@ function ProposalForm() {
                 return (
                   <button
                     key={section.key}
-                    className={`nav-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                    className={`nav-item ${section.key === 'poolSpecs' ? 'pool-specs-item' : ''} ${section.key === 'excavation' ? 'excavation-item' : ''} ${section.key === 'plumbing' ? 'plumbing-item' : ''} ${section.key === 'electrical' ? 'electrical-item' : ''} ${section.key === 'tileCopingDecking' ? 'tile-item' : ''} ${section.key === 'drainage' ? 'drainage-item' : ''} ${section.key === 'waterFeatures' ? 'water-item' : ''} ${section.key === 'interiorFinish' ? 'interior-item' : ''} ${section.key === 'equipment' ? 'equipment-item' : ''} ${section.key === 'customFeatures' ? 'custom-item' : ''} ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
                     onClick={() => setCurrentSection(index)}
                   >
                     <span className="nav-icon-wrapper" aria-hidden="true">
@@ -1084,6 +1052,7 @@ function ProposalForm() {
           <aside className="cost-sidebar">
             <LiveCostBreakdown
               costBreakdown={currentCostBreakdown.costBreakdown}
+              totalCOGS={currentCostBreakdown.pricing.totalCOGS}
               onToggle={() => {
                 setCostManuallyToggled(true);
                 setShowRightCost(false);
@@ -1117,6 +1086,7 @@ function ProposalForm() {
               costBreakdown={currentCostBreakdown.costBreakdown}
               customerName={proposal.customerInfo?.customerName || ''}
               proposal={proposal}
+              pricing={currentCostBreakdown.pricing}
             />
           </div>
         </div>

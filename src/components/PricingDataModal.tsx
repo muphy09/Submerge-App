@@ -28,6 +28,8 @@ type ScalarField = {
   path: Path;
   type: 'number' | 'boolean' | 'text';
   note?: string;
+  tooltip?: string;
+  prefix?: string;
 };
 
 type ListField = {
@@ -35,6 +37,7 @@ type ListField = {
   label: string;
   type: 'number' | 'boolean' | 'text';
   placeholder?: string;
+  prefix?: string;
 };
 
 type ListConfig = {
@@ -48,6 +51,7 @@ type Group = {
   title: string;
   scalars?: ScalarField[];
   lists?: ListConfig[];
+  render?: () => JSX.Element;
 };
 
 type Section = {
@@ -93,6 +97,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<{ id: string; name: string } | null>(null);
+  const updateTooltipAlign = (e: React.MouseEvent<HTMLSpanElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const center = rect.left + rect.width / 2;
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const ratio = center / vw;
+    let align: 'left' | 'right' | 'center' = 'center';
+    if (ratio < 0.4) align = 'left';
+    else if (ratio > 0.6) align = 'right';
+    e.currentTarget.dataset.align = align;
+  };
 
   useEffect(() => {
     const targetFranchise = franchiseId || getActiveFranchiseId();
@@ -277,6 +291,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setHasChanges(true);
   };
 
+
   const handleAddListItem = (list: ListConfig) => {
     addPricingListItem(list.path, emptyFromFields(list.fields));
     setHasChanges(true);
@@ -414,13 +429,43 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Plans & Engineering',
         groups: [
           {
-            title: 'Plan packages',
+            title: 'Base Costs',
             scalars: [
-              { label: 'Pool only', path: ['plans', 'poolOnly'], type: 'number' },
-              { label: 'Spa add-on', path: ['plans', 'spa'], type: 'number' },
-              { label: 'Waterfall add-on', path: ['plans', 'waterfall'], type: 'number' },
-              { label: 'Water feature add-on', path: ['plans', 'waterFeature'], type: 'number' },
-              { label: 'Soil sample engineer', path: ['plans', 'soilSampleEngineer'], type: 'number' },
+              {
+                label: 'Pool',
+                path: ['plans', 'poolOnly'],
+                type: 'number',
+                tooltip: 'Added when a pool is defined. Quantity is always 1 if defined.',
+                prefix: '$',
+              },
+              {
+                label: 'Spa',
+                path: ['plans', 'spa'],
+                type: 'number',
+                tooltip: 'Added when a spa exists. Quantity is always 1 if spa exists.',
+                prefix: '$',
+              },
+              {
+                label: 'Waterfall',
+                path: ['plans', 'waterfall'],
+                type: 'number',
+                tooltip: 'Added when a waterfall exists. Quantity equals the total waterfall count.',
+                prefix: '$',
+              },
+              {
+                label: 'Water Feature',
+                path: ['plans', 'waterFeature'],
+                type: 'number',
+                tooltip: 'Applies when a water feature exists. Quantity equals total water feature count.',
+                prefix: '$',
+              },
+              {
+                label: 'Soil Sample / Engineer',
+                path: ['plans', 'soilSampleEngineer'],
+                type: 'number',
+                tooltip: 'Added when the soil sample / engineer input is activated.',
+                prefix: '$',
+              },
             ],
           },
         ],
@@ -429,19 +474,55 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Layout & Permit',
         groups: [
           {
-            title: 'On-site layout',
+            title: 'Layout',
             scalars: [
-              { label: 'Pool only layout', path: ['misc', 'layout', 'poolOnly'], type: 'number' },
-              { label: 'Spa layout add-on', path: ['misc', 'layout', 'spa'], type: 'number' },
-              { label: 'Silt fencing allowance', path: ['misc', 'layout', 'siltFencing'], type: 'number' },
+              {
+                label: 'Pool',
+                path: ['misc', 'layout', 'poolOnly'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Spa',
+                path: ['misc', 'layout', 'spa'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Silt Fencing',
+                path: ['misc', 'layout', 'siltFencing'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
             ],
           },
           {
-            title: 'Permitting',
+            title: 'Permit',
             scalars: [
-              { label: 'Pool permit', path: ['misc', 'permit', 'poolOnly'], type: 'number' },
-              { label: 'Spa permit add-on', path: ['misc', 'permit', 'spa'], type: 'number' },
-              { label: 'Permit runner', path: ['misc', 'permit', 'permitRunner'], type: 'number' },
+              {
+                label: 'Pool',
+                path: ['misc', 'permit', 'poolOnly'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Spa',
+                path: ['misc', 'permit', 'spa'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Permit Runner',
+                path: ['misc', 'permit', 'permitRunner'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
             ],
           },
         ],
@@ -452,34 +533,110 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Base & allowances',
             scalars: [
-              { label: 'Base excavation (project)', path: ['excavation', 'basePricePerSqft'], type: 'number' },
-              { label: 'Over 1,000 sqft surcharge', path: ['excavation', 'over1000Sqft'], type: 'number' },
-              { label: 'Additional 6" depth (per sqft)', path: ['excavation', 'additional6InchDepth'], type: 'number' },
-              { label: 'Site prep (per hour)', path: ['excavation', 'sitePrep'], type: 'number' },
-              { label: 'Backfill', path: ['excavation', 'backfill'], type: 'number' },
-              { label: 'Gravel install (per ton)', path: ['excavation', 'gravelPerTon'], type: 'number' },
-              { label: 'Dirt haul (per load)', path: ['excavation', 'dirtHaulPerLoad'], type: 'number' },
-              { label: 'Cover box', path: ['excavation', 'coverBox'], type: 'number' },
-              { label: 'Travel (per mile)', path: ['excavation', 'travelPerMile'], type: 'number' },
-              { label: 'Miscellaneous', path: ['excavation', 'misc'], type: 'number' },
+              {
+                label: 'Base excavation (project)',
+                path: ['excavation', 'basePricePerSqft'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Over 1,000 sqft surcharge',
+                path: ['excavation', 'over1000Sqft'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Additional 6" depth (per sqft)',
+                path: ['excavation', 'additional6InchDepth'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Site prep (per hour)',
+                path: ['excavation', 'sitePrep'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Backfill',
+                path: ['excavation', 'backfill'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Gravel install (per ton)',
+                path: ['excavation', 'gravelPerTon'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Dirt haul (per load)',
+                path: ['excavation', 'dirtHaulPerLoad'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Cover box',
+                path: ['excavation', 'coverBox'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Travel (per mile)',
+                path: ['excavation', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Miscellaneous',
+                path: ['excavation', 'misc'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
             ],
+          },
+          {
+            title: 'Base Ranges - Surface Area Breakpoints',
+            render: renderBaseRanges,
           },
           {
             title: 'Spa excavation',
             scalars: [
-              { label: 'Spa base excavation', path: ['excavation', 'baseSpa'], type: 'number' },
-              { label: 'Raised spa excavation', path: ['excavation', 'raisedSpa'], type: 'number' },
+              {
+                label: 'Spa base excavation',
+                path: ['excavation', 'baseSpa'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa excavation',
+                path: ['excavation', 'raisedSpa'],
+                type: 'number',
+                tooltip: 'Placeholder',
+                prefix: '$',
+              },
             ],
           },
           {
             title: 'Raised bond beam (per lnft)',
             scalars: [
-              { label: '6" RBB', path: ['excavation', 'rbb6'], type: 'number' },
-              { label: '12" RBB', path: ['excavation', 'rbb12'], type: 'number' },
-              { label: '18" RBB', path: ['excavation', 'rbb18'], type: 'number' },
-              { label: '24" RBB', path: ['excavation', 'rbb24'], type: 'number' },
-              { label: '30" RBB', path: ['excavation', 'rbb30'], type: 'number' },
-              { label: '36" RBB', path: ['excavation', 'rbb36'], type: 'number' },
+              { label: '6" RBB', path: ['excavation', 'rbb6'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
+              { label: '12" RBB', path: ['excavation', 'rbb12'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
+              { label: '18" RBB', path: ['excavation', 'rbb18'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
+              { label: '24" RBB', path: ['excavation', 'rbb24'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
+              { label: '30" RBB', path: ['excavation', 'rbb30'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
+              { label: '36" RBB', path: ['excavation', 'rbb36'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
             ],
           },
         ],
@@ -982,6 +1139,17 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               onChange={(e) => handleScalarChange(field, e.target.checked)}
             />
             <span>{field.label}</span>
+            {field.tooltip && (
+              <span
+                className="pricing-field__info"
+                data-tooltip={field.tooltip}
+                aria-label={field.tooltip}
+                role="img"
+                onMouseEnter={updateTooltipAlign}
+              >
+                i
+              </span>
+            )}
           </div>
           {field.note && <div className="pricing-field__note">{field.note}</div>}
         </label>
@@ -990,13 +1158,29 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
     return (
       <label className="pricing-field">
-        <div className="pricing-field__label">{field.label}</div>
-        <input
-          className="pricing-field__input"
-          type={field.type === 'number' ? 'number' : 'text'}
-          value={typeof value === 'number' ? value : value ?? ''}
-          onChange={(e) => handleScalarChange(field, e.target.value)}
-        />
+        <div className="pricing-field__label">
+          <span>{field.label}</span>
+            {field.tooltip && (
+              <span
+                className="pricing-field__info"
+                data-tooltip={field.tooltip}
+                aria-label={field.tooltip}
+                role="img"
+                onMouseEnter={updateTooltipAlign}
+              >
+                i
+              </span>
+            )}
+          </div>
+        <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
+          {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
+          <input
+            className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
+            type={field.type === 'number' ? 'number' : 'text'}
+            value={typeof value === 'number' ? value : value ?? ''}
+            onChange={(e) => handleScalarChange(field, e.target.value)}
+          />
+        </div>
         {field.note && <div className="pricing-field__note">{field.note}</div>}
       </label>
     );
@@ -1037,13 +1221,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   return (
                     <label key={field.key} className="pricing-field inline">
                       <div className="pricing-field__label">{field.label}</div>
-                      <input
-                        type={field.type === 'number' ? 'number' : 'text'}
-                        className="pricing-field__input"
-                        value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
-                        placeholder={field.placeholder}
-                        onChange={(e) => handleListChange(config, index, field, e.target.value)}
-                      />
+                      <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
+                        {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
+                        <input
+                          type={field.type === 'number' ? 'number' : 'text'}
+                          className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
+                          value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
+                          placeholder={field.placeholder}
+                          onChange={(e) => handleListChange(config, index, field, e.target.value)}
+                        />
+                      </div>
                     </label>
                   );
                 })}
@@ -1064,6 +1251,73 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       </div>
     );
   };
+
+  function renderBaseRanges() {
+    const baseRanges = ((getValue(data, ['excavation', 'baseRanges']) as any[]) || []).sort(
+      (a, b) => (a?.max ?? 0) - (b?.max ?? 0)
+    );
+    let previousMax = 0;
+
+    return (
+      <div className="pricing-list-card base-ranges-card">
+        <div className="pricing-list-card__body base-ranges-body">
+          <div className="pricing-fields-grid base-ranges-grid">
+            {baseRanges.map((range, index) => {
+              const max = range?.max ?? 0;
+              const min = index === 0 ? 0 : previousMax + 1;
+              const label = `${min}-${max}`;
+              previousMax = max;
+              const price = range?.price ?? 0;
+              return (
+                <label key={`base-range-${index}`} className="pricing-field inline">
+                  <div className="pricing-field__label">{label}</div>
+                  <div className="pricing-field__input-wrap has-prefix">
+                    <span className="pricing-field__prefix">$</span>
+                    <input
+                      type="number"
+                      className="pricing-field__input pricing-field__input--bare"
+                      value={price}
+                      onChange={(e) =>
+                        handleListChange(
+                          {
+                            title: 'Surface area breakpoints',
+                            path: ['excavation', 'baseRanges'],
+                            fields: [],
+                            addLabel: '',
+                          },
+                          index,
+                          { key: 'price', label: 'Price', type: 'number' },
+                          e.target.value
+                        )
+                      }
+                    />
+                  </div>
+                </label>
+              );
+            })}
+            <label className="pricing-field inline">
+              <div className="pricing-field__label">1000+</div>
+              <div className="pricing-field__input-wrap has-prefix">
+                <span className="pricing-field__prefix">$</span>
+                <input
+                  type="number"
+                  className="pricing-field__input pricing-field__input--bare"
+                  value={getValue(data, ['excavation', 'over1000Sqft']) ?? ''}
+                  onChange={(e) =>
+                    handleScalarChange(
+                      { label: 'over1000', path: ['excavation', 'over1000Sqft'], type: 'number' },
+                      e.target.value
+                    )
+                  }
+                />
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div
@@ -1218,14 +1472,15 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   <div className="pricing-section__body-content">
                     {section.groups.map((group) => (
                       <div key={group.title} className="pricing-group">
-                        <div className="pricing-group__heading">
-                          <h4>{group.title}</h4>
-                        </div>
-                        {group.scalars && (
-                          <div className="pricing-fields-grid">
-                            {group.scalars.map((field) => (
-                              <React.Fragment key={`${section.title}-${group.title}-${field.label}`}>
-                                {renderScalar(field)}
+                      <div className="pricing-group__heading">
+                        <h4>{group.title}</h4>
+                      </div>
+                      {group.render && <div className="pricing-group__custom">{group.render()}</div>}
+                      {group.scalars && (
+                        <div className="pricing-fields-grid">
+                          {group.scalars.map((field) => (
+                            <React.Fragment key={`${section.title}-${group.title}-${field.label}`}>
+                              {renderScalar(field)}
                               </React.Fragment>
                             ))}
                           </div>

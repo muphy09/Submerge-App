@@ -130,6 +130,7 @@ function AppContent() {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
     setShowLogin(false);
+    navigate('/', { replace: true });
     await loadPricingForFranchise(response.franchiseId);
   };
 
@@ -159,7 +160,7 @@ function AppContent() {
       <Routes>
         <Route
           path="/"
-          element={<HomePage />}
+          element={<HomePage session={session} />}
         />
         <Route
           path="/admin"

@@ -1,30 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
 import heroImage from '../assets/homepagetestbck.jpg';
 import { listProposals, deleteProposal } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, getSessionUserName } from '../services/session';
+import { getSessionFranchiseId, getSessionUserName, type UserSession } from '../services/session';
 
-function HomePage() {
+type HomePageProps = {
+  session?: UserSession | null;
+};
+
+function HomePage({ session }: HomePageProps) {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; proposalNumber: string } | null>(null);
   const { showToast } = useToast();
+  const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
+  const sessionUserName = session?.userName || getSessionUserName();
 
-  useEffect(() => {
-    loadProposals();
-  }, []);
-
-  const loadProposals = async () => {
+  const loadProposals = useCallback(async () => {
     setLoading(true);
     try {
-      const userName = getSessionUserName();
-      const data = await listProposals(getSessionFranchiseId());
-      const filtered = userName
-        ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === userName.toLowerCase())
+      const data = await listProposals(sessionFranchiseId);
+      const filtered = sessionUserName
+        ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === sessionUserName.toLowerCase())
         : data || [];
       setProposals(filtered);
     } catch (error) {
@@ -32,7 +33,11 @@ function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionFranchiseId, sessionUserName]);
+
+  useEffect(() => {
+    void loadProposals();
+  }, [loadProposals]);
 
   const handleNewProposal = () => {
     navigate('/proposal/new');
@@ -48,7 +53,7 @@ function HomePage() {
 
   const handleDeleteProposal = async (proposalNumber: string) => {
     try {
-      await deleteProposal(proposalNumber, getSessionFranchiseId());
+      await deleteProposal(proposalNumber, sessionFranchiseId);
       setProposals(prev => prev.filter(p => p.proposalNumber !== proposalNumber));
       setContextMenu(null);
       showToast({ type: 'success', message: 'Proposal deleted.' });

@@ -181,6 +181,7 @@ function ProposalView() {
               costBreakdown={costBreakdownForDisplay}
               customerName={proposal.customerInfo.customerName}
               proposal={proposal}
+              pricing={calculated?.pricing ?? proposal.pricing}
             />
           </section>
         )}

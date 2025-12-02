@@ -18,7 +18,7 @@ interface CategoryData {
 }
 
 function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBreakdownPageProps) {
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Excavation']));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(
     proposal.papDiscounts || {
       excavation: 0,
@@ -139,239 +139,325 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
 
   // Filter out empty categories
   const nonEmptyCategories = categories.filter(cat => cat.items.length > 0);
+  const papDiscountCategories = nonEmptyCategories.filter(
+    (cat) => cat.showPAPInput && cat.papDiscountKey
+  );
+
+  const isAdjustmentItem = (item: CostLineItem) => {
+    const desc = (item.description || '').toLowerCase();
+    return desc.includes('pap discount') || desc.includes('tax');
+  };
+
+  const totalPapDiscount = nonEmptyCategories.reduce((sum, cat) => {
+    const papAdjustments = cat.items.filter((item) =>
+      (item.description || '').toLowerCase().includes('pap discount')
+    );
+    const catTotal = papAdjustments.reduce((acc, item) => acc + item.total, 0);
+    return sum + catTotal;
+  }, 0);
+
+  const customerName =
+    proposal.customerInfo?.customerName?.trim() && proposal.customerInfo.customerName.trim().length > 0
+      ? proposal.customerInfo.customerName.trim()
+      : 'No Customer Name';
 
   return (
     <div className="cost-breakdown-page-overlay" onClick={onClose}>
       <div className="cost-breakdown-page-container" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className="cost-breakdown-page-header">
-          <h2>Cost Breakdown - PAP Discount Management</h2>
-          <button className="cost-breakdown-close-button" onClick={onClose}>
-            ✕
+          <div>
+            <p className="cost-breakdown-eyebrow">{customerName}</p>
+            <h2>Cost Breakdown</h2>
+          </div>
+          <button className="cost-breakdown-close-button" onClick={onClose} aria-label="Close cost breakdown">
+            X
           </button>
         </div>
 
-        {/* Main Content */}
-        <div className="cost-breakdown-page-content">
-          {/* Categories */}
-          <div className="cost-breakdown-categories">
-            {nonEmptyCategories.map((category) => {
-              const isExpanded = expandedCategories.has(category.name);
-              const categoryTotal = category.items.reduce((sum, item) => sum + item.total, 0);
+        <div className="cost-breakdown-main">
+          <div className="cost-breakdown-left">
+            <div className="cost-breakdown-left-header">
+              <div>
+                <p className="cost-breakdown-label">Detailed Breakdown</p>
+                <p className="cost-breakdown-helper">
+                  Expand a category to view labor/material details; adjust PAP discounts in the panel on the right.
+                </p>
+              </div>
+            </div>
 
-              // Calculate labor and material subtotals if applicable
-              const hasLabor = category.items.some(isLaborItem);
-              const hasMaterial = category.items.some(isMaterialItem);
-              const laborSubtotal = hasLabor
-                ? category.items.filter(isLaborItem).reduce((sum, item) => sum + item.total, 0)
-                : 0;
-              const materialSubtotal = hasMaterial
-                ? category.items.filter(isMaterialItem).reduce((sum, item) => sum + item.total, 0)
-                : 0;
-              const isWaterTruck = category.name === 'Water Truck';
+            <div className="cost-breakdown-categories">
+              {nonEmptyCategories.map((category) => {
+                const isExpanded = expandedCategories.has(category.name);
+                const categoryTotal = category.items.reduce((sum, item) => sum + item.total, 0);
 
-              return (
-                <div key={category.name} className="cost-breakdown-category">
-                  <div
-                    className="cost-breakdown-category-header"
-                    onClick={() => toggleCategory(category.name)}
-                  >
-                    <span className="cost-breakdown-expand-icon">
-                      {isExpanded ? '▼' : '▶'}
-                    </span>
-                    <span className="cost-breakdown-category-name">{category.name}</span>
-                    <span className="cost-breakdown-category-total">
-                      {formatCurrency(categoryTotal)}
-                    </span>
-                  </div>
+                // Calculate labor and material subtotals if applicable
+                const adjustments = category.items.filter(isAdjustmentItem);
+                const visibleItems = category.items.filter((item) => !isAdjustmentItem(item));
+                const hasLabor = visibleItems.some(isLaborItem);
+                const hasMaterial = visibleItems.some(isMaterialItem);
+                const laborSubtotal = hasLabor
+                  ? visibleItems.filter(isLaborItem).reduce((sum, item) => sum + item.total, 0)
+                  : 0;
+                const materialSubtotal = hasMaterial
+                  ? visibleItems.filter(isMaterialItem).reduce((sum, item) => sum + item.total, 0)
+                  : 0;
+                const isWaterTruck = category.name === 'Water Truck';
+                const hasLaborSubcategory = Boolean(
+                  category.subcategories?.some((sub) => sub.name.toLowerCase().includes('labor'))
+                );
+                const laborSubtotalLabel =
+                  hasLaborSubcategory && category.name === 'Shotcrete'
+                    ? 'Shotcrete Labor Subtotal:'
+                    : hasLaborSubcategory && category.name === 'Tile'
+                    ? 'Tile Labor Subtotal:'
+                    : hasLaborSubcategory
+                    ? 'Labor Subtotal:'
+                    : `${category.name} Subtotal:`;
+                const materialSubtotalLabel =
+                  category.name === 'Shotcrete'
+                    ? 'Shotcrete Material Subtotal:'
+                    : category.name === 'Tile'
+                    ? 'Tile Material Subtotal:'
+                    : 'Material Subtotal:';
 
-                  {isExpanded && (
-                    <div className="cost-breakdown-category-content">
-                      {/* If category has subcategories, render them */}
-                      {category.subcategories ? (
-                        <>
-                          {category.subcategories.map((subcategory) => {
-                            const subtotal = subcategory.items.reduce((sum, item) => sum + item.total, 0);
-                            if (subcategory.items.length === 0) return null;
-                            return (
-                              <div key={subcategory.name} className="cost-breakdown-subcategory">
-                                <h4 className="cost-breakdown-subcategory-header">
-                                  {subcategory.name}
-                                  <span className="cost-breakdown-subcategory-total">
-                                    {formatCurrency(subtotal)}
-                                  </span>
-                                </h4>
-                                <table className="cost-breakdown-items-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Description</th>
-                                      <th>Quantity</th>
-                                      <th>Unit Price</th>
-                                      <th>Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {subcategory.items.map((item, idx) => (
-                                      <tr
-                                        key={idx}
-                                        className={item.description.includes('PAP Discount') ? 'pap-discount-row' : ''}
-                                      >
-                                        <td>{item.description}</td>
-                                        <td>{item.description.toLowerCase().includes('tax') ? '' : item.quantity.toFixed(2)}</td>
-                                        <td>{item.description.toLowerCase().includes('tax') ? '' : formatCurrency(item.unitPrice)}</td>
-                                        <td>{formatCurrency(item.total)}</td>
+                return (
+                  <div key={category.name} className="cost-breakdown-category">
+                    <div
+                      className="cost-breakdown-category-header"
+                      onClick={() => toggleCategory(category.name)}
+                    >
+                      <span className={`cost-breakdown-expand-icon ${isExpanded ? 'open' : ''}`}>
+                        &gt;
+                      </span>
+                      <span className="cost-breakdown-category-name">{category.name}</span>
+                      <span className="cost-breakdown-category-total">
+                        {formatCurrency(categoryTotal)}
+                      </span>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="cost-breakdown-category-content">
+                        {/* If category has subcategories, render them */}
+                        {category.subcategories ? (
+                          <>
+                            {category.subcategories.map((subcategory) => {
+                              const visibleSubItems = subcategory.items.filter((item) => !isAdjustmentItem(item));
+                              if (visibleSubItems.length === 0) return null;
+                              return (
+                                <div key={subcategory.name} className="cost-breakdown-subcategory">
+                                  <div className="cost-breakdown-subcategory-title">{subcategory.name}</div>
+                                  <table className="cost-breakdown-items-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Description</th>
+                                        <th>Quantity</th>
+                                        <th>Unit Price</th>
+                                        <th>Total</th>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                    </thead>
+                                    <tbody>
+                                      {visibleSubItems.map((item, idx) => {
+                                        const isPapDiscount = item.description.includes('PAP Discount');
+                                        const percentage =
+                                          category.papDiscountKey && isPapDiscount
+                                            ? (papDiscounts[category.papDiscountKey] || 0) * 100
+                                            : 0;
+                                        const quantityDisplay = isPapDiscount ? '1' : item.quantity.toFixed(2);
+                                        const unitPriceDisplay = isPapDiscount
+                                          ? `${percentage.toFixed(2)}%`
+                                          : formatCurrency(item.unitPrice);
+
+                                        return (
+                                          <tr key={idx}>
+                                            <td>{item.description}</td>
+                                            <td>{item.description.toLowerCase().includes('tax') ? '' : quantityDisplay}</td>
+                                            <td>{item.description.toLowerCase().includes('tax') ? '' : unitPriceDisplay}</td>
+                                            <td>{formatCurrency(item.total)}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          <>
+                            {/* Line Items Table */}
+                            <table className="cost-breakdown-items-table">
+                              <thead>
+                                <tr>
+                                  <th>Description</th>
+                                  {isWaterTruck && <th>Quantity</th>}
+                                  {isWaterTruck && <th>Total Gallons to Fill</th>}
+                                  {isWaterTruck && <th>Truck Total</th>}
+                                  {!isWaterTruck && <th>Quantity</th>}
+                                  <th>Unit Price</th>
+                                  <th>Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {visibleItems.map((item, idx) => {
+                                  const isTaxLine = item.description.toLowerCase().includes('tax');
+                                  const gallons = item.details?.totalGallons;
+                                  const truckGallons = item.details?.truckTotalGallons ??
+                                    (isWaterTruck ? item.quantity * 7000 : undefined);
+                                  const isPapDiscount = item.description.includes('PAP Discount');
+                                  const percentage =
+                                    category.papDiscountKey && isPapDiscount
+                                      ? (papDiscounts[category.papDiscountKey] || 0) * 100
+                                      : 0;
+                                  const quantityDisplay = isPapDiscount ? '1' : item.quantity.toFixed(2);
+                                  const unitPriceDisplay = isPapDiscount
+                                    ? `${percentage.toFixed(2)}%`
+                                    : formatCurrency(item.unitPrice);
+
+                                  return (
+                                    <tr key={idx}>
+                                      <td>{item.description}</td>
+                                      {isWaterTruck && (
+                                        <td>{isTaxLine ? '' : quantityDisplay}</td>
+                                      )}
+                                      {isWaterTruck && (
+                                        <td>{gallons !== undefined ? Number(gallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
+                                      )}
+                                      {isWaterTruck && (
+                                        <td>{truckGallons !== undefined ? Number(truckGallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
+                                      )}
+                                      {!isWaterTruck && (
+                                        <td>{isTaxLine ? '' : quantityDisplay}</td>
+                                      )}
+                                      <td>{isTaxLine ? '' : unitPriceDisplay}</td>
+                                      <td>{formatCurrency(item.total)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </>
+                        )}
+
+                        {/* Subtotals */}
+                        {(hasLabor || hasMaterial || adjustments.length > 0) && (
+                          <div className="cost-breakdown-subtotals">
+                            {hasLabor && laborSubtotal !== 0 && (
+                              <div className="cost-breakdown-subtotal-row">
+                                <span>{laborSubtotalLabel}</span>
+                                <span>{formatCurrency(laborSubtotal)}</span>
                               </div>
-                            );
-                          })}
-                        </>
-                      ) : (
-                        <>
-                          {/* Line Items Table */}
-                          <table className="cost-breakdown-items-table">
-                            <thead>
-                              <tr>
-                                <th>Description</th>
-                                {isWaterTruck && <th>Quantity</th>}
-                                {isWaterTruck && <th>Total Gallons to Fill</th>}
-                                {isWaterTruck && <th>Truck Total</th>}
-                                {!isWaterTruck && <th>Quantity</th>}
-                                <th>Unit Price</th>
-                                <th>Total</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {category.items.map((item, idx) => {
-                                const isTaxLine = item.description.toLowerCase().includes('tax');
-                                const gallons = item.details?.totalGallons;
-                                const truckGallons = item.details?.truckTotalGallons ??
-                                  (isWaterTruck ? item.quantity * 7000 : undefined);
-                                return (
-                                  <tr
-                                    key={idx}
-                                    className={item.description.includes('PAP Discount') ? 'pap-discount-row' : ''}
-                                  >
-                                    <td>{item.description}</td>
-                                    {isWaterTruck && (
-                                      <td>{isTaxLine ? '' : item.quantity.toFixed(2)}</td>
-                                    )}
-                                    {isWaterTruck && (
-                                      <td>{gallons !== undefined ? Number(gallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
-                                    )}
-                                    {isWaterTruck && (
-                                      <td>{truckGallons !== undefined ? Number(truckGallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
-                                    )}
-                                    {!isWaterTruck && (
-                                      <td>{isTaxLine ? '' : item.quantity.toFixed(2)}</td>
-                                    )}
-                                    <td>{isTaxLine ? '' : formatCurrency(item.unitPrice)}</td>
-                                    <td>{formatCurrency(item.total)}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </>
-                      )}
+                            )}
+                            {hasMaterial && materialSubtotal !== 0 && (
+                              <div className="cost-breakdown-subtotal-row">
+                                <span>{materialSubtotalLabel}</span>
+                                <span>{formatCurrency(materialSubtotal)}</span>
+                              </div>
+                            )}
+                            {adjustments.map((item, idx) => (
+                              <div key={`${category.name}-adj-${idx}`} className="cost-breakdown-subtotal-row">
+                                <span>
+                                  {(() => {
+                                    const desc = item.description || '';
+                                    if (category.name === 'Shotcrete') {
+                                      return desc.startsWith('Shotcrete') ? desc : `Shotcrete ${desc}`;
+                                    }
+                                    if (category.name === 'Tile' && desc.toLowerCase().includes('tax')) {
+                                      return desc.toLowerCase().startsWith('tile') ? desc : `Tile ${desc}`;
+                                    }
+                                    return desc;
+                                  })()}
+                                </span>
+                                <span>{formatCurrency(item.total)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
 
-                      {/* Subtotals */}
-                      {(hasLabor || hasMaterial) && (
-                        <div className="cost-breakdown-subtotals">
-                          {hasLabor && laborSubtotal !== 0 && (
-                            <div className="cost-breakdown-subtotal-row">
-                              <span>Labor Subtotal:</span>
-                              <span>{formatCurrency(laborSubtotal)}</span>
-                            </div>
-                          )}
-                          {hasMaterial && materialSubtotal !== 0 && (
-                            <div className="cost-breakdown-subtotal-row">
-                              <span>Material Subtotal:</span>
-                              <span>{formatCurrency(materialSubtotal)}</span>
-                            </div>
-                          )}
+                        {/* Category Total */}
+                        <div className="cost-breakdown-category-total-row">
+                          <span>{category.name} Total:</span>
+                          <span>{formatCurrency(categoryTotal)}</span>
                         </div>
-                      )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-                      {/* PAP Discount Input */}
-                      {category.showPAPInput && category.papDiscountKey && (
-                        <div className="cost-breakdown-pap-input">
-                          <label>
-                            PAP Discount (%):
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.5"
-                              value={papDiscounts[category.papDiscountKey] * 100}
-                              onChange={(e) => handlePAPDiscountChange(
-                                category.papDiscountKey!,
-                                parseFloat(e.target.value) || 0
-                              )}
-                            />
-                          </label>
-                          <span className="pap-discount-slider-wrapper">
-                            <input
-                              type="range"
-                              min="0"
-                              max="20"
-                              step="0.5"
-                              value={papDiscounts[category.papDiscountKey] * 100}
-                              onChange={(e) => handlePAPDiscountChange(
-                                category.papDiscountKey!,
-                                parseFloat(e.target.value)
-                              )}
-                              className="pap-discount-slider"
-                            />
-                          </span>
-                        </div>
-                      )}
+          <aside className="cost-breakdown-summary-column">
+            <div className="cost-breakdown-summary-card">
+              <h3>Financial Summary</h3>
+              <div className="cost-breakdown-summary-rows">
+                <div className="cost-breakdown-summary-row">
+                  <span>Total COGS:</span>
+                  <span className="cost-breakdown-summary-value">{formatCurrency(pricing.totalCOGS)}</span>
+                </div>
+                <div className="cost-breakdown-summary-row">
+                  <span>Retail Price:</span>
+                  <span className="cost-breakdown-summary-value">{formatCurrency(pricing.retailPrice)}</span>
+                </div>
+                <div className="cost-breakdown-summary-row muted">
+                  <span>Dig Comm. ({(pricing.digCommissionRate * 100).toFixed(2)}%):</span>
+                  <span>{formatCurrency(pricing.digCommission)}</span>
+                </div>
+                <div className="cost-breakdown-summary-row muted">
+                  <span>Admin Fee ({(pricing.adminFeeRate * 100).toFixed(2)}%):</span>
+                  <span>{formatCurrency(pricing.adminFee)}</span>
+                </div>
+                <div className="cost-breakdown-summary-row muted">
+                  <span>Closeout Comm. ({(pricing.closeoutCommissionRate * 100).toFixed(2)}%):</span>
+                  <span>{formatCurrency(pricing.closeoutCommission)}</span>
+                </div>
+              </div>
+              <div className="cost-breakdown-profit-card">
+                <span>Gross Profit:</span>
+                <div className="cost-breakdown-profit-figure">
+                  <span>{formatCurrency(pricing.grossProfit)}</span>
+                  <span className="cost-breakdown-profit-margin">({pricing.grossProfitMargin.toFixed(2)}%)</span>
+                </div>
+              </div>
+            </div>
 
-                      {/* Category Total */}
-                      <div className="cost-breakdown-category-total-row">
-                        <span>{category.name} Total:</span>
-                        <span>{formatCurrency(categoryTotal)}</span>
+            {papDiscountCategories.length > 0 && (
+              <div className="pap-discount-card">
+                <div className="pap-discount-card__header">
+                  <h4>PAP Discount</h4>
+                  <span>Adjust PAP discounts for eligible categories.</span>
+                </div>
+                <div className="pap-discount-list">
+                  {papDiscountCategories.map((category) => (
+                    <div key={category.name} className="pap-discount-row">
+                      <span className="pap-discount-row__label">{category.name}</span>
+                      <div className="pap-discount-input">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={(papDiscounts[category.papDiscountKey!] || 0) * 100}
+                          onChange={(e) =>
+                            handlePAPDiscountChange(
+                              category.papDiscountKey!,
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                        />
+                        <span className="pap-discount-input__suffix">%</span>
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Bottom Totals Section */}
-        <div className="cost-breakdown-page-footer">
-          <div className="cost-breakdown-totals-grid">
-            <div className="cost-breakdown-total-row">
-              <span>Total COGS:</span>
-              <span className="cost-breakdown-total-value">{formatCurrency(pricing.totalCOGS)}</span>
-            </div>
-            <div className="cost-breakdown-total-row">
-              <span>Retail Price:</span>
-              <span className="cost-breakdown-total-value">{formatCurrency(pricing.retailPrice)}</span>
-            </div>
-            <div className="cost-breakdown-total-row minor">
-              <span>Dig Commission ({(pricing.digCommissionRate * 100).toFixed(2)}%):</span>
-              <span>{formatCurrency(pricing.digCommission)}</span>
-            </div>
-            <div className="cost-breakdown-total-row minor">
-              <span>Admin Fee ({(pricing.adminFeeRate * 100).toFixed(2)}%):</span>
-              <span>{formatCurrency(pricing.adminFee)}</span>
-            </div>
-            <div className="cost-breakdown-total-row minor">
-              <span>Closeout Commission ({(pricing.closeoutCommissionRate * 100).toFixed(2)}%):</span>
-              <span>{formatCurrency(pricing.closeoutCommission)}</span>
-            </div>
-            <div className="cost-breakdown-total-row highlight">
-              <span>Gross Profit:</span>
-              <span className="cost-breakdown-profit-value">
-                {formatCurrency(pricing.grossProfit)} ({pricing.grossProfitMargin.toFixed(2)}%)
-              </span>
-            </div>
-          </div>
+                <div className="pap-discount-total-card">
+                  <span className="pap-discount-total-label">Total PAP Discount:</span>
+                  <div className="pap-discount-total-figure">
+                    <span className="pap-discount-total-value">{formatCurrency(totalPapDiscount)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </aside>
         </div>
       </div>
     </div>

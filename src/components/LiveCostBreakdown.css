@@ -2,27 +2,31 @@
   display: grid;
   grid-template-rows: auto 1fr auto;
   height: 100%;
-  background: white;
+  background: transparent;
   font-size: 0.85rem;
-  padding: 10px 0;
-  border-radius: 12px;
+  padding: 0;
+  border-radius: 0;
   min-height: 0;
   overflow: hidden;
   position: relative;
 }
 
 .live-breakdown-header {
-  padding: 10px 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px 14px;
   background: #082556;
   color: white;
-  text-align: center;
-  border-bottom: 2px solid #e5e7eb;
+  text-align: left;
+  border-bottom: 1px solid #1c3f73;
   position: sticky;
   top: 0;
   z-index: 3;
   cursor: pointer;
   transition: background 0.2s;
-  border-radius: 12px 12px 0 0;
+  border-radius: 12px;
 }
 
 .live-breakdown-header:hover {
@@ -34,6 +38,8 @@
   font-size: 1rem;
   font-weight: 600;
   color: #f8fafc;
+  flex: 1;
+  text-align: center;
 }
 
 .live-breakdown-content {
@@ -161,6 +167,26 @@
   font-weight: 500;
 }
 
+.live-subcategories {
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.live-subcategory-block {
+  padding: 8px 10px 12px;
+}
+
+.live-subcategory-block + .live-subcategory-block {
+  border-top: 1px solid #eef2f7;
+}
+
+.live-subcategory-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #1f2937;
+  margin: 4px 0 8px;
+}
+
 .live-line-items.empty {
   padding: 10px 12px;
   color: #6b7280;
@@ -178,7 +204,7 @@
   background: #0c2243;
   color: white;
   font-weight: 700;
-  font-size: 1rem;
+  font-size: 0.85rem;
   border-top: 2px solid #e5e7eb;
   border-radius: 0 0 12px 12px;
   flex-shrink: 0;

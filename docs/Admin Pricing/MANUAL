@@ -1,0 +1,482 @@
+Plans & Engineering
+-------------------
+
+Purpose: pricing for plan drafting and engineering adders. Values are stored in `pricingData.plans.*` and edited through the Admin Pricing panel. They are pulled into every proposal via `MasterPricingEngine.calculateCompleteProposal` (`src/services/masterPricingEngine.ts:37`) and surface in Cost Breakdown views (live breakdown on the proposal form, proposal view, admin proposal list).
+
+When this category is evaluated
+- The engine only emits line items if a pool is defined (`hasPoolDefinition` in `src/services/masterPricingEngine.ts:9`). A pool is considered defined when there are gunite dimensions (surface area, perimeter, or length/width), a fiberglass selection, or spa dimensions/perimeter.
+- Before calculations, `poolSpecs.waterfallCount` is set to either the explicit pool spec value or, if that is 0/undefined, defaults to 1 when any double-bullnose coping length is present (`tileCopingDecking.doubleBullnoseLnft > 0`; see `src/services/masterPricingEngine.ts:45-52`).
+
+Inputs and how they apply
+- Pool only (`pricingData.plans.poolOnly`): Added once whenever a pool is defined. Quantity is always 1 (`src/services/masterPricingEngine.ts:425-431`).
+- Spa add-on (`pricingData.plans.spa`): Added when a spa exists (`spaType !== 'none'`). Quantity 1 (`src/services/masterPricingEngine.ts:433-440`). Applies to both gunite and fiberglass spas.
+- Waterfall add-on (`pricingData.plans.waterfall`): Quantity equals the resolved `waterfallCount`. The engine uses the pool spec `waterfallCount` if it is >0; otherwise it sums any selected water features whose catalog name contains "waterfall" (`src/services/masterPricingEngine.ts:443-461`). Because the catalog currently has no "waterfall" entries, the count normally comes from the pool spec or the double-bullnose fallback mentioned above.
+- Water feature add-on (`pricingData.plans.waterFeature`): Present in the Admin Pricing UI, but no part of the calculation pipeline currently reads this value. Changing it does not affect proposals until code hooks it up.
+- Soil sample engineer (`pricingData.plans.soilSampleEngineer`): Added when `excavation.needsSoilSampleEngineer` is true; quantity 1 (`src/services/masterPricingEngine.ts:464-471`). Independent of county or other flags.
+
+Where the charges flow
+- Line items land in `costBreakdown.plansAndEngineering` and roll into `costBreakdown.totals.plansAndEngineering` (`src/services/masterPricingEngine.ts:285-348`). This total is included in `grandTotal`, which drives COGS, retail price, commissions, and profit (`src/services/masterPricingEngine.ts:355-404`).
+- The same totals are shown in Cost Breakdown components (`CostBreakdownPage`, `LiveCostBreakdown`, `ProposalView`), so admins/designers see the effect immediately after a pricing change.
+
+Edge behaviors and guardrails
+- Leaving pool specs blank suppresses all items in this category (and several downstream categories) because `hasPoolDefinition` short-circuits the calculation.
+- Any non-zero double-bullnose coping length silently counts as one waterfall for plan purposes unless `poolSpecs.waterfallCount` is explicitly set (including setting it to 0 to suppress).
+- Because the Water feature add-on is unused, consider hiding or wiring it before relying on it in pricing.
+
+Layout & Permit
+---------------
+
+Purpose: on-site layout staking and permitting fees. Values live in `pricingData.misc.layout.*` and `pricingData.misc.permit.*`, edited in the Admin Pricing panel. They enter proposals through `MasterPricingEngine.calculateCompleteProposal` (layout calc at `src/services/masterPricingEngine.ts:477`, permit at `src/services/masterPricingEngine.ts:500`).
+
+When this category is evaluated
+- Same pool-definition gate as Plans: no items are emitted unless `hasPoolDefinition` is true.
+
+Layout inputs and how they apply
+- Pool only layout (`pricingData.misc.layout.poolOnly`): Added once when a pool is defined; quantity 1.
+- Spa layout add-on (`pricingData.misc.layout.spa`): Added when a spa exists (`spaType !== 'none'`); quantity 1.
+- Silt fencing allowance (`pricingData.misc.layout.siltFencing`): Added when `poolSpecs.hasSiltFence` is true (defaults to true in proposal defaults); quantity 1.
+
+Permit inputs and how they apply
+- Pool permit (`pricingData.misc.permit.poolOnly`): Added once when a pool is defined; quantity 1.
+- Spa permit add-on (`pricingData.misc.permit.spa`): Added when a spa exists; quantity 1.
+- Permit runner (`pricingData.misc.permit.permitRunner`): Added once whenever a pool is defined, regardless of spa.
+
+Where the charges flow
+- Layout items go to `costBreakdown.layout`; permit items go to `costBreakdown.permit`. Both roll into `costBreakdown.totals.*` and the overall `grandTotal`, affecting retail price and commissions.
+
+Edge behaviors and guardrails
+- No county or pool-type branching; only the presence of pool definition, spa, and silt fence toggle whether items appear.
+
+Excavation
+----------
+
+Purpose: base dig allowances, depth surcharges, RBB, spa excavation, site prep, soil handling, and travel. Prices come from `pricingData.excavation.*` and are used by `ExcavationCalculations.calculateExcavationCost` (`src/services/pricingEngine.ts:129`) inside the master engine.
+
+When this category is evaluated
+- Requires `hasPoolDefinition`; otherwise no excavation lines are emitted.
+- Toggles come from proposal flags (`excavation.hasGravelInstall`, `excavation.hasDirtHaul`, `excavation.additionalSitePrepHours`, `excavation.rbbLevels`, `poolSpecs.hasAutomaticCover`) and pool specs (surface area, end depth, spa type/raised flag, travel distance, pool type).
+
+Inputs and how they apply (admin-priced fields that are actually consumed)
+- Base ranges (table in `pricingData.excavation.baseRanges`): For gunite pools, pick the first range whose `max` is >= `surfaceArea` and charge that price once. If `surfaceArea` exceeds 1,000 sqft, add "Over 1,000 SQFT" at `pricingData.excavation.over1000Sqft` per extra sqft (`src/services/pricingEngine.ts:143-164`). This table is hard-coded and not editable in the Admin Pricing modal.
+- Additional 6" depth (`pricingData.excavation.additional6InchDepth`): For gunite pools with end depth >= 8.05 ft, quantity is `roundUp((endDepth - 8) * 2)` (6" increments), charged at the configured rate (`src/services/pricingEngine.ts:167-176`).
+- RBB 6/12/18/24/30/36 (`pricingData.excavation.rbb*`): For each raised bond beam level with length > 0, charge the matching height rate per lnft (`src/services/pricingEngine.ts:179-192`). Quantities come from `excavation.rbbLevels`.
+- Spa base / Raised spa (`pricingData.excavation.baseSpa`, `pricingData.excavation.raisedSpa`): Applied only for gunite spas. Base spa always if a gunite spa exists; raised spa if `poolSpecs.isRaisedSpa` is true (`src/services/pricingEngine.ts:194-213`).
+- Site prep per hour (`pricingData.excavation.sitePrep`): Multiplies `excavation.additionalSitePrepHours` when that value is >0 (`src/services/pricingEngine.ts:216-224`).
+- Backfill (`pricingData.excavation.backfill`): Added once for gunite pools (`src/services/pricingEngine.ts:227-235`).
+- Gravel (`pricingData.excavation.gravelPerSqft`): Added when `excavation.hasGravelInstall` is true, quantity = pool surface area in sqft (`src/services/pricingEngine.ts:238-246`).
+- Dirt haul (`pricingData.excavation.dirtHaulPerYard`): Added when `excavation.hasDirtHaul` is true. Yardage is computed from surface area (with 15% overdig), depths (+1.25 ft each end), and a 75 sqft spa allowance if a spa exists. Total is `ceil(unitPrice * yardage)` with yardage shown to two decimals (`src/services/pricingEngine.ts:270-288`).
+- Cover box (`pricingData.excavation.coverBox`): Added when `poolSpecs.hasAutomaticCover` is true; quantity is pool max width in feet (`src/services/pricingEngine.ts:290-298`).
+- Travel per mile (`pricingData.excavation.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity is travel distance (`src/services/pricingEngine.ts:301-309`).
+- Misc (`pricingData.excavation.misc`): Added once for gunite pools (`src/services/pricingEngine.ts:312-320`).
+
+Inputs shown in the Admin panel that are not currently used by the engine
+- The modal shows "Base excavation (project)", "Gravel install (per ton)", and "Dirt haul (per load)" paths, but the engine ignores those keys. It uses the `baseRanges` table, `gravelPerSqft`, and `dirtHaulPerYard` instead. Changing the unused fields will not affect calculations until the engine is wired to them.
+
+Fiberglass-specific behavior
+- Gunite-only charges (base ranges, additional depth, spa dig, backfill, misc) are skipped for fiberglass pools.
+- For fiberglass pools with a defined pool, the engine adds two lines from `pricingData.fiberglass.fiberglassInstall` (labor and gravel) instead of gunite base dig/backfill (`src/services/pricingEngine.ts:249-268`).
+
+Where the charges flow
+- Excavation lines populate `costBreakdown.excavation` and roll into `costBreakdown.totals.excavation`, then `grandTotal`, affecting retail price and commissions downstream.
+
+Edge behaviors and guardrails
+- Zero/blank pool specs stop all excavation charges via `hasPoolDefinition`.
+- Toggling `hasGravelInstall` or `hasDirtHaul` to false suppresses those charges entirely.
+- To suppress the extra 6" depth charge, ensure end depth stays under 8.05 ft.
+- If spa type is fiberglass or none, spa dig charges do not appear; if spa is gunite and raised, both base spa and raised spa apply.
+
+Plumbing
+--------
+
+Purpose: base plumbing allowances, overruns, water feature runs, infloor, and pad items. Values live in `pricingData.plumbing.*` and are edited in the Admin Pricing panel. Calculations are in `PlumbingCalculations.calculatePlumbingCost` (`src/services/pricingEngine.ts:331`) and run inside `MasterPricingEngine.calculateCompleteProposal`.
+
+When this category is evaluated
+- Requires `hasPoolDefinition`; otherwise no plumbing lines are emitted.
+- The master engine injects electrical run data into plumbing before calculation, so conduit uses the electrical section's `electricalRun` and `lightRun` values.
+
+Inputs and how they apply (fields that affect calculations)
+- Short stub (`pricingData.plumbing.shortStub`): Always added once when a pool is defined; quantity 1 (`src/services/pricingEngine.ts:351-358`).
+- Spa base plumbing (`pricingData.plumbing.spaBase`): Added only when a spa exists and is gunite; quantity 1 (`src/services/pricingEngine.ts:360-368`).
+- Pool overrun per ft (`pricingData.plumbing.poolOverrunPerFt`, threshold `poolOverrunThreshold`): If `skimmerRun` exceeds the threshold, charges overage length at the configured rate (`src/services/pricingEngine.ts:371-380`).
+- Spa overrun per ft (`pricingData.plumbing.spaOverrunPerFt`, threshold `spaOverrunThreshold`): If a gunite spa exists and `spaRun` exceeds the threshold, charges the overage (`src/services/pricingEngine.ts:383-392`).
+- 2.0" plumbing (`pricingData.plumbing.twoInchPipe`): Quantity is `ceil((perimeter + skimmerRun + cleanerRun + infloorValveToEQ + infloorValveToPool*6*1.15) * 1.25)`; charged at the configured rate (`src/services/pricingEngine.ts:395-410`).
+- 2.5" plumbing (`pricingData.plumbing.twoPointFiveInchPipe`): Quantity is `ceil(mainDrainRun + spaPerimeter)` where spa perimeter is only included for gunite spas; charged at the configured rate (`src/services/pricingEngine.ts:412-424`).
+- 3.0" plumbing (`pricingData.plumbing.threeInchPipe`): If `gasRun` > 0, quantity is `ceil(max(gasRun - 100, 0))`; only applies when gas run exceeds 100 ft (`src/services/pricingEngine.ts:426-438`).
+- Water feature runs (`pricingData.plumbing.waterFeatureRun.setup`, `baseAllowanceFt`, `perFt`): For each water feature run > 0, the line item always includes the setup charge. Quantity is the overage beyond the base allowance (can be 0), and total is `setup + overage * perFt` (`src/services/pricingEngine.ts:440-462`).
+- Additional water feature run (`pricingData.plumbing.additionalWaterFeatureRunPerFt` or `waterFeatureRun.perFt` fallback): Adds a single line when any water feature run is present, quantity is the sum of each run capped at the base allowance, and unit price is the configured additional rate (`src/services/pricingEngine.ts:464-473`).
+- Infloor plumbing (`pricingData.plumbing.infloorPerFt`): If either infloor run value is > 0, quantity is `ceil(surfaceArea * 0.5)` (`src/services/pricingEngine.ts:476-485`).
+- Conduit (`pricingData.plumbing.conduitPerFt`): Quantity is `ceil(electricalRun + lightRun * 1.25)` using runs passed in from the electrical section; charged when quantity > 0 (`src/services/pricingEngine.ts:488-500`).
+- Manifold (`pricingData.plumbing.manifold`): Always added once; quantity 1 (`src/services/pricingEngine.ts:503-509`).
+- Strip forms (`pricingData.plumbing.stripForms`): Always added once; quantity 1 (`src/services/pricingEngine.ts:512-519`).
+- Cleaner line (`pricingData.plumbing.cleanerPerFt`): Added when `cleanerRun` > 0 (`src/services/pricingEngine.ts:521-529`).
+- Auto-fill (`pricingData.plumbing.autoFillPerFt`): Added when `autoFillRun` > 0 (`src/services/pricingEngine.ts:532-540`).
+- Additional skimmers (`pricingData.plumbing.additionalSkimmer`): Added when `additionalSkimmers` > 0; quantity is the count of additional skimmers (`src/services/pricingEngine.ts:543-551`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- `pricingData.plumbing.spaPlumbing`: Not used (code intentionally commented out to match Excel, see `src/services/pricingEngine.ts:554-563`).
+- `pricingData.plumbing.heaterSet`: Not referenced in calculations.
+- `pricingData.plumbing.travelPerMile`: Not referenced in calculations.
+- `pricingData.plumbing.gasOverrunPerFt`: Not used; gas overrun pricing comes from `pricingData.electrical.gasPerFtOverThreshold`, but the threshold uses `pricingData.plumbing.gasOverrunThreshold`.
+
+Interactions with Gas section
+- `pricingData.plumbing.gasOverrunThreshold` is used by the Gas calculation to decide when to add a Gas Overrun line; the overrun rate itself comes from `pricingData.electrical.gasPerFtOverThreshold` (`src/services/pricingEngine.ts:695-718`).
+
+Where the charges flow
+- Plumbing lines populate `costBreakdown.plumbing` and roll into `costBreakdown.totals.plumbing`, then `grandTotal`, affecting retail price and commissions.
+
+Edge behaviors and guardrails
+- No pool definition => no plumbing charges.
+- Spa-specific charges (spa base, spa overrun, spa perimeter in 2.5" calc) require a gunite spa; fiberglass/none spa types skip them.
+- 3.0" line only appears when gas run exceeds 100 ft.
+- Water feature runs always bill the setup fee when a run is entered, even if the entered length is below the base allowance (overage quantity can be 0 but total still includes setup).
+
+Water Features
+--------------
+
+Purpose: charge for selected water feature SKUs. Values come from `pricingData.waterFeatures.catalog` (id, name, category, unitPrice, optional note). Calculations are in `WaterFeaturesCalculations.calculateWaterFeaturesCost` (`src/services/pricingEngineComplete.ts:842`) and run inside `MasterPricingEngine.calculateCompleteProposal`.
+
+When this category is evaluated
+- Uses water feature selections on the proposal (`waterFeatures.selections`). There is no dependency on pool definition; if selections are present with quantity > 0 they are charged.
+
+Inputs and how they apply
+- Feature selection (per catalog item): Admins edit the catalog entries (id, name, category, unitPrice, note). Designers/Admins pick features in the proposal and set `quantity`.
+- For each selection with `quantity > 0`, the engine looks up the catalog entry by `featureId` and adds a line with `description = name`, `unitPrice = catalog.unitPrice`, `quantity = selection.quantity`, `total = unitPrice * quantity`, and `notes = catalog.note` if present.
+- All features share the same inputs; only the chosen catalog row and quantity differ.
+
+Inputs shown in the Admin panel that are not currently used by the engine
+- None specific to this category; all catalog fields (name, price, note) are used when a matching selection exists.
+
+Interactions with other categories
+- Plumbing water feature runs (setup/allowance/overage) are billed separately in the Plumbing section and do not depend on the catalog price here.
+- Plans & Engineering waterfall add-on is driven by `waterfallCount` or waterfall-named catalog items but is priced from `pricingData.plans.waterfall`, not these catalog prices.
+
+Where the charges flow
+- Water feature lines populate `costBreakdown.waterFeatures` and roll into `costBreakdown.totals.waterFeatures`, then `grandTotal`.
+
+Edge behaviors and guardrails
+- If a selection references an unknown `featureId` or has `quantity <= 0`, it is skipped.
+- Catalog edits take effect immediately for future calculations; there is no per-franchise override unless the pricing model is saved/activated.
+
+Electrical & Gas
+----------------
+
+Purpose: electrical pad/setup, overruns, lights, automation, bonding/outlet, heat pump electrical; plus gas base and overruns. Values live in `pricingData.electrical.*` (and thresholds in `pricingData.plumbing.gasOverrunThreshold`) and are used by `ElectricalCalculations.calculateElectricalCost` and `calculateGasCost` (`src/services/pricingEngine.ts:575` and `695`).
+
+When this category is evaluated
+- Electrical requires `hasPoolDefinition`; gas charges only when `plumbing.runs.gasRun > 0`.
+- Equipment data is used for lights and automation detection; heat pump run length uses `electrical.runs.heatPumpElectricalRun`.
+
+Inputs and how they apply (fields that affect calculations)
+- Base electrical (`pricingData.electrical.baseElectrical`): Always added once; includes first 65 ft of electrical run (`src/services/pricingEngine.ts:588-595`).
+- Homerun overrun (`pricingData.electrical.overrunPerFt`, threshold `overrunThreshold`): If `electricalRun` exceeds the threshold, charges the overage length (`src/services/pricingEngine.ts:597-606`).
+- Additional lights (`pricingData.electrical.lightAdditionalPerLight`): Charges for lights beyond the first, using `equipment.numberOfLights` + optional spa light (`equipment.hasSpaLight`) minus one included (`src/services/pricingEngine.ts:609-620`).
+- Spa electrical (`pricingData.electrical.spaElectrical`): Added when a spa exists (any spa type); quantity 1 (`src/services/pricingEngine.ts:623-632`).
+- Automation (`pricingData.electrical.automation`): Added when equipment automation selection is present/meaningful (price, name not “no automation,” zones, or chemistry flag) (`src/services/pricingEngine.ts:634-649`).
+- Bonding (`pricingData.electrical.bonding`): Always added once (`src/services/pricingEngine.ts:652-659`).
+- Outlet (`pricingData.electrical.outlet`): Always added once (`src/services/pricingEngine.ts:661-668`).
+- Heat pump electrical base (`pricingData.electrical.heatPumpElectricalBase` or `heatPumpElectrical` fallback): Added when `heatPumpElectricalRun` > 0 (`src/services/pricingEngine.ts:670-678`).
+- Heat pump overrun (`pricingData.electrical.heatPumpPerFtOver` or `heatPumpElectrical` fallback, threshold `heatPumpOverrunThreshold` default 40): Charges overage when run exceeds the threshold (`src/services/pricingEngine.ts:680-688`).
+- Gas base set (`pricingData.electrical.baseGas`): Added when `plumbing.runs.gasRun` > 0; quantity 1 (`src/services/pricingEngine.ts:699-705`).
+- Gas overrun (`pricingData.electrical.gasPerFtOverThreshold`, threshold `pricingData.plumbing.gasOverrunThreshold`): Charges per ft beyond the threshold when gas run exceeds it (`src/services/pricingEngine.ts:708-716`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- `pricingData.electrical.lightRunPerFt`, `lightRunConduitMultiplier`, `travelPerMile`, `saltSystem`, `autoFillPerFt`: Not referenced in current electrical calculations.
+- `pricingData.plumbing.gasOverrunPerFt`: Not used (gas overrun rate comes from `pricingData.electrical.gasPerFtOverThreshold`).
+
+Interactions with other categories
+- Plumbing conduit quantity uses electrical run values injected into plumbing; pricing for conduit is in the Plumbing section.
+- Gas overrun threshold is stored under Plumbing but the per-ft rate is under Electrical.
+
+Where the charges flow
+- Electrical lines populate `costBreakdown.electrical`; gas lines populate `costBreakdown.gas`. Both roll into their respective totals and `grandTotal`.
+
+Edge behaviors and guardrails
+- No pool definition => no electrical charges.
+- Gas items do not appear unless a positive gas run is entered.
+- Heat pump electrical appears only when `heatPumpElectricalRun` > 0; overrun requires exceeding the threshold.
+
+Steel
+-----
+
+Purpose: rebar/steel for gunite pools and spas, including steps, RBB steel, double curtain, bonding, and travel. Prices come from `pricingData.steel.*` and are used in `SteelCalculations.calculateSteelCost` (`src/services/pricingEngine.ts:728`).
+
+When this category is evaluated
+- Skips entirely for fiberglass pools (`PoolCalculations.isFiberglassPool` guard). There is no other gate, so gunite pools will receive steel charges even if dimensions are minimal.
+
+Inputs and how they apply (fields that affect calculations)
+- Pool base (`pricingData.steel.poolBase`): Charged per perimeter foot; quantity = `poolSpecs.perimeter` (`src/services/pricingEngine.ts:741-748`).
+- 4-Bar Beam (`pricingData.steel.fourBarBeam`): Charged once; quantity 1 (`src/services/pricingEngine.ts:750-757`).
+- Spa base (`pricingData.steel.spaBase`): Charged once when a gunite spa exists; quantity 1 (`src/services/pricingEngine.ts:759-767`).
+- Raised spa (`pricingData.steel.raisedSpa`): Charged once when a gunite raised spa (`poolSpecs.isRaisedSpa`); quantity 1 (`src/services/pricingEngine.ts:768-775`).
+- Spa double curtain (`pricingData.steel.spaDoubleCurtain`): Charged once when a gunite raised spa; quantity 1 (`src/services/pricingEngine.ts:776-783`).
+- Steps & bench (`pricingData.steel.stepsPerLnft`): Charged per `poolSpecs.totalStepsAndBench` when > 0 (`src/services/pricingEngine.ts:786-794`).
+- Tanning shelf (`pricingData.steel.tanningShelf`): Charged once when `poolSpecs.hasTanningShelf` is true (`src/services/pricingEngine.ts:797-805`).
+- Additional 6" depth (`pricingData.steel.depthOver8Ft`): If end depth > 8.1 ft, quantity is `(endDepth - 8) * 2` (increments of 6"); charged at configured rate (`src/services/pricingEngine.ts:808-817`).
+- RBB steel (`pricingData.steel.rbb{height}PerLnft`): For each RBB level with length > 0, charges per lnft at the matching height rate (`src/services/pricingEngine.ts:820-832`).
+- Double curtain (`pricingData.steel.doubleCurtainPerLnft`): Charged per `excavation.doubleCurtainLength` when > 0 (`src/services/pricingEngine.ts:835-843`).
+- Pool bonding (`pricingData.steel.poolBonding`): Always added once; quantity 1 (`src/services/pricingEngine.ts:846-853`).
+- Muck out (`pricingData.steel.muckOut`, `muckOutQty`): Always added; quantity uses `muckOutQty` (default 2) and unit price `muckOut` (`src/services/pricingEngine.ts:855-863`).
+- Travel (`pricingData.steel.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity = travel distance (`src/services/pricingEngine.ts:865-873`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- `pricingData.steel.automaticCover` is defined but not used in calculations.
+
+Where the charges flow
+- Steel lines populate `costBreakdown.steel` and roll into `costBreakdown.totals.steel`, then `grandTotal`.
+
+Edge behaviors and guardrails
+- Fiberglass pools never get steel charges.
+- Gunite pools receive steel even with zero perimeter; perimeter-driven items will be $0 but fixed items still apply. Use fiberglass type to suppress if needed.
+- Raised spa flags trigger multiple spa-related steel lines (spa base, raised spa, spa double curtain).
+
+Shotcrete Labor
+---------------
+
+Purpose: shotcrete placement labor, including minimum yardage, spa, auto cover, distance surcharges, and travel. Values come from `pricingData.shotcrete.labor.*` and are used in `ShotcreteCalculations.calculateShotcreteCost` (`src/services/pricingEngine.ts:884`).
+
+When this category is evaluated
+- Skips entirely for fiberglass pools. There is no pool-definition gate; gunite pools always accrue at least the minimum labor even if specs are minimal.
+
+Inputs and how they apply (fields that affect calculations)
+- Base labor per yard (`pricingData.shotcrete.labor.poolBase`) and minimum yards (`minimumYards`): Always charges `minimumYards` at `poolBase` (`src/services/pricingEngine.ts:927-935`).
+- Additional labor: If computed yardage exceeds `minimumYards`, additional yards are charged at the same `poolBase` rate (`src/services/pricingEngine.ts:937-946`).
+- Spa (`pricingData.shotcrete.labor.spa`): Added when a gunite spa exists; quantity 1 (`src/services/pricingEngine.ts:949-956`).
+- Auto cover (`pricingData.shotcrete.labor.autoCover`): Added when `poolSpecs.hasAutomaticCover` is true; quantity 1 (`src/services/pricingEngine.ts:959-966`).
+- Distance surcharges (`pricingData.shotcrete.labor.distance250to300`, `distance300to350`): Added when `poolSpecs.poolToStreetDistance` is 1 (251-300 ft) or 2 (301-350 ft); quantity 1 (`src/services/pricingEngine.ts:969-984`).
+- Travel (`pricingData.shotcrete.labor.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity = travel distance (`src/services/pricingEngine.ts:987-994`).
+
+How yardage is determined (drives labor and material quantities)
+- Uses perimeter, interior area (from depths and perimeter), RBB sqft, spa perimeter, double-bullnose lnft, and double-curtain lnft. Adds 10% waste, plus `doubleCurtainLength/20`, plus 2 yards if the spa is raised gunite (`src/services/pricingEngine.ts:900-925`). Yardage is ceiled to whole yards and floored at 0.
+
+Shotcrete Material
+------------------
+
+Purpose: shotcrete material, travel, and tax. Values come from `pricingData.shotcrete.material.*` and share the same yardage calculation as labor.
+
+When this category is evaluated
+- Same as shotcrete labor: runs for gunite pools; skipped for fiberglass.
+
+Inputs and how they apply (fields that affect calculations)
+- Per-yard material (`pricingData.shotcrete.material.perYard`): Charged on computed yardage (`src/services/pricingEngine.ts:997-1005`).
+- Clean out (`pricingData.shotcrete.material.cleanOut`): Always added once (`src/services/pricingEngine.ts:1007-1013`).
+- Env/Fuel per yard (`pricingData.shotcrete.material.envFuelPerYard`): Charged on computed yardage (`src/services/pricingEngine.ts:1015-1021`).
+- Miscellaneous (`pricingData.shotcrete.material.misc`): Always added once (`src/services/pricingEngine.ts:1023-1029`).
+- Travel (`pricingData.shotcrete.material.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity = travel distance (`src/services/pricingEngine.ts:1031-1038`).
+- Tax: Calculated on the material subtotal. MECK county splits state (4.75%) and county (2.5%); NC (other counties) uses state 4.75%; default uses `pricingData.shotcrete.material.taxRate` (7.25%) (`src/services/pricingEngine.ts:1041-1084`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- All shotcrete material fields listed above are used; no unused fields in this category.
+
+Where the charges flow
+- Shotcrete labor lines populate `costBreakdown.shotcreteLabor`; material lines populate `costBreakdown.shotcreteMaterial`. Both roll into `costBreakdown.totals.shotcreteLabor` / `shotcreteMaterial`, then `grandTotal`.
+
+Edge behaviors and guardrails
+- Yardage drives both labor and material; changes to perimeter, depths, RBB, double curtain, double bullnose, or raised spa affect both.
+- Minimum labor always applies for gunite pools, even if yardage calculates below the minimum or specs are sparse.
+- County code affects material tax; ensure `customerInfo.county` is set to MECK or NC to avoid default 7.25% combined tax.
+
+Tile, Coping, & Decking
+-----------------------
+
+Purpose: tile, coping, decking, rockwork, and related taxes. Values come from `pricingData.tileCoping.*` and are calculated in `TileCopingDeckingCalculations.calculateCosts` (`src/services/pricingEngineComplete.ts:95`), used by `MasterPricingEngine`.
+
+When this category is evaluated
+- Runs regardless of pool definition. Fiberglass pools skip tile/coping labor & base tile material but still may get certain material lines (e.g., concrete band).
+- Many quantities derive from pool perimeter, spa perimeter, decking area, rockwork sqft, bullnose lnft, and spillway length.
+
+Inputs and how they apply (fields that affect calculations)
+- Tile labor (`pricingData.tileCoping.tile.labor.level1`): Charged per perimeter plus `additionalTileLength`. Spa tile labor also uses the spa perimeter. Trim tile uses `pricingData.tileCoping.tile.labor.stepTrim` per step/bench when enabled.
+- Tile material level 1 (`pricingData.tileCoping.tile.material.level1`): Charged on perimeter + extras; spa tile material uses spa perimeter. Tile upgrades use `level2Upgrade` or `level3Upgrade` when `tileLevel` > 1.
+- Coping labor: Rate from coping type (`pricingData.tileCoping.decking.coping.*` via `getCopingRate`); quantity = coping lnft (perimeter with waste + spa perimeter unless overridden). Coping material: rate from `pricingData.tileCoping.decking.material.coping[...]`; flagstone multiplies quantity by `flagstoneQuantityMultiplier` (1.1).
+- Decking labor: Rate from decking type (`pricingData.tileCoping.decking.labor.*`). Concrete deck labor only when coping type is `concrete`, charged on pool perimeter; other decking types charge on decking area (with 5% waste).
+- Decking material: Rate from decking type (`pricingData.tileCoping.decking.material.*`). Concrete decks split into base and addl quantities (10 sqft rounding) based on perimeter band vs. entered decking area; other types use decking area with 5% waste. Concrete steps labor/material use `decking.labor.concreteSteps` and `decking.material.concreteSteps` per lnft.
+- Bullnose: Labor `pricingData.tileCoping.coping.bullnoseLabor` (fallback 8) and material `pricingData.tileCoping.decking.material.bullnose` per total bullnose lnft (single + double).
+- Spillway: Labor `pricingData.tileCoping.decking.spillwayLabor` (or coping spillway) and material `decking.spillwayMaterial` (or `decking.material.spillway`) when `spillwayLnft > 0`.
+- Rockwork (panel ledge, stacked stone, tile): Labor rates from `decking.rockworkLabor[...]`; material from `decking.material.rockwork[...]`. Panel ledge material may get a waste multiplier (`rockworkMaterialWaste.panelLedge`, default 1.15).
+- Concrete pump: Added (labor) when decking type is concrete or concrete steps length > 0; hard-coded $600 in code.
+- Concrete band for fiberglass: Material line using `decking.material.concrete` at `perimeter * 1.25` even though labor is skipped for fiberglass.
+- Material tax: Tile materials taxed at `tileMaterialTaxRate`; coping/decking materials taxed at `materialTaxRate`; rockwork materials taxed at `rockworkMaterialTaxRate` if present; otherwise `materialTaxRate`.
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- None explicitly unused in this category; note the concrete pump is hard-coded ($600) and not admin-editable.
+
+Where the charges flow
+- Tile labor/material feed `costBreakdown.tileLabor` / `tileMaterial`. Coping/decking labor/material feed `copingDeckingLabor` / `copingDeckingMaterial`. Rockwork labor/material join `stoneRockworkLabor` / `stoneRockworkMaterial`. Taxes are included in material lists. Totals roll into `grandTotal`.
+
+Edge behaviors and guardrails
+- Fiberglass pools skip tile labor/material and most coping/decking labor but may still get concrete band material.
+- Concrete deck labor only applies with concrete coping (cantilever) per perimeter; for other coping types + concrete decking, only decking material is charged.
+- Bullnose combines single + double lengths for labor/material; double bullnose also influences waterfall count elsewhere (Plans).
+- Decking area is adjusted for waste (5%) or rounded to nearest 10 sqft for concrete splits; ensure inputs reflect desired coverage.
+
+Equipment
+---------
+
+Purpose: equipment pad components (pumps, filters, lights, automation, etc.) with pricing pulled from the equipment module. Values come from `pricingData.equipment.*` (not shown in Admin modal in this repo) and are calculated in `EquipmentCalculations` within `pricingEngineComplete.ts`. Admin Pricing modal does not currently expose equipment scalars, so category behavior is driven by equipment selections, not admin-edited numbers here.
+
+When this category is evaluated
+- Runs when equipment data exists on the proposal. No dependency on `hasPoolDefinition`.
+
+Inputs and how they apply
+- Equipment selections (pumps, filters, lights, heaters, automation, salt, etc.) map to unit prices in `pricingData.equipment` and generate line items under `Equipment` and `Equipment Set`. Quantities come from counts/selections on the proposal (e.g., `numberOfLights`, `hasSpaLight`, heater type, pump choices). Automation charge in Electrical is separate from equipment hardware pricing.
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- The Admin Pricing modal does not list equipment inputs in this codebase. To change equipment pricing, edit `pricingData.equipment` directly or via a pricing model if supported elsewhere.
+
+Where the charges flow
+- Hardware purchases populate `costBreakdown.equipmentOrdered`; equipment set/installation items populate `costBreakdown.equipmentSet`. Totals roll into `costBreakdown.totals.equipmentOrdered` / `equipmentSet`, then `grandTotal`.
+
+Edge behaviors and guardrails
+- Because equipment scalars are not exposed in the Admin panel here, franchise admins cannot update equipment pricing via this UI; changes must be in `pricingData.equipment` or pricing model data.
+- Electrical and gas sections still charge for runs/overruns irrespective of equipment pricing; ensure equipment selections align with run lengths to avoid mismatched charges.
+
+Interior Finish
+---------------
+
+Purpose: interior surface finish, prep, waterproofing, fittings, and water truck. Values come from `pricingData.interiorFinish.*` and calculations in `InteriorFinishCalculations.calculateInteriorFinishCost` (`src/services/pricingEngineComplete.ts:881`), used by `MasterPricingEngine`.
+
+When this category is evaluated
+- Requires `hasPoolDefinition`; skips entirely for fiberglass pools. Only gunite pools with a defined pool accrue these charges.
+
+Inputs and how they apply (fields that affect calculations)
+- Finish material rate (`pricingData.interiorFinish.material.*` by finish type): Base line uses charge area (max of computed interior area and `minimumChargeSqft`, default 850). Cost is `ceil(rate * chargeArea)` with the rate as unit price and charge area as quantity (`src/services/pricingEngineComplete.ts:892-906`).
+- Spa finish (`pricingData.interiorFinish.material.spaFinish`): Added when spa is gunite and `interiorFinish.hasSpa` is true; quantity 1 (`src/services/pricingEngineComplete.ts:908-916`).
+- Pool prep (`pricingData.interiorFinish.extras.poolPrepBase`): Always added once; quantity 1 (`src/services/pricingEngineComplete.ts:919-926`).
+- Prep overage (`pricingData.interiorFinish.extras.poolPrepOverRate`, threshold `poolPrepThreshold` default 1200): Added when charge area exceeds threshold; quantity is overage sqft (`src/services/pricingEngineComplete.ts:927-935`).
+- Spa prep (`pricingData.interiorFinish.extras.spaPrep`): Added when gunite spa exists and `interiorFinish.hasSpa` is true; quantity 1 (`src/services/pricingEngineComplete.ts:938-945`).
+- Misc (`pricingData.interiorFinish.extras.misc`): Always added once; quantity 1 (`src/services/pricingEngineComplete.ts:948-955`).
+- Travel (`pricingData.interiorFinish.extras.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity = travel distance (`src/services/pricingEngineComplete.ts:956-964`).
+- Step detail over 20 (`pricingData.interiorFinish.extras.stepDetailPerLnftOver20`): Added when `totalStepsAndBench > 20`; quantity = steps over 20 (`src/services/pricingEngineComplete.ts:966-975`).
+- Waterproofing (`pricingData.interiorFinish.extras.waterproofingPerSqft`, `waterproofingRaisedSpa`): Added when `interiorFinish.hasWaterproofing` is true for gunite pools. Quantity = interior area + spa waterproof sqft (spa perimeter * 3.45). Raised spa adds a separate line (`src/services/pricingEngineComplete.ts:978-1000`).
+- Fittings (drains/returns/hydro) flat amount: Calculated from equipment pump counts; added as a single line with unit price = total fittings cost, quantity 1 (`src/services/pricingEngineComplete.ts:1003-1024`).
+- Water truck (`pricingData.interiorFinish.waterTruck.base`, `loadSizeGallons`): Loads = `ceil(gallons / loadSizeGallons)`, where gallons come from `PoolCalculations.calculateGallons`. Added as separate items under category `Water Truck` (`src/services/pricingEngineComplete.ts:1027-1043`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- All listed interior finish pricing inputs are used; fittings cost is embedded logic, not admin-configurable.
+
+Where the charges flow
+- Interior finish labor/material lines go to `costBreakdown.interiorFinish`; water truck lines go to `costBreakdown.waterTruck`. Totals roll into `costBreakdown.totals.interiorFinish` / `waterTruck`, then `grandTotal`.
+
+Edge behaviors and guardrails
+- No charges for fiberglass pools. Gunite-only.
+- Charge area floors at `minimumChargeSqft`, so small pools still pay at least the minimum area.
+- Waterproofing requires the explicit `hasWaterproofing` flag; raised spa waterproofing is a separate add-on.
+- Water truck loads scale with calculated gallons; set pool specs accurately to avoid over/under charging.
+
+Cleanup
+-------
+
+Purpose: post-construction cleanup, RBB cleanup, travel, and optional rough grading. Values come from `pricingData.cleanup.*` and are calculated in `CleanupCalculations.calculateCleanupCost` (`src/services/pricingEngineComplete.ts:1069`).
+
+When this category is evaluated
+- Requires `hasPoolDefinition`; applies to both gunite and fiberglass.
+
+Inputs and how they apply (fields that affect calculations)
+- Base pool cleanup (`pricingData.cleanup.basePool`): Always added once; quantity 1 (`src/services/pricingEngineComplete.ts:1083-1089`).
+- Spa cleanup (`pricingData.cleanup.spa`): Added when a spa exists; quantity 1 (`src/services/pricingEngineComplete.ts:1091-1098`).
+- Over 500 sqft (`pricingData.cleanup.perSqftOver500`): If `surfaceArea > 500`, charges per sqft overage (`src/services/pricingEngineComplete.ts:1101-1109`).
+- RBB cleanup (`pricingData.cleanup.rbbPerSqft`): Charged on total RBB sqft derived from excavation levels if any (`src/services/pricingEngineComplete.ts:1112-1126`).
+- Travel (`pricingData.cleanup.travelPerMile`): Added when `travelDistance > 0`; quantity = travel distance (`src/services/pricingEngineComplete.ts:1129-1136`).
+- Rough grading (`pricingData.cleanup.roughGrading`): Added when `tileCopingDecking.hasRoughGrading` is true; quantity 1 (`src/services/pricingEngineComplete.ts:1139-1146`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- None; all cleanup scalars are used.
+
+Where the charges flow
+- Cleanup lines populate `costBreakdown.cleanup` and roll into `costBreakdown.totals.cleanup`, then `grandTotal`.
+
+Edge behaviors and guardrails
+- Cleanup requires pool definition but is otherwise pool-type agnostic.
+- RBB cleanup depends on excavation data; missing RBB input yields no RBB cleanup charge.
+- Rough grading is gated by `hasRoughGrading` on tile/coping/decking, not excavation.
+
+Fiberglass Shells
+-----------------
+
+Purpose: fiberglass pool/spa shell pricing, discounts, and tax. Values come from `pricingData.fiberglass.*` and calculations in `FiberglassCalculations.calculateFiberglassCost` (`src/services/pricingEngineComplete.ts:1157`), used by `MasterPricingEngine`.
+
+When this category is evaluated
+- Runs only when pool and/or spa is fiberglass AND `hasPoolDefinition` is true.
+
+Inputs and how they apply (fields that affect calculations)
+- Pool shell price: Taken from `poolSpecs.fiberglassModelPrice`/`fiberglassModelName` if provided; otherwise from size-based lookup (`pricingData.fiberglass.small|medium|large|crystite`) when `fiberglassSize` is set (`src/services/pricingEngineComplete.ts:1171-1191`).
+- Spa shell price: From `poolSpecs.spaFiberglassModelPrice` or model lookup in `pricingData.fiberglass.spaModels` when `spaFiberglassModelName` matches (`src/services/pricingEngineComplete.ts:1194-1206`).
+- Spillover (`pricingData.fiberglass.spillover`): Added when `hasSpillover` is true on fiberglass pool or spa (`src/services/pricingEngineComplete.ts:1209-1218`).
+- Discount (`pricingData.fiberglass.discountRate`, default 10%): Applied to shell items (pool, spa, spillover) as a negative line item when shell subtotal > 0 (`src/services/pricingEngineComplete.ts:1220-1241`).
+- Tax (`pricingData.fiberglass.taxRate`, default 7.25%): Applied to fiberglass shell subtotal after discount (`src/services/pricingEngineComplete.ts:1243-1253`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- Freight, crane, surcharge, and install pricing live in `pricingData.fiberglass` but are applied in Fiberglass Install (separate category below).
+
+Where the charges flow
+- Shell lines populate `costBreakdown.fiberglassShell` and roll into `costBreakdown.totals.fiberglassShell`, then `grandTotal`.
+
+Edge behaviors and guardrails
+- No fiberglass shell charges if neither pool nor spa is fiberglass or if pool definition is missing.
+- Discount applies only to shell/spillover items, not freight/crane/install.
+- Ensure `fiberglassModelName/Price` or `fiberglassSize`/`spaFiberglassModelName` is set; otherwise shell lines may be skipped.
+
+Equipment Set & Drainage
+------------------------
+
+Purpose: equipment set/installation and drainage system costs. Equipment set uses `EquipmentCalculations.calculateEquipmentSetCost`; drainage uses `DrainageCalculations.calculateDrainageCost`, both in `pricingEngineComplete.ts`. Admin Pricing modal does not expose scalars for these in this repo; values come from `pricingData.equipment` and `pricingData.misc.drainage`.
+
+When this category is evaluated
+- Equipment Set: Runs when equipment data exists; no pool-definition gate.
+- Drainage: Requires `hasPoolDefinition`; uses drainage inputs from the proposal.
+
+Inputs and how they apply (fields that affect calculations)
+- Equipment set components: Additional pump(s), automation, heat pump set, etc., priced from `pricingData.equipment` based on equipment selections (`EquipmentCalculations.calculateEquipmentSetCost`). Quantities driven by proposal equipment (e.g., auxiliary pumps, automation choice, heater/heat pump flags).
+- Drainage: Base cost includes first `includedFt` (default 10 ft) at `baseCost`; overage charged per ft over via `perFtOver` from `pricingData.misc.drainage` (`DrainageCalculations.calculateDrainageCost`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- Equipment set scalars are not surfaced in the Admin Pricing modal here.
+- Drainage scalars are not shown in the Admin Pricing modal here (they live in `pricingData.misc.drainage`).
+
+Where the charges flow
+- Equipment set lines populate `costBreakdown.equipmentSet` and roll into `costBreakdown.totals.equipmentSet`.
+- Drainage lines populate `costBreakdown.drainage` and roll into `costBreakdown.totals.drainage`.
+- All roll into `grandTotal`.
+
+Edge behaviors and guardrails
+- Without equipment selections, equipment set produces no lines even though pricing exists.
+- Drainage overage depends on measured footage beyond the included allowance; ensure proposal drainage inputs are set.
+- Admins cannot tweak these prices via the current Admin Pricing UI; changes must be in `pricingData.equipment` / `pricingData.misc.drainage` or a pricing model file.
+
+Masonry
+-------
+
+Purpose: masonry labor/material for columns, RBB facing, raised spa facing, spillway, and retaining walls. Values come from `pricingData.masonry.*` and calculations in `MasonryCalculations.calculateMasonryCost` (`src/services/pricingEngineComplete.ts:108-400`), used by `MasterPricingEngine`.
+
+When this category is evaluated
+- Requires `hasPoolDefinition`; applies to gunite configurations. Relies on excavation inputs for RBB levels, columns, and retaining walls; pool specs for raised spa.
+
+Inputs and how they apply (fields that affect calculations)
+- Columns: Labor uses `pricingData.masonry.columnBase` multiplied by total column height (count * height). Facing adds labor/material using `rbbFacing` rates when column facing is not "none" (`src/services/pricingEngineComplete.ts:154-187`).
+- RBB facing: For each RBB level with facing not "none", labor/material use `masonry.labor.rbbFacing[...]` and `masonry.material.rbbFacing[...]` on calculated sqft (length * height/12) (`src/services/pricingEngineComplete.ts:189-207`).
+- Raised spa facing: When `poolSpecs.isRaisedSpa` and facing is not "none", labor/material use `raisedSpaFacing` rates on spa perimeter * 1.5 ft height, with waste multipliers (`raisedSpaWasteMultiplier`, `raisedSpaMaterialWaste`) (`src/services/pricingEngineComplete.ts:209-234`).
+- Spillway: When spa is raised, adds labor/material using `masonry.labor.spillway` and `masonry.material.spillway` (`src/services/pricingEngineComplete.ts:236-247`).
+- Retaining walls: Uses `pricingData.masonry.retainingWalls` to find matching type by name; charges sqft at `costPerSqft` as a single labor line and a placeholder material line (`src/services/pricingEngineComplete.ts:249-280`).
+
+Inputs shown in the Admin panel that are currently unused or partially used
+- None called out; all masonry scalars referenced above are used.
+
+Where the charges flow
+- Masonry labor/material feed into rockwork totals in the master engine (combined with tile/coping rockwork): `stoneRockworkLabor` / `stoneRockworkMaterial`. These roll into totals and `grandTotal`.
+
+Edge behaviors and guardrails
+- Missing or "none" facing suppresses facing lines.
+- Retaining wall costs depend on matching `retainingWallType` text to an entry in `pricingData.masonry.retainingWalls`; unknown names yield no retaining wall charge.
+- Raised spa facing uses waste multipliers; ensure spa perimeter is set or auto-calculated.
+
+Missing or mismatched Admin Pricing controls
+--------------------------------------------
+
+- Excavation: Engine uses `baseRanges`, `gravelPerSqft`, `dirtHaulPerYard`, and fiberglass install rates (`pricingData.fiberglass.fiberglassInstall.*`) but the modal exposes `basePricePerSqft`, `gravelPerTon`, and `dirtHaulPerLoad` instead. Admin edits to the exposed fields do not affect calculations; hidden fields do.
+- Plumbing: `additionalWaterFeatureRunPerFt` is consumed (fallback to per-ft rate) but not exposed. `travelPerMile` and `heaterSet` exist in pricing data but are not surfaced. `gasOverrunPerFt` is exposed yet unused (gas overrun pricing comes from Electrical).
+- Electrical: Several modal fields are unused (`lightRunPerFt`, `lightRunConduitMultiplier`, `travelPerMile`, `saltSystem`, `autoFillPerFt`). Gas overrun threshold is in Plumbing (exposed there), but its rate is under Electrical.
+- Tile, Coping & Decking: Material tax rates (`tileMaterialTaxRate`, `materialTaxRate`, `rockworkMaterialTaxRate` if present), `flagstoneQuantityMultiplier`, and `rockworkMaterialWaste` multipliers are used but not exposed. Concrete pump charge ($600) is hard-coded. Bullnose labor can fall back to a hard-coded default if not set.
+- Interior Finish: Water truck pricing (`waterTruck.base`, `waterTruck.loadSizeGallons`) and waterproofing rates (`extras.waterproofingPerSqft`, `extras.waterproofingRaisedSpa`) are used but not exposed. Fittings costs are hard-coded (drains/returns/hydro), not admin-configurable.
+- Fiberglass Shells & Install: Shell discount (`discountRate`) and tax (`taxRate`) are used but not exposed. Fiberglass install costs (freight by size, install labor by size, gravel, water, crane options, surcharge, no-crane allowance) are mostly hard-coded or in `pricingData.fiberglass` but not surfaced; only a generic “crane allowance” scalar is shown.
+- Equipment Set: Modal exposes `misc.equipmentSet.*`, but the engine builds equipment set costs from `pricingData.equipment` and equipment selections; modal fields do not affect calculations.
+- Masonry: Retaining wall table (`pricingData.masonry.retainingWalls`) and waste multipliers (`raisedSpaWasteMultiplier`, `raisedSpaMaterialWaste`) are used but not exposed; mismatched retaining wall names result in no charge.
