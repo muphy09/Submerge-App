@@ -184,7 +184,19 @@ export async function saveProposal(proposal: Proposal): Promise<SaveResult> {
       updated_at: normalized.lastModified || now,
       proposal_json: normalized,
     });
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase proposal upsert failed', {
+        message: error.message,
+        details: (error as any).details,
+        hint: (error as any).hint,
+        code: (error as any).code,
+      });
+      const wrapped = new Error(error.message || 'Supabase upsert failed');
+      (wrapped as any).code = (error as any).code;
+      (wrapped as any).details = (error as any).details;
+      (wrapped as any).hint = (error as any).hint;
+      throw wrapped;
+    }
     return normalized;
   }, async () => {
     if (!window.electron?.saveProposal) {

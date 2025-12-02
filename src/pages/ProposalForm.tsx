@@ -556,9 +556,14 @@ function ProposalForm() {
       return true;
     } catch (error) {
       console.error('Failed to save proposal:', error);
+      const errMsg =
+        (error as any)?.message ||
+        (error as any)?.error_description ||
+        (error as any)?.hint ||
+        'Failed to save proposal. Please try again.';
       showToast({
         type: 'error',
-        message: 'Failed to save proposal. Please try again.',
+        message: `Failed to save proposal: ${errMsg}`,
       });
       return false;
     } finally {
