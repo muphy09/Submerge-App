@@ -248,7 +248,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             <h3>About</h3>
             <p className="about-text">Submerge Proposal Builder</p>
             <p className="about-text">Version {window.electron?.appVersion || '1.0.5'}</p>
-            <p className="about-text">(c) {new Date().getFullYear()} Designed by Brian Kummer for Submerge</p>
+            <p className="about-text">(c) {new Date().getFullYear()} Submerge</p>
           </div>
         </div>
       </div>
