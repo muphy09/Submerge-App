@@ -170,20 +170,25 @@ export async function saveProposal(proposal: Proposal): Promise<SaveResult> {
   const result = await withFallback(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
-    const { error } = await supabase.from('franchise_proposals').upsert({
-      proposal_number: normalized.proposalNumber,
-      franchise_id: franchiseId,
-      designer_name: normalized.designerName,
-      designer_role: normalized.designerRole,
-      designer_code: normalized.designerCode,
-      status: normalized.status,
-      pricing_model_id: normalized.pricingModelId || null,
-      pricing_model_name: normalized.pricingModelName || null,
-      last_modified: normalized.lastModified || now,
-      created_date: normalized.createdDate || now,
-      updated_at: normalized.lastModified || now,
-      proposal_json: normalized,
-    });
+    const { error } = await supabase
+      .from('franchise_proposals')
+      .upsert(
+        {
+          proposal_number: normalized.proposalNumber,
+          franchise_id: franchiseId,
+          designer_name: normalized.designerName,
+          designer_role: normalized.designerRole,
+          designer_code: normalized.designerCode,
+          status: normalized.status,
+          pricing_model_id: normalized.pricingModelId || null,
+          pricing_model_name: normalized.pricingModelName || null,
+          last_modified: normalized.lastModified || now,
+          created_date: normalized.createdDate || now,
+          updated_at: normalized.lastModified || now,
+          proposal_json: normalized,
+        },
+        { onConflict: 'proposal_number', ignoreDuplicates: false }
+      );
     if (error) {
       console.error('Supabase proposal upsert failed', {
         message: error.message,
