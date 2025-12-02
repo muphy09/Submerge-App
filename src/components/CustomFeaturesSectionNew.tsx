@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { CustomFeatures, CustomFeature } from '../types/proposal-new';
 import './SectionStyles.css';
 
@@ -7,6 +8,26 @@ interface Props {
 }
 
 function CustomFeaturesSectionNew({ data, onChange }: Props) {
+  const [activeFeatureIndex, setActiveFeatureIndex] = useState<number | null>(null);
+  const maxFeatures = 7;
+
+  const toNumber = (value: any) => Number(value) || 0;
+  const formatCurrency = (value?: number) =>
+    `$${toNumber(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+  const featureTotal = (feature: CustomFeature) => toNumber(feature.laborCost) + toNumber(feature.materialCost);
+  const recalcTotals = (features: CustomFeature[]) => {
+    const normalized = features.map(f => ({ ...f, totalCost: featureTotal(f) }));
+    const totalCost = normalized.reduce((sum, f) => sum + f.totalCost, 0);
+    onChange({ features: normalized, totalCost });
+  };
+
+  useEffect(() => {
+    if (activeFeatureIndex !== null && activeFeatureIndex >= data.features.length) {
+      setActiveFeatureIndex(null);
+    }
+  }, [activeFeatureIndex, data.features.length]);
+
   const addFeature = () => {
     const newFeature: CustomFeature = {
       name: '',
@@ -15,26 +36,23 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
       materialCost: 0,
       totalCost: 0,
     };
-    onChange({ ...data, features: [...data.features, newFeature] });
+    if (data.features.length >= maxFeatures) return;
+    const next = [...data.features, newFeature];
+    recalcTotals(next);
+    setActiveFeatureIndex(next.length - 1);
   };
 
   const updateFeature = (index: number, field: keyof CustomFeature, value: any) => {
-    const updated = [...data.features];
-    updated[index] = { ...updated[index], [field]: value };
-
-    // Auto-calculate total cost
-    if (field === 'laborCost' || field === 'materialCost') {
-      updated[index].totalCost = updated[index].laborCost + updated[index].materialCost;
-    }
-
-    const totalCost = updated.reduce((sum, f) => sum + f.totalCost, 0);
-    onChange({ features: updated, totalCost });
+    const updated = data.features.map((f, i) =>
+      i === index ? { ...f, [field]: value } : f,
+    );
+    recalcTotals(updated);
   };
 
   const removeFeature = (index: number) => {
     const updated = data.features.filter((_, i) => i !== index);
-    const totalCost = updated.reduce((sum, f) => sum + f.totalCost, 0);
-    onChange({ features: updated, totalCost });
+    recalcTotals(updated);
+    setActiveFeatureIndex(null);
   };
 
   return (
@@ -43,96 +61,142 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
         Add any custom features or special work not covered in other sections (up to 7 features).
       </div>
 
-      {data.features.map((feature, index) => (
-        <div key={index} className="card" style={{ marginBottom: '1.5rem', padding: '1rem', border: '1px solid #ddd' }}>
-          <div className="form-group">
-            <label className="form-label">Feature Name</label>
-            <input
-              type="text"
-              className="form-input"
-              value={feature.name}
-              onChange={(e) => updateFeature(index, 'name', e.target.value)}
-              placeholder="e.g., 16x16, Turf, etc."
-            />
-          </div>
+      {data.features.map((feature, index) => {
+        const isEditing = activeFeatureIndex === index;
+        const total = featureTotal(feature);
+        const subtitle =
+          feature.description?.trim() || 'No description provided';
 
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <textarea
-              className="form-input"
-              value={feature.description}
-              onChange={(e) => updateFeature(index, 'description', e.target.value)}
-              placeholder="Description of the feature..."
-              rows={3}
-              style={{ resize: 'vertical' }}
-            />
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Labor Cost</label>
-              <input
-                type="number"
-                className="form-input"
-                value={feature.laborCost || ''}
-                onChange={(e) => updateFeature(index, 'laborCost', parseFloat(e.target.value) || 0)}
-                min="0"
-                step="0.01"
-                placeholder="0"
-              />
+        return (
+          <div key={index} className="spec-subcard" style={{ marginBottom: '1rem' }}>
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{feature.name?.trim() || `Custom Feature #${index + 1}`}</div>
+                {!isEditing && (
+                  <>
+                    <div className="spec-subcard-subtitle">{subtitle.length > 120 ? `${subtitle.slice(0, 120)}…` : subtitle}</div>
+                    <div className="spec-subcard-subtitle">
+                      Labor: {formatCurrency(feature.laborCost)} | Material: {formatCurrency(feature.materialCost)} | Total:{' '}
+                      {formatCurrency(total)}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setActiveFeatureIndex(isEditing ? null : index)}
+                  >
+                    {isEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  <button
+                    type="button"
+                    className="link-btn danger"
+                    onClick={() => removeFeature(index)}
+                  >
+                    Remove
+                  </button>
+                </div>
+                {!isEditing && data.features.length < maxFeatures && (
+                  <button type="button" className="link-btn small" onClick={addFeature}>
+                    Add Another
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Material Cost</label>
-              <input
-                type="number"
-                className="form-input"
-                value={feature.materialCost || ''}
-                onChange={(e) => updateFeature(index, 'materialCost', parseFloat(e.target.value) || 0)}
-                min="0"
-                step="0.01"
-                placeholder="0"
-              />
-            </div>
+            {isEditing && (
+              <div className="spec-field" style={{ marginTop: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Feature Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={feature.name}
+                    onChange={(e) => updateFeature(index, 'name', e.target.value)}
+                    placeholder="e.g., 16x16, Turf, etc."
+                  />
+                </div>
 
-            <div className="form-group">
-              <label className="form-label">Total Cost (Auto)</label>
-              <input
-                type="text"
-                className="form-input"
-                value={`$${feature.totalCost.toLocaleString()}`}
-                readOnly
-                style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
-              />
-            </div>
-          </div>
+                <div className="form-group">
+                  <label className="form-label">Description</label>
+                  <textarea
+                    className="form-input"
+                    value={feature.description}
+                    onChange={(e) => updateFeature(index, 'description', e.target.value)}
+                    placeholder="Description of the feature..."
+                    rows={3}
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => removeFeature(index)}
-            >
-              Remove Feature
-            </button>
-            <button type="button" className="action-btn secondary" onClick={() => {}}>
-              Done
-            </button>
-            {data.features.length < 7 && (
-              <button
-                type="button"
-                className="action-btn"
-                onClick={addFeature}
-              >
-                Add Another
-              </button>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Labor Cost</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={feature.laborCost || ''}
+                      onChange={(e) => updateFeature(index, 'laborCost', parseFloat(e.target.value) || 0)}
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Material Cost</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={feature.materialCost || ''}
+                      onChange={(e) => updateFeature(index, 'materialCost', parseFloat(e.target.value) || 0)}
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Total Cost (Auto)</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={formatCurrency(total)}
+                      readOnly
+                      style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className="action-row"
+                  style={{ marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}
+                >
+                  <button type="button" className="action-btn" onClick={() => setActiveFeatureIndex(null)}>
+                    Done
+                  </button>
+                  {data.features.length < maxFeatures && (
+                    <button type="button" className="action-btn secondary" onClick={addFeature}>
+                      Add Another
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
-      {data.features.length === 0 && (
+      {data.features.length === 0 && data.features.length < maxFeatures && (
         <button type="button" className="btn btn-add" onClick={addFeature}>
+          + Add Custom Feature
+        </button>
+      )}
+      {data.features.length > 0 && data.features.length < maxFeatures && activeFeatureIndex === null && (
+        <button type="button" className="btn btn-add" onClick={addFeature} style={{ marginTop: '0.75rem' }}>
           + Add Custom Feature
         </button>
       )}

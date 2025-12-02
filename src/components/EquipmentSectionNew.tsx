@@ -727,18 +727,18 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
         )}
       </div>
 
-      {/* Salt System */}
+      {/* Sanitation System (formerly Salt) */}
       <div className="spec-block">
         <div className="spec-block-header">
-          <h2 className="spec-block-title">Salt System</h2>
-          <p className="spec-block-subtitle">Toggle salt system and select if needed.</p>
+          <h2 className="spec-block-title">Sanitation System</h2>
+          <p className="spec-block-subtitle">Toggle sanitation system and select if needed.</p>
           <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
             <button
               type="button"
               className={`pool-type-btn ${includeSalt ? 'active' : ''}`}
               onClick={() => toggleSalt(!includeSalt)}
             >
-              {includeSalt ? 'Remove Salt System' : 'Add Salt System'}
+              {includeSalt ? 'Remove Sanitation System' : 'Add Sanitation System'}
             </button>
           </div>
         </div>

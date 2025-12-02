@@ -729,7 +729,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               { label: 'Heat pump electrical base', path: ['electrical', 'heatPumpElectricalBase'], type: 'number' },
               { label: 'Heat pump overrun per ft', path: ['electrical', 'heatPumpPerFtOver'], type: 'number' },
               { label: 'Automation add', path: ['electrical', 'automation'], type: 'number' },
-              { label: 'Salt system add', path: ['electrical', 'saltSystem'], type: 'number' },
+              { label: 'Sanitation system add', path: ['electrical', 'saltSystem'], type: 'number' },
               { label: 'Bonding', path: ['electrical', 'bonding'], type: 'number' },
               { label: 'Outlet', path: ['electrical', 'outlet'], type: 'number' },
               { label: 'Auto-fill (per ft)', path: ['electrical', 'autoFillPerFt'], type: 'number' },
@@ -946,7 +946,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
-            title: 'Salt & accessories',
+            title: 'Sanitation & accessories',
             scalars: [
               { label: 'Blanket reel', path: ['equipment', 'blanketReel'], type: 'number' },
               { label: 'Solar blanket', path: ['equipment', 'solarBlanket'], type: 'number' },
@@ -956,11 +956,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
             lists: [
               {
-                title: 'Salt systems',
+                title: 'Sanitation systems',
                 path: ['equipment', 'saltSystem'],
-                addLabel: 'Add salt system',
+                addLabel: 'Add sanitation system',
                 fields: [
-                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Salt system name' },
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Sanitation system name' },
                   { key: 'model', label: 'Model', type: 'text', placeholder: 'Model' },
                   { key: 'price', label: 'Price', type: 'number', placeholder: '0' },
                 ],

@@ -26,7 +26,7 @@
 .hero-section {
   position: relative;
   margin: clamp(1rem, 2vh, 1.5rem) clamp(1.5rem, 3vw, 3rem) clamp(1rem, 2vh, 1.5rem) clamp(1.5rem, 3vw, 3rem);
-  height: clamp(225px, 35vh, 450px);
+  height: clamp(300px, 45vh, 560px);
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
@@ -645,7 +645,7 @@
 
   .hero-section {
     margin: 1.5rem 2rem 1rem 2rem;
-    height: clamp(160px, 22vh, 260px);
+    height: clamp(220px, 34vh, 380px);
   }
 
   .dashboard-column {
@@ -689,7 +689,7 @@
 @media (max-width: 768px) {
   .hero-section {
     margin: 1rem 1rem 0.75rem 1rem;
-    height: clamp(140px, 18vh, 180px);
+    height: clamp(180px, 26vh, 240px);
   }
 
   .hero-content {
@@ -764,7 +764,7 @@
 @media (max-width: 480px) {
   .hero-section {
     margin: 0.75rem 0.75rem 0.5rem 0.75rem;
-    height: clamp(110px, 14vh, 140px);
+    height: clamp(140px, 20vh, 190px);
   }
 
   .hero-content {

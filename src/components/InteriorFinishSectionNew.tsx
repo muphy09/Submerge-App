@@ -60,6 +60,14 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
     { value: 'pebble-brilliance', label: 'Pebble Brilliance' },
     { value: 'pebble-breeze', label: 'Pebble Breeze' },
   ];
+  const colorOptions = [
+    'Bordeaux',
+    'Desert Gold',
+    'French Grey',
+    'Irish Mist',
+    'White Diamonds',
+    'HighTech Carribean Blue',
+  ];
 
   // Auto-set defaults from pool specs and enforce waterproofing + valid finish
   useEffect(() => {
@@ -113,13 +121,23 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
 
           <div className="spec-field">
             <label className="spec-label">Color / Style</label>
-            <input
-              type="text"
+            <select
               className="compact-input"
-              value={data.color}
+              value={data.color || ''}
               onChange={(e) => handleChange('color', e.target.value)}
-              placeholder="Enter color or style name"
-            />
+            >
+              <option value="" disabled>
+                Select color/style
+              </option>
+              {colorOptions.map(option => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+              {data.color && !colorOptions.includes(data.color) && (
+                <option value={data.color}>{data.color}</option>
+              )}
+            </select>
           </div>
 
           <div className="spec-field">

@@ -89,6 +89,7 @@ const ButtonGroup = <T extends string | number>({
 );
 
 function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFiberglass, poolDeckingArea }: Props) {
+  const showStoneRockwork = false;
   const handleChange = (field: keyof TileCopingDecking, value: any) => {
     onChange({ ...data, [field]: value });
   };
@@ -292,63 +293,65 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
         </div>
       </div>
 
-      {/* Stone / Rockwork */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Stone / Rockwork</h2>
-          <p className="spec-block-subtitle">Keep labor vs. material clear with inline labels.</p>
+      {/* Stone / Rockwork - hidden for now */}
+      {showStoneRockwork && (
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Stone / Rockwork</h2>
+            <p className="spec-block-subtitle">Keep labor vs. material clear with inline labels.</p>
+          </div>
+
+          <div className="spec-grid spec-grid-2">
+            <div className="spec-field">
+              <label className="spec-label">Panel Ledge Facing</label>
+              <CompactInput
+                value={data.rockworkPanelLedgeSqft ?? 0}
+                onChange={(e) => handleChange('rockworkPanelLedgeSqft', parseFloat(e.target.value) || 0)}
+                unit="SQFT"
+                min="0"
+                step="1"
+              />
+            </div>
+
+            <div className="spec-field">
+              <label className="spec-label">Panel Ledge Material</label>
+              <CompactInput
+                value={data.rockworkPanelLedgeMaterialSqft ?? 0}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  handleChange('rockworkPanelLedgeMaterialSqft', val > 0 ? val : undefined);
+                }}
+                unit="SQFT"
+                min="0"
+                step="0.01"
+              />
+              <small className="form-help">Use if material overage differs (~15% in Excel).</small>
+            </div>
+
+            <div className="spec-field">
+              <label className="spec-label">Stacked Stone Facing</label>
+              <CompactInput
+                value={data.rockworkStackedStoneSqft ?? 0}
+                onChange={(e) => handleChange('rockworkStackedStoneSqft', parseFloat(e.target.value) || 0)}
+                unit="SQFT"
+                min="0"
+                step="1"
+              />
+            </div>
+
+            <div className="spec-field">
+              <label className="spec-label">Tile Facing</label>
+              <CompactInput
+                value={data.rockworkTileSqft ?? 0}
+                onChange={(e) => handleChange('rockworkTileSqft', parseFloat(e.target.value) || 0)}
+                unit="SQFT"
+                min="0"
+                step="1"
+              />
+            </div>
+          </div>
         </div>
-
-        <div className="spec-grid spec-grid-2">
-          <div className="spec-field">
-            <label className="spec-label">Panel Ledge Facing</label>
-            <CompactInput
-              value={data.rockworkPanelLedgeSqft ?? 0}
-              onChange={(e) => handleChange('rockworkPanelLedgeSqft', parseFloat(e.target.value) || 0)}
-              unit="SQFT"
-              min="0"
-              step="1"
-            />
-          </div>
-
-          <div className="spec-field">
-            <label className="spec-label">Panel Ledge Material</label>
-            <CompactInput
-              value={data.rockworkPanelLedgeMaterialSqft ?? 0}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value);
-                handleChange('rockworkPanelLedgeMaterialSqft', val > 0 ? val : undefined);
-              }}
-              unit="SQFT"
-              min="0"
-              step="0.01"
-            />
-            <small className="form-help">Use if material overage differs (~15% in Excel).</small>
-          </div>
-
-          <div className="spec-field">
-            <label className="spec-label">Stacked Stone Facing</label>
-            <CompactInput
-              value={data.rockworkStackedStoneSqft ?? 0}
-              onChange={(e) => handleChange('rockworkStackedStoneSqft', parseFloat(e.target.value) || 0)}
-              unit="SQFT"
-              min="0"
-              step="1"
-            />
-          </div>
-
-          <div className="spec-field">
-            <label className="spec-label">Tile Facing</label>
-            <CompactInput
-              value={data.rockworkTileSqft ?? 0}
-              onChange={(e) => handleChange('rockworkTileSqft', parseFloat(e.target.value) || 0)}
-              unit="SQFT"
-              min="0"
-              step="1"
-            />
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Options */}
       <div className="spec-block">

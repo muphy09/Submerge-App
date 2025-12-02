@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
-import heroImage from '../assets/homepagetestbck.jpg';
+import heroImage from '../../docs/img/newback.jpg';
 import { listProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, getSessionUserName, type UserSession } from '../services/session';
 

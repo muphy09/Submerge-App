@@ -347,6 +347,7 @@ function ProposalForm() {
   };
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
+  const previousSpaTypeRef = useRef<string>(proposal.poolSpecs?.spaType ?? 'none');
 
   useEffect(() => {
     const hasContent =
@@ -357,12 +358,29 @@ function ProposalForm() {
   }, [proposal.equipment, completedByAdvance.equipment]);
 
   useEffect(() => {
+    const currentSpaType = proposal.poolSpecs?.spaType ?? 'none';
+    const previousSpaType = previousSpaTypeRef.current ?? 'none';
+    const spaJustAdded = previousSpaType === 'none' && currentSpaType !== 'none';
+
+    if (spaJustAdded && !proposal.equipment?.hasSpaLight) {
+      setProposal(prev => ({
+        ...prev,
+        equipment: { ...(prev.equipment || getDefaultEquipment()), hasSpaLight: true },
+      }));
+      setHasEdits(true);
+    }
+
+    previousSpaTypeRef.current = currentSpaType;
+  }, [proposal.poolSpecs?.spaType, proposal.equipment?.hasSpaLight]);
+
+  useEffect(() => {
     const requestId = ++loadRequestRef.current;
     if (proposalNumber) {
       setIsLoading(true);
       loadProposal(proposalNumber, requestId);
     } else {
       const freshProposal = getInitialProposal();
+      previousSpaTypeRef.current = freshProposal.poolSpecs?.spaType ?? 'none';
       setProposal(freshProposal);
       setSelectedPricingModelId(freshProposal.pricingModelId || null);
       setSelectedPricingModelName(freshProposal.pricingModelName || null);
@@ -402,6 +420,7 @@ function ProposalForm() {
         freshData.lastModified = freshData.lastModified || new Date().toISOString();
 
         if (loadRequestRef.current === requestId) {
+          previousSpaTypeRef.current = freshData.poolSpecs?.spaType ?? 'none';
           setProposal(freshData);
           setSelectedPricingModelId(freshData.pricingModelId || null);
           setSelectedPricingModelName(freshData.pricingModelName || null);

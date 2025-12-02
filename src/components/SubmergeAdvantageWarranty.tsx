@@ -222,7 +222,7 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
   if (equipment.saltSystem?.name) {
     items.push({ label: equipment.saltSystem.name });
   } else {
-    items.push({ label: 'Salt system not selected' });
+    items.push({ label: 'Sanitation system not selected' });
   }
 
   items.push({ label: lightsText });
