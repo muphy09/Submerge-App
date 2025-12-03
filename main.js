@@ -71,6 +71,17 @@ const UPDATE_FEED = {
   owner: 'muphy09',
   repo: 'Submerge-App',
 };
+const CSP_HEADER = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: file: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' http://localhost:5173 ws://localhost:5173 https://*.supabase.co",
+  "media-src 'self' blob: file:",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
 const DEFAULT_FRANCHISE_ID = 'default';
 const DEFAULT_FRANCHISE_CODE = 'DEFAULT-CODE';
 const DEFAULT_PRICING_VERSION = 'v1';
@@ -437,6 +448,14 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload-script.js'),
     },
+  });
+
+  // Enforce CSP via HTTP header so directives like frame-ancestors are honored in dev and prod.
+  const session = mainWindow.webContents.session;
+  session.webRequest.onHeadersReceived((details, callback) => {
+    const headers = details.responseHeaders || {};
+    headers['Content-Security-Policy'] = [CSP_HEADER];
+    callback({ responseHeaders: headers });
   });
 
   // Load the app

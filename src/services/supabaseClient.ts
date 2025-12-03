@@ -46,9 +46,18 @@ function createSupabaseClient() {
     }
     return null;
   }
+
+  // Attach headers dynamically so we don't need to recreate the client (which was triggering
+  // multiple GoTrueClient warnings) every time the context changes.
+  const fetchWithContext: typeof fetch = (input, init) => {
+    const headers = new Headers(init?.headers || {});
+    Object.entries(buildHeaders(currentContext)).forEach(([k, v]) => headers.set(k, v));
+    return fetch(input, { ...init, headers });
+  };
+
   const instance = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: buildHeaders(currentContext) },
+    global: { fetch: fetchWithContext },
   });
   if (!loggedEnabled) {
     console.info('Supabase client initialized with provided env vars.');
@@ -65,8 +74,6 @@ export function getSupabaseClient() {
 
 export function setSupabaseContext(context: SupabaseContext) {
   currentContext = { ...context };
-  // Recreate the client so the updated headers are applied on every request.
-  client = createSupabaseClient();
 }
 
 /**
