@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Proposal, WaterFeatures, PAPDiscounts } from '../types/proposal-new';
+import { Proposal, WaterFeatures, PAPDiscounts, ManualAdjustments } from '../types/proposal-new';
 import {
   getDefaultProposal,
   getDefaultPAPDiscounts,
@@ -203,7 +203,7 @@ function ProposalForm() {
     const snapshot = getPricingDataSnapshot();
     return snapshot?.papDiscountRates ? { ...snapshot.papDiscountRates } : getDefaultPAPDiscounts();
   };
-  const readManualAdjustmentsFromModel = () => {
+  const readManualAdjustmentsFromModel = (): ManualAdjustments => {
     const snapshot = getPricingDataSnapshot() as any;
     return snapshot?.manualAdjustments
       ? { ...snapshot.manualAdjustments }
@@ -211,8 +211,9 @@ function ProposalForm() {
   };
   const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(readPapDiscountsFromModel());
   const papDiscountSourceRef = useRef<'pricingModel' | 'proposal'>('pricingModel');
-  const [manualAdjustments, setManualAdjustments] = useState(readManualAdjustmentsFromModel());
+  const [manualAdjustments, setManualAdjustments] = useState<ManualAdjustments>(readManualAdjustmentsFromModel());
   const manualAdjustmentsSourceRef = useRef<'pricingModel' | 'proposal'>('pricingModel');
+  const pricingModelManualAdjustmentsRef = useRef<ManualAdjustments>(readManualAdjustmentsFromModel());
   const sectionContentRef = useRef<HTMLDivElement | null>(null);
   const createCompletionMap = () =>
     sections.reduce((acc, section) => {
@@ -232,11 +233,41 @@ function ProposalForm() {
     papDiscountSourceRef.current = 'pricingModel';
   };
 
-  const syncManualAdjustmentsFromModel = () => {
-    const next = readManualAdjustmentsFromModel();
-    setManualAdjustments(next);
-    manualAdjustmentsSourceRef.current = 'pricingModel';
-    setProposal((prev) => ({ ...prev, manualAdjustments: next }));
+  const mergeDesignerAdjustmentsWithModel = (nextModelAdjustments: ManualAdjustments) => {
+    if (manualAdjustmentsSourceRef.current !== 'proposal') {
+      return { merged: nextModelAdjustments, carriedDesignerAdjustments: false };
+    }
+
+    const previousModelAdjustments = pricingModelManualAdjustmentsRef.current || getDefaultManualAdjustments();
+    const currentDesignerAdjustments = manualAdjustments || getDefaultManualAdjustments();
+    const merged: ManualAdjustments = { ...nextModelAdjustments };
+    let carriedDesignerAdjustments = false;
+
+    const moveOverrides = (keys: (keyof ManualAdjustments)[]) => {
+      keys.forEach((key) => {
+        const currentValue = currentDesignerAdjustments[key] ?? 0;
+        const previousModelValue = previousModelAdjustments[key] ?? 0;
+        const hasDesignerOverride = currentValue !== 0 && currentValue !== previousModelValue;
+        if (!hasDesignerOverride) return;
+
+        if ((merged[key] ?? 0) === 0) {
+          merged[key] = currentValue;
+          carriedDesignerAdjustments = true;
+          return;
+        }
+
+        const openKey = keys.find((candidate) => (merged[candidate] ?? 0) === 0);
+        if (openKey) {
+          merged[openKey] = currentValue;
+          carriedDesignerAdjustments = true;
+        }
+      });
+    };
+
+    moveOverrides(['positive1', 'positive2']);
+    moveOverrides(['negative1', 'negative2']);
+
+    return { merged, carriedDesignerAdjustments };
   };
 
   const applyPricingModelSelection = async (
@@ -252,9 +283,20 @@ function ProposalForm() {
     if (papDiscountSourceRef.current !== 'proposal' || markDirty) {
       syncPapDiscountsFromModel();
     }
-    if (manualAdjustmentsSourceRef.current !== 'proposal' || markDirty) {
-      syncManualAdjustmentsFromModel();
+
+    const nextModelAdjustments = readManualAdjustmentsFromModel();
+    pricingModelManualAdjustmentsRef.current = nextModelAdjustments;
+    if (manualAdjustmentsSourceRef.current === 'proposal') {
+      const { merged, carriedDesignerAdjustments } = mergeDesignerAdjustmentsWithModel(nextModelAdjustments);
+      setManualAdjustments(merged);
+      setProposal((prev) => ({ ...prev, manualAdjustments: merged }));
+      manualAdjustmentsSourceRef.current = carriedDesignerAdjustments ? 'proposal' : 'pricingModel';
+    } else if (manualAdjustmentsSourceRef.current !== 'proposal' || markDirty) {
+      setManualAdjustments(nextModelAdjustments);
+      manualAdjustmentsSourceRef.current = 'pricingModel';
+      setProposal((prev) => ({ ...prev, manualAdjustments: nextModelAdjustments }));
     }
+
     setSelectedPricingModelId(modelId);
     setSelectedPricingModelName(modelName || null);
     setProposal((prev) => ({
@@ -402,6 +444,7 @@ function ProposalForm() {
         setPapDiscounts(snapshot.papDiscountRates as PAPDiscounts);
       }
       if (snapshot?.manualAdjustments && manualAdjustmentsSourceRef.current === 'pricingModel') {
+        pricingModelManualAdjustmentsRef.current = snapshot.manualAdjustments as ManualAdjustments;
         setManualAdjustments(snapshot.manualAdjustments as any);
         manualAdjustmentsSourceRef.current = 'pricingModel';
         setProposal((prev) => ({ ...prev, manualAdjustments: snapshot.manualAdjustments as any }));
@@ -494,6 +537,7 @@ function ProposalForm() {
             manualAdjustmentsSourceRef.current = 'pricingModel';
             setManualAdjustments(readManualAdjustmentsFromModel());
           }
+          pricingModelManualAdjustmentsRef.current = readManualAdjustmentsFromModel();
           setHasEdits(false);
         }
       }

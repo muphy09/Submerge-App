@@ -1,5 +1,15 @@
 ---
 
+## [1.8.0]
+### Changed
+- New Proposal Summary screen
+- PAP Discount moved to Price Model
+- Manual Adjustments added
+- RLS Security in database
+- 
+
+---
+
 ## [1.6.0]
 ### Changed
 - Backend implementation of 'Franchises' and 'Roles'

@@ -9,14 +9,23 @@ interface Props {
   customerName: string;
   proposal?: Partial<Proposal>;
   pricing?: PricingCalculations;
+  showWarranty?: boolean;
+  showZoomControl?: boolean;
 }
 
 const isPapDiscount = (item: CostLineItem): boolean =>
   item.description?.toLowerCase().includes('pap discount') ?? false;
 
-function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: Props) {
+function CostBreakdownView({
+  costBreakdown,
+  customerName,
+  proposal,
+  pricing,
+  showWarranty = true,
+  showZoomControl = true,
+}: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
-  const [zoomLevel, setZoomLevel] = useState(0.5); // Start at 50% (0.5 scale)
+  const [zoomLevel, setZoomLevel] = useState(showZoomControl ? 0.5 : 1); // Start at 50% (0.5 scale) when slider is shown
 
   const formatCurrency = (value: number): string =>
     `$${(Number.isFinite(value) ? value : 0).toLocaleString(undefined, {
@@ -124,7 +133,7 @@ function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: P
           onClick={() => toggleSection(categoryName)}
           style={{ cursor: 'pointer' }}
         >
-          <span className="expand-icon">{isExpanded ? '▼' : '►'}</span>
+          <span className="expand-icon">{isExpanded ? 'v' : '>'}</span>
           <span className="category-name">{categoryName}</span>
           <span className="category-total">
             ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -206,7 +215,7 @@ function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: P
   void expandAll;
   void collapseAll;
 
-  const scaleValue = 0.5 + (zoomLevel * 0.5); // Maps 0-1 slider to 0.5-1.0 scale
+  const scaleValue = showZoomControl ? 0.5 + (zoomLevel * 0.5) : 1; // Maps 0-1 slider to 0.5-1.0 scale
   const scaleStyle = {
     transform: `scale(${scaleValue})`,
     transformOrigin: 'top center',
@@ -249,28 +258,30 @@ function CostBreakdownView({ costBreakdown, customerName, proposal, pricing }: P
         </div>
         </div>
 
-        {proposal && (
+        {showWarranty && proposal && (
           <div className="warranty-shell">
             <SubmergeAdvantageWarranty proposal={proposal} />
           </div>
         )}
       </div>
 
-      <div className="zoom-control-container">
-        <label className="zoom-label">
-          <span className="zoom-icon">🔍</span>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={zoomLevel}
-            onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
-            className="zoom-slider"
-          />
-          <span className="zoom-percentage">{Math.round(scaleValue * 100)}%</span>
-        </label>
-      </div>
+      {showZoomControl && (
+        <div className="zoom-control-container">
+          <label className="zoom-label">
+            <span className="zoom-icon">Zoom</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+              className="zoom-slider"
+            />
+            <span className="zoom-percentage">{Math.round(scaleValue * 100)}%</span>
+          </label>
+        </div>
+      )}
     </div>
   );
 }
