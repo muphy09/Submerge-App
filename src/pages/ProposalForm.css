@@ -412,6 +412,18 @@
   box-shadow: 0 10px 18px rgba(12, 34, 67, 0.12);
 }
 
+/* Hover border colors per section */
+.nav-item.pool-specs-item:hover { border-color: #2f4f8f; }
+.nav-item.excavation-item:hover { border-color: #d6b78e; }
+.nav-item.plumbing-item:hover { border-color: #9fa6b2; }
+.nav-item.electrical-item:hover { border-color: #f4d27f; }
+.nav-item.tile-item:hover { border-color: #a8d8c9; }
+.nav-item.drainage-item:hover { border-color: #5f8d6d; }
+.nav-item.water-item:hover { border-color: #69c5cc; }
+.nav-item.interior-item:hover { border-color: #b08bd8; }
+.nav-item.equipment-item:hover { border-color: #d85c5c; }
+.nav-item.custom-item:hover { border-color: #f09a63; }
+
 .nav-item.active {
   background: #e6edfb;
   border-color: #2f4f8f;
@@ -444,20 +456,20 @@
 }
 
 .nav-icon-wrapper:has(.nav-icon-excavation) {
-  background: #e8ddd0;
-  border-color: #d4c5b3;
+  background: transparent;
+  border-color: transparent;
   color: #8b7355;
 }
 
 .nav-icon-wrapper:has(.nav-icon-plumbing) {
-  background: #d8dfe6;
-  border-color: #bfc9d3;
+  background: transparent;
+  border-color: transparent;
   color: #5a6b7d;
 }
 
 .nav-icon-wrapper:has(.nav-icon-electrical) {
-  background: #fef3c7;
-  border-color: #f5e5a8;
+  background: transparent;
+  border-color: transparent;
   color: #b89d2b;
 }
 
@@ -470,6 +482,12 @@
   width: 64px;
   height: 64px;
   object-fit: contain;
+}
+
+.nav-icon-img,
+.nav-icon-mask,
+.nav-icon-svg {
+  transition: transform 0.2s ease;
 }
 
 .nav-icon-mask {
@@ -486,16 +504,22 @@
   mask-type: luminance;
 }
 
+.nav-item:hover .nav-icon-img,
+.nav-item:hover .nav-icon-mask,
+.nav-item:hover .nav-icon-svg {
+  transform: scale(1.1);
+}
+
 .nav-item.pool-specs-item .nav-icon-wrapper {
-  background: transparent;
-  border-color: transparent;
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
   overflow: visible;
 }
 
 .nav-item.pool-specs-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
 }
 
 .nav-item.pool-specs-item.active {
@@ -506,13 +530,18 @@
 .nav-item.pool-specs-item.active .nav-icon-wrapper {
   background: transparent;
   border-color: #dfe6f1;
-  color: #0c2243;
+  box-shadow: none;
+}
+
+.nav-item.pool-specs-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
 }
 
 .nav-item.excavation-item .nav-icon-wrapper {
-  background: transparent;
-  border-color: transparent;
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
   overflow: visible;
 }
@@ -541,29 +570,34 @@
   overflow: visible;
 }
 
-.nav-item.plumbing-item .nav-icon-img,
+.nav-item.plumbing-item .nav-icon-img {
+  mix-blend-mode: normal;
+  filter: none;
+  background: transparent;
+}
+
 .nav-item.electrical-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
   background: transparent;
 }
 
 .nav-item.tile-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
   background: transparent;
 }
 
 .nav-item.drainage-item .nav-icon-wrapper {
-  background: transparent;
-  border-color: transparent;
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
   overflow: visible;
 }
 
 .nav-item.drainage-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
   background: transparent;
 }
 
@@ -579,6 +613,12 @@
   box-shadow: none;
 }
 
+.nav-item.drainage-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
 .nav-item.water-item .nav-icon-wrapper {
   background: transparent;
   border-color: transparent;
@@ -587,8 +627,8 @@
 }
 
 .nav-item.water-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
   background: transparent;
 }
 
@@ -605,15 +645,15 @@
 }
 
 .nav-item.interior-item .nav-icon-wrapper {
-  background: transparent;
-  border-color: transparent;
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
   overflow: visible;
 }
 
 .nav-item.interior-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
   background: transparent;
 }
 
@@ -630,15 +670,15 @@
 }
 
 .nav-item.custom-item .nav-icon-wrapper {
-  background: transparent;
-  border-color: transparent;
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
   overflow: visible;
 }
 
 .nav-item.custom-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
   background: transparent;
 }
 
@@ -655,15 +695,15 @@
 }
 
 .nav-item.equipment-item .nav-icon-wrapper {
-  background: transparent;
-  border-color: transparent;
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
   overflow: visible;
 }
 
 .nav-item.equipment-item .nav-icon-img {
-  mix-blend-mode: darken;
-  filter: contrast(1.05);
+  mix-blend-mode: normal;
+  filter: none;
   background: transparent;
 }
 
@@ -691,12 +731,66 @@
   box-shadow: none;
 }
 
+.nav-item.plumbing-item .nav-icon-wrapper,
+.nav-item.equipment-item .nav-icon-wrapper,
 .nav-item.electrical-item .nav-icon-wrapper,
-.nav-item.tile-item .nav-icon-wrapper {
-  background: transparent;
-  border-color: transparent;
+.nav-item.tile-item .nav-icon-wrapper,
+.nav-item.water-item .nav-icon-wrapper,
+.nav-item.interior-item .nav-icon-wrapper,
+.nav-item.custom-item .nav-icon-wrapper,
+.nav-item.excavation-item .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
   box-shadow: none;
   overflow: visible;
+}
+
+.nav-item.plumbing-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+.nav-item.equipment-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+.nav-item.electrical-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+.nav-item.tile-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+.nav-item.water-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+.nav-item.interior-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+.nav-item.custom-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+.nav-item.excavation-item.completed .nav-icon-wrapper {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none;
 }
 
 .nav-item.electrical-item.active {
@@ -1163,4 +1257,3 @@
     font-size: 0.78rem;
   }
 }
-

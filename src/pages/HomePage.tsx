@@ -6,6 +6,8 @@ import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
 import { listProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, getSessionUserName, type UserSession } from '../services/session';
+import syncGoodIcon from '../../docs/img/syncgood.png';
+import syncBadIcon from '../../docs/img/syncbad.png';
 
 type HomePageProps = {
   session?: UserSession | null;
@@ -37,6 +39,12 @@ function HomePage({ session }: HomePageProps) {
 
   useEffect(() => {
     void loadProposals();
+  }, [loadProposals]);
+
+  useEffect(() => {
+    const handleOnline = () => void loadProposals();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, [loadProposals]);
 
   const handleNewProposal = () => {
@@ -84,6 +92,13 @@ function HomePage({ session }: HomePageProps) {
   const recentProposals = [...proposals]
     .sort((a, b) => new Date(b.lastModified || b.createdDate).getTime() - new Date(a.lastModified || a.createdDate).getTime())
     .slice(0, 4);
+
+  const renderSyncIcon = (proposal: Proposal) => {
+    const synced = (proposal.syncStatus || 'synced') === 'synced';
+    const src = synced ? syncGoodIcon : syncBadIcon;
+    const label = synced ? 'Cloud synced' : 'Pending cloud sync';
+    return <img src={src} alt={label} title={label} className="proposal-sync-icon" />;
+  };
 
   // Calculate stats
   const totalProposalsCreated = proposals.length;
@@ -188,7 +203,10 @@ function HomePage({ session }: HomePageProps) {
                     </div>
                     <div className="proposal-item-content">
                       <div className="proposal-item-header-line">
-                        <div className="proposal-item-name">{proposal.customerInfo.customerName}</div>
+                        <div className="proposal-item-name">
+                          {proposal.customerInfo.customerName}
+                          {renderSyncIcon(proposal)}
+                        </div>
                       </div>
                       <div className="proposal-item-meta">
                         <span className="proposal-item-date">

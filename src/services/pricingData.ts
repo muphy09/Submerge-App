@@ -17,6 +17,13 @@ const pricingData = {
     interiorFinish: 0.10, // 10%
     startup: 0.10, // 10%
   },
+  // Manual retail adjustments (designer-facing)
+  manualAdjustments: {
+    positive1: 0,
+    positive2: 0,
+    negative1: 0,
+    negative2: 0,
+  },
   plans: {
     poolOnly: 410,
     spa: 80,

@@ -8,6 +8,8 @@ import { listPricingModels as listPricingModelsRemote } from '../services/pricin
 import './ProposalsListPage.css';
 import { deleteProposal as deleteProposalRemote, listProposals } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, getSessionUserName } from '../services/session';
+import syncGoodIcon from '../../docs/img/syncgood.png';
+import syncBadIcon from '../../docs/img/syncbad.png';
 
 function ProposalsListPage() {
   const navigate = useNavigate();
@@ -23,6 +25,12 @@ function ProposalsListPage() {
 
   useEffect(() => {
     loadProposals();
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => void loadProposals();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, []);
 
   const loadProposals = async () => {
@@ -100,6 +108,14 @@ function ProposalsListPage() {
   const getGrossProfitPercent = (proposal: Proposal) => {
     // Gross profit margin returned from pricing is already expressed as a percentage
     return proposal.pricing?.grossProfitMargin || 0;
+  };
+
+  const getSyncIcon = (proposal: Proposal) => {
+    const synced = (proposal.syncStatus || 'synced') === 'synced';
+    return {
+      src: synced ? syncGoodIcon : syncBadIcon,
+      label: synced ? 'Cloud synced' : 'Pending cloud sync',
+    };
   };
 
   const sortedProposals = [...proposals].sort((a, b) => {
@@ -316,7 +332,20 @@ function ProposalsListPage() {
                         className="checkbox-row"
                       />
                     </td>
-                    <td className="customer-name">{proposal.customerInfo.customerName}</td>
+                    <td className="customer-name">
+                      <span className="customer-name-text">{proposal.customerInfo.customerName}</span>
+                      {(() => {
+                        const icon = getSyncIcon(proposal);
+                        return (
+                          <img
+                            src={icon.src}
+                            alt={icon.label}
+                            title={icon.label}
+                            className="proposal-sync-icon"
+                          />
+                        );
+                      })()}
+                    </td>
                     <td>{new Date(proposal.lastModified).toLocaleDateString()}</td>
                     <td>
                       <span

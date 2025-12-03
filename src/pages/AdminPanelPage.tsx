@@ -10,6 +10,7 @@ import {
   deleteFranchiseUser,
   listFranchiseUsers,
   markDesignerProposalsDeleted,
+  updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
 
 const DEFAULT_FRANCHISE_ID = 'default';
@@ -19,7 +20,7 @@ type SessionInfo = {
   franchiseId?: string;
   franchiseName?: string;
   franchiseCode?: string;
-  role?: 'admin' | 'designer';
+  role?: 'owner' | 'admin' | 'designer';
 };
 
 interface AdminPanelPageProps {
@@ -51,17 +52,19 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [loadingModels, setLoadingModels] = useState(true);
   const [activatingModelId, setActivatingModelId] = useState<string | null>(null);
   const [franchiseUsers, setFranchiseUsers] = useState<
-    { id: string; name: string; role: 'admin' | 'designer'; isActive: boolean }[]
+    { id: string; name: string; role: 'owner' | 'admin' | 'designer'; isActive: boolean }[]
   >([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [addingUser, setAddingUser] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [userError, setUserError] = useState<string | null>(null);
+  const [promotingUserId, setPromotingUserId] = useState<string | null>(null);
   const userListRef = useRef<HTMLDivElement | null>(null);
   const userWheelLockRef = useRef<number>(0);
 
   const franchiseId = session?.franchiseId || DEFAULT_FRANCHISE_ID;
-  const isAdmin = (session?.role || '').toLowerCase() === 'admin';
+  const normalizedRole = (session?.role || '').toLowerCase();
+  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'owner';
 
   useEffect(() => {
     if (!isAdmin) {
@@ -189,8 +192,8 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   };
 
   const handleRemoveUser = async (userId: string, role: string) => {
-    if (role === 'admin') {
-      console.warn('Skipping removal of admin user to prevent lockout.');
+    if (role === 'admin' || role === 'owner') {
+      console.warn('Skipping removal of elevated user to prevent lockout.');
       return;
     }
     try {
@@ -201,6 +204,18 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       await loadProposals(franchiseId);
     } catch (error) {
       console.error('Failed to remove user:', error);
+    }
+  };
+
+  const handlePromoteUser = async (userId: string) => {
+    setPromotingUserId(userId);
+    try {
+      await updateFranchiseUserRole(userId, 'admin');
+      await loadUsers(franchiseId);
+    } catch (error) {
+      console.error('Failed to promote user to admin:', error);
+    } finally {
+      setPromotingUserId(null);
     }
   };
 
@@ -338,10 +353,23 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                   <div className="admin-user-row" key={user.id} role="listitem">
                     <div className="admin-user-meta">
                       <div className="admin-user-name">{user.name}</div>
-                      <div className="admin-user-role">{user.role === 'admin' ? 'Admin' : 'Designer'}</div>
+                      <div className="admin-user-role">
+                        {user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : 'Designer'}
+                      </div>
                     </div>
                     <div className="admin-user-actions">
-                      {user.role !== 'admin' && (
+                      {user.role === 'designer' && (
+                        <button
+                          className="admin-primary-btn ghost"
+                          type="button"
+                          onClick={() => handlePromoteUser(user.id)}
+                          disabled={promotingUserId === user.id}
+                          title="Promote to admin"
+                        >
+                          {promotingUserId === user.id ? 'Promoting...' : 'Make Admin'}
+                        </button>
+                      )}
+                      {user.role === 'designer' && (
                         <button
                           className="admin-remove-btn"
                           type="button"

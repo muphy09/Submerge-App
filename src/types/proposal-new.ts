@@ -468,6 +468,14 @@ export interface PAPDiscounts {
   startup: number;
 }
 
+// Manual retail adjustments applied by designers
+export interface ManualAdjustments {
+  positive1: number;
+  positive2: number;
+  negative1: number;
+  negative2: number;
+}
+
 // ============================================================================
 // PRICING & PROFIT CALCULATIONS
 // ============================================================================
@@ -489,13 +497,16 @@ export interface PricingCalculations {
   digCommissionRate: number; // Default 0.0275 (2.75%)
   digCommission: number; // retailPrice × digCommissionRate
   adminFeeRate: number; // Default 0.029 (2.9%)
-  adminFee: number; // retailPrice × adminFeeRate
+  adminFee: number; // retailPrice x adminFeeRate
   closeoutCommissionRate: number; // Default 0.0275 (2.75%)
-  closeoutCommission: number; // retailPrice × closeoutCommissionRate
+  closeoutCommission: number; // retailPrice x closeoutCommissionRate
 
   // Final profit
   grossProfit: number; // retailPrice - totalCOGS - digCommission - adminFee - closeoutCommission
   grossProfitMargin: number; // grossProfit / retailPrice (as percentage)
+
+  // Designer adjustments applied to retail price
+  manualAdjustmentsTotal?: number;
 }
 
 // ============================================================================
@@ -510,11 +521,13 @@ export interface Proposal {
   status: 'draft' | 'submitted' | 'approved' | 'rejected';
   franchiseId?: string;
   designerName?: string;
-  designerRole?: 'admin' | 'designer';
+  designerRole?: 'owner' | 'admin' | 'designer';
   designerCode?: string;
   pricingModelId?: string;
   pricingModelName?: string;
   pricingModelIsDefault?: boolean;
+  syncStatus?: 'synced' | 'pending' | 'error';
+  syncMessage?: string;
 
   // Main sections
   customerInfo: CustomerInfo;
@@ -535,6 +548,9 @@ export interface Proposal {
 
   // PAP Discount Configuration
   papDiscounts?: PAPDiscounts;
+
+  // Designer retail adjustments
+  manualAdjustments?: ManualAdjustments;
 
   // Pricing & Profit Calculations (NEW - matching Excel)
   pricing: PricingCalculations;

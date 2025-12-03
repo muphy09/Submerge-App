@@ -17,6 +17,7 @@ import {
   InteriorFinish,
   CostBreakdown,
   PAPDiscounts,
+  ManualAdjustments,
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 
@@ -312,6 +313,16 @@ export function getDefaultPAPDiscounts(): PAPDiscounts {
   };
 }
 
+export function getDefaultManualAdjustments(): ManualAdjustments {
+  const defaults = (pricingData as any).manualAdjustments || {};
+  return {
+    positive1: defaults.positive1 ?? 0,
+    positive2: defaults.positive2 ?? 0,
+    negative1: defaults.negative1 ?? 0,
+    negative2: defaults.negative2 ?? 0,
+  };
+}
+
 export function getDefaultProposal(): Partial<Proposal> {
   return {
     proposalNumber: `PROP-${Date.now()}`,
@@ -333,6 +344,8 @@ export function getDefaultProposal(): Partial<Proposal> {
     customFeatures: getDefaultCustomFeatures(),
     masonry: getDefaultMasonry(),
     interiorFinish: getDefaultInteriorFinish(),
+    manualAdjustments: getDefaultManualAdjustments(),
+    papDiscounts: { ...(pricingData.papDiscountRates || getDefaultPAPDiscounts()) },
     costBreakdown: getDefaultCostBreakdown(),
     subtotal: 0,
     taxRate: 0,

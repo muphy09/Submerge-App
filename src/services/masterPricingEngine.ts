@@ -111,84 +111,87 @@ export class MasterPricingEngine {
     // Startup & Orientation
     let startupItems = this.calculateStartupOrientation(poolSpecs, equipment);
 
+    const appliedPapDiscounts: PAPDiscounts | undefined =
+      papDiscounts || proposal.papDiscounts || pricingData.papDiscountRates;
+
     // Apply PAP Discounts if provided
-    if (papDiscounts) {
+    if (appliedPapDiscounts) {
       // Excavation (NOT for fiberglass)
-      if (!isFiberglass && papDiscounts.excavation > 0) {
+      if (!isFiberglass && appliedPapDiscounts.excavation > 0) {
         const subtotal = excavationItems.reduce((sum, item) => sum + item.total, 0);
         excavationItems.push({
           category: 'Excavation',
           description: 'PAP Discount',
-          unitPrice: -(subtotal * papDiscounts.excavation),
+          unitPrice: -(subtotal * appliedPapDiscounts.excavation),
           quantity: 1,
-          total: -(subtotal * papDiscounts.excavation),
+          total: -(subtotal * appliedPapDiscounts.excavation),
         });
       }
 
       // Plumbing
-      if (papDiscounts.plumbing > 0) {
+      if (appliedPapDiscounts.plumbing > 0) {
         const subtotal = plumbingItems.reduce((sum, item) => sum + item.total, 0);
         plumbingItems.push({
           category: 'Plumbing',
           description: 'PAP Discount',
-          unitPrice: -(subtotal * papDiscounts.plumbing),
+          unitPrice: -(subtotal * appliedPapDiscounts.plumbing),
           quantity: 1,
-          total: -(subtotal * papDiscounts.plumbing),
+          total: -(subtotal * appliedPapDiscounts.plumbing),
         });
       }
 
       // Steel
-      if (papDiscounts.steel > 0) {
+      if (appliedPapDiscounts.steel > 0) {
         const subtotal = steelItems.reduce((sum, item) => sum + item.total, 0);
         steelItems.push({
           category: 'Steel',
           description: 'PAP Discount',
-          unitPrice: -(subtotal * papDiscounts.steel),
+          unitPrice: -(subtotal * appliedPapDiscounts.steel),
           quantity: 1,
-          total: -(subtotal * papDiscounts.steel),
+          total: -(subtotal * appliedPapDiscounts.steel),
         });
       }
 
       // Electrical
-      if (papDiscounts.electrical > 0) {
+      if (appliedPapDiscounts.electrical > 0) {
         const subtotal = electricalItems.reduce((sum, item) => sum + item.total, 0);
         electricalItems.push({
           category: 'Electrical',
           description: 'PAP Discount',
-          unitPrice: -(subtotal * papDiscounts.electrical),
+          unitPrice: -(subtotal * appliedPapDiscounts.electrical),
           quantity: 1,
-          total: -(subtotal * papDiscounts.electrical),
+          total: -(subtotal * appliedPapDiscounts.electrical),
         });
       }
 
       // Shotcrete (combined labor + material)
-      if (papDiscounts.shotcrete > 0) {
+      if (appliedPapDiscounts.shotcrete > 0) {
         const laborSubtotal = shotcrete.labor.reduce((sum, i) => sum + i.total, 0);
         const materialSubtotal = shotcrete.material.reduce((sum, i) => sum + i.total, 0);
         const combinedSubtotal = laborSubtotal + materialSubtotal;
         shotcrete.labor.push({
           category: 'Shotcrete Labor',
           description: 'PAP Discount',
-          unitPrice: -(combinedSubtotal * papDiscounts.shotcrete),
+          unitPrice: -(combinedSubtotal * appliedPapDiscounts.shotcrete),
           quantity: 1,
-          total: -(combinedSubtotal * papDiscounts.shotcrete),
+          total: -(combinedSubtotal * appliedPapDiscounts.shotcrete),
         });
       }
 
       // Tile/Coping Labor
-      if (papDiscounts.tileCopingLabor > 0) {
+      if (appliedPapDiscounts.tileCopingLabor > 0) {
         const laborSubtotal = tileCoping.labor.reduce((sum, item) => sum + item.total, 0);
         tileCoping.labor.push({
           category: 'Tile & Coping Labor',
           description: 'PAP Discount',
-          unitPrice: -(laborSubtotal * papDiscounts.tileCopingLabor),
+          unitPrice: -(laborSubtotal * appliedPapDiscounts.tileCopingLabor),
           quantity: 1,
-          total: -(laborSubtotal * papDiscounts.tileCopingLabor),
+          total: -(laborSubtotal * appliedPapDiscounts.tileCopingLabor),
         });
       }
 
       // Tile/Coping Material (ONLY on flagstone)
-      if (papDiscounts.tileCopingMaterial > 0) {
+      if (appliedPapDiscounts.tileCopingMaterial > 0) {
         let flagstoneMaterialTotal = 0;
         tileCoping.material.forEach((item) => {
           if (item.description.toLowerCase().includes('flagstone') ||
@@ -200,20 +203,20 @@ export class MasterPricingEngine {
           tileCoping.material.push({
             category: 'Tile & Coping Material',
             description: 'PAP Discount',
-            unitPrice: -(flagstoneMaterialTotal * papDiscounts.tileCopingMaterial),
+            unitPrice: -(flagstoneMaterialTotal * appliedPapDiscounts.tileCopingMaterial),
             quantity: 1,
-            total: -(flagstoneMaterialTotal * papDiscounts.tileCopingMaterial),
+            total: -(flagstoneMaterialTotal * appliedPapDiscounts.tileCopingMaterial),
           });
         }
       }
 
       // Equipment
-      if (papDiscounts.equipment > 0) {
+      if (appliedPapDiscounts.equipment > 0) {
         const subtotalBeforeTax = equipmentItems
           .filter(item => !item.description.includes('Tax'))
           .reduce((sum, i) => sum + i.total, 0);
         if (subtotalBeforeTax > 0) {
-          const discountAmount = subtotalBeforeTax * papDiscounts.equipment;
+          const discountAmount = subtotalBeforeTax * appliedPapDiscounts.equipment;
           // Insert before tax
           const taxIndex = equipmentItems.findIndex(item => item.description.includes('Tax'));
           const discountItem: CostLineItem = {
@@ -248,26 +251,26 @@ export class MasterPricingEngine {
       }
 
       // Interior Finish
-      if (papDiscounts.interiorFinish > 0) {
+      if (appliedPapDiscounts.interiorFinish > 0) {
         const laborSubtotal = interior.labor.reduce((sum, item) => sum + item.total, 0);
         interior.labor.push({
           category: 'Interior Finish',
           description: 'PAP Discount',
-          unitPrice: -(laborSubtotal * papDiscounts.interiorFinish),
+          unitPrice: -(laborSubtotal * appliedPapDiscounts.interiorFinish),
           quantity: 1,
-          total: -(laborSubtotal * papDiscounts.interiorFinish),
+          total: -(laborSubtotal * appliedPapDiscounts.interiorFinish),
         });
       }
 
       // Startup
-      if (papDiscounts.startup > 0) {
+      if (appliedPapDiscounts.startup > 0) {
         const subtotal = startupItems.reduce((sum, item) => sum + item.total, 0);
         startupItems.push({
           category: 'Start-Up / Orientation',
           description: 'PAP Discount',
-          unitPrice: -(subtotal * papDiscounts.startup),
+          unitPrice: -(subtotal * appliedPapDiscounts.startup),
           quantity: 1,
-          total: -(subtotal * papDiscounts.startup),
+          total: -(subtotal * appliedPapDiscounts.startup),
         });
       }
     }
@@ -354,15 +357,25 @@ export class MasterPricingEngine {
 
     // Get configuration values (these should come from proposal or defaults)
     const overheadMultiplier = proposal.pricing?.overheadMultiplier ?? 1.01; // 1% overhead
-    const targetMargin = proposal.pricing?.targetMargin ?? 0.733; // Excel target margin (COGS ≈ 73.3% of retail)
+    const targetMargin = proposal.pricing?.targetMargin ?? 0.7; // Excel target margin (COGS ~70% of retail)
     const discountAmount = proposal.pricing?.discountAmount ?? 0; // Manual discount
     const digCommissionRate = proposal.pricing?.digCommissionRate ?? 0.0275; // 2.75%
     const adminFeeRate = proposal.pricing?.adminFeeRate ?? 0.029; // 2.9%
     const closeoutCommissionRate = proposal.pricing?.closeoutCommissionRate ?? 0.0275; // 2.75%
+    const manualAdjustments = proposal.manualAdjustments || (pricingData as any).manualAdjustments || {
+      positive1: 0,
+      positive2: 0,
+      negative1: 0,
+      negative2: 0,
+    };
+    const manualAdjustmentsTotal =
+      (manualAdjustments.positive1 ?? 0) +
+      (manualAdjustments.positive2 ?? 0) -
+      (manualAdjustments.negative1 ?? 0) -
+      (manualAdjustments.negative2 ?? 0);
 
-    // Determine G3 upgrade cost
-    const hasG3Upgrade = interiorFinish?.finishType?.toLowerCase().includes('crystite') ?? false;
-    const g3UpgradeCost = hasG3Upgrade ? 1250 : 0;
+    // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
+    const g3UpgradeCost = 1250;
 
     // Step 1: Total costs before overhead
     const totalCostsBeforeOverhead = totals.grandTotal;
@@ -370,11 +383,11 @@ export class MasterPricingEngine {
     // Step 2: Apply overhead multiplier
     const totalCOGS = totalCostsBeforeOverhead * overheadMultiplier;
 
-    // Step 3: Calculate base retail price (divide by target margin and round up to nearest $50 to match Excel)
-    const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 50) * 50;
+    // Step 3: Calculate base retail price (divide by target margin and round up to nearest $10 to match Excel)
+    const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 10) * 10;
 
     // Step 4: Add G3 upgrade and discount
-    const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount;
+    const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount + manualAdjustmentsTotal;
 
     // Step 5: Calculate commissions and fees
     const digCommission = retailPrice * digCommissionRate;
@@ -402,6 +415,7 @@ export class MasterPricingEngine {
       closeoutCommission,
       grossProfit,
       grossProfitMargin,
+      manualAdjustmentsTotal,
     };
 
     return {

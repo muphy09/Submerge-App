@@ -14,6 +14,7 @@ import {
   getDefaultWaterFeatures,
   getDefaultCustomFeatures,
   getDefaultInteriorFinish,
+  getDefaultManualAdjustments,
 } from '../utils/proposalDefaults';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { validateProposal } from '../utils/validation';
@@ -49,11 +50,13 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import {
   getActivePricingModelMeta,
   initPricingDataStore,
+  getPricingDataSnapshot,
   setActivePricingModel,
+  subscribeToPricingData,
 } from '../services/pricingDataStore';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
-import { isSupabaseEnabled } from '../services/supabaseClient';
+import { hasSupabaseConnection } from '../services/supabaseClient';
 import {
   getSessionFranchiseCode,
   getSessionFranchiseId,
@@ -161,6 +164,7 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
     interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
     customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+    manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
     papDiscounts: input.papDiscounts || base.papDiscounts,
     costBreakdown: input.costBreakdown || base.costBreakdown,
   };
@@ -193,7 +197,22 @@ function ProposalForm() {
   const [hasEdits, setHasEdits] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
-  const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(getDefaultPAPDiscounts());
+  const [showOfflineConfirm, setShowOfflineConfirm] = useState(false);
+  const [pendingSaveMode, setPendingSaveMode] = useState<'draft' | 'submit' | null>(null);
+  const readPapDiscountsFromModel = (): PAPDiscounts => {
+    const snapshot = getPricingDataSnapshot();
+    return snapshot?.papDiscountRates ? { ...snapshot.papDiscountRates } : getDefaultPAPDiscounts();
+  };
+  const readManualAdjustmentsFromModel = () => {
+    const snapshot = getPricingDataSnapshot() as any;
+    return snapshot?.manualAdjustments
+      ? { ...snapshot.manualAdjustments }
+      : getDefaultManualAdjustments();
+  };
+  const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(readPapDiscountsFromModel());
+  const papDiscountSourceRef = useRef<'pricingModel' | 'proposal'>('pricingModel');
+  const [manualAdjustments, setManualAdjustments] = useState(readManualAdjustmentsFromModel());
+  const manualAdjustmentsSourceRef = useRef<'pricingModel' | 'proposal'>('pricingModel');
   const sectionContentRef = useRef<HTMLDivElement | null>(null);
   const createCompletionMap = () =>
     sections.reduce((acc, section) => {
@@ -206,6 +225,20 @@ function ProposalForm() {
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
 
+  const syncPapDiscountsFromModel = () => {
+    const snapshot = getPricingDataSnapshot();
+    const nextDiscounts = snapshot?.papDiscountRates ? { ...snapshot.papDiscountRates } : getDefaultPAPDiscounts();
+    setPapDiscounts(nextDiscounts);
+    papDiscountSourceRef.current = 'pricingModel';
+  };
+
+  const syncManualAdjustmentsFromModel = () => {
+    const next = readManualAdjustmentsFromModel();
+    setManualAdjustments(next);
+    manualAdjustmentsSourceRef.current = 'pricingModel';
+    setProposal((prev) => ({ ...prev, manualAdjustments: next }));
+  };
+
   const applyPricingModelSelection = async (
     modelId: string | null,
     modelName?: string | null,
@@ -215,6 +248,12 @@ function ProposalForm() {
   ) => {
     if (modelId && !skipRemote) {
       await setActivePricingModel(modelId);
+    }
+    if (papDiscountSourceRef.current !== 'proposal' || markDirty) {
+      syncPapDiscountsFromModel();
+    }
+    if (manualAdjustmentsSourceRef.current !== 'proposal' || markDirty) {
+      syncManualAdjustmentsFromModel();
     }
     setSelectedPricingModelId(modelId);
     setSelectedPricingModelName(modelName || null);
@@ -358,6 +397,20 @@ function ProposalForm() {
   }, [proposal.equipment, completedByAdvance.equipment]);
 
   useEffect(() => {
+    const unsubscribe = subscribeToPricingData((snapshot) => {
+      if (snapshot?.papDiscountRates && papDiscountSourceRef.current === 'pricingModel') {
+        setPapDiscounts(snapshot.papDiscountRates as PAPDiscounts);
+      }
+      if (snapshot?.manualAdjustments && manualAdjustmentsSourceRef.current === 'pricingModel') {
+        setManualAdjustments(snapshot.manualAdjustments as any);
+        manualAdjustmentsSourceRef.current = 'pricingModel';
+        setProposal((prev) => ({ ...prev, manualAdjustments: snapshot.manualAdjustments as any }));
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     const currentSpaType = proposal.poolSpecs?.spaType ?? 'none';
     const previousSpaType = previousSpaTypeRef.current ?? 'none';
     const spaJustAdded = previousSpaType === 'none' && currentSpaType !== 'none';
@@ -429,6 +482,17 @@ function ProposalForm() {
           // Load PAP discounts if they exist
           if (freshData.papDiscounts) {
             setPapDiscounts(freshData.papDiscounts);
+            papDiscountSourceRef.current = 'proposal';
+          } else {
+            papDiscountSourceRef.current = 'pricingModel';
+            setPapDiscounts(readPapDiscountsFromModel());
+          }
+          if (freshData.manualAdjustments) {
+            setManualAdjustments(freshData.manualAdjustments);
+            manualAdjustmentsSourceRef.current = 'proposal';
+          } else {
+            manualAdjustmentsSourceRef.current = 'pricingModel';
+            setManualAdjustments(readManualAdjustmentsFromModel());
           }
           setHasEdits(false);
         }
@@ -494,8 +558,16 @@ function ProposalForm() {
     }
   };
 
-  const handleSave = async (mode: 'draft' | 'submit'): Promise<boolean> => {
+  const handleSave = async (mode: 'draft' | 'submit', options?: { forceLocal?: boolean }): Promise<boolean> => {
     if (isSaving) return false;
+
+    const supabaseConnected = options?.forceLocal ? false : await hasSupabaseConnection();
+    if (!supabaseConnected && !options?.forceLocal) {
+      setPendingSaveMode(mode);
+      setShowOfflineConfirm(true);
+      return false;
+    }
+
     setIsSaving(true);
     try {
       if (!proposal.pricingModelId && defaultPricingModelId) {
@@ -532,43 +604,26 @@ function ProposalForm() {
         totalCost: toFiniteNumber(totals.totalCost),
       };
 
-      let persisted = false;
-      const supabaseAvailable = isSupabaseEnabled();
-      try {
-        await saveProposalRemote(finalProposal);
-        persisted = true;
-      } catch (primaryError) {
-        // If Supabase is configured, don't silently fall back to local-only saves.
-        if (supabaseAvailable) {
-          throw primaryError;
-        }
+      const saveOptions = supabaseConnected && !options?.forceLocal ? {} : { forceLocal: true };
+      const saved = await saveProposalRemote(finalProposal, saveOptions);
 
-        if (window.electron?.saveProposal) {
-          try {
-            await window.electron.saveProposal(finalProposal);
-            persisted = true;
-            console.warn('Supabase save failed; fell back to local save.', primaryError);
-          } catch (fallbackError) {
-            console.error('Failed to save proposal (primary and fallback):', primaryError, fallbackError);
-            throw fallbackError;
-          }
-        } else {
-          throw primaryError;
-        }
-      }
-
-      if (!persisted) {
-        throw new Error('Save failed');
-      }
-      setProposal(finalProposal);
+      setProposal(saved);
       setHasEdits(false);
+      const isPending = saved.syncStatus === 'pending';
       showToast({
-        type: 'success',
-        message: mode === 'submit' ? 'Proposal submitted successfully!' : 'Proposal saved successfully!',
+        type: isPending ? 'warning' : 'success',
+        message:
+          mode === 'submit'
+            ? isPending
+              ? 'Saved locally. Will submit when cloud connection returns.'
+              : 'Proposal submitted successfully!'
+            : isPending
+            ? 'Saved locally. Will sync to cloud when back online.'
+            : 'Proposal saved successfully!',
       });
 
       if (mode === 'submit') {
-        navigate(`/proposal/view/${finalProposal.proposalNumber}`);
+        navigate(`/proposal/view/${saved.proposalNumber}`);
       } else {
         navigate('/');
       }
@@ -587,6 +642,7 @@ function ProposalForm() {
       return false;
     } finally {
       setIsSaving(false);
+      setPendingSaveMode(null);
     }
   };
 
@@ -1125,14 +1181,34 @@ function ProposalForm() {
 
       {showCostBreakdownPage && (
         <CostBreakdownPage
-          proposal={{ ...proposal, papDiscounts }}
+          proposal={{ ...proposal, papDiscounts, manualAdjustments: proposal.manualAdjustments }}
           onClose={() => setShowCostBreakdownPage(false)}
-          onPAPDiscountsChange={(discounts) => {
-            setPapDiscounts(discounts);
-            updateProposal('papDiscounts', discounts);
+          onAdjustmentsChange={(adjustments) => {
+            manualAdjustmentsSourceRef.current = 'proposal';
+            setManualAdjustments(adjustments);
+            updateProposal('manualAdjustments', adjustments);
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={showOfflineConfirm}
+        title="Offline Save"
+        message="Warning: You are not connected to the cloud. Save locally instead? (Proposal will be uploaded when connection is restored)"
+        confirmLabel="Save locally"
+        cancelLabel="Go Back"
+        onConfirm={async () => {
+          setShowOfflineConfirm(false);
+          if (pendingSaveMode) {
+            await handleSave(pendingSaveMode, { forceLocal: true });
+          }
+          setPendingSaveMode(null);
+        }}
+        onCancel={() => {
+          setShowOfflineConfirm(false);
+          setPendingSaveMode(null);
+        }}
+      />
 
       <ConfirmDialog
         open={showSubmitConfirm}

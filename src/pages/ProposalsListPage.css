@@ -224,6 +224,22 @@
 .customer-name {
   font-weight: 600;
   color: #1e3a5f;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.proposal-sync-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
+  background: transparent !important;
+  border: none !important;
+  padding: 0;
+  margin: 0;
+  box-shadow: none !important;
+  display: inline-block;
 }
 
 .status-badge-table {

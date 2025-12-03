@@ -30,6 +30,7 @@ type ScalarField = {
   note?: string;
   tooltip?: string;
   prefix?: string;
+  isPercent?: boolean;
 };
 
 type ListField = {
@@ -274,13 +275,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const handleScalarChange = (field: ScalarField, value: string | boolean) => {
+    let parsed: any = value;
     if (field.type === 'number') {
-      updatePricingValue(field.path, typeof value === 'string' ? toNumber(value) : value);
+      const numericValue = typeof value === 'string' ? toNumber(value) : Number(value);
+      parsed = field.isPercent ? numericValue / 100 : numericValue;
     } else if (field.type === 'boolean') {
-      updatePricingValue(field.path, Boolean(value));
-    } else {
-      updatePricingValue(field.path, value);
+      parsed = Boolean(value);
     }
+    updatePricingValue(field.path, parsed);
     setHasChanges(true);
   };
 
@@ -312,6 +314,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const renderSectionIcon = (title: string) => {
     const icons: Record<string, JSX.Element> = {
+      'Discounts / Adjustments': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 18l12-12" />
+          <circle cx="8" cy="8" r="2.25" />
+          <circle cx="16" cy="16" r="2.25" />
+        </svg>
+      ),
       'Plans & Engineering': (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="5" y="4" width="12" height="14" rx="2" />
@@ -425,6 +434,35 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const sections: Section[] = useMemo(
     () => [
+      {
+        title: 'Discounts / Adjustments',
+        groups: [
+          {
+            title: 'Preferred Approved Provider Discounts',
+            scalars: [
+              { label: 'Excavation', path: ['papDiscountRates', 'excavation'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Plumbing', path: ['papDiscountRates', 'plumbing'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Steel', path: ['papDiscountRates', 'steel'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Electrical', path: ['papDiscountRates', 'electrical'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Shotcrete (Labor + Material)', path: ['papDiscountRates', 'shotcrete'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Tile/Coping Labor', path: ['papDiscountRates', 'tileCopingLabor'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Tile/Coping Material', path: ['papDiscountRates', 'tileCopingMaterial'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Equipment (Pre-Tax)', path: ['papDiscountRates', 'equipment'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Interior Finish Labor', path: ['papDiscountRates', 'interiorFinish'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Startup/Orientation', path: ['papDiscountRates', 'startup'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+            ],
+          },
+          {
+            title: 'Manual Retail Price Adjustments',
+            scalars: [
+              { label: 'Positive Adjustment 1', path: ['manualAdjustments', 'positive1'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
+              { label: 'Positive Adjustment 2', path: ['manualAdjustments', 'positive2'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
+              { label: 'Negative Adjustment 1', path: ['manualAdjustments', 'negative1'], type: 'number', tooltip: 'Placeholder', prefix: '-$' },
+              { label: 'Negative Adjustment 2', path: ['manualAdjustments', 'negative2'], type: 'number', tooltip: 'Placeholder', prefix: '-$' },
+            ],
+          },
+        ],
+      },
       {
         title: 'Plans & Engineering',
         groups: [
@@ -1124,11 +1162,22 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         ],
       },
     ],
-    [data.electrical.overrunThreshold, data.plumbing.gasOverrunThreshold, data.plumbing.poolOverrunThreshold, data.plumbing.spaOverrunThreshold],
+    [
+      data.electrical.overrunThreshold,
+      data.plumbing.gasOverrunThreshold,
+      data.plumbing.poolOverrunThreshold,
+      data.plumbing.spaOverrunThreshold,
+      data.papDiscountRates,
+      data.manualAdjustments,
+    ],
   );
 
   const renderScalar = (field: ScalarField) => {
     const value = getValue(data, field.path);
+    const displayValue =
+      field.type === 'number' && field.isPercent && typeof value === 'number'
+        ? value * 100
+        : value;
     if (field.type === 'boolean') {
       return (
         <label className="pricing-field">
@@ -1177,7 +1226,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           <input
             className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
             type={field.type === 'number' ? 'number' : 'text'}
-            value={typeof value === 'number' ? value : value ?? ''}
+            value={typeof displayValue === 'number' ? displayValue : displayValue ?? ''}
             onChange={(e) => handleScalarChange(field, e.target.value)}
           />
         </div>

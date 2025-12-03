@@ -14,6 +14,7 @@ import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
 import { assertDesignerAllowed, ensureAdminUser } from './services/franchiseUsersAdapter';
+import { setSupabaseContext } from './services/supabaseClient';
 import './App.css';
 
 type UserSession = {
@@ -21,7 +22,7 @@ type UserSession = {
   franchiseId: string;
   franchiseName?: string;
   franchiseCode: string;
-  role?: 'admin' | 'designer';
+  role?: 'owner' | 'admin' | 'designer';
 };
 
 const SESSION_STORAGE_KEY = 'submerge-user-session';
@@ -53,6 +54,12 @@ function AppContent() {
         const saved = JSON.parse(raw) as UserSession;
         setSession(saved);
         void loadPricingForFranchise(saved.franchiseId);
+        setSupabaseContext({
+          franchiseId: saved.franchiseId,
+          franchiseCode: saved.franchiseCode,
+          userName: saved.userName,
+          role: saved.role || 'designer',
+        });
       } else {
         setShowLogin(true);
       }
@@ -110,11 +117,21 @@ function AppContent() {
       displayName: userName,
     });
 
-    const isAdminLogin = String(franchiseCode || '').trim().toUpperCase().endsWith('-A');
+    const trimmedCode = String(franchiseCode || '').trim().toUpperCase();
+    const isOwnerLogin = trimmedCode === '1111-A';
+    const isAdminLogin = trimmedCode.endsWith('-A');
+    const nextRole: UserSession['role'] = isOwnerLogin ? 'owner' : isAdminLogin ? 'admin' : 'designer';
+
+    setSupabaseContext({
+      franchiseId: response.franchiseId,
+      franchiseCode: response.franchiseCode,
+      userName,
+      role: nextRole,
+    });
 
     // Validate or create user in Supabase
     if (isAdminLogin) {
-      await ensureAdminUser(response.franchiseId, userName);
+      await ensureAdminUser(response.franchiseId, userName, isOwnerLogin ? 'owner' : 'admin');
     } else {
       await assertDesignerAllowed(response.franchiseId, userName);
     }
@@ -124,7 +141,7 @@ function AppContent() {
       franchiseId: response.franchiseId,
       franchiseName: response.franchiseName,
       franchiseCode: response.franchiseCode,
-      role: response.role || 'designer',
+      role: nextRole,
     };
 
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
@@ -137,6 +154,7 @@ function AppContent() {
   const handleLogout = async () => {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     setSession(null);
+    setSupabaseContext({});
     setShowLogin(true);
     try {
       await loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
@@ -154,7 +172,7 @@ function AppContent() {
         <NavigationBar
           userName={session?.userName || 'User'}
           onLogout={session ? handleLogout : undefined}
-          isAdmin={(session?.role || '').toLowerCase() === 'admin'}
+          isAdmin={['owner', 'admin'].includes((session?.role || '').toLowerCase())}
         />
       )}
       <Routes>
@@ -188,7 +206,9 @@ function AppContent() {
       />
       {session && location.pathname === '/' && (
         <div className="app-session-meta">
-          <div className="app-session-line">Role: {session.role ? session.role.charAt(0).toUpperCase() + session.role.slice(1) : 'Designer'}</div>
+          <div className="app-session-line">
+            Role: {session.role ? session.role.charAt(0).toUpperCase() + session.role.slice(1) : 'Designer'}
+          </div>
           <div className="app-session-line">
             {session.franchiseName || session.franchiseCode || session.franchiseId || 'Unknown'}
           </div>

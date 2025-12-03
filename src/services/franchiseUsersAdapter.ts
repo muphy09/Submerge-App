@@ -6,7 +6,7 @@ type FranchiseUser = {
   id: string;
   franchiseId: string;
   name: string;
-  role: 'admin' | 'designer';
+  role: 'owner' | 'admin' | 'designer';
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -34,10 +34,9 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
     .from('franchise_users')
     .select('id,franchise_id,name,role,is_active,created_at,updated_at')
     .eq('franchise_id', franchiseId)
-    .order('role', { ascending: false })
     .order('name', { ascending: true });
   if (error) throw error;
-  return (data || []).map((row: any) => ({
+  const rows = (data || []).map((row: any) => ({
     id: row.id,
     franchiseId: row.franchise_id,
     name: row.name,
@@ -46,12 +45,14 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+  const weight = { owner: 2, admin: 1, designer: 0 } as Record<string, number>;
+  return rows.sort((a, b) => weight[b.role] - weight[a.role] || a.name.localeCompare(b.name));
 }
 
 export async function addFranchiseUser(payload: {
   franchiseId: string;
   name: string;
-  role?: 'admin' | 'designer';
+  role?: 'owner' | 'admin' | 'designer';
   isActive?: boolean;
 }) {
   const supabase = getSupabaseClient();
@@ -68,6 +69,20 @@ export async function addFranchiseUser(payload: {
     is_active: payload.isActive ?? true,
     updated_at: new Date().toISOString(),
   });
+  if (error) throw error;
+  return true;
+}
+
+export async function updateFranchiseUserRole(userId: string, role: 'owner' | 'admin' | 'designer') {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    requireSupabase();
+    return null;
+  }
+  const { error } = await supabase
+    .from('franchise_users')
+    .update({ role, updated_at: new Date().toISOString() })
+    .eq('id', userId);
   if (error) throw error;
   return true;
 }
@@ -147,7 +162,11 @@ export async function markDesignerProposalsDeleted(franchiseId: string, name: st
   return true;
 }
 
-export async function ensureAdminUser(franchiseId: string, name: string) {
+export async function ensureAdminUser(
+  franchiseId: string,
+  name: string,
+  targetRole: 'owner' | 'admin' = 'admin'
+) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
@@ -162,13 +181,13 @@ export async function ensureAdminUser(franchiseId: string, name: string) {
     .maybeSingle();
   if (error && error.code !== 'PGRST116') throw error;
   if (!data) {
-    await addFranchiseUser({ franchiseId, name: cleanName, role: 'admin', isActive: true });
+    await addFranchiseUser({ franchiseId, name: cleanName, role: targetRole, isActive: true });
     return;
   }
-  if (!data.is_active || data.role !== 'admin') {
+  if (!data.is_active || data.role !== targetRole) {
     await supabase
       .from('franchise_users')
-      .update({ is_active: true, role: 'admin', updated_at: new Date().toISOString() })
+      .update({ is_active: true, role: targetRole, updated_at: new Date().toISOString() })
       .eq('id', data.id);
   }
 }

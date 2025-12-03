@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { Proposal, PAPDiscounts, CostLineItem } from '../types/proposal-new';
+import { useEffect, useState } from 'react';
+import { Proposal, PAPDiscounts, CostLineItem, ManualAdjustments } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import './CostBreakdownPage.css';
 
 interface CostBreakdownPageProps {
   proposal: Partial<Proposal>;
   onClose: () => void;
-  onPAPDiscountsChange: (discounts: PAPDiscounts) => void;
+  onAdjustmentsChange?: (adjustments: ManualAdjustments) => void;
 }
 
 interface CategoryData {
@@ -17,10 +18,10 @@ interface CategoryData {
   subcategories?: { name: string; items: CostLineItem[] }[];
 }
 
-function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBreakdownPageProps) {
+function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreakdownPageProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(
-    proposal.papDiscounts || {
+  const papDiscounts: PAPDiscounts =
+    proposal.papDiscounts || pricingData.papDiscountRates || {
       excavation: 0,
       plumbing: 0,
       steel: 0,
@@ -31,11 +32,36 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
       equipment: 0,
       interiorFinish: 0,
       startup: 0,
-    }
+    };
+  const [manualAdjustments, setManualAdjustments] = useState<ManualAdjustments>(
+    proposal.manualAdjustments ||
+      (pricingData as any).manualAdjustments || {
+        positive1: 0,
+        positive2: 0,
+        negative1: 0,
+        negative2: 0,
+      }
   );
 
-  // Recalculate with current PAP discounts
-  const result = MasterPricingEngine.calculateCompleteProposal(proposal, papDiscounts);
+  const proposalForCalc: Partial<Proposal> = {
+    ...proposal,
+    manualAdjustments,
+  };
+
+  useEffect(() => {
+    setManualAdjustments(
+      proposal.manualAdjustments ||
+        (pricingData as any).manualAdjustments || {
+          positive1: 0,
+          positive2: 0,
+          negative1: 0,
+          negative2: 0,
+        }
+    );
+  }, [proposal.manualAdjustments]);
+
+  // Recalculate with current PAP discounts and manual adjustments
+  const result = MasterPricingEngine.calculateCompleteProposal(proposalForCalc, papDiscounts);
   const { costBreakdown, pricing } = result;
 
   const toggleCategory = (categoryName: string) => {
@@ -48,10 +74,11 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
     setExpandedCategories(newExpanded);
   };
 
-  const handlePAPDiscountChange = (key: keyof PAPDiscounts, value: number) => {
-    const newDiscounts = { ...papDiscounts, [key]: value / 100 }; // Convert percentage to decimal
-    setPapDiscounts(newDiscounts);
-    onPAPDiscountsChange(newDiscounts);
+  const handleAdjustmentChange = (key: keyof ManualAdjustments, rawValue: number) => {
+    const safeValue = Number.isFinite(rawValue) ? Math.max(rawValue, 0) : 0;
+    const updated: ManualAdjustments = { ...manualAdjustments, [key]: safeValue };
+    setManualAdjustments(updated);
+    onAdjustmentsChange?.(updated);
   };
 
   const formatCurrency = (amount: number): string => {
@@ -139,22 +166,25 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
 
   // Filter out empty categories
   const nonEmptyCategories = categories.filter(cat => cat.items.length > 0);
-  const papDiscountCategories = nonEmptyCategories.filter(
-    (cat) => cat.showPAPInput && cat.papDiscountKey
-  );
 
   const isAdjustmentItem = (item: CostLineItem) => {
     const desc = (item.description || '').toLowerCase();
     return desc.includes('pap discount') || desc.includes('tax');
   };
 
-  const totalPapDiscount = nonEmptyCategories.reduce((sum, cat) => {
-    const papAdjustments = cat.items.filter((item) =>
-      (item.description || '').toLowerCase().includes('pap discount')
-    );
-    const catTotal = papAdjustments.reduce((acc, item) => acc + item.total, 0);
-    return sum + catTotal;
-  }, 0);
+  const positiveTotal =
+    (manualAdjustments.positive1 || 0) + (manualAdjustments.positive2 || 0);
+  const negativeTotal =
+    (manualAdjustments.negative1 || 0) + (manualAdjustments.negative2 || 0);
+  const totalAdjustments = positiveTotal - negativeTotal;
+  const showDiscountWarning =
+    pricing.retailPrice > 0 && negativeTotal > pricing.retailPrice * 0.18;
+  const adjustmentFields: { key: keyof ManualAdjustments; label: string; sign: '+' | '-' }[] = [
+    { key: 'positive1', label: 'Positive Adjustment 1', sign: '+' },
+    { key: 'positive2', label: 'Positive Adjustment 2', sign: '+' },
+    { key: 'negative1', label: 'Negative Adjustment 1', sign: '-' },
+    { key: 'negative2', label: 'Negative Adjustment 2', sign: '-' },
+  ];
 
   const customerName =
     proposal.customerInfo?.customerName?.trim() && proposal.customerInfo.customerName.trim().length > 0
@@ -180,7 +210,7 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
               <div>
                 <p className="cost-breakdown-label">Detailed Breakdown</p>
                 <p className="cost-breakdown-helper">
-                  Expand a category to view labor/material details; adjust PAP discounts in the panel on the right.
+                  Expand a category to view labor/material details. PAP discounts reflect the active Pricing Model.
                 </p>
               </div>
             </div>
@@ -419,44 +449,45 @@ function CostBreakdownPage({ proposal, onClose, onPAPDiscountsChange }: CostBrea
                 </div>
               </div>
             </div>
-
-            {papDiscountCategories.length > 0 && (
-              <div className="pap-discount-card">
-                <div className="pap-discount-card__header">
-                  <h4>PAP Discount</h4>
-                  <span>Adjust PAP discounts for eligible categories.</span>
-                </div>
-                <div className="pap-discount-list">
-                  {papDiscountCategories.map((category) => (
-                    <div key={category.name} className="pap-discount-row">
-                      <span className="pap-discount-row__label">{category.name}</span>
-                      <div className="pap-discount-input">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          value={(papDiscounts[category.papDiscountKey!] || 0) * 100}
-                          onChange={(e) =>
-                            handlePAPDiscountChange(
-                              category.papDiscountKey!,
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                        />
-                        <span className="pap-discount-input__suffix">%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="pap-discount-total-card">
-                  <span className="pap-discount-total-label">Total PAP Discount:</span>
-                  <div className="pap-discount-total-figure">
-                    <span className="pap-discount-total-value">{formatCurrency(totalPapDiscount)}</span>
+          <div className="adjustments-card">
+            <div className="adjustments-card__header">
+              <h4>Adjustments</h4>
+              <span>Manual Retail Price changes</span>
+            </div>
+            {showDiscountWarning && (
+              <div className="adjustments-warning">Warning: over 18% threshold</div>
+            )}
+            <div className="adjustments-list">
+              {adjustmentFields.map((field) => (
+                <div key={field.key} className="adjustments-row">
+                  <span className="adjustments-row__label">{field.label}</span>
+                  <div className={`adjustments-input ${field.sign === '-' ? 'negative' : 'positive'}`}>
+                    <span className="adjustments-input__prefix">{field.sign}</span>
+                    {(() => {
+                      const current = manualAdjustments[field.key];
+                      const displayValue = current === 0 ? '' : current ?? '';
+                      return (
+                      <input
+                        type="number"
+                        step="50"
+                        inputMode="decimal"
+                        value={displayValue}
+                        placeholder="0"
+                        onChange={(e) => handleAdjustmentChange(field.key, parseFloat(e.target.value))}
+                      />
+                      );
+                    })()}
                   </div>
                 </div>
+              ))}
+            </div>
+            <div className="adjustments-total-card">
+              <span className="adjustments-total-label">Total Adjustments:</span>
+              <div className="adjustments-total-figure">
+                <span className="adjustments-total-value">{formatCurrency(totalAdjustments)}</span>
               </div>
-            )}
+            </div>
+          </div>
           </aside>
         </div>
       </div>

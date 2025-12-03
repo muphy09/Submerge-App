@@ -3,7 +3,7 @@ export type UserSession = {
   franchiseId?: string;
   franchiseName?: string;
   franchiseCode?: string;
-  role?: 'admin' | 'designer';
+  role?: 'owner' | 'admin' | 'designer';
 };
 
 export const SESSION_STORAGE_KEY = 'submerge-user-session';
@@ -28,8 +28,11 @@ export function getSessionUserName(defaultName = 'Designer') {
   return readSession()?.userName || defaultName;
 }
 
-export function getSessionRole(defaultRole: 'admin' | 'designer' = 'designer'): 'admin' | 'designer' {
+export function getSessionRole(
+  defaultRole: 'owner' | 'admin' | 'designer' = 'designer'
+): 'owner' | 'admin' | 'designer' {
   const role = readSession()?.role;
+  if (role === 'owner') return 'owner';
   if (role === 'admin') return 'admin';
   return defaultRole;
 }
