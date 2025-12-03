@@ -7,6 +7,9 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useToast } from '../components/Toast';
 import './ProposalView.css';
+import customerBreakIconImg from '../../docs/img/custbreak.png';
+import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
+import preCogsBreakIconImg from '../../docs/img/1cogbreak.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote } from '../services/proposalsAdapter';
 
@@ -393,10 +396,7 @@ function ProposalView() {
           <button className="summary-tile customer-tile" type="button" onClick={() => setShowCustomerBreakdown(true)}>
             <div className="tile-header">
               <div className="tile-icon customer-icon">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="10" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M4 16c0-3 2.5-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
+                <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
               </div>
               <div className="tile-header-text">
                 <p className="tile-title">Customer<br/>Breakdown</p>
@@ -435,17 +435,13 @@ function ProposalView() {
             </span>
           </button>
 
-          <button className="summary-tile" type="button" onClick={() => setShowCogsBreakdown(true)}>
+          <button className="summary-tile cogs-tile" type="button" onClick={() => setShowCogsBreakdown(true)}>
             <div className="tile-header">
               <div className="tile-icon cogs-icon">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M6 3h8M7 7h6M7 13h6M6 17h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M10 3v14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/>
-                </svg>
+                <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
               </div>
               <div className="tile-header-text">
-                <p className="tile-title">COGS Breakdown</p>
+                <p className="tile-title">COGS<br/>Breakdown</p>
               </div>
             </div>
             <div className="tile-content-box">
@@ -471,14 +467,10 @@ function ProposalView() {
             </span>
           </button>
 
-          <button className="summary-tile" type="button" onClick={() => setShowCogsBreakdown(true)}>
+          <button className="summary-tile pre-tile" type="button" onClick={() => setShowCogsBreakdown(true)}>
             <div className="tile-header">
               <div className="tile-icon pre-icon">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M7 10h6M10 7v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M15 5l2-2M3 17l2-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
+                <img src={preCogsBreakIconImg} alt="Pre 1% COGS breakdown icon" className="pre-break-icon" />
               </div>
               <div className="tile-header-text">
                 <p className="tile-title">Pre 1% COGS<br/>Breakdown</p>

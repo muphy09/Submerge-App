@@ -1,0 +1,7 @@
+Quick Thoughts
+
+No Electric Autoflow run input field
+
+
+If there is no spa selected, do not display the Spa Run in plumbing
+

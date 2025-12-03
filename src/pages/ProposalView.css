@@ -261,47 +261,47 @@
 }
 
 .summary-tile.warranty-tile {
-  background: linear-gradient(135deg, #1e3a5f 0%, #2c4f7c 100%);
+  background: #ffffff;
   border: 2px solid #d4af37;
-  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3);
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.25);
 }
 
 .summary-tile.warranty-tile:hover {
-  box-shadow: 0 8px 24px rgba(212, 175, 55, 0.5);
-  border-color: #f4d03f;
+  box-shadow: 0 8px 24px rgba(212, 175, 55, 0.36);
+  border-color: #c9981c;
   transform: translateY(-3px);
 }
 
 .summary-tile.warranty-tile .tile-title,
 .summary-tile.warranty-tile .metric-label,
 .summary-tile.warranty-tile .metric-value {
-  color: #ffffff;
+  color: #1a2332;
 }
 
 .summary-tile.warranty-tile .tile-link {
-  color: #f4d03f;
+  color: #b78a0c;
 }
 
 .summary-tile.warranty-tile .tile-header {
-  border-bottom-color: rgba(255, 255, 255, 0.2);
+  border-bottom-color: rgba(212, 175, 55, 0.3);
+  background: linear-gradient(135deg, #fff5d8 0%, #ffe5a4 100%);
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin: -2px -2px 14px -2px;
 }
 
 .summary-tile.warranty-tile .tile-content-box {
-  border-top-color: rgba(255, 255, 255, 0.2);
-  border-bottom-color: rgba(255, 255, 255, 0.2);
-}
-
-.summary-tile.warranty-tile .metric-divider {
-  background: rgba(255, 255, 255, 0.2);
+  border-top-color: rgba(212, 175, 55, 0.22);
+  border-bottom-color: rgba(212, 175, 55, 0.26);
 }
 
 .summary-tile.warranty-tile .tile-icon {
-  background: rgba(244, 208, 63, 0.2);
-  color: #f4d03f;
+  background: #f9e3a0;
+  color: #b78a0c;
 }
 
 .summary-tile.customer-tile {
-  background: linear-gradient(135deg, #e8f8f0 0%, #d4f1e3 100%);
+  background: #ffffff;
   border: 2px solid #52c084;
   box-shadow: 0 4px 16px rgba(82, 192, 132, 0.25);
 }
@@ -314,6 +314,10 @@
 
 .summary-tile.customer-tile .tile-header {
   border-bottom-color: rgba(82, 192, 132, 0.3);
+  background: linear-gradient(135deg, #e8f8f0 0%, #d4f1e3 100%);
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin: -2px -2px 14px -2px;
 }
 
 .summary-tile.customer-tile .tile-content-box {
@@ -332,6 +336,84 @@
 
 .summary-tile.customer-tile .tile-link {
   color: #2d8a5c;
+  font-weight: 700;
+}
+
+.summary-tile.cogs-tile {
+  background: #ffffff;
+  border: 2px solid #e08ab1;
+  box-shadow: 0 4px 16px rgba(224, 138, 177, 0.2);
+}
+
+.summary-tile.cogs-tile:hover {
+  box-shadow: 0 8px 24px rgba(224, 138, 177, 0.32);
+  border-color: #cf6f9e;
+  transform: translateY(-3px);
+}
+
+.summary-tile.cogs-tile .tile-header {
+  border-bottom-color: rgba(224, 138, 177, 0.32);
+  background: linear-gradient(135deg, #ffe9f4 0%, #ffd7ea 100%);
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin: -2px -2px 14px -2px;
+}
+
+.summary-tile.cogs-tile .tile-content-box {
+  border-top-color: rgba(224, 138, 177, 0.26);
+  border-bottom-color: rgba(224, 138, 177, 0.26);
+}
+
+.summary-tile.cogs-tile .metric-divider {
+  background: rgba(224, 138, 177, 0.26);
+}
+
+.summary-tile.cogs-tile .tile-icon {
+  background: #ffd9ea;
+  color: #c24f7d;
+}
+
+.summary-tile.cogs-tile .tile-link {
+  color: #c24f7d;
+  font-weight: 700;
+}
+
+.summary-tile.pre-tile {
+  background: #ffffff;
+  border: 2px solid #8b5cf6;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.22);
+}
+
+.summary-tile.pre-tile:hover {
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35);
+  border-color: #7544dd;
+  transform: translateY(-3px);
+}
+
+.summary-tile.pre-tile .tile-header {
+  border-bottom-color: rgba(139, 92, 246, 0.32);
+  background: linear-gradient(135deg, #f5f0ff 0%, #ebe1ff 100%);
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin: -2px -2px 14px -2px;
+}
+
+.summary-tile.pre-tile .tile-content-box {
+  border-top-color: rgba(139, 92, 246, 0.26);
+  border-bottom-color: rgba(139, 92, 246, 0.26);
+}
+
+.summary-tile.pre-tile .metric-divider {
+  background: rgba(139, 92, 246, 0.24);
+}
+
+.summary-tile.pre-tile .tile-icon {
+  background: #e6d9ff;
+  color: #6f3fcb;
+}
+
+.summary-tile.pre-tile .tile-link {
+  color: #6f3fcb;
   font-weight: 700;
 }
 
@@ -360,21 +442,61 @@
 .tile-icon.customer-icon {
   background: #e8f2fc;
   color: #4a7cbe;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+}
+
+.tile-icon.customer-icon .customer-break-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .tile-icon.cogs-icon {
-  background: #fff8e6;
-  color: #d4941c;
+  background: #f6d37a;
+  color: #b67800;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+}
+
+.tile-icon.cogs-icon .cogs-break-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .tile-icon.pre-icon {
   background: #f0e8ff;
   color: #8b5cf6;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+}
+
+.tile-icon.pre-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.tile-icon.pre-icon .pre-break-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .tile-icon.warranty-icon {
   background: #e8f9f0;
   color: #22c55e;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+}
+
+.tile-icon.warranty-icon svg {
+  width: 32px;
+  height: 32px;
 }
 
 .tile-header-text {
@@ -394,9 +516,9 @@
   display: flex;
   flex-direction: column;
   border-top: 1px solid #e8eef4;
-  border-bottom: 1px solid #e8eef4;
-  padding: 14px 0;
-  margin-bottom: 14px;
+  border-bottom: 2px solid #d0dae5;
+  padding: 8px 0 10px;
+  margin-bottom: 12px;
   width: 100%;
   align-items: stretch;
 }
@@ -415,12 +537,61 @@
   align-items: center;
   padding: 8px 0;
   width: 100%;
+  background: #fbfdff;
+}
+
+.metric-row:nth-child(even) {
+  background: #f6f9fd;
+}
+
+.metric-row + .metric-row {
+  border-top: 1px solid #e8eef4;
 }
 
 .metric-divider {
-  height: 1px;
-  background: #e8eef4;
-  margin: 0;
+  display: none;
+}
+
+/* Alternating row colors aligned to tile themes */
+.summary-tile.customer-tile .metric-row:nth-child(odd) {
+  background: #f7fcf7;
+}
+
+.summary-tile.customer-tile .metric-row:nth-child(even) {
+  background: #edf7ef;
+}
+
+.summary-tile.cogs-tile .metric-row:nth-child(odd) {
+  background: #fff3fa;
+}
+
+.summary-tile.cogs-tile .metric-row:nth-child(even) {
+  background: #ffe8f3;
+}
+
+.summary-tile.pre-tile .metric-row:nth-child(odd) {
+  background: #f7f3ff;
+}
+
+.summary-tile.pre-tile .metric-row:nth-child(even) {
+  background: #ede3ff;
+}
+
+.summary-tile.warranty-tile .tile-content-box {
+  border-top-color: rgba(212, 175, 55, 0.22);
+  border-bottom-color: rgba(212, 175, 55, 0.28);
+}
+
+.summary-tile.warranty-tile .metric-row {
+  background: #fff7e6;
+}
+
+.summary-tile.warranty-tile .metric-row:nth-child(even) {
+  background: #ffeecc;
+}
+
+.summary-tile.warranty-tile .metric-row + .metric-row {
+  border-top-color: rgba(212, 175, 55, 0.2);
 }
 
 .metric-label {
