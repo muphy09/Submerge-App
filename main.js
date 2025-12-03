@@ -71,17 +71,22 @@ const UPDATE_FEED = {
   owner: 'muphy09',
   repo: 'Submerge-App',
 };
-const CSP_HEADER = [
+const CSP_DIRECTIVES = [
   "default-src 'self'",
-  "script-src 'self'",
+  isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173"
+    : "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: file: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' http://localhost:5173 ws://localhost:5173 https://*.supabase.co",
+  isDev
+    ? "connect-src 'self' http://localhost:5173 ws://localhost:5173 https://*.supabase.co"
+    : "connect-src 'self' https://*.supabase.co",
   "media-src 'self' blob: file:",
   "object-src 'none'",
   "frame-ancestors 'none'",
-].join('; ');
+];
+const CSP_HEADER = CSP_DIRECTIVES.join('; ');
 const DEFAULT_FRANCHISE_ID = 'default';
 const DEFAULT_FRANCHISE_CODE = 'DEFAULT-CODE';
 const DEFAULT_PRICING_VERSION = 'v1';
@@ -443,11 +448,18 @@ function createWindow() {
     height: 900,
     title: APP_NAME,
     icon: iconPath,
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload-script.js'),
     },
+  });
+
+  // Show as maximized (windowed fullscreen) once ready to avoid flicker.
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
+    mainWindow.show();
   });
 
   // Enforce CSP via HTTP header so directives like frame-ancestors are honored in dev and prod.

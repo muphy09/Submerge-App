@@ -109,8 +109,11 @@ export class TileCopingDeckingCalculations {
     const isConcreteDeck = tileCopingDecking.deckingType === 'concrete';
     const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 * 1.1 : 0; // 4' band * 1.1 waste
     const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? Math.ceil(concreteBandAreaRaw / 10) * 10 : 0;
-    const concreteAddlQtyRaw = isConcreteDeck ? Math.max(0, tileCopingDecking.deckingArea - concreteBandAreaRaw) : 0;
-    const concreteAddlQty = isConcreteDeck && concreteAddlQtyRaw > 0 ? Math.ceil(concreteAddlQtyRaw / 10) * 10 : 0;
+    // Excel (TILE COPING!J35/J42) lets the addl qty go negative when the 4' band exceeds the entered deck area.
+    // Mirror that CEILING behavior instead of clamping to zero so we remove overcounted sqft.
+    const concreteAddlQtyRaw = isConcreteDeck ? tileCopingDecking.deckingArea - concreteBandAreaRaw : 0;
+    const concreteAddlQty =
+      isConcreteDeck && concreteAddlQtyRaw !== 0 ? Math.ceil(concreteAddlQtyRaw / 10) * 10 : 0;
     const deckingArea = isConcreteDeck
       ? concreteBaseQty + concreteAddlQty
       : tileCopingDecking.deckingArea * 1.05; // 5% waste for non-concrete decking
@@ -273,7 +276,7 @@ export class TileCopingDeckingCalculations {
           total: deckingMaterialRate * concreteBaseQty,
         });
       }
-      if (concreteAddlQty > 0) {
+      if (concreteAddlQty !== 0) {
         materialItems.push({
           category: 'Decking Material',
           description: 'Concrete Decking - Addl',
@@ -1381,13 +1384,33 @@ export class MasonryCalculations {
     const prices = pricingData.masonry;
     const retaining = prices.retainingWalls?.find((r: any) => r.name === excavation.retainingWallType);
 
+    const normalizeFacingKey = (facing: string): string => {
+      const key = (facing || '').toLowerCase().replace(/\s+/g, '');
+      if (key === 'panelledge' || key === 'panel-ledge') return 'panelLedge';
+      if (key === 'stackedstone' || key === 'stacked-stone') return 'stackedStone';
+      if (key === 'ledgestone') return 'ledgestone';
+      return facing;
+    };
+
+    const getRockworkMaterialWaste = (facingKey: string, hasExplicitQty: boolean): number => {
+      if (hasExplicitQty) return 1; // caller already applied waste
+      if (facingKey === 'panelLedge' || facingKey === 'stackedStone') {
+        return pricingData.tileCoping.rockworkMaterialWaste?.panelLedge ?? 1.15;
+      }
+      return 1;
+    };
+
     const addFacing = (description: string, sqft: number, facingKey: string, raised: boolean = false, materialQtyOverride?: number) => {
+      const normalizedFacing = normalizeFacingKey(facingKey);
       const laborRate = raised
-        ? (prices.labor.raisedSpaFacing as any)[facingKey] || 0
-        : (prices.labor.rbbFacing as any)[facingKey] || 0;
+        ? (prices.labor.raisedSpaFacing as any)[normalizedFacing] || 0
+        : (prices.labor.rbbFacing as any)[normalizedFacing] || 0;
       const materialRate = raised
-        ? (prices.material.raisedSpaFacing as any)[facingKey] || 0
-        : (prices.material.rbbFacing as any)[facingKey] || 0;
+        ? (prices.material.raisedSpaFacing as any)[normalizedFacing] || 0
+        : (prices.material.rbbFacing as any)[normalizedFacing] || 0;
+      const baseMaterialQty = materialQtyOverride ?? sqft;
+      const materialQty =
+        Math.round(baseMaterialQty * getRockworkMaterialWaste(normalizedFacing, materialQtyOverride !== undefined) * 100) / 100;
       labor.push({
         category: 'Masonry Labor',
         description,
@@ -1399,8 +1422,8 @@ export class MasonryCalculations {
         category: 'Masonry Material',
         description,
         unitPrice: materialRate,
-        quantity: materialQtyOverride ?? sqft,
-        total: materialRate * (materialQtyOverride ?? sqft),
+        quantity: materialQty,
+        total: materialRate * materialQty,
       });
     };
 
@@ -1416,7 +1439,7 @@ export class MasonryCalculations {
       });
 
       if (excavation.columns.facing !== 'none') {
-        const facingKey = excavation.columns.facing.replace('-', '') as keyof typeof prices.rbbFacing;
+        const facingKey = normalizeFacingKey(excavation.columns.facing) as keyof typeof prices.rbbFacing;
         const perimeter = 2 * (excavation.columns.width + excavation.columns.depth);
         const totalFacing = excavation.columns.count * perimeter * excavation.columns.height;
         addFacing(`Column ${excavation.columns.facing} Facing`, totalFacing, facingKey);
@@ -1426,7 +1449,7 @@ export class MasonryCalculations {
     // RBB facing
     excavation.rbbLevels.forEach((level) => {
       if (level.length > 0 && level.facing !== 'none') {
-        const facingKey = level.facing.replace('-', '') as keyof typeof prices.rbbFacing;
+        const facingKey = normalizeFacingKey(level.facing) as keyof typeof prices.rbbFacing;
         const sqft = level.length * (level.height / 12);
         addFacing(`${level.height}" RBB ${level.facing} Facing`, sqft, facingKey);
       }
@@ -1434,7 +1457,7 @@ export class MasonryCalculations {
 
     // Raised spa facing
     if (poolSpecs.isRaisedSpa && poolSpecs.raisedSpaFacing !== 'none') {
-      const facingKey = poolSpecs.raisedSpaFacing.replace('-', '') as keyof typeof prices.raisedSpaFacing;
+      const facingKey = normalizeFacingKey(poolSpecs.raisedSpaFacing) as keyof typeof prices.raisedSpaFacing;
       const spaPerimeter = poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs);
       const raisedHeight = 1.5; // 18 inches
       const wasteFactor = prices.raisedSpaWasteMultiplier ?? 1;

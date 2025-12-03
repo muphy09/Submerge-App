@@ -231,7 +231,7 @@ export function getDefaultInteriorFinish(): InteriorFinish {
     color: '',
     surfaceArea: 0,
     hasSpa: false,
-    hasWaterproofing: true,
+    hasWaterproofing: false,
     cost: 0,
   };
 }

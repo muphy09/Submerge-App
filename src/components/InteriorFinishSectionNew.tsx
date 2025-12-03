@@ -69,7 +69,7 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
     'HighTech Carribean Blue',
   ];
 
-  // Auto-set defaults from pool specs and enforce waterproofing + valid finish
+  // Auto-set defaults from pool specs and enforce a valid finish
   useEffect(() => {
     const updates: Partial<InteriorFinish> = {};
     if (!data.surfaceArea || data.surfaceArea <= 0) {
@@ -78,8 +78,8 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
     if (data.hasSpa !== hasSpa) {
       updates.hasSpa = hasSpa;
     }
-    if (data.hasWaterproofing !== true) {
-      updates.hasWaterproofing = true;
+    if (data.hasWaterproofing === undefined) {
+      updates.hasWaterproofing = false;
     }
     const allowedValues = finishTypes.map((f) => f.value);
     if (!allowedValues.includes(data.finishType)) {
@@ -150,6 +150,20 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
               step="1"
               placeholder={poolSurfaceArea ? poolSurfaceArea.toString() : '0'}
             />
+          </div>
+        </div>
+
+        <div className="spec-grid spec-grid-3">
+          <div className="spec-field">
+            <label className="spec-label">Waterproofing</label>
+            <label className="checkbox-inline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={data.hasWaterproofing ?? false}
+                onChange={(e) => handleChange('hasWaterproofing', e.target.checked)}
+              />
+              <span>Include waterproofing</span>
+            </label>
           </div>
         </div>
 
