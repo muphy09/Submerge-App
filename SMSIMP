@@ -1,0 +1,55 @@
+Overall flow:
+
+    Electron app detects an over-budget proposal → sends a signed alert payload to a small backend service.
+
+    Backend sends SMS (Twilio) to the configured admin for that franchise with a link to a hosted approval page.
+
+    The approval page shows the proposal cost/discount breakdown and exposes Approve / Deny actions.
+
+    Backend records the decision and updates proposal status; Electron app listens for that status change (polling or Supabase realtime) and continues the submission flow.
+
+
+
+
+ 1: Backend alert + approval APIs (small serverless/Edge function or lightweight service)
+
+    Endpoints:
+
+        POST /alert-overage: accepts {proposalId, franchiseId, amount, threshold, summary}; verifies an API key; fetches admin contact(s); generates a short-lived signed URL for approval; sends SMS with the link.
+
+        POST /proposal/decision: accepts {proposalId, decision, token}; validates signature/expiry; records status change (approved/denied) and who/when; returns success for the page to display.
+
+    Data: store admin phone per franchise, plus optional email/push tokens for future channels.
+
+    Security: HMAC/JWT-signed tokens with expiry, single-use decision IDs, audit logging.
+
+
+2:  Mobile-friendly approval page
+
+        Static or server-rendered page hosted with the backend (or a tiny PWA).
+
+        Loads proposal data (id from token), shows line items/discounts, totals, and threshold context.
+
+        Buttons call the decision endpoint; show confirmation/“already processed” states; handle expired tokens gracefully.
+
+
+3: Electron app trigger + follow-up
+
+        On proposal save/update, compare amount vs threshold (configurable per franchise).
+
+        When exceeding, POST to /alert-overage with proposal summary and franchise ID; log errors and retry lightly.
+
+        After approval/denial, update the local proposal state and continue the flow (e.g., mark submitted/send confirmation). Use Supabase realtime on the proposal record or periodic polling to detect status changes.
+
+4: Status propagation back to desktop
+
+        Supabase realtime on a proposals table (status column)
+
+        On approved/denied, refresh the proposal view, advance the submission workflow, and record the decision locally for offline parity.
+
+5: Configuration and secrets
+
+        Environment variables for SMS provider keys, signing secret, API key for the alert endpoint, and per-franchise admin contacts/thresholds.
+
+        Admin contact management can live in a simple table (franchiseId → phone/email/push token) editable in a small settings UI
+

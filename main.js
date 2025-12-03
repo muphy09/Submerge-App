@@ -25,16 +25,23 @@ let Database;
 try {
   Database = require('better-sqlite3');
 } catch (err) {
-  const logDir = app.getPath('userData');
-  const logPath = path.join(logDir, 'startup-error.log');
-  try {
-    fs.mkdirSync(logDir, { recursive: true });
-    fs.writeFileSync(logPath, `${new Date().toISOString()} Failed to load better-sqlite3\n${err.stack || err.message}\n`);
-  } catch (_) {
-    // ignore log write issues
+  // Defer error handling until app is ready if needed
+  if (app && app.getPath) {
+    const logDir = app.getPath('userData');
+    const logPath = path.join(logDir, 'startup-error.log');
+    try {
+      fs.mkdirSync(logDir, { recursive: true });
+      fs.writeFileSync(logPath, `${new Date().toISOString()} Failed to load better-sqlite3\n${err.stack || err.message}\n`);
+    } catch (_) {
+      // ignore log write issues
+    }
+    dialog.showErrorBox('Startup error', `Failed to start Submerge Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
+    app.quit();
+  } else {
+    // App not ready yet, log to console and rethrow
+    console.error('Failed to load better-sqlite3:', err);
+    throw err;
   }
-  dialog.showErrorBox('Startup error', `Failed to start Submerge Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
-  app.quit();
 }
 
 // Ensure env vars are available before any renderer/preload needs them
@@ -43,7 +50,12 @@ loadLocalEnv();
 // Handle ASAR paths correctly
 const isDev = process.env.NODE_ENV === 'development';
 // Surface the app version to the preload script without requiring package.json there
-process.env.SUBMERGE_APP_VERSION = app.getVersion();
+try {
+  process.env.SUBMERGE_APP_VERSION = app.getVersion();
+} catch (e) {
+  // Fallback to package.json if app not ready yet
+  process.env.SUBMERGE_APP_VERSION = require('./package.json').version;
+}
 let appPath = __dirname;
 let iconPath = path.join(__dirname, 'icon.ico');
 const APP_NAME = 'Submerge Proposal Builder';

@@ -10,6 +10,8 @@ import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import preCogsBreakIconImg from '../../docs/img/1cogbreak.png';
+import summaryIconImg from '../../docs/img/summary.png';
+import submergeLogo from '../../Submerge Logo.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote } from '../services/proposalsAdapter';
 
@@ -20,6 +22,7 @@ function ProposalView() {
   const [loading, setLoading] = useState(true);
   const [showCustomerBreakdown, setShowCustomerBreakdown] = useState(false);
   const [showCogsBreakdown, setShowCogsBreakdown] = useState(false);
+  const [showPreCogsBreakdown, setShowPreCogsBreakdown] = useState(false);
   const [showWarrantyBreakdown, setShowWarrantyBreakdown] = useState(false);
   const proposalRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
@@ -132,6 +135,9 @@ function ProposalView() {
   const totalCost = calculated?.totalCost ?? proposal.totalCost ?? 0;
   const pricing = calculated?.pricing ?? proposal.pricing;
   const retailPrice = pricing?.retailPrice ?? totalCost ?? subtotal ?? 0;
+  const digCommission = pricing?.digCommission ?? 0;
+  const adminFee = pricing?.adminFee ?? 0;
+  const closeoutCommission = pricing?.closeoutCommission ?? 0;
   const totalCOGS =
     pricing?.totalCOGS ??
     costBreakdownForDisplay?.totals?.grandTotal ??
@@ -156,6 +162,16 @@ function ProposalView() {
     : 0;
 
   const overheadMultiplier = pricing?.overheadMultiplier ?? 1.01;
+  const totalCOGSBeforeOverhead =
+    pricing?.totalCostsBeforeOverhead ??
+    (overheadMultiplier > 0 ? totalCOGS / overheadMultiplier : totalCOGS);
+  const totalCOGSWithoutOverhead = Math.max(totalCOGSBeforeOverhead, 0);
+  const overheadReductionFactor =
+    totalCOGS > 0 ? Math.min(Math.max(totalCOGSWithoutOverhead / totalCOGS, 0), 1) : 1;
+  const preOverheadGrossProfit = retailPrice - totalCOGSWithoutOverhead - digCommission - adminFee - closeoutCommission;
+  const overheadDifferential = totalCOGS - totalCOGSWithoutOverhead;
+  const preOverheadGrossMarginPercent =
+    retailPrice > 0 ? (preOverheadGrossProfit / retailPrice) * 100 : 0;
   const targetMargin = pricing?.targetMargin ?? 0.7;
   const costsBeforePapDiscounts = (pricing?.totalCostsBeforeOverhead ?? subtotal ?? 0) - papDiscountTotal;
   const baseRetailPriceBeforePap =
@@ -205,7 +221,7 @@ function ProposalView() {
   const spaLength = formatNumber(proposal.poolSpecs.spaLength, 'ft');
   const spaWidth = formatNumber(proposal.poolSpecs.spaWidth, 'ft');
 
-  const costLineItems: { name: string; items: CostLineItem[] }[] = costBreakdownForDisplay
+  const costLineItems: { name: string; items: CostLineItem[]; subcategories?: { name: string; items: CostLineItem[] }[] }[] = costBreakdownForDisplay
     ? [
         { name: 'Plans & Engineering', items: costBreakdownForDisplay.plansAndEngineering },
         { name: 'Layout', items: costBreakdownForDisplay.layout },
@@ -218,10 +234,18 @@ function ProposalView() {
         {
           name: 'Shotcrete',
           items: [...costBreakdownForDisplay.shotcreteLabor, ...costBreakdownForDisplay.shotcreteMaterial],
+          subcategories: [
+            { name: 'Labor', items: costBreakdownForDisplay.shotcreteLabor },
+            { name: 'Material', items: costBreakdownForDisplay.shotcreteMaterial },
+          ].filter((sub) => sub.items.length > 0),
         },
         {
           name: 'Tile',
           items: [...costBreakdownForDisplay.tileLabor, ...costBreakdownForDisplay.tileMaterial],
+          subcategories: [
+            { name: 'Labor', items: costBreakdownForDisplay.tileLabor },
+            { name: 'Material', items: costBreakdownForDisplay.tileMaterial },
+          ].filter((sub) => sub.items.length > 0),
         },
         {
           name: 'Coping/Decking',
@@ -229,6 +253,10 @@ function ProposalView() {
             ...costBreakdownForDisplay.copingDeckingLabor,
             ...costBreakdownForDisplay.copingDeckingMaterial,
           ],
+          subcategories: [
+            { name: 'Labor', items: costBreakdownForDisplay.copingDeckingLabor },
+            { name: 'Material', items: costBreakdownForDisplay.copingDeckingMaterial },
+          ].filter((sub) => sub.items.length > 0),
         },
         {
           name: 'Stone/Rockwork',
@@ -236,6 +264,10 @@ function ProposalView() {
             ...costBreakdownForDisplay.stoneRockworkLabor,
             ...costBreakdownForDisplay.stoneRockworkMaterial,
           ],
+          subcategories: [
+            { name: 'Labor', items: costBreakdownForDisplay.stoneRockworkLabor },
+            { name: 'Material', items: costBreakdownForDisplay.stoneRockworkMaterial },
+          ].filter((sub) => sub.items.length > 0),
         },
         { name: 'Drainage', items: costBreakdownForDisplay.drainage },
         { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered },
@@ -251,16 +283,208 @@ function ProposalView() {
       ].filter((category) => (category.items || []).length > 0)
     : [];
 
+  const adjustItemForNoOverhead = (item: CostLineItem): CostLineItem => ({
+    ...item,
+    unitPrice: (item.unitPrice ?? 0) * overheadReductionFactor,
+    total: (item.total ?? 0) * overheadReductionFactor,
+  });
+
+  const preOverheadCostLineItems = costLineItems.map((category) => ({
+    ...category,
+    items: category.items.map(adjustItemForNoOverhead),
+    subcategories: category.subcategories?.map((sub) => ({
+      ...sub,
+      items: sub.items.map(adjustItemForNoOverhead),
+    })),
+  }));
+
   const categoryTotal = (items: CostLineItem[] = []): number =>
     items.reduce((sum, item) => sum + (item.total ?? 0), 0);
 
+  const isTaxLineItem = (item: CostLineItem): boolean =>
+    (item.description || '').toLowerCase().includes('tax');
+
   const renderQuantity = (item: CostLineItem): string => {
-    const isTaxLine = (item.description || '').toLowerCase().includes('tax');
-    if (isTaxLine) return '';
+    if (isTaxLineItem(item)) return '';
     return (item.quantity ?? 0).toLocaleString('en-US', {
       maximumFractionDigits: 2,
       minimumFractionDigits: 0,
     });
+  };
+
+  const renderUnitPrice = (item: CostLineItem): string => {
+    if (isTaxLineItem(item)) return '';
+    return formatCurrency(item.unitPrice);
+  };
+
+  const getCategoryClassName = (categoryName: string): string => {
+    const classMap: { [key: string]: string } = {
+      'Plans & Engineering': 'pool-specs',
+      'Excavation': 'excavation',
+      'Plumbing': 'plumbing',
+      'Electrical': 'electrical',
+      'Tile': 'tile',
+      'Coping/Decking': 'tile',
+      'Drainage': 'drainage',
+      'Equipment Ordered': 'equipment',
+      'Equipment Set': 'equipment',
+      'Water Features': 'water-features',
+      'Interior Finish': 'interior',
+      'Fiberglass Shell': 'pool-specs',
+      'Fiberglass Install': 'pool-specs',
+      'Custom Features': 'custom',
+    };
+    return classMap[categoryName] || '';
+  };
+
+  const getCategoryIcon = (categoryName: string) => {
+    const iconMap: { [key: string]: JSX.Element } = {
+      'Plans & Engineering': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 3h12c.6 0 1 .4 1 1v12c0 .6-.4 1-1 1H4c-.6 0-1-.4-1-1V4c0-.6.4-1 1-1z" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+          <path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+      Layout: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+          <rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+          <rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+          <rect x="11" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      Permit: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 3h10c.6 0 1 .4 1 1v13c0 .6-.4 1-1 1H5c-.6 0-1-.4-1-1V4c0-.6.4-1 1-1z" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M7 7h6M7 10h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <circle cx="10" cy="14" r="1.5" fill="currentColor"/>
+        </svg>
+      ),
+      Excavation: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 15h14M5 15L7 8l3 3 3-3 2 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      Plumbing: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 10h4m4 0h4M10 4v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <circle cx="10" cy="10" r="2" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      Gas: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 3v6m-3 3l3-3 3 3M6 13h8v3H6z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      Steel: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 4l12 12M16 4L4 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <circle cx="10" cy="10" r="6" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      Electrical: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M11 3L6 11h5l-1 6 5-8h-5l1-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        </svg>
+      ),
+      Shotcrete: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="5" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M7 9h6M7 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+      Tile: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="6" height="6" stroke="currentColor" strokeWidth="1.5"/>
+          <rect x="11" y="3" width="6" height="6" stroke="currentColor" strokeWidth="1.5"/>
+          <rect x="3" y="11" width="6" height="6" stroke="currentColor" strokeWidth="1.5"/>
+          <rect x="11" y="11" width="6" height="6" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      'Coping/Decking': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 12h14M3 8h14M3 12v3h14v-3M3 8V5h14v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+      'Stone/Rockwork': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 15l3-6 4 2 5-7M3 16h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      Drainage: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 3v14m-3-3l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6 7h8v6H6z" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      'Equipment Ordered': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="5" width="14" height="10" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M7 9h6M7 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+      'Equipment Set': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="10" cy="10" r="6" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M10 7v3l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+      'Water Features': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 3c-2 2-3 4-3 6 0 1.7 1.3 3 3 3s3-1.3 3-3c0-2-1-4-3-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+          <path d="M4 15h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+      Cleanup: (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 6V4h6v2M4 6h12M6 6v9c0 .6.4 1 1 1h6c.6 0 1-.4 1-1V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M8 9v4M12 9v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      ),
+      'Interior Finish': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 10c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M6 10h8v6H6z" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      'Water Truck': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="6" width="11" height="7" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+          <circle cx="6" cy="15" r="1.5" stroke="currentColor" strokeWidth="1.5"/>
+          <circle cx="12" cy="15" r="1.5" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M14 9h2l1 2v2h-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      'Fiberglass Shell': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="10" cy="10" rx="7" ry="5" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M3 10h14" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      'Fiberglass Install': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 3v6m0 0L7 6m3 3l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <rect x="4" y="11" width="12" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+      ),
+      'Startup/Orientation': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M8 8l5 2-5 2V8z" fill="currentColor"/>
+        </svg>
+      ),
+      'Custom Features': (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 3l2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6l2-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+        </svg>
+      ),
+    };
+
+    return iconMap[categoryName] || (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      </svg>
+    );
   };
 
   return (
@@ -319,17 +543,15 @@ function ProposalView() {
       <div ref={proposalRef} className="proposal-summary-page">
         <h1 className="page-title">Proposal Summary</h1>
 
-        <div className="hero-card">
-          <div className="hero-header">
-            <div className="hero-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2.5c-1.5 0-3 1.5-4 3.5-1 2-2 4-2 6 0 3.3 2.7 6 6 6s6-2.7 6-6c0-2-1-4-2-6-1-2-2.5-3.5-4-3.5z" fill="currentColor"/>
-              </svg>
-            </div>
-            <div className="hero-header-text">
-              <h2 className="hero-title">
-                {customerLocation} - {proposalStatus} {dateModified}
-              </h2>
+          <div className="hero-card">
+            <div className="hero-header">
+              <div className="hero-icon">
+                <img src={summaryIconImg} alt="Proposal summary icon" className="summary-icon" />
+              </div>
+              <div className="hero-header-text">
+                <h2 className="hero-title">
+                  {customerLocation} - {proposalStatus} {dateModified}
+                </h2>
             </div>
             <div
               className={`hero-price-model ${priceModelStatus}`}
@@ -447,14 +669,24 @@ function ProposalView() {
             <div className="tile-content-box">
               <div className="tile-metrics">
                 <div className="metric-row">
-                  <p className="metric-label">Total Cost:</p>
-                  <p className="metric-value">{formatCurrency(totalCOGS)}</p>
+                  <p className="metric-label">Dig Commission:</p>
+                  <p className="metric-value">{formatCurrency(pricing?.digCommission ?? 0)}</p>
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Gross Margin:</p>
+                  <p className="metric-label">Admin Fee:</p>
+                  <p className="metric-value">{formatCurrency(pricing?.adminFee ?? 0)}</p>
+                </div>
+                <div className="metric-divider"></div>
+                <div className="metric-row">
+                  <p className="metric-label">Closeout Commission:</p>
+                  <p className="metric-value">{formatCurrency(pricing?.closeoutCommission ?? 0)}</p>
+                </div>
+                <div className="metric-divider"></div>
+                <div className="metric-row">
+                  <p className="metric-label">Gross Profit:</p>
                   <p className="metric-value">
-                    {Number.isFinite(grossMargin) ? `${grossMargin.toFixed(1)}%` : 'N/A'}
+                    {formatCurrency(pricing?.grossProfit ?? 0)} ({Number.isFinite(grossMargin) ? `${grossMargin.toFixed(1)}%` : 'N/A'})
                   </p>
                 </div>
               </div>
@@ -467,7 +699,7 @@ function ProposalView() {
             </span>
           </button>
 
-          <button className="summary-tile pre-tile" type="button" onClick={() => setShowCogsBreakdown(true)}>
+          <button className="summary-tile pre-tile" type="button" onClick={() => setShowPreCogsBreakdown(true)}>
             <div className="tile-header">
               <div className="tile-icon pre-icon">
                 <img src={preCogsBreakIconImg} alt="Pre 1% COGS breakdown icon" className="pre-break-icon" />
@@ -479,15 +711,19 @@ function ProposalView() {
             <div className="tile-content-box">
               <div className="tile-metrics">
                 <div className="metric-row">
-                  <p className="metric-label">Starting Cost:</p>
-                  <p className="metric-value">{formatCurrency(totalCOGS * 0.99)}</p>
+                  <p className="metric-label">-1% Gross Profit:</p>
+                  <p className="metric-value">
+                    {formatCurrency(preOverheadGrossProfit)} (
+                    {Number.isFinite(preOverheadGrossMarginPercent)
+                      ? `${preOverheadGrossMarginPercent.toFixed(1)}%`
+                      : 'N/A'}
+                    )
+                  </p>
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Pre-1% Margin:</p>
-                  <p className="metric-value">
-                    {Number.isFinite(grossMargin) ? `${(grossMargin + 1).toFixed(1)}%` : 'N/A'}
-                  </p>
+                  <p className="metric-label">Overhead Differential:</p>
+                  <p className="metric-value">{formatCurrency(overheadDifferential)}</p>
                 </div>
               </div>
             </div>
@@ -502,7 +738,7 @@ function ProposalView() {
           <button className="summary-tile warranty-tile" type="button" onClick={() => setShowWarrantyBreakdown(true)}>
             <div className="tile-header">
               <div className="tile-icon warranty-icon">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg width="32" height="32" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M10 2L3 5v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V5l-7-3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M7 10l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -562,51 +798,252 @@ function ProposalView() {
 
       {showCogsBreakdown && (
         <div className="modal-overlay" onClick={() => setShowCogsBreakdown(false)}>
-          <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <p className="modal-eyebrow">COGS Breakdown</p>
-                <h2>Cost of Goods Detail</h2>
+          <div className="modal-content cogs-breakdown-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-button" onClick={() => setShowCogsBreakdown(false)} aria-label="Close COGS breakdown">
+              ×
+            </button>
+
+            <div className="cogs-header-info">
+              <div className="cogs-header-content">
+                <div>
+                  <p className="cogs-header-eyebrow">COGS Cost Breakdown</p>
+                  <h2 className="cogs-header-title">Estimated Cost of Goods Sold</h2>
+                  <div className="cogs-header-details">
+                    <div className="cogs-header-detail-item">
+                      <span className="cogs-header-detail-label">Customer:</span>
+                      <span className="cogs-header-detail-value">{proposal.customerInfo.customerName}</span>
+                    </div>
+                    <div className="cogs-header-detail-item">
+                      <span className="cogs-header-detail-label">Date:</span>
+                      <span className="cogs-header-detail-value">{new Date(proposal.lastModified || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="cogs-header-logo">
+                  <img src={submergeLogo} alt="Submerge Logo" />
+                </div>
               </div>
-              <button className="modal-close" onClick={() => setShowCogsBreakdown(false)} aria-label="Close COGS breakdown">
-                x
-              </button>
             </div>
+
             <div className="modal-body-scroll">
               {costLineItems.length === 0 ? (
                 <div className="empty-state">No cost breakdown available for this proposal.</div>
               ) : (
-                <>
+                <div className="cogs-categories-grid">
                   {costLineItems.map((category) => (
-                    <div className="cogs-category" key={category.name}>
-                      <div className="cogs-category-header">
-                        <span>{category.name}</span>
-                        <span>{formatCurrency(categoryTotal(category.items))}</span>
+                    <div className={`cogs-category-card ${getCategoryClassName(category.name)}`} key={category.name}>
+                      <div className="cogs-category-card-header">
+                        <div className="cogs-category-icon">
+                          {getCategoryIcon(category.name)}
+                        </div>
+                        <div className="cogs-category-title-wrapper">
+                          <h3 className="cogs-category-title">{category.name}</h3>
+                          <div className="cogs-category-total">{formatCurrency(categoryTotal(category.items))}</div>
+                        </div>
                       </div>
-                      <table className="cogs-table">
-                        <thead>
-                          <tr>
-                            <th>Description</th>
-                            <th>Qty</th>
-                            <th>Unit Price</th>
-                            <th>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {category.items.map((item, idx) => (
-                            <tr key={`${category.name}-${idx}`}>
-                              <td>{item.description}</td>
-                              <td>{renderQuantity(item)}</td>
-                              <td>{formatCurrency(item.unitPrice)}</td>
-                              <td>{formatCurrency(item.total)}</td>
-                            </tr>
+
+                      {category.subcategories && category.subcategories.length > 0 ? (
+                        <div className="cogs-subcategories">
+                          {category.subcategories.map((subcategory) => (
+                            <div key={subcategory.name} className="cogs-subcategory">
+                              <div className="cogs-subcategory-header">
+                                <span className="cogs-subcategory-name">{subcategory.name}</span>
+                                <span className="cogs-subcategory-total">
+                                  {formatCurrency(categoryTotal(subcategory.items))}
+                                </span>
+                              </div>
+                              <table className="cogs-category-table">
+                                <colgroup>
+                                  <col style={{ width: '40%' }} />
+                                  <col style={{ width: '10%' }} />
+                                  <col style={{ width: '25%' }} />
+                                  <col style={{ width: '25%' }} />
+                                </colgroup>
+                                <thead>
+                                  <tr>
+                                    <th>Description</th>
+                                    <th>Qty</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {subcategory.items.map((item, idx) => (
+                                    <tr key={`${category.name}-${subcategory.name}-${idx}`}>
+                                      <td>{item.description}</td>
+                                      <td>{renderQuantity(item)}</td>
+                                      <td>{renderUnitPrice(item)}</td>
+                                      <td>{formatCurrency(item.total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           ))}
-                        </tbody>
-                      </table>
+                        </div>
+                      ) : (
+                        <table className="cogs-category-table">
+                          <colgroup>
+                            <col style={{ width: '40%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '25%' }} />
+                            <col style={{ width: '25%' }} />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th>Description</th>
+                              <th>Qty</th>
+                              <th>Unit Price</th>
+                              <th>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {category.items.map((item, idx) => (
+                              <tr key={`${category.name}-${idx}`}>
+                                <td>{item.description}</td>
+                                <td>{renderQuantity(item)}</td>
+                                <td>{renderUnitPrice(item)}</td>
+                                <td>{formatCurrency(item.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   ))}
-                  <div className="cogs-total">Total COGS: {formatCurrency(totalCOGS)}</div>
-                </>
+                </div>
+              )}
+              {costLineItems.length > 0 && (
+                <div className="cogs-footer">
+                  <div className="cogs-footer-text">Total COGS: {formatCurrency(totalCOGS)}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPreCogsBreakdown && (
+        <div className="modal-overlay" onClick={() => setShowPreCogsBreakdown(false)}>
+          <div className="modal-content cogs-breakdown-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close-button" onClick={() => setShowPreCogsBreakdown(false)} aria-label="Close pre-COGS breakdown">
+              A-
+            </button>
+
+            <div className="cogs-header-info">
+              <div className="cogs-header-content">
+                <div>
+                  <p className="cogs-header-eyebrow">PRE OVERHEAD COGS COST BREAKDOWN</p>
+                  <h2 className="cogs-header-title">Estimated Cost of Goods Sold (No 1% Overhead)</h2>
+                  <div className="cogs-header-details">
+                    <div className="cogs-header-detail-item">
+                      <span className="cogs-header-detail-label">Customer:</span>
+                      <span className="cogs-header-detail-value">{proposal.customerInfo.customerName}</span>
+                    </div>
+                    <div className="cogs-header-detail-item">
+                      <span className="cogs-header-detail-label">Date:</span>
+                      <span className="cogs-header-detail-value">{new Date(proposal.lastModified || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="cogs-header-logo">
+                  <img src={submergeLogo} alt="Submerge Logo" />
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-body-scroll">
+              {preOverheadCostLineItems.length === 0 ? (
+                <div className="empty-state">No cost breakdown available for this proposal.</div>
+              ) : (
+                <div className="cogs-categories-grid">
+                  {preOverheadCostLineItems.map((category) => (
+                    <div className={`cogs-category-card ${getCategoryClassName(category.name)}`} key={category.name}>
+                      <div className="cogs-category-card-header">
+                        <div className="cogs-category-icon">
+                          {getCategoryIcon(category.name)}
+                        </div>
+                        <div className="cogs-category-title-wrapper">
+                          <h3 className="cogs-category-title">{category.name}</h3>
+                          <div className="cogs-category-total">{formatCurrency(categoryTotal(category.items))}</div>
+                        </div>
+                      </div>
+
+                      {category.subcategories && category.subcategories.length > 0 ? (
+                        <div className="cogs-subcategories">
+                          {category.subcategories.map((subcategory) => (
+                            <div key={subcategory.name} className="cogs-subcategory">
+                              <div className="cogs-subcategory-header">
+                                <span className="cogs-subcategory-name">{subcategory.name}</span>
+                                <span className="cogs-subcategory-total">
+                                  {formatCurrency(categoryTotal(subcategory.items))}
+                                </span>
+                              </div>
+                              <table className="cogs-category-table">
+                                <colgroup>
+                                  <col style={{ width: '40%' }} />
+                                  <col style={{ width: '10%' }} />
+                                  <col style={{ width: '25%' }} />
+                                  <col style={{ width: '25%' }} />
+                                </colgroup>
+                                <thead>
+                                  <tr>
+                                    <th>Description</th>
+                                    <th>Qty</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {subcategory.items.map((item, idx) => (
+                                    <tr key={`${category.name}-${subcategory.name}-${idx}`}>
+                                      <td>{item.description}</td>
+                                      <td>{renderQuantity(item)}</td>
+                                      <td>{renderUnitPrice(item)}</td>
+                                      <td>{formatCurrency(item.total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <table className="cogs-category-table">
+                          <colgroup>
+                            <col style={{ width: '40%' }} />
+                            <col style={{ width: '10%' }} />
+                            <col style={{ width: '25%' }} />
+                            <col style={{ width: '25%' }} />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th>Description</th>
+                              <th>Qty</th>
+                              <th>Unit Price</th>
+                              <th>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {category.items.map((item, idx) => (
+                              <tr key={`${category.name}-${idx}`}>
+                                <td>{item.description}</td>
+                                <td>{renderQuantity(item)}</td>
+                                <td>{renderUnitPrice(item)}</td>
+                                <td>{formatCurrency(item.total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {preOverheadCostLineItems.length > 0 && (
+                <div className="cogs-footer">
+                  <div className="cogs-footer-text">TOTAL COGS (No 1% Overhead): {formatCurrency(totalCOGSWithoutOverhead)}</div>
+                </div>
               )}
             </div>
           </div>
