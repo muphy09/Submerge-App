@@ -22,7 +22,7 @@ Mid Term -
 - Custom Tile Tab
 - Fiberglass Shells
 - Performance Data for Admin overhaul
-
+- Proposal 'Complete' reconcile it, no input changes
 
 
 ---------------------------------------------------------------------------------------------------------
@@ -42,6 +42,10 @@ Confusion -
 - Columns only bill when a facing is selected; otherwise ignored (stone/rockwork)
     - Custom facing option?
 - Remodel workflow
+- Included cost workflow; what is included by default?
+- Sanitation remodel doesnt include Overhead like Pumps
+    - Some equip uses Remodel cost some use base?
+
 
 Question - 
 - Should things like Cleaner & Autofil run be inputs when entered on equip? Or stay in plumb
@@ -55,5 +59,3 @@ Question -
 ---
 Equip wrong prices
 water feature wrong price
-
-We need to change the way the Equipment prices are handled in the app. Currently, you can add and remove different equipment in the Equipment category by changing their values in the Admin Pricing Model Editor. The table used in my app is not as sophisticated as the table it is supposed to be mirroring in the Excel sheet 'EQUIP' tab. Each subcategory of Equipment should have columns for the Name, Base Price, Add. Cost, Add. Cost. This way, the base price can be input, then the costs for install & extra equipment can be added to it for the total. The retail price of the equipment should always add those 3 columns first (base price, add cost, add cost), then do the math for the retail price increase. Remember the retail increase is only applicable to the Retail Cost, so the COGS amount will be reflective of just the columns; base price, add cost, add cost, put together for the specific equipment selection total. Ensure this change is made for all the subcategories of Equipment - Pump models, Filter models, Cleaner models Heater models, Automation, and Sanitation Systems. When making this change, only carry over the Name (no model, sqft, price, etc needs to be converted, the other columns can have placeholder 0 in them for now). Ensure functionality remains with the app, and these new input fields will accurately update if changed in the Admin Pricing Model Editor

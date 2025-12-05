@@ -674,6 +674,17 @@
   transition-delay: 0.5s;
 }
 
+/* Remove number spinners in Admin Pricing Model inputs */
+.pricing-modal input[type='number']::-webkit-outer-spin-button,
+.pricing-modal input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pricing-modal input[type='number'] {
+  -moz-appearance: textfield;
+}
+
 .pricing-confirm-backdrop {
   position: fixed;
   inset: 0;

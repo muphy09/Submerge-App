@@ -254,38 +254,39 @@ const pricingData = {
     },
   },
   equipment: {
+    pumpOverheadMultiplier: 1.1, // Pumps only: (base + add1 + add2) * 1.1 before COGS
     pumps: [
-      { name: 'No Pump (Select pump)', model: 'NONE', price: 0 },
-      { name: 'Jandy 1.65HP Variable Pump', model: 'VS-1.65HP', price: 2310 },
-      { name: 'Jandy 1.85HP Variable Pump', model: 'VS-1.85HP', price: 2540 },
-      { name: 'Jandy 2.7HP Variable Pump', model: 'VS-2.7HP', price: 2174.15 },
-      { name: 'Jandy 1.0HP Single Speed Pump', model: 'SS-1.0HP', price: 1900 },
-      { name: 'Jandy 2.0HP Single Speed Pump', model: 'SS-2.0HP', price: 2060 },
+      { name: 'No Pump (Select pump)', basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy 1.65HP Variable Pump', basePrice: 2310, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy 1.85HP Variable Pump', basePrice: 2540, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy 2.7HP Variable Pump', basePrice: 2174.15, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy 1.0HP Single Speed Pump', basePrice: 1900, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy 2.0HP Single Speed Pump', basePrice: 2060, addCost1: 0, addCost2: 0 },
     ],
     filters: [
-      { name: 'No Filter (Select filter)', sqft: 0, price: 0 },
-      { name: '200 SQFT Cartridge Filter', sqft: 200, price: 1103.57 },
-      { name: '340 SQFT Cartridge Filter', sqft: 340, price: 1618.57 },
-      { name: '460 SQFT Cartridge Filter', sqft: 460, price: 1174.20 },
-      { name: '580 SQFT Cartridge Filter', sqft: 580, price: 2133.57 },
-      { name: '4.9 SQFT Sand Filter', sqft: 0, price: 1115.2 },
-      { name: '60 SQFT DE Filter', sqft: 60, price: 1224.37 },
+      { name: 'No Filter (Select filter)', sqft: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: '200 SQFT Cartridge Filter', sqft: 200, basePrice: 1103.57, addCost1: 0, addCost2: 0 },
+      { name: '340 SQFT Cartridge Filter', sqft: 340, basePrice: 1618.57, addCost1: 0, addCost2: 0 },
+      { name: '460 SQFT Cartridge Filter', sqft: 460, basePrice: 1174.20, addCost1: 0, addCost2: 0 },
+      { name: '580 SQFT Cartridge Filter', sqft: 580, basePrice: 2133.57, addCost1: 0, addCost2: 0 },
+      { name: '4.9 SQFT Sand Filter', sqft: 0, basePrice: 1115.2, addCost1: 0, addCost2: 0 },
+      { name: '60 SQFT DE Filter', sqft: 60, basePrice: 1224.37, addCost1: 0, addCost2: 0 },
     ],
     cleaners: [
-      { name: 'Polaris Epic IQ', price: 1540 },
-      { name: 'Polaris Alpha IQ', price: 1397.13 },
-      { name: 'Polaris 360 Standard', price: 1618.57 },
-      { name: 'Polaris 360 Black', price: 1677.43 },
-      { name: 'Polaris 280 w/ Booster', price: 2133.57 },
-      { name: 'No Cleaner', price: 0 },
+      { name: 'Polaris Epic IQ', basePrice: 1540, addCost1: 0, addCost2: 0 },
+      { name: 'Polaris Alpha IQ', basePrice: 1397.13, addCost1: 0, addCost2: 0 },
+      { name: 'Polaris 360 Standard', basePrice: 1618.57, addCost1: 0, addCost2: 0 },
+      { name: 'Polaris 360 Black', basePrice: 1677.43, addCost1: 0, addCost2: 0 },
+      { name: 'Polaris 280 w/ Booster', basePrice: 2133.57, addCost1: 0, addCost2: 0 },
+      { name: 'No Cleaner', basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
     heaters: [
-      { name: 'No Heater (Select heater)', btu: 0, price: 0, isVersaFlo: false },
-      { name: 'Jandy 400K BTU - VersaFlo', btu: 400000, price: 3297, isVersaFlo: true },
-      { name: 'Jandy LXI 250K BTU', btu: 250000, price: 1885, isVersaFlo: false },
-      { name: 'Jandy JXI 400K - No Bypass', btu: 400000, price: 2308, isVersaFlo: false },
-      { name: 'Jandy JXI 400K - w/ Bypass', btu: 400000, price: 2475, isVersaFlo: false },
-      { name: 'Heat Pump', btu: 0, price: 0, isVersaFlo: false },
+      { name: 'No Heater (Select heater)', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0, isVersaFlo: false },
+      { name: 'Jandy 400K BTU - VersaFlo', btu: 400000, basePrice: 3297, addCost1: 0, addCost2: 0, isVersaFlo: true },
+      { name: 'Jandy LXI 250K BTU', btu: 250000, basePrice: 1885, addCost1: 0, addCost2: 0, isVersaFlo: false },
+      { name: 'Jandy JXI 400K - No Bypass', btu: 400000, basePrice: 2308, addCost1: 0, addCost2: 0, isVersaFlo: false },
+      { name: 'Jandy JXI 400K - w/ Bypass', btu: 400000, basePrice: 2475, addCost1: 0, addCost2: 0, isVersaFlo: false },
+      { name: 'Heat Pump', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0, isVersaFlo: false },
     ],
     lights: {
       nicheLightPrice: 601, // 24 Watt - Jandy Nicheless LED (Excel)
@@ -295,22 +296,22 @@ const pricingData = {
     },
     automation: [
       // Automation prices include the 6614 base panel and any required install adders (matches EQUIP sheet rows 61-69)
-      { name: 'No Automation', price: 0, hasChemistry: false },
-      { name: '6614 APL BASE PANEL', price: 1600, hasChemistry: false },
-      { name: 'Additional JVA', price: 1800, hasChemistry: false }, // base panel + JVA
-      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', price: 2250, hasChemistry: false }, // base + 650
-      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', price: 2575, hasChemistry: false }, // base + 650 + install
-      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', price: 3025, hasChemistry: false }, // base + 1100 + install
-      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', price: 3722, hasChemistry: false }, // base + 1797 + install
-      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', price: 4525, hasChemistry: false }, // base + 2600 + install
-      { name: 'IQ Pump 01', price: 1721, hasChemistry: false }, // base + 121
+      { name: 'No Automation', basePrice: 0, addCost1: 0, addCost2: 0, hasChemistry: false },
+      { name: '6614 APL BASE PANEL', basePrice: 1600, addCost1: 0, addCost2: 0, hasChemistry: false },
+      { name: 'Additional JVA', basePrice: 1800, addCost1: 0, addCost2: 0, hasChemistry: false }, // base panel + JVA
+      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', basePrice: 2250, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 650
+      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', basePrice: 2575, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 650 + install
+      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', basePrice: 3025, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 1100 + install
+      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', basePrice: 3722, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 1797 + install
+      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', basePrice: 4525, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 2600 + install
+      { name: 'IQ Pump 01', basePrice: 1721, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 121
     ],
     automationZoneAddon: 365, // Per additional zone
     saltSystem: [
-      { name: 'Jandy AquaPure 1400', model: 'AquaPure', price: 0 },
-      { name: 'Jandy Tru-Clear', model: 'TruClear', price: 1150 },
-      { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', price: 1000 },
-      { name: 'No Salt System', model: 'None', price: 0 },
+      { name: 'Jandy AquaPure 1400', model: 'AquaPure', basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy Tru-Clear', model: 'TruClear', basePrice: 1150, addCost1: 0, addCost2: 0 },
+      { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', basePrice: 1000, addCost1: 0, addCost2: 0 },
+      { name: 'No Salt System', model: 'None', basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
     blanketReel: 0,
     solarBlanket: 0,

@@ -20,6 +20,7 @@ import {
   ManualAdjustments,
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { getEquipmentItemCost } from './equipmentCost';
 
 export function getDefaultPoolSpecs(): PoolSpecs {
   return {
@@ -145,39 +146,50 @@ export function getDefaultDrainage(): Drainage {
 }
 
 export function getDefaultEquipment(): Equipment {
-  const defaultPump =
-    pricingData.equipment.pumps.find(p => p.price === 0) || pricingData.equipment.pumps[0];
-  const defaultFilter =
-    pricingData.equipment.filters.find(f => f.price === 0) || pricingData.equipment.filters[0];
-  const defaultCleaner =
-    pricingData.equipment.cleaners.find(c => c.price === 0) || pricingData.equipment.cleaners[0];
-  const defaultHeater =
-    pricingData.equipment.heaters.find(h => h.price === 0) || pricingData.equipment.heaters[0];
-  const defaultAutomation =
-    pricingData.equipment.automation.find(a => a.price === 0) || pricingData.equipment.automation[0];
+  const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
+  const pickDefault = <T extends { name: string }>(list: T[], multiplier: number = 1) =>
+    list.find(item => getEquipmentItemCost(item as any, multiplier) === 0) || list[0];
+
+  const defaultPump = pickDefault(pricingData.equipment.pumps, pumpOverhead);
+  const defaultFilter = pickDefault(pricingData.equipment.filters, 1);
+  const defaultCleaner = pickDefault(pricingData.equipment.cleaners, 1);
+  const defaultHeater = pickDefault(pricingData.equipment.heaters, 1);
+  const defaultAutomation = pickDefault(pricingData.equipment.automation, 1);
 
   return {
     pump: {
       name: defaultPump.name,
-      model: defaultPump.model,
-      price: defaultPump.price,
+      model: (defaultPump as any).model,
+      basePrice: (defaultPump as any).basePrice,
+      addCost1: (defaultPump as any).addCost1,
+      addCost2: (defaultPump as any).addCost2,
+      price: getEquipmentItemCost(defaultPump as any, pumpOverhead),
     },
     auxiliaryPumps: [],
     filter: {
       name: defaultFilter.name,
-      sqft: defaultFilter.sqft,
-      price: defaultFilter.price,
+      sqft: (defaultFilter as any).sqft,
+      basePrice: (defaultFilter as any).basePrice,
+      addCost1: (defaultFilter as any).addCost1,
+      addCost2: (defaultFilter as any).addCost2,
+      price: getEquipmentItemCost(defaultFilter as any, equipmentOverhead),
     },
     filterQuantity: 0,
     cleaner: {
       name: defaultCleaner.name,
-      price: defaultCleaner.price,
+      basePrice: (defaultCleaner as any).basePrice,
+      addCost1: (defaultCleaner as any).addCost1,
+      addCost2: (defaultCleaner as any).addCost2,
+      price: getEquipmentItemCost(defaultCleaner as any, equipmentOverhead),
     },
     cleanerQuantity: 0,
     heater: {
       name: defaultHeater.name,
-      btu: defaultHeater.btu,
-      price: defaultHeater.price,
+      btu: (defaultHeater as any).btu,
+      basePrice: (defaultHeater as any).basePrice,
+      addCost1: (defaultHeater as any).addCost1,
+      addCost2: (defaultHeater as any).addCost2,
+      price: getEquipmentItemCost(defaultHeater as any, equipmentOverhead),
       isVersaFlo: defaultHeater.isVersaFlo,
     },
     heaterQuantity: 1,
@@ -186,7 +198,10 @@ export function getDefaultEquipment(): Equipment {
     hasSpaLight: false,
     automation: {
       name: defaultAutomation.name,
-      price: defaultAutomation.price,
+      basePrice: (defaultAutomation as any).basePrice,
+      addCost1: (defaultAutomation as any).addCost1,
+      addCost2: (defaultAutomation as any).addCost2,
+      price: getEquipmentItemCost(defaultAutomation as any, equipmentOverhead),
       zones: 0,
       hasChemistry: defaultAutomation.hasChemistry,
     },

@@ -228,39 +228,57 @@ export interface Drainage {
 
 export interface PumpSelection {
   name: string;
-  model: string;
-  price: number;
+  model?: string;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
 }
 
 export interface FilterSelection {
   name: string;
-  sqft: number;
-  price: number;
+  sqft?: number;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
 }
 
 export interface CleanerSelection {
   name: string;
-  price: number;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
 }
 
 export interface HeaterSelection {
   name: string;
-  btu: number;
-  price: number;
+  btu?: number;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
   isVersaFlo: boolean;
 }
 
 export interface AutomationSelection {
   name: string;
-  price: number;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
   zones: number; // Additional zones beyond base
   hasChemistry: boolean;
 }
 
 export interface SaltSystemSelection {
   name: string;
-  model: string;
-  price: number;
+  model?: string;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
 }
 
 export interface Equipment {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Equipment, PumpSelection } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { getEquipmentItemCost } from '../utils/equipmentCost';
 import './SectionStyles.css';
 
 interface Props {
@@ -79,38 +80,67 @@ const ButtonGroup = <T extends string | number>({
 
 function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
   const defaults = useMemo(() => {
-    const pump = pricingData.equipment.pumps.find(p => p.price === 0) || pricingData.equipment.pumps[0];
-    const filter = pricingData.equipment.filters.find(f => f.price === 0) || pricingData.equipment.filters[0];
-    const cleaner = pricingData.equipment.cleaners.find(c => c.price === 0) || pricingData.equipment.cleaners[0];
-    const heater = pricingData.equipment.heaters.find(h => h.price === 0) || pricingData.equipment.heaters[0];
-    const automation = pricingData.equipment.automation.find(a => a.price === 0) || pricingData.equipment.automation[0];
+    const byCost = <T,>(list: T[]) =>
+      list.find((item: any) => getEquipmentItemCost(item) === 0) || list[0];
+    const pump = byCost(pricingData.equipment.pumps);
+    const filter = byCost(pricingData.equipment.filters);
+    const cleaner = byCost(pricingData.equipment.cleaners);
+    const heater = byCost(pricingData.equipment.heaters);
+    const automation = byCost(pricingData.equipment.automation);
     return { pump, filter, cleaner, heater, automation };
   }, []);
 
   const selectableDefaults = useMemo(() => ({
-  pump: pricingData.equipment.pumps.find(p => !p.name.toLowerCase().includes('no pump')) || pricingData.equipment.pumps[0],
-  filter: pricingData.equipment.filters.find(f => !f.name.toLowerCase().includes('no filter')) || pricingData.equipment.filters[0],
-  heater: pricingData.equipment.heaters.find(h => !h.name.toLowerCase().includes('no heater')) || pricingData.equipment.heaters[0],
-  automation: pricingData.equipment.automation.find(a => !a.name.toLowerCase().includes('no automation')) || pricingData.equipment.automation[0],
-}), []);
+    pump: pricingData.equipment.pumps.find(p => !p.name.toLowerCase().includes('no pump')) || pricingData.equipment.pumps[0],
+    filter: pricingData.equipment.filters.find(f => !f.name.toLowerCase().includes('no filter')) || pricingData.equipment.filters[0],
+    heater: pricingData.equipment.heaters.find(h => !h.name.toLowerCase().includes('no heater')) || pricingData.equipment.heaters[0],
+    automation: pricingData.equipment.automation.find(a => !a.name.toLowerCase().includes('no automation')) || pricingData.equipment.automation[0],
+  }), []);
 
   const hasRealSelection = (name: string | undefined, placeholder: string) =>
     !!(name && !name.toLowerCase().includes(placeholder));
 
+  const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
+  const costOf = (item: any, applyPumpOverhead?: boolean) =>
+    getEquipmentItemCost(item, applyPumpOverhead ? pumpOverhead : 1);
+
   const safeData: Equipment = {
-    pump: data?.pump || { name: defaults.pump.name, model: defaults.pump.model, price: defaults.pump.price },
+    pump: data?.pump || {
+      name: defaults.pump.name,
+      model: (defaults.pump as any).model,
+      basePrice: (defaults.pump as any).basePrice,
+      addCost1: (defaults.pump as any).addCost1,
+      addCost2: (defaults.pump as any).addCost2,
+      price: costOf(defaults.pump, true),
+    },
     auxiliaryPumps:
       data?.auxiliaryPumps ||
       (data?.auxiliaryPump ? [data.auxiliaryPump] : []),
     auxiliaryPump: data?.auxiliaryPump ?? data?.auxiliaryPumps?.[0],
-    filter: data?.filter || { name: defaults.filter.name, sqft: defaults.filter.sqft, price: defaults.filter.price },
+    filter: data?.filter || {
+      name: defaults.filter.name,
+      sqft: (defaults.filter as any).sqft,
+      basePrice: (defaults.filter as any).basePrice,
+      addCost1: (defaults.filter as any).addCost1,
+      addCost2: (defaults.filter as any).addCost2,
+      price: costOf(defaults.filter),
+    },
     filterQuantity: data?.filterQuantity ?? 0,
-    cleaner: data?.cleaner || { name: defaults.cleaner.name, price: defaults.cleaner.price },
+    cleaner: data?.cleaner || {
+      name: defaults.cleaner.name,
+      basePrice: (defaults.cleaner as any).basePrice,
+      addCost1: (defaults.cleaner as any).addCost1,
+      addCost2: (defaults.cleaner as any).addCost2,
+      price: costOf(defaults.cleaner),
+    },
     cleanerQuantity: data?.cleanerQuantity ?? 0,
     heater: data?.heater || {
       name: defaults.heater.name,
-      btu: defaults.heater.btu,
-      price: defaults.heater.price,
+      btu: (defaults.heater as any).btu,
+      basePrice: (defaults.heater as any).basePrice,
+      addCost1: (defaults.heater as any).addCost1,
+      addCost2: (defaults.heater as any).addCost2,
+      price: costOf(defaults.heater),
       isVersaFlo: defaults.heater.isVersaFlo,
     },
     heaterQuantity:
@@ -120,7 +150,10 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     hasSpaLight: data?.hasSpaLight ?? false,
     automation: data?.automation || {
       name: defaults.automation.name,
-      price: defaults.automation.price,
+      basePrice: (defaults.automation as any).basePrice,
+      addCost1: (defaults.automation as any).addCost1,
+      addCost2: (defaults.automation as any).addCost2,
+      price: costOf(defaults.automation),
       zones: data?.automation?.zones ?? 0,
       hasChemistry: defaults.automation.hasChemistry,
     },
@@ -177,15 +210,25 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       updateData({
         pump: {
           name: selectedPump?.name || defaults.pump.name,
-          model: selectedPump?.model || defaults.pump.model,
-          price: selectedPump?.price ?? defaults.pump.price,
+          model: (selectedPump as any)?.model || (defaults.pump as any).model,
+          basePrice: (selectedPump as any)?.basePrice ?? (defaults.pump as any).basePrice,
+          addCost1: (selectedPump as any)?.addCost1 ?? (defaults.pump as any).addCost1,
+          addCost2: (selectedPump as any)?.addCost2 ?? (defaults.pump as any).addCost2,
+          price: costOf(selectedPump || defaults.pump, true),
         },
         auxiliaryPumps: auxiliaryPumps,
         auxiliaryPump: auxiliaryPumps[0],
       });
     } else {
       updateData({
-        pump: { name: defaults.pump.name, model: defaults.pump.model, price: defaults.pump.price },
+        pump: {
+          name: defaults.pump.name,
+          model: (defaults.pump as any).model,
+          basePrice: (defaults.pump as any).basePrice,
+          addCost1: (defaults.pump as any).addCost1,
+          addCost2: (defaults.pump as any).addCost2,
+          price: costOf(defaults.pump, true),
+        },
         auxiliaryPumps: [],
         auxiliaryPump: undefined,
       });
@@ -199,14 +242,24 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       updateData({
         filter: {
           name: selectedFilter?.name || defaults.filter.name,
-          sqft: selectedFilter?.sqft ?? defaults.filter.sqft,
-          price: selectedFilter?.price ?? defaults.filter.price,
+          sqft: (selectedFilter as any)?.sqft ?? (defaults.filter as any).sqft,
+          basePrice: (selectedFilter as any)?.basePrice ?? (defaults.filter as any).basePrice,
+          addCost1: (selectedFilter as any)?.addCost1 ?? (defaults.filter as any).addCost1,
+          addCost2: (selectedFilter as any)?.addCost2 ?? (defaults.filter as any).addCost2,
+          price: costOf(selectedFilter || defaults.filter),
         },
         filterQuantity: Math.max(safeData.filterQuantity ?? 1, 1),
       });
     } else {
       updateData({
-        filter: { name: defaults.filter.name, sqft: defaults.filter.sqft, price: defaults.filter.price },
+        filter: {
+          name: defaults.filter.name,
+          sqft: (defaults.filter as any).sqft,
+          basePrice: (defaults.filter as any).basePrice,
+          addCost1: (defaults.filter as any).addCost1,
+          addCost2: (defaults.filter as any).addCost2,
+          price: costOf(defaults.filter),
+        },
         filterQuantity: 0,
       });
     }
@@ -218,12 +271,24 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       const selected = safeData.cleaner?.name ? safeData.cleaner : defaults.cleaner;
       const baseQty = 1;
       updateData({
-        cleaner: { name: selected.name, price: selected.price },
+        cleaner: {
+          name: selected.name,
+          basePrice: (selected as any).basePrice,
+          addCost1: (selected as any).addCost1,
+          addCost2: (selected as any).addCost2,
+          price: costOf(selected),
+        },
         cleanerQuantity: Math.max(safeData.cleanerQuantity ?? baseQty, baseQty),
       });
     } else {
       updateData({
-        cleaner: { name: defaults.cleaner.name, price: defaults.cleaner.price },
+        cleaner: {
+          name: defaults.cleaner.name,
+          basePrice: (defaults.cleaner as any).basePrice,
+          addCost1: (defaults.cleaner as any).addCost1,
+          addCost2: (defaults.cleaner as any).addCost2,
+          price: costOf(defaults.cleaner),
+        },
         cleanerQuantity: 0,
       });
     }
@@ -236,8 +301,11 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       updateData({
         heater: {
           name: selected?.name || defaults.heater.name,
-          btu: selected?.btu ?? defaults.heater.btu,
-          price: selected?.price ?? defaults.heater.price,
+          btu: (selected as any)?.btu ?? (defaults.heater as any).btu,
+          basePrice: (selected as any)?.basePrice ?? (defaults.heater as any).basePrice,
+          addCost1: (selected as any)?.addCost1 ?? (defaults.heater as any).addCost1,
+          addCost2: (selected as any)?.addCost2 ?? (defaults.heater as any).addCost2,
+          price: costOf(selected || defaults.heater),
           isVersaFlo: selected?.isVersaFlo ?? defaults.heater.isVersaFlo,
         },
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
@@ -246,8 +314,11 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       updateData({
         heater: {
           name: defaults.heater.name,
-          btu: defaults.heater.btu,
-          price: defaults.heater.price,
+          btu: (defaults.heater as any).btu,
+          basePrice: (defaults.heater as any).basePrice,
+          addCost1: (defaults.heater as any).addCost1,
+          addCost2: (defaults.heater as any).addCost2,
+          price: costOf(defaults.heater),
           isVersaFlo: defaults.heater.isVersaFlo,
         },
         upgradeToVersaFlo: false,
@@ -275,7 +346,10 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       updateData({
         automation: {
           name: selected?.name || defaults.automation.name,
-          price: selected?.price ?? defaults.automation.price,
+          basePrice: (selected as any)?.basePrice ?? (defaults.automation as any).basePrice,
+          addCost1: (selected as any)?.addCost1 ?? (defaults.automation as any).addCost1,
+          addCost2: (selected as any)?.addCost2 ?? (defaults.automation as any).addCost2,
+          price: costOf(selected || defaults.automation),
           zones: safeData.automation?.zones ?? 0,
           hasChemistry: selected?.hasChemistry ?? defaults.automation.hasChemistry,
         },
@@ -285,7 +359,10 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       updateData({
         automation: {
           name: defaults.automation.name,
-          price: defaults.automation.price,
+          basePrice: (defaults.automation as any).basePrice,
+          addCost1: (defaults.automation as any).addCost1,
+          addCost2: (defaults.automation as any).addCost2,
+          price: costOf(defaults.automation),
           zones: 0,
           hasChemistry: defaults.automation.hasChemistry,
         },
@@ -304,7 +381,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
   const handlePumpChange = (name: string) => {
     const pump = pricingData.equipment.pumps.find(p => p.name === name);
     if (pump) {
-      handleChange('pump', { name: pump.name, model: pump.model, price: pump.price });
+      handleChange('pump', {
+        name: pump.name,
+        model: (pump as any).model,
+        basePrice: (pump as any).basePrice,
+        addCost1: (pump as any).addCost1,
+        addCost2: (pump as any).addCost2,
+          price: costOf(pump, true),
+      });
     }
   };
 
@@ -312,7 +396,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     const pump = pricingData.equipment.pumps.find(p => p.name === name);
     if (!pump) return;
     const next = [...auxiliaryPumps];
-    next[index] = { name: pump.name, model: pump.model, price: pump.price };
+    next[index] = {
+      name: pump.name,
+      model: (pump as any).model,
+      basePrice: (pump as any).basePrice,
+      addCost1: (pump as any).addCost1,
+      addCost2: (pump as any).addCost2,
+      price: costOf(pump),
+    };
     setAuxiliaryPumps(next);
   };
 
@@ -321,7 +412,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     const defaultPump = pricingData.equipment.pumps.find(p => !p.name.toLowerCase().includes('no pump')) || selectableDefaults.pump;
     setAuxiliaryPumps([
       ...auxiliaryPumps,
-      { name: defaultPump.name, model: defaultPump.model, price: defaultPump.price },
+      {
+        name: defaultPump.name,
+        model: (defaultPump as any).model,
+        basePrice: (defaultPump as any).basePrice,
+        addCost1: (defaultPump as any).addCost1,
+        addCost2: (defaultPump as any).addCost2,
+        price: costOf(defaultPump, true),
+      },
     ]);
   };
 
@@ -333,7 +431,17 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
   const handleFilterChange = (name: string) => {
     const filter = pricingData.equipment.filters.find(f => f.name === name);
     if (filter) {
-      updateData({ filter: { name: filter.name, sqft: filter.sqft, price: filter.price }, filterQuantity: Math.max(safeData.filterQuantity ?? 1, 1) });
+      updateData({
+        filter: {
+          name: filter.name,
+          sqft: (filter as any).sqft,
+          basePrice: (filter as any).basePrice,
+          addCost1: (filter as any).addCost1,
+          addCost2: (filter as any).addCost2,
+          price: costOf(filter),
+        },
+        filterQuantity: Math.max(safeData.filterQuantity ?? 1, 1),
+      });
     }
   };
 
@@ -342,7 +450,13 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     if (cleaner) {
       const nextQuantity = safeData.cleanerQuantity && safeData.cleanerQuantity > 0 ? safeData.cleanerQuantity : 1;
       updateData({
-        cleaner: { name: cleaner.name, price: cleaner.price },
+        cleaner: {
+          name: cleaner.name,
+          basePrice: (cleaner as any).basePrice,
+          addCost1: (cleaner as any).addCost1,
+          addCost2: (cleaner as any).addCost2,
+          price: costOf(cleaner),
+        },
         cleanerQuantity: nextQuantity,
       });
     }
@@ -352,7 +466,15 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     const heater = pricingData.equipment.heaters.find(h => h.name === name);
     if (heater) {
       updateData({
-        heater: { name: heater.name, btu: heater.btu, price: heater.price, isVersaFlo: heater.isVersaFlo },
+        heater: {
+          name: heater.name,
+          btu: (heater as any).btu,
+          basePrice: (heater as any).basePrice,
+          addCost1: (heater as any).addCost1,
+          addCost2: (heater as any).addCost2,
+          price: costOf(heater),
+          isVersaFlo: heater.isVersaFlo,
+        },
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
       });
     }
@@ -364,7 +486,10 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       updateData({
         automation: {
           name: automation.name,
-          price: automation.price,
+          basePrice: (automation as any).basePrice,
+          addCost1: (automation as any).addCost1,
+          addCost2: (automation as any).addCost2,
+          price: costOf(automation),
           zones: safeData.automation.zones,
           hasChemistry: automation.hasChemistry,
         },
@@ -379,7 +504,19 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       return;
     }
     const system = pricingData.equipment.saltSystem.find(s => s.name === name);
-    handleChange('saltSystem', system ? { name: system.name, model: system.model, price: system.price } : undefined);
+    handleChange(
+      'saltSystem',
+      system
+        ? {
+            name: system.name,
+            model: system.model,
+            basePrice: (system as any).basePrice,
+            addCost1: (system as any).addCost1,
+            addCost2: (system as any).addCost2,
+            price: costOf(system),
+          }
+        : undefined
+    );
   };
 
   return (
@@ -410,7 +547,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
                 .map(pump => ({
                   label: pump.name,
                   value: pump.name,
-                  badge: pump.price > 0 ? `$${pump.price.toLocaleString()}` : 'Included',
+                  badge: costOf(pump, true) > 0 ? `$${costOf(pump, true).toLocaleString()}` : 'Included',
                 }))}
             />
 
@@ -433,7 +570,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
                     .map(p => ({
                       label: p.name,
                       value: p.name,
-                      badge: p.price > 0 ? `$${p.price.toLocaleString()}` : 'Included',
+                      badge: costOf(p, true) > 0 ? `$${costOf(p, true).toLocaleString()}` : 'Included',
                     }))}
                 />
               </div>
@@ -471,14 +608,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
               value={safeData.filter.name}
               onChange={handleFilterChange}
               buttonClassName="filter-grid"
-              options={pricingData.equipment.filters
-                .filter(filter => !filter.name.toLowerCase().includes('no filter'))
+            options={pricingData.equipment.filters
+              .filter(filter => !filter.name.toLowerCase().includes('no filter'))
                 .map(filter => ({
                   label: `${filter.name} (${filter.sqft} sqft)`,
                   value: filter.name,
-                  badge: filter.price > 0 ? `$${filter.price.toLocaleString()}` : 'Included',
-                }))}
-            />
+                  badge: costOf(filter) > 0 ? `$${costOf(filter).toLocaleString()}` : 'Included',
+              }))}
+          />
             <div className="spec-field" style={{ maxWidth: '220px', marginTop: '12px' }}>
               <label className="spec-label">Filter Quantity</label>
               <CompactInput
@@ -515,14 +652,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
               value={safeData.cleaner.name}
               onChange={handleCleanerChange}
               buttonClassName="cleaner-row"
-              options={pricingData.equipment.cleaners
-                .filter(cleaner => !cleaner.name.toLowerCase().includes('no cleaner'))
+            options={pricingData.equipment.cleaners
+              .filter(cleaner => !cleaner.name.toLowerCase().includes('no cleaner'))
                 .map(cleaner => ({
                   label: cleaner.name,
                   value: cleaner.name,
-                  badge: cleaner.price > 0 ? `$${cleaner.price.toLocaleString()}` : 'Included',
-                }))}
-            />
+                  badge: costOf(cleaner) > 0 ? `$${costOf(cleaner).toLocaleString()}` : 'Included',
+              }))}
+          />
             <div className="spec-field" style={{ maxWidth: '220px', marginTop: '12px' }}>
               <label className="spec-label">Cleaner Quantity</label>
               <CompactInput
@@ -560,14 +697,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
                 <ButtonGroup
                   value={safeData.heater.name}
                   onChange={handleHeaterChange}
-                  options={pricingData.equipment.heaters
-                    .filter(heater => !heater.name.toLowerCase().includes('no heater'))
+                options={pricingData.equipment.heaters
+                  .filter(heater => !heater.name.toLowerCase().includes('no heater'))
                     .map(heater => ({
                       label: heater.name,
                       value: heater.name,
-                      badge: heater.price > 0 ? `$${heater.price.toLocaleString()}` : 'Included',
-                    }))}
-                />
+                      badge: costOf(heater) > 0 ? `$${costOf(heater).toLocaleString()}` : 'Included',
+                  }))}
+              />
               </div>
               <div className="spec-field" style={{ maxWidth: '220px' }}>
                 <label className="spec-label">Heater Quantity</label>
@@ -685,14 +822,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
                 value={safeData.automation.name}
                 onChange={handleAutomationChange}
                 buttonClassName="automation-grid"
-                options={pricingData.equipment.automation
-                  .filter(auto => !auto.name.toLowerCase().includes('no automation'))
+              options={pricingData.equipment.automation
+                .filter(auto => !auto.name.toLowerCase().includes('no automation'))
                   .map(auto => ({
                     label: auto.name,
                     value: auto.name,
-                    badge: auto.price > 0 ? `$${auto.price.toLocaleString()}` : 'Included',
-                  }))}
-              />
+                    badge: costOf(auto) > 0 ? `$${costOf(auto).toLocaleString()}` : 'Included',
+                }))}
+            />
             </div>
 
             <div className="spec-grid spec-grid-2" style={{ marginTop: '12px' }}>
@@ -747,14 +884,14 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
               <ButtonGroup
                 value={safeData.saltSystem?.name || ''}
                 onChange={(val) => handleSaltSystemChange(val || undefined)}
-                options={pricingData.equipment.saltSystem
-                  .filter(system => !system.name.toLowerCase().includes('no salt'))
+            options={pricingData.equipment.saltSystem
+              .filter(system => !system.name.toLowerCase().includes('no salt'))
                   .map(system => ({
                     label: system.name,
                     value: system.name,
-                    badge: system.price > 0 ? `$${system.price.toLocaleString()}` : 'Included',
+                    badge: costOf(system) > 0 ? `$${costOf(system).toLocaleString()}` : 'Included',
                   }))}
-              />
+            />
             </div>
         )}
       </div>

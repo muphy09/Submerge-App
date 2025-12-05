@@ -16,6 +16,7 @@ import {
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
 } from '../utils/proposalDefaults';
+import { getEquipmentItemCost } from '../utils/equipmentCost';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { validateProposal } from '../utils/validation';
 import PoolSpecsSectionNew from '../components/PoolSpecsSectionNew';
@@ -353,6 +354,7 @@ function ProposalForm() {
 
   const computeHasEquipmentData = (equipment?: Proposal['equipment']) => {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
+    const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
     if (!equipment) return false;
     return (
       hasPositive(equipment.totalCost) ||
@@ -365,12 +367,12 @@ function ProposalForm() {
       hasPositive(equipment.automationQuantity) ||
       (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0) ||
       !!equipment.auxiliaryPump ||
-      hasPositive(equipment.pump?.price) ||
-      hasPositive(equipment.filter?.price) ||
-      hasPositive(equipment.cleaner?.price) ||
-      hasPositive(equipment.heater?.price) ||
-      hasPositive(equipment.automation?.price) ||
-      hasPositive(equipment.saltSystem?.price) ||
+      hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead)) ||
+      hasPositive(getEquipmentItemCost(equipment.filter as any, 1)) ||
+      hasPositive(getEquipmentItemCost(equipment.cleaner as any, 1)) ||
+      hasPositive(getEquipmentItemCost(equipment.heater as any, 1)) ||
+      hasPositive(getEquipmentItemCost(equipment.automation as any, 1)) ||
+      hasPositive(getEquipmentItemCost(equipment.saltSystem as any, 1)) ||
       equipment.hasBlanketReel ||
       equipment.hasSolarBlanket ||
       equipment.hasAutoFill ||
