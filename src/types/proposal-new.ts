@@ -354,24 +354,14 @@ export interface Masonry {
 // INTERIOR FINISH
 // ============================================================================
 
-export type InteriorFinishType =
-  | 'pebble-tec-l1'
-  | 'pebble-tec-l2'
-  | 'pebble-tec-l3'
-  | 'pebble-sheen-l1'
-  | 'pebble-sheen-l2'
-  | 'pebble-sheen-l3'
-  | 'pebble-fina-l1'
-  | 'pebble-fina-l2'
-  | 'pebble-brilliance'
-  | 'pebble-breeze';
+export type InteriorFinishType = string;
 
 export interface InteriorFinish {
   finishType: InteriorFinishType;
   color: string;
   surfaceArea: number; // Auto-calculated from pool specs
   hasSpa: boolean;
-  hasWaterproofing?: boolean; // Optional waterproofing line item
+  hasWaterproofing?: boolean; // Auto-managed; gunite pools always include waterproofing
   cost: number; // Auto-calculated
 }
 

@@ -2,7 +2,8 @@
 
 ## [1.8.0]
 ### Changed
-- New Proposal Summary screen
+- New 'Tile style' Proposal Summary screen
+    - Different breakdown views 
 - PAP Discount moved to Price Model
 - Manual Adjustments added
 - RLS Security in database

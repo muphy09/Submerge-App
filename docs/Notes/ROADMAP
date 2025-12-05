@@ -3,6 +3,11 @@ Short Term -
 - Pricing model comparison breakdown
 - Auto update without being public
 - Logo upload option for admin, makes available for franchise
+- Admin Pricing Menu Redesign
+- Equip (after redo) show price difference from included as cost, not full cost
+- Equip Lightight infinite water color
+- Cost Breakdown has Swap View button for COGS breakdown and Retail Breakdown
+
 
 
 
@@ -16,6 +21,8 @@ Mid Term -
 - Exposed pool wall
 - Custom Tile Tab
 - Fiberglass Shells
+- Performance Data for Admin overhaul
+
 
 
 ---------------------------------------------------------------------------------------------------------
@@ -30,6 +37,23 @@ Long Term -
 
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)
-- Spa Prep ($250) never included in COST-NEW (INTD31-34)?
+- Spa Prep ($250) never included in COST-NEW (INTD25)?
 - Waterproofing not included (Daisy?)
+- Columns only bill when a facing is selected; otherwise ignored (stone/rockwork)
+    - Custom facing option?
+- Remodel workflow
 
+Question - 
+- Should things like Cleaner & Autofil run be inputs when entered on equip? Or stay in plumb
+- Should Water Features (costs) be grouped into Equip cost breakdown (like excel) or separate like the app now
+- What other information can be included in the large Tile in proposal summary?
+
+- Find where equip additonal acc ties into
+
+
+
+---
+Equip wrong prices
+water feature wrong price
+
+We need to change the way the Equipment prices are handled in the app. Currently, you can add and remove different equipment in the Equipment category by changing their values in the Admin Pricing Model Editor. The table used in my app is not as sophisticated as the table it is supposed to be mirroring in the Excel sheet 'EQUIP' tab. Each subcategory of Equipment should have columns for the Name, Base Price, Add. Cost, Add. Cost. This way, the base price can be input, then the costs for install & extra equipment can be added to it for the total. The retail price of the equipment should always add those 3 columns first (base price, add cost, add cost), then do the math for the retail price increase. Remember the retail increase is only applicable to the Retail Cost, so the COGS amount will be reflective of just the columns; base price, add cost, add cost, put together for the specific equipment selection total. Ensure this change is made for all the subcategories of Equipment - Pump models, Filter models, Cleaner models Heater models, Automation, and Sanitation Systems. When making this change, only carry over the Name (no model, sqft, price, etc needs to be converted, the other columns can have placeholder 0 in them for now). Ensure functionality remains with the app, and these new input fields will accurately update if changed in the Admin Pricing Model Editor

@@ -378,9 +378,10 @@
 }
 
 .pricing-section__body--open {
-  max-height: 1600px;
+  max-height: none; /* allow very tall categories (e.g., Equipment) to expand fully */
   opacity: 1;
   padding: 0;
+  overflow: visible;
 }
 
 .pricing-section__body--closed {
@@ -574,6 +575,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 420px;
+  overflow: auto;
 }
 
 .base-ranges-card {

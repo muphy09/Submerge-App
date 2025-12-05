@@ -18,6 +18,15 @@ const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   return hasGuniteDimensions || hasFiberglassSelection || hasSpaDefinition;
 };
 
+/**
+ * Excel-style CEILING that guards against floating point noise (e.g., 440.00000000000006 -> 440 instead of 450).
+ */
+const ceilToStep = (value: number, step: number): number => {
+  if (step === 0) return value;
+  const adjusted = Math.ceil(value / step - 1e-9) * step;
+  return adjusted === 0 ? 0 : adjusted;
+};
+
 // ============================================================================
 // HELPER CALCULATIONS
 // ============================================================================
@@ -55,7 +64,7 @@ export class PoolCalculations {
       }
     }
 
-    const gallons = Math.ceil((baseGallons + spaGallons) / 10) * 10 - tanningShelfDeduction;
+    const gallons = ceilToStep(baseGallons + spaGallons, 10) - tanningShelfDeduction;
     return Math.max(0, gallons);
   }
 
@@ -108,12 +117,12 @@ export class TileCopingDeckingCalculations {
       Math.ceil(poolSpecs.perimeter * 1.1 + spaPerimeter * 2.15);
     const isConcreteDeck = tileCopingDecking.deckingType === 'concrete';
     const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 * 1.1 : 0; // 4' band * 1.1 waste
-    const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? Math.ceil(concreteBandAreaRaw / 10) * 10 : 0;
+    const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? ceilToStep(concreteBandAreaRaw, 10) : 0;
     // Excel (TILE COPING!J35/J42) lets the addl qty go negative when the 4' band exceeds the entered deck area.
     // Mirror that CEILING behavior instead of clamping to zero so we remove overcounted sqft.
     const concreteAddlQtyRaw = isConcreteDeck ? tileCopingDecking.deckingArea - concreteBandAreaRaw : 0;
     const concreteAddlQty =
-      isConcreteDeck && concreteAddlQtyRaw !== 0 ? Math.ceil(concreteAddlQtyRaw / 10) * 10 : 0;
+      isConcreteDeck ? ceilToStep(concreteAddlQtyRaw, 10) : 0;
     const deckingArea = isConcreteDeck
       ? concreteBaseQty + concreteAddlQty
       : tileCopingDecking.deckingArea * 1.05; // 5% waste for non-concrete decking
@@ -908,13 +917,15 @@ export class InteriorFinishCalculations {
     const interiorArea =
       ((poolSpecs.shallowDepth + poolSpecs.endDepth) / 2) * poolSpecs.perimeter + poolSpecs.surfaceArea;
     const chargeArea = Math.max(interiorArea, prices.minimumChargeSqft ?? 850);
-    const materialRate = this.getMaterialRate(interiorFinish.finishType, prices);
+    const finish = this.getFinish(prices, interiorFinish.finishType);
+    const finishName = finish?.name || interiorFinish.finishType || 'Interior Finish';
+    const materialRate = finish?.costPerSqft ?? 0;
     const baseCost = Math.ceil(materialRate * chargeArea); // Excel uses ROUNDUP with 0 decimals (COST-NEW!D285)
 
     // Base finish line
     laborItems.push({
       category: 'Interior Finish',
-      description: `${interiorFinish.finishType} Finish`,
+      description: `${finishName} Finish`,
       unitPrice: materialRate,
       quantity: chargeArea,
       total: baseCost,
@@ -924,11 +935,11 @@ export class InteriorFinishCalculations {
     if (isGuniteSpa && interiorFinish.hasSpa) {
       laborItems.push({
         category: 'Interior Finish',
-        description: 'Spa Finish',
-        unitPrice: prices.material.spaFinish,
-        quantity: 1,
-        total: prices.material.spaFinish,
-      });
+      description: 'Spa Finish',
+      unitPrice: finish?.spaFinishCost ?? 0,
+      quantity: 1,
+      total: finish?.spaFinishCost ?? 0,
+    });
     }
 
     // Pool prep up to 1,200 + overage
@@ -990,8 +1001,8 @@ export class InteriorFinishCalculations {
       });
     }
 
-    // Waterproofing (if applicable)
-    if (interiorFinish.hasWaterproofing && poolSpecs.poolType === 'gunite') {
+    // Waterproofing (always applied for gunite pools)
+    if (poolSpecs.poolType === 'gunite') {
       const waterproofRate = prices.extras.waterproofingPerSqft ?? 0;
       const spaPerimeter = isGuniteSpa ? (poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs)) : 0;
       const spaWaterproofSqft = spaPerimeter * 3.45; // matches INT sheet values (28 lnft -> 96.6 sqft)
@@ -1061,19 +1072,13 @@ export class InteriorFinishCalculations {
   }
 
   private static getMaterialRate(finishType: string, prices: any): number {
-    const mapping: Record<string, number> = {
-      'pebble-tec-l1': prices.material.pebbleTecL1,
-      'pebble-tec-l2': prices.material.pebbleTecL2,
-      'pebble-tec-l3': prices.material.pebbleTecL3,
-      'pebble-sheen-l1': prices.material.pebbleSheenL1,
-      'pebble-sheen-l2': prices.material.pebbleSheenL2,
-      'pebble-sheen-l3': prices.material.pebbleSheenL3,
-      'pebble-fina-l1': prices.material.pebbleFinaL1,
-      'pebble-fina-l2': prices.material.pebbleFinaL2,
-      'pebble-brilliance': prices.material.pebbleBrilliance,
-      'pebble-breeze': prices.material.pebbleBreeze,
-    };
-    return mapping[finishType] || 0;
+    return this.getFinish(prices, finishType)?.costPerSqft ?? 0;
+  }
+
+  private static getFinish(prices: any, finishType: string | undefined) {
+    if (!finishType) return undefined;
+    return (prices.finishes || []).find((finish: any) => finish.id === finishType) ||
+      (prices.finishes || []).find((finish: any) => finish.name === finishType);
   }
 }
 
@@ -1427,8 +1432,9 @@ export class MasonryCalculations {
       });
     };
 
-    // Columns
-    if (excavation.columns.count > 0) {
+    // Columns (only bill when a facing is selected, mirroring NEW POOL!C40 gating)
+    const hasColumnFacingSelected = !!(excavation.columns.facing && excavation.columns.facing !== 'none');
+    if (excavation.columns.count > 0 && hasColumnFacingSelected) {
       const totalHeight = excavation.columns.count * excavation.columns.height;
       labor.push({
         category: 'Masonry Labor',
@@ -1438,12 +1444,10 @@ export class MasonryCalculations {
         total: prices.columnBase * totalHeight,
       });
 
-      if (excavation.columns.facing !== 'none') {
-        const facingKey = normalizeFacingKey(excavation.columns.facing) as keyof typeof prices.rbbFacing;
-        const perimeter = 2 * (excavation.columns.width + excavation.columns.depth);
-        const totalFacing = excavation.columns.count * perimeter * excavation.columns.height;
-        addFacing(`Column ${excavation.columns.facing} Facing`, totalFacing, facingKey);
-      }
+      const facingKey = normalizeFacingKey(excavation.columns.facing) as keyof typeof prices.rbbFacing;
+      const perimeter = 2 * (excavation.columns.width + excavation.columns.depth);
+      const totalFacing = excavation.columns.count * perimeter * excavation.columns.height;
+      addFacing(`Column ${excavation.columns.facing} Facing`, totalFacing, facingKey);
     }
 
     // RBB facing

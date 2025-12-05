@@ -602,9 +602,10 @@ export class MasterPricingEngine {
       total: prices.base,
     });
 
-    // Add automation fee if automation is present
-    const hasSpa = CalculationModules.Pool.hasSpa(poolSpecs);
-    if (hasSpa && equipment?.automation) {
+    // Add automation fee if automation is present (mirrors MISC!Add Automation tied to NEW POOL!B131)
+    const automationQty = Math.max(equipment?.automationQuantity ?? 0, 0);
+    const hasAutomation = automationQty > 0 && !!equipment?.automation;
+    if (hasAutomation) {
       items.push({
         category: 'Start-Up / Orientation',
         description: 'Add Automation',

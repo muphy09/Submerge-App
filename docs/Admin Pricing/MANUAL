@@ -347,7 +347,7 @@ Inputs and how they apply (fields that affect calculations)
 - Misc (`pricingData.interiorFinish.extras.misc`): Always added once; quantity 1 (`src/services/pricingEngineComplete.ts:948-955`).
 - Travel (`pricingData.interiorFinish.extras.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity = travel distance (`src/services/pricingEngineComplete.ts:956-964`).
 - Step detail over 20 (`pricingData.interiorFinish.extras.stepDetailPerLnftOver20`): Added when `totalStepsAndBench > 20`; quantity = steps over 20 (`src/services/pricingEngineComplete.ts:966-975`).
-- Waterproofing (`pricingData.interiorFinish.extras.waterproofingPerSqft`, `waterproofingRaisedSpa`): Added when `interiorFinish.hasWaterproofing` is true for gunite pools. Quantity = interior area + spa waterproof sqft (spa perimeter * 3.45). Raised spa adds a separate line (`src/services/pricingEngineComplete.ts:978-1000`).
+- Waterproofing (`pricingData.interiorFinish.extras.waterproofingPerSqft`, `waterproofingRaisedSpa`): Added automatically for gunite pools. Quantity = interior area + spa waterproof sqft (spa perimeter * 3.45). Raised spa adds a separate line (`src/services/pricingEngineComplete.ts:978-1000`).
 - Fittings (drains/returns/hydro) flat amount: Calculated from equipment pump counts; added as a single line with unit price = total fittings cost, quantity 1 (`src/services/pricingEngineComplete.ts:1003-1024`).
 - Water truck (`pricingData.interiorFinish.waterTruck.base`, `loadSizeGallons`): Loads = `ceil(gallons / loadSizeGallons)`, where gallons come from `PoolCalculations.calculateGallons`. Added as separate items under category `Water Truck` (`src/services/pricingEngineComplete.ts:1027-1043`).
 
@@ -360,7 +360,7 @@ Where the charges flow
 Edge behaviors and guardrails
 - No charges for fiberglass pools. Gunite-only.
 - Charge area floors at `minimumChargeSqft`, so small pools still pay at least the minimum area.
-- Waterproofing requires the explicit `hasWaterproofing` flag; raised spa waterproofing is a separate add-on.
+- Waterproofing is always included for gunite pools; raised spa waterproofing is added automatically when the spa is raised.
 - Water truck loads scale with calculated gallons; set pool specs accurately to avoid over/under charging.
 
 Cleanup

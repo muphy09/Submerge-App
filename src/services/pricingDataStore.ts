@@ -7,7 +7,7 @@ import {
 
 type PricingData = typeof pricingData;
 
-const STORAGE_VERSION = '2025-02-water-features-catalog';
+const STORAGE_VERSION = '2025-03-interior-finish-catalog';
 const LEGACY_STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
 const DEFAULT_FRANCHISE_ID = 'default';
 

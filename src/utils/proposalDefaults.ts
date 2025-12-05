@@ -226,12 +226,13 @@ export function getDefaultMasonry(): Masonry {
 }
 
 export function getDefaultInteriorFinish(): InteriorFinish {
+  const defaultFinishId = pricingData.interiorFinish.finishes?.[0]?.id || 'pebble-tec-l1';
   return {
-    finishType: 'pebble-tec-l1',
+    finishType: defaultFinishId,
     color: '',
     surfaceArea: 0,
     hasSpa: false,
-    hasWaterproofing: false,
+    hasWaterproofing: true,
     cost: 0,
   };
 }

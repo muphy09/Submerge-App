@@ -54,6 +54,7 @@ import {
   setActivePricingModel,
   subscribeToPricingData,
 } from '../services/pricingDataStore';
+import pricingData from '../services/pricingData';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { hasSupabaseConnection } from '../services/supabaseClient';
@@ -980,12 +981,12 @@ function ProposalForm() {
         hasPositive(waterFeatures.totalCost));
 
     const interiorFinish = proposal.interiorFinish;
+    const defaultFinishId = pricingData.interiorFinish.finishes?.[0]?.id || 'pebble-tec-l1';
     const hasInteriorData =
       !!interiorFinish &&
-      (interiorFinish.finishType !== 'pebble-tec-l1' ||
+      (interiorFinish.finishType !== defaultFinishId ||
         !!interiorFinish.color?.trim() ||
         interiorFinish.hasSpa ||
-        interiorFinish.hasWaterproofing === false ||
         hasPositive(interiorFinish.cost));
 
     const customFeatures = proposal.customFeatures;

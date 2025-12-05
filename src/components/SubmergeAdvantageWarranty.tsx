@@ -1,4 +1,5 @@
-import { Proposal, InteriorFinishType } from '../types/proposal-new';
+import { Proposal } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
 import submergeLogo from '../../Submerge Logo.png';
 import './SubmergeAdvantageWarranty.css';
 
@@ -110,18 +111,10 @@ const SectionIcon = ({ name }: { name: SectionIconKey }) => (
   <span className="warranty-title-icon">{sectionIconMap[name]}</span>
 );
 
-const interiorFinishLabels: Partial<Record<InteriorFinishType, string>> = {
-  'pebble-tec-l1': 'Pebble Tec - Level 1',
-  'pebble-tec-l2': 'Pebble Tec - Level 2',
-  'pebble-tec-l3': 'Pebble Tec - Level 3',
-  'pebble-sheen-l1': 'Pebble Sheen - Level 1',
-  'pebble-sheen-l2': 'Pebble Sheen - Level 2',
-  'pebble-sheen-l3': 'Pebble Sheen - Level 3',
-  'pebble-fina-l1': 'Pebble Fina - Level 1',
-  'pebble-fina-l2': 'Pebble Fina - Level 2',
-  'pebble-brilliance': 'Pebble Brilliance',
-  'pebble-breeze': 'Pebble Breeze',
-};
+const getInteriorFinishLabel = (finishType?: string) =>
+  pricingData.interiorFinish.finishes?.find((f) => f.id === finishType)?.name ||
+  finishType ||
+  'Interior finish';
 
 const formatNumber = (value?: number, digits = 1) =>
   value !== undefined && value !== null && !Number.isNaN(value)
@@ -169,7 +162,7 @@ const buildInteriorFinishDetail = (proposal?: Partial<Proposal>) => {
   const interior = proposal?.interiorFinish;
   if (!poolSpecs || poolSpecs.poolType === 'fiberglass' || !interior) return undefined;
 
-  const label = interiorFinishLabels[interior.finishType] ?? 'Interior finish';
+  const label = getInteriorFinishLabel(interior.finishType);
   const color = interior.color ? ` - ${interior.color}` : '';
   return `${label}${color}`;
 };

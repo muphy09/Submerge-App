@@ -1,5 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { InteriorFinish, InteriorFinishType } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
+import { subscribeToPricingData } from '../services/pricingDataStore';
 import './SectionStyles.css';
 
 // Reuse compact input styling from other sections
@@ -47,27 +49,35 @@ interface Props {
 }
 
 function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: Props) {
-  // Allowed finish list (restricted)
-  const finishTypes: { value: InteriorFinishType; label: string }[] = [
-    { value: 'pebble-tec-l1', label: 'Pebble Tec - Level 1' },
-    { value: 'pebble-tec-l2', label: 'Pebble Tec - Level 2' },
-    { value: 'pebble-tec-l3', label: 'Pebble Tec - Level 3' },
-    { value: 'pebble-sheen-l1', label: 'Pebble Sheen - Level 1' },
-    { value: 'pebble-sheen-l2', label: 'Pebble Sheen - Level 2' },
-    { value: 'pebble-sheen-l3', label: 'Pebble Sheen - Level 3' },
-    { value: 'pebble-fina-l1', label: 'Pebble Fina - Level 1' },
-    { value: 'pebble-fina-l2', label: 'Pebble Fina - Level 2' },
-    { value: 'pebble-brilliance', label: 'Pebble Brilliance' },
-    { value: 'pebble-breeze', label: 'Pebble Breeze' },
-  ];
-  const colorOptions = [
-    'Bordeaux',
-    'Desert Gold',
-    'French Grey',
-    'Irish Mist',
-    'White Diamonds',
-    'HighTech Carribean Blue',
-  ];
+  const [finishes, setFinishes] = useState(pricingData.interiorFinish.finishes || []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToPricingData((snapshot) => {
+      setFinishes(snapshot.interiorFinish.finishes || []);
+    });
+    return unsubscribe;
+  }, []);
+
+  const selectedFinish = finishes.find((f) => f.id === data.finishType) || finishes[0];
+  const finishTypes: { value: InteriorFinishType; label: string }[] =
+    finishes.length > 0
+      ? finishes.map((finish) => ({
+          value: finish.id,
+          label: finish.name,
+        }))
+      : data.finishType
+        ? [{ value: data.finishType, label: data.finishType }]
+        : [{ value: '', label: 'No finishes configured' }];
+  const rawColors = selectedFinish?.colors as any;
+  const colorOptions = Array.isArray(rawColors)
+    ? rawColors
+    : typeof rawColors === 'string'
+      ? rawColors.split(',').map((c: string) => c.trim()).filter(Boolean)
+      : [];
+  const colorMatchesOption = colorOptions.some(
+    (option) => option.toLowerCase() === (data.color || '').toLowerCase()
+  );
+  const selectedColorValue = colorMatchesOption ? data.color : '';
 
   // Auto-set defaults from pool specs and enforce a valid finish
   useEffect(() => {
@@ -78,18 +88,33 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
     if (data.hasSpa !== hasSpa) {
       updates.hasSpa = hasSpa;
     }
-    if (data.hasWaterproofing === undefined) {
-      updates.hasWaterproofing = false;
+    if (data.hasWaterproofing !== true) {
+      updates.hasWaterproofing = true;
     }
     const allowedValues = finishTypes.map((f) => f.value);
-    if (!allowedValues.includes(data.finishType)) {
+    if (allowedValues.length && !allowedValues.includes(data.finishType)) {
       updates.finishType = finishTypes[0].value;
+      updates.color = '';
     }
     if (Object.keys(updates).length > 0) {
       onChange({ ...data, ...updates });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poolSurfaceArea, hasSpa]);
+  }, [poolSurfaceArea, hasSpa, finishes]);
+
+  // Keep color in sync with finish-specific options
+  useEffect(() => {
+    if (colorOptions.length === 0) {
+      if (data.color) {
+        onChange({ ...data, color: '' });
+      }
+      return;
+    }
+    if (!colorMatchesOption) {
+      onChange({ ...data, color: colorOptions[0] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorOptions.join(','), data.finishType]);
 
   const handleChange = (field: keyof InteriorFinish, value: any) => {
     onChange({ ...data, [field]: value });
@@ -123,20 +148,18 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
             <label className="spec-label">Color / Style</label>
             <select
               className="compact-input"
-              value={data.color || ''}
+              value={selectedColorValue || ''}
               onChange={(e) => handleChange('color', e.target.value)}
             >
               <option value="" disabled>
                 Select color/style
               </option>
-              {colorOptions.map(option => (
+              {colorOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
               ))}
-              {data.color && !colorOptions.includes(data.color) && (
-                <option value={data.color}>{data.color}</option>
-              )}
+              {colorOptions.length === 0 && <option value="">No colors configured</option>}
             </select>
           </div>
 
@@ -153,18 +176,16 @@ function InteriorFinishSectionNew({ data, onChange, poolSurfaceArea, hasSpa }: P
           </div>
         </div>
 
-        <div className="spec-grid spec-grid-3">
-          <div className="spec-field">
-            <label className="spec-label">Waterproofing</label>
-            <label className="checkbox-inline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input
-                type="checkbox"
-                checked={data.hasWaterproofing ?? false}
-                onChange={(e) => handleChange('hasWaterproofing', e.target.checked)}
-              />
-              <span>Include waterproofing</span>
-            </label>
-          </div>
+        <div
+          className="info-box"
+          style={{
+            marginTop: '12px',
+            background: '#ecfdf3',
+            borderColor: '#a7f3d0',
+            color: '#065f46',
+          }}
+        >
+          Waterproofing is automatically included for gunite pools (no designer toggle needed).
         </div>
 
         {hasSpa && (

@@ -1024,34 +1024,20 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
-            title: 'Labor (per sqft unless noted)',
-            scalars: [
-              { label: 'Plaster base', path: ['interiorFinish', 'labor', 'plasterBase'], type: 'number' },
-              { label: 'Plaster per 100 sqft over 500', path: ['interiorFinish', 'labor', 'plasterPer100SqftOver500'], type: 'number' },
-              { label: 'Pebble base', path: ['interiorFinish', 'labor', 'pebbleBase'], type: 'number' },
-              { label: 'Pebble per 100 sqft over 500', path: ['interiorFinish', 'labor', 'pebblePer100SqftOver500'], type: 'number' },
-              { label: 'Quartz base', path: ['interiorFinish', 'labor', 'quartzBase'], type: 'number' },
-              { label: 'Quartz per 100 sqft over 500', path: ['interiorFinish', 'labor', 'quartzPer100SqftOver500'], type: 'number' },
-              { label: 'Polished base', path: ['interiorFinish', 'labor', 'polishedBase'], type: 'number' },
-              { label: 'Polished per 100 sqft over 500', path: ['interiorFinish', 'labor', 'polishedPer100SqftOver500'], type: 'number' },
-              { label: 'Tile base', path: ['interiorFinish', 'labor', 'tileBase'], type: 'number' },
-              { label: 'Tile per 100 sqft over 500', path: ['interiorFinish', 'labor', 'tilePer100SqftOver500'], type: 'number' },
-              { label: 'Spa labor', path: ['interiorFinish', 'labor', 'spa'], type: 'number' },
-            ],
-          },
-          {
-            title: 'Material (per sqft unless noted)',
-            scalars: [
-              { label: 'Plaster', path: ['interiorFinish', 'material', 'plaster'], type: 'number' },
-              { label: 'PebbleTec', path: ['interiorFinish', 'material', 'pebbleTec'], type: 'number' },
-              { label: 'PebbleSheen', path: ['interiorFinish', 'material', 'pebbleSheen'], type: 'number' },
-              { label: 'PebbleFina', path: ['interiorFinish', 'material', 'pebbleFina'], type: 'number' },
-              { label: 'Mini pebble', path: ['interiorFinish', 'material', 'miniPebble'], type: 'number' },
-              { label: 'Beadcrete', path: ['interiorFinish', 'material', 'beadcrete'], type: 'number' },
-              { label: 'QuartzScapes', path: ['interiorFinish', 'material', 'quartzScapes'], type: 'number' },
-              { label: 'Hydrazzo', path: ['interiorFinish', 'material', 'hydrazzo'], type: 'number' },
-              { label: 'Tile finish', path: ['interiorFinish', 'material', 'tile'], type: 'number' },
-              { label: 'Spa finish', path: ['interiorFinish', 'material', 'spaFinish'], type: 'number' },
+            title: 'Finishes catalog',
+            lists: [
+              {
+                title: 'Interior finishes',
+                path: ['interiorFinish', 'finishes'],
+                addLabel: 'Add finish',
+                fields: [
+                  { key: 'name', label: 'Interior Finish Name', type: 'text', placeholder: 'Pebble Sheen - Level 1' },
+                  { key: 'id', label: 'Key (no spaces)', type: 'text', placeholder: 'pebble-sheen-l1' },
+                  { key: 'costPerSqft', label: 'Cost Per Sqft', type: 'number', prefix: '$' },
+                  { key: 'spaFinishCost', label: 'Spa Finish Cost', type: 'number', prefix: '$' },
+                  { key: 'colors', label: 'Finish Colors (comma separated)', type: 'text' },
+                ],
+              },
             ],
           },
           {
@@ -1251,7 +1237,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             <div key={`${config.title}-${index}`} className="pricing-list-row">
               <div className="pricing-list-row__fields">
                 {config.fields.map((field) => {
-                  const fieldValue = entry ? entry[field.key] : '';
+                  let fieldValue = entry ? entry[field.key] : '';
+                  if (field.key === 'colors' && Array.isArray(fieldValue)) {
+                    fieldValue = fieldValue.join(', ');
+                  }
                   if (field.type === 'boolean') {
                     return (
                       <label key={field.key} className="pricing-field inline">
@@ -1506,7 +1495,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             const open = openSections[section.title] ?? false;
             return (
               <section key={section.title} className={`pricing-section ${open ? 'open' : ''}`}>
-                <button className="pricing-section__header" onClick={() => toggleSection(section.title)}>
+                <button
+                  type="button"
+                  className="pricing-section__header"
+                  aria-expanded={open}
+                  onClick={() => toggleSection(section.title)}
+                >
                   <div className="pricing-section__header-left">
                     {renderSectionIcon(section.title)}
                     <span className="pricing-section__title">{section.title}</span>
