@@ -147,7 +147,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
       data?.heaterQuantity ?? (hasRealSelection(data?.heater?.name, 'no heater') ? 1 : 0),
     upgradeToVersaFlo: data?.upgradeToVersaFlo ?? false,
     numberOfLights: data?.numberOfLights ?? 0,
-    hasSpaLight: data?.hasSpaLight ?? false,
+    hasSpaLight: data?.hasSpaLight ?? true,
     automation: data?.automation || {
       name: defaults.automation.name,
       basePrice: (defaults.automation as any).basePrice,
@@ -770,30 +770,25 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
                 unit="ea"
                 min="0"
                 step="1"
+                placeholder="Additional pool lights"
               />
-              <small className="form-help">Typical builds use 2.</small>
+              <small className="form-help">First pool light is included by default; this adds extras.</small>
             </div>
 
-            {hasSpa && (
+            {hasSpa ? (
               <div className="spec-field">
-                <label className="spec-label">Spa Light</label>
-                <div className="pool-type-buttons">
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${safeData.hasSpaLight ? 'active' : ''}`}
-                    onClick={() => handleChange('hasSpaLight', true)}
-                  >
-                    Add Spa Light
-                  </button>
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${!safeData.hasSpaLight ? 'active' : ''}`}
-                    onClick={() => handleChange('hasSpaLight', false)}
-                  >
-                    No Spa Light
-                  </button>
-                </div>
-                <small className="form-help">Spa light add-on: ${pricingData.equipment.lights.spaLightAddon}</small>
+                <label className="spec-label">Spa Lights</label>
+                <CompactInput
+                  value={safeData.hasSpaLight ? 0 : 0}
+                  readOnly
+                  placeholder="Spa light included"
+                />
+                <div className="form-help">Spa light is included by default when a spa is present.</div>
+              </div>
+            ) : (
+              <div className="spec-field">
+                <label className="spec-label">Spa Lights</label>
+                <CompactInput value="No spa included" readOnly type="text" />
               </div>
             )}
           </div>

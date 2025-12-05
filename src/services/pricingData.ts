@@ -289,10 +289,14 @@ const pricingData = {
       { name: 'Heat Pump', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0, isVersaFlo: false },
     ],
     lights: {
-      nicheLightPrice: 601, // 24 Watt - Jandy Nicheless LED (Excel)
-      spaLightAddon: 528,
-      additionalLightPrice: 601,
-      catalog: [],
+      poolLights: [
+        { name: '24W Nicheless LED (Included by default)', basePrice: 601, addCost1: 0, addCost2: 0 },
+        { name: 'Low Voltage LED', basePrice: 650, addCost1: 0, addCost2: 0 },
+      ],
+      spaLights: [
+        { name: 'Spa LED (Included by default)', basePrice: 528, addCost1: 0, addCost2: 0 },
+        { name: 'Spa Color LED', basePrice: 650, addCost1: 0, addCost2: 0 },
+      ],
     },
     automation: [
       // Automation prices include the 6614 base panel and any required install adders (matches EQUIP sheet rows 61-69)

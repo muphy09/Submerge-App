@@ -687,28 +687,33 @@ export class EquipmentCalculations {
       }
     }
 
-    // Lights (2 included, charge for additional)
-    const lightCount = Math.max(0, equipment.numberOfLights);
-    if (lightCount > 0) {
-      const price = pricingData.equipment.lights.nicheLightPrice;
+    // Lights: first pool light included by default; numberOfLights adds extras
+    const poolLight = pricingData.equipment.lights.poolLights?.[0];
+    const poolLightCost = getEquipmentItemCost(poolLight as any, 1);
+    const totalPoolLights = Math.max(1, (equipment.numberOfLights ?? 0) + 1); // 1 default + extras
+    if (poolLightCost > 0 && totalPoolLights > 0) {
       items.push({
         category: 'Equipment',
         description: 'Pool Lights',
-        unitPrice: price,
-        quantity: lightCount,
-        total: price * lightCount,
+        unitPrice: poolLightCost,
+        quantity: totalPoolLights,
+        total: poolLightCost * totalPoolLights,
       });
     }
 
-    // Spa light
-    if (equipment.hasSpaLight && hasSpa) {
-      items.push({
-        category: 'Equipment',
-        description: 'Spa Light',
-        unitPrice: pricingData.equipment.lights.spaLightAddon,
-        quantity: 1,
-        total: pricingData.equipment.lights.spaLightAddon,
-      });
+    // Spa light (included by default when spa exists)
+    if (hasSpa) {
+      const spaLight = pricingData.equipment.lights.spaLights?.[0];
+      const spaLightCost = getEquipmentItemCost(spaLight as any, 1);
+      if (spaLightCost > 0) {
+        items.push({
+          category: 'Equipment',
+          description: 'Spa Light',
+          unitPrice: spaLightCost,
+          quantity: 1,
+          total: spaLightCost,
+        });
+      }
     }
 
     // Automation

@@ -155,6 +155,7 @@ export function getDefaultEquipment(): Equipment {
   const defaultCleaner = pickDefault(pricingData.equipment.cleaners, 1);
   const defaultHeater = pickDefault(pricingData.equipment.heaters, 1);
   const defaultAutomation = pickDefault(pricingData.equipment.automation, 1);
+  const otherOverhead = 1;
 
   return {
     pump: {
@@ -172,7 +173,7 @@ export function getDefaultEquipment(): Equipment {
       basePrice: (defaultFilter as any).basePrice,
       addCost1: (defaultFilter as any).addCost1,
       addCost2: (defaultFilter as any).addCost2,
-      price: getEquipmentItemCost(defaultFilter as any, equipmentOverhead),
+      price: getEquipmentItemCost(defaultFilter as any, otherOverhead),
     },
     filterQuantity: 0,
     cleaner: {
@@ -180,7 +181,7 @@ export function getDefaultEquipment(): Equipment {
       basePrice: (defaultCleaner as any).basePrice,
       addCost1: (defaultCleaner as any).addCost1,
       addCost2: (defaultCleaner as any).addCost2,
-      price: getEquipmentItemCost(defaultCleaner as any, equipmentOverhead),
+      price: getEquipmentItemCost(defaultCleaner as any, otherOverhead),
     },
     cleanerQuantity: 0,
     heater: {
@@ -189,19 +190,19 @@ export function getDefaultEquipment(): Equipment {
       basePrice: (defaultHeater as any).basePrice,
       addCost1: (defaultHeater as any).addCost1,
       addCost2: (defaultHeater as any).addCost2,
-      price: getEquipmentItemCost(defaultHeater as any, equipmentOverhead),
+      price: getEquipmentItemCost(defaultHeater as any, otherOverhead),
       isVersaFlo: defaultHeater.isVersaFlo,
     },
     heaterQuantity: 1,
     upgradeToVersaFlo: false,
     numberOfLights: 0,
-    hasSpaLight: false,
+    hasSpaLight: true,
     automation: {
       name: defaultAutomation.name,
       basePrice: (defaultAutomation as any).basePrice,
       addCost1: (defaultAutomation as any).addCost1,
       addCost2: (defaultAutomation as any).addCost2,
-      price: getEquipmentItemCost(defaultAutomation as any, equipmentOverhead),
+      price: getEquipmentItemCost(defaultAutomation as any, otherOverhead),
       zones: 0,
       hasChemistry: defaultAutomation.hasChemistry,
     },

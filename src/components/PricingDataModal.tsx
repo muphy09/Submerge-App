@@ -969,13 +969,30 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           },
           {
             title: 'Lighting & automation rates',
-            scalars: [
-              { label: 'Niche light', path: ['equipment', 'lights', 'nicheLightPrice'], type: 'number' },
-              { label: 'Spa light add-on', path: ['equipment', 'lights', 'spaLightAddon'], type: 'number' },
-              { label: 'Additional light', path: ['equipment', 'lights', 'additionalLightPrice'], type: 'number' },
-              { label: 'Automation extra zone', path: ['equipment', 'automationZoneAddon'], type: 'number' },
-            ],
+            scalars: [{ label: 'Automation extra zone', path: ['equipment', 'automationZoneAddon'], type: 'number' }],
             lists: [
+              {
+                title: 'Pool lights',
+                path: ['equipment', 'lights', 'poolLights'],
+                addLabel: 'Add pool light',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Pool light name' },
+                  { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                ],
+              },
+              {
+                title: 'Spa lights',
+                path: ['equipment', 'lights', 'spaLights'],
+                addLabel: 'Add spa light',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Spa light name' },
+                  { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                ],
+              },
               {
                 title: 'Automation kits',
                 path: ['equipment', 'automation'],
