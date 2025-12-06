@@ -272,6 +272,15 @@ export interface AutomationSelection {
   hasChemistry: boolean;
 }
 
+export interface LightSelection {
+  type: 'pool' | 'spa';
+  name: string;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
+}
+
 export interface SaltSystemSelection {
   name: string;
   model?: string;
@@ -295,8 +304,12 @@ export interface Equipment {
   upgradeToVersaFlo: boolean;
 
   // Lights
-  numberOfLights: number; // Base 2 included
-  hasSpaLight: boolean;
+  poolLights?: LightSelection[];
+  spaLights?: LightSelection[];
+  includePoolLights?: boolean;
+  includeSpaLights?: boolean;
+  numberOfLights: number; // Legacy: additional pool lights beyond the first
+  hasSpaLight: boolean; // Legacy: spa light included
 
   // Automation
   automation: AutomationSelection;

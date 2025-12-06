@@ -4,6 +4,7 @@
 
 import { Proposal, PoolSpecs, Excavation, Plumbing, Electrical, CostBreakdown, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
+import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
 
 /**
  * ROUNDUP function - Excel-style ceiling function
@@ -19,9 +20,7 @@ const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasFiberglassSelection =
     poolSpecs.poolType === 'fiberglass' &&
     (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
-  const hasSpaDefinition =
-    (poolSpecs.spaLength > 0 && poolSpecs.spaWidth > 0) || (poolSpecs.spaPerimeter ?? 0) > 0;
-  return hasGuniteDimensions || hasFiberglassSelection || hasSpaDefinition;
+  return hasGuniteDimensions || hasFiberglassSelection;
 };
 
 // ============================================================================
@@ -606,10 +605,13 @@ export class ElectricalCalculations {
       });
     }
 
+    const normalizedEquipment = equipment
+      ? normalizeEquipmentLighting(equipment as any, { hasPool: hasPoolDefinition(poolSpecs), hasSpa, poolSpecs })
+      : equipment;
+
     // Lights - $100 per additional light beyond the first (ELEC!Row6)
-    const poolLights = equipment?.numberOfLights ?? 0;
-    const spaLight = equipment?.hasSpaLight ? 1 : 0;
-    const additionalLights = Math.max(0, poolLights + spaLight - 1);
+    const lightCounts = getLightCounts(normalizedEquipment as any);
+    const additionalLights = Math.max(0, lightCounts.total - 1);
     if (additionalLights > 0) {
       items.push({
         category: 'Electrical',
@@ -632,7 +634,7 @@ export class ElectricalCalculations {
     }
 
     // Automation - Excel ELEC!Row8: $250 × hasAutomation
-    const automationSelection = equipment?.automation;
+    const automationSelection = (normalizedEquipment as any)?.automation;
     const hasAutomation = !!automationSelection && (
       (automationSelection.price ?? 0) > 0 ||
       (automationSelection.name && !automationSelection.name.toLowerCase().includes('no automation')) ||

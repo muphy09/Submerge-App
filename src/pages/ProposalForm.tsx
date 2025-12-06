@@ -48,6 +48,7 @@ import customIconImg from '../../docs/img/custom.png';
 import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
 import {
   getActivePricingModelMeta,
   initPricingDataStore,
@@ -150,19 +151,36 @@ const toFiniteNumber = (value: any): number => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const hasPoolDefinition = (poolSpecs?: Proposal['poolSpecs']) => {
+  if (!poolSpecs) return false;
+  const hasGuniteDimensions =
+    (poolSpecs.surfaceArea ?? 0) > 0 ||
+    (poolSpecs.perimeter ?? 0) > 0 ||
+    ((poolSpecs.maxLength ?? 0) > 0 && (poolSpecs.maxWidth ?? 0) > 0);
+  const hasFiberglassSelection =
+    poolSpecs.poolType === 'fiberglass' &&
+    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+  return hasGuniteDimensions || hasFiberglassSelection;
+};
+
 const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   const base = getDefaultProposal();
+  const mergedPoolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
+  const mergedEquipment = normalizeEquipmentLighting(
+    { ...getDefaultEquipment(), ...(input.equipment || {}) } as Proposal['equipment'],
+    { poolSpecs: mergedPoolSpecs, hasSpa: mergedPoolSpecs.spaType !== 'none' }
+  );
   return {
     ...base,
     ...input,
     customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
-    poolSpecs: { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) },
+    poolSpecs: mergedPoolSpecs,
     excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
     plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
     electrical: { ...getDefaultElectrical(), ...(input.electrical || {}) },
     tileCopingDecking: { ...getDefaultTileCopingDecking(), ...(input.tileCopingDecking || {}) },
     drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
-    equipment: { ...getDefaultEquipment(), ...(input.equipment || {}) },
+    equipment: mergedEquipment,
     waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
     interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
     customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
@@ -356,10 +374,10 @@ function ProposalForm() {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
     const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
     if (!equipment) return false;
+    const lightCounts = getLightCounts(equipment as any);
     return (
       hasPositive(equipment.totalCost) ||
-      hasPositive(equipment.numberOfLights) ||
-      equipment.hasSpaLight ||
+      lightCounts.total > 0 ||
       equipment.upgradeToVersaFlo ||
       hasPositive(equipment.cleanerQuantity) ||
       hasPositive(equipment.filterQuantity) ||
@@ -460,17 +478,36 @@ function ProposalForm() {
     const currentSpaType = proposal.poolSpecs?.spaType ?? 'none';
     const previousSpaType = previousSpaTypeRef.current ?? 'none';
     const spaJustAdded = previousSpaType === 'none' && currentSpaType !== 'none';
+    const spaRemoved = previousSpaType !== 'none' && currentSpaType === 'none';
+    const hasSpaLightSelection = (proposal.equipment?.spaLights?.length ?? 0) > 0;
 
-    if (spaJustAdded && !proposal.equipment?.hasSpaLight) {
+    if (spaJustAdded && !hasSpaLightSelection) {
+      setProposal(prev => {
+        const nextEquipment = normalizeEquipmentLighting(
+          {
+            ...(prev.equipment || getDefaultEquipment()),
+            includeSpaLights: true,
+          } as Proposal['equipment'],
+          { poolSpecs: { ...(prev.poolSpecs || {}), spaType: currentSpaType } as any, hasSpa: true }
+        );
+        return { ...prev, equipment: nextEquipment };
+      });
+      setHasEdits(true);
+    } else if (spaRemoved && (proposal.equipment?.spaLights?.length ?? 0) > 0) {
       setProposal(prev => ({
         ...prev,
-        equipment: { ...(prev.equipment || getDefaultEquipment()), hasSpaLight: true },
+        equipment: {
+          ...(prev.equipment || getDefaultEquipment()),
+          includeSpaLights: false,
+          spaLights: [],
+          hasSpaLight: false,
+        },
       }));
       setHasEdits(true);
     }
 
     previousSpaTypeRef.current = currentSpaType;
-  }, [proposal.poolSpecs?.spaType, proposal.equipment?.hasSpaLight]);
+  }, [proposal.poolSpecs?.spaType, proposal.equipment?.spaLights?.length]);
 
   useEffect(() => {
     const requestId = ++loadRequestRef.current;
@@ -714,6 +751,7 @@ function ProposalForm() {
     const currentSectionKey = sections[currentSection]?.key;
     const hasSpa = proposal.poolSpecs?.spaType !== 'none';
     const isFiberglass = proposal.poolSpecs?.poolType === 'fiberglass';
+    const hasPool = hasPoolDefinition(proposal.poolSpecs);
 
     try {
       switch (currentSectionKey) {
@@ -793,6 +831,7 @@ function ProposalForm() {
               data={proposal.equipment!}
               onChange={(data) => updateProposal('equipment', data)}
               hasSpa={hasSpa}
+              hasPool={hasPool}
             />
           );
         case 'waterFeatures':

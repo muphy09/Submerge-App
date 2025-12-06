@@ -2,6 +2,7 @@ import { Proposal } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import submergeLogo from '../../Submerge Logo.png';
 import './SubmergeAdvantageWarranty.css';
+import { getLightCounts } from '../utils/lighting';
 
 interface WarrantyItem {
   label: string;
@@ -177,10 +178,19 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
     ];
   }
 
-  const lightsCount = equipment.numberOfLights ?? 0;
-  const lightsText = lightsCount > 0
-    ? `${lightsCount} low-voltage Submerge colored LED light${lightsCount === 1 ? '' : 's'}${equipment.hasSpaLight ? ' (spa light included)' : ''}`
-    : 'No pool lights specified yet';
+  const lightCounts = getLightCounts(equipment as any);
+  const lightsText = (lightCounts.poolLights + lightCounts.spaLights) > 0
+    ? [
+        lightCounts.poolLights > 0
+          ? `${lightCounts.poolLights} pool light${lightCounts.poolLights === 1 ? '' : 's'}`
+          : null,
+        lightCounts.spaLights > 0
+          ? `${lightCounts.spaLights} spa light${lightCounts.spaLights === 1 ? '' : 's'}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' + ')
+    : 'No lights specified yet';
 
   items.push({
     label: equipment.pump?.name || 'Primary pump not selected',

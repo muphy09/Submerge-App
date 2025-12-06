@@ -5,6 +5,7 @@
 import { PoolSpecs, Excavation, TileCopingDecking, Drainage, Equipment, WaterFeatures, InteriorFinish, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
+import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasGuniteDimensions =
@@ -14,9 +15,7 @@ const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasFiberglassSelection =
     poolSpecs.poolType === 'fiberglass' &&
     (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
-  const hasSpaDefinition =
-    (poolSpecs.spaLength > 0 && poolSpecs.spaWidth > 0) || (poolSpecs.spaPerimeter ?? 0) > 0;
-  return hasGuniteDimensions || hasFiberglassSelection || hasSpaDefinition;
+  return hasGuniteDimensions || hasFiberglassSelection;
 };
 
 /**
@@ -554,6 +553,7 @@ export class EquipmentCalculations {
     const heaterQty = Math.max(equipment.heaterQuantity ?? 0, 0);
     const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
     const cleanerQty = Math.max(equipment.cleanerQuantity ?? 0, 0);
+    const lightCounts = getLightCounts(equipment);
 
     const pricedSelections = [
       getEquipmentItemCost(equipment.pump as any, pumpOverhead),
@@ -578,34 +578,37 @@ export class EquipmentCalculations {
       automationQty > 0 ||
       cleanerQty > 0 ||
       (equipment.automation?.zones ?? 0) > 0 ||
-      (equipment.numberOfLights ?? 0) > 0 ||
-      !!equipment.hasSpaLight ||
+      lightCounts.total > 0 ||
       accessoriesSelected ||
       !!equipment.upgradeToVersaFlo;
   }
 
   static calculateEquipmentCost(equipment: Equipment, poolSpecs: PoolSpecs): CostLineItem[] {
-    const items: CostLineItem[] = [];
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const hasPool = hasPoolDefinition(poolSpecs);
+    const normalizedEquipment = normalizeEquipmentLighting(equipment, { hasPool, hasSpa, poolSpecs });
+    const items: CostLineItem[] = [];
     const prices = pricingData.equipment;
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
     const auxiliaryPumps =
-      equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
-        ? equipment.auxiliaryPumps
-        : equipment.auxiliaryPump
-          ? [equipment.auxiliaryPump]
+      normalizedEquipment.auxiliaryPumps && normalizedEquipment.auxiliaryPumps.length > 0
+        ? normalizedEquipment.auxiliaryPumps
+        : normalizedEquipment.auxiliaryPump
+          ? [normalizedEquipment.auxiliaryPump]
           : [];
-    const filterQty = Math.max(equipment.filterQuantity ?? 0, 0);
-    const heaterQty = Math.max(equipment.heaterQuantity ?? 0, 0);
-    const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
-    const pumpCost = getEquipmentItemCost(equipment.pump as any, pumpOverhead);
-    const filterCost = getEquipmentItemCost(equipment.filter as any, 1);
-    const cleanerCost = getEquipmentItemCost(equipment.cleaner as any, 1);
-    const heaterCost = getEquipmentItemCost(equipment.heater as any, 1);
-    const automationCost = getEquipmentItemCost(equipment.automation as any, 1);
-    const saltCost = getEquipmentItemCost(equipment.saltSystem as any, 1);
+    const filterQty = Math.max(normalizedEquipment.filterQuantity ?? 0, 0);
+    const heaterQty = Math.max(normalizedEquipment.heaterQuantity ?? 0, 0);
+    const automationQty = Math.max(normalizedEquipment.automationQuantity ?? 0, 0);
+    const pumpCost = getEquipmentItemCost(normalizedEquipment.pump as any, pumpOverhead);
+    const filterCost = getEquipmentItemCost(normalizedEquipment.filter as any, 1);
+    const cleanerCost = getEquipmentItemCost(normalizedEquipment.cleaner as any, 1);
+    const heaterCost = getEquipmentItemCost(normalizedEquipment.heater as any, 1);
+    const automationCost = getEquipmentItemCost(normalizedEquipment.automation as any, 1);
+    const saltCost = getEquipmentItemCost(normalizedEquipment.saltSystem as any, 1);
+    const poolLights = normalizedEquipment.poolLights || [];
+    const spaLights = normalizedEquipment.spaLights || [];
 
-    if (!this.hasEquipmentSelection(equipment)) {
+    if (!this.hasEquipmentSelection(normalizedEquipment)) {
       return items;
     }
 
@@ -621,7 +624,7 @@ export class EquipmentCalculations {
     // Pump
     items.push({
       category: 'Equipment',
-      description: equipment.pump.name,
+      description: normalizedEquipment.pump.name,
       unitPrice: pumpCost,
       quantity: 1,
       total: pumpCost,
@@ -643,7 +646,7 @@ export class EquipmentCalculations {
     if (filterQty > 0) {
       items.push({
         category: 'Equipment',
-        description: equipment.filter.name,
+        description: normalizedEquipment.filter.name,
         unitPrice: filterCost,
         quantity: filterQty,
         total: filterCost * filterQty,
@@ -651,11 +654,11 @@ export class EquipmentCalculations {
     }
 
     // Cleaner
-    const cleanerQuantity = Math.max(equipment.cleanerQuantity ?? 0, 0);
+    const cleanerQuantity = Math.max(normalizedEquipment.cleanerQuantity ?? 0, 0);
     if (cleanerCost > 0 && cleanerQuantity > 0) {
       items.push({
         category: 'Equipment',
-        description: equipment.cleaner.name,
+        description: normalizedEquipment.cleaner.name,
         unitPrice: cleanerCost,
         quantity: cleanerQuantity,
         total: cleanerCost * cleanerQuantity,
@@ -666,7 +669,7 @@ export class EquipmentCalculations {
     if (heaterQty > 0) {
       items.push({
         category: 'Equipment',
-        description: equipment.heater.name,
+        description: normalizedEquipment.heater.name,
         unitPrice: heaterCost,
         quantity: heaterQty,
         total: heaterCost * heaterQty,
@@ -674,53 +677,54 @@ export class EquipmentCalculations {
     }
 
     // VersaFlo upgrade
-    if (equipment.upgradeToVersaFlo && !equipment.heater.isVersaFlo) {
+    if (normalizedEquipment.upgradeToVersaFlo && !normalizedEquipment.heater.isVersaFlo) {
       const upgrade = pricingData.equipment.heaters.find((h) => h.name.includes('VersaFlo'));
       if (upgrade) {
+        const upgradeCost = getEquipmentItemCost(upgrade as any, pumpOverhead) - heaterCost;
         items.push({
           category: 'Equipment',
           description: 'Upgrade to VersaFlo',
-          unitPrice: getEquipmentItemCost(upgrade as any, equipmentOverhead) - heaterCost,
+          unitPrice: upgradeCost,
           quantity: 1,
-          total: getEquipmentItemCost(upgrade as any, equipmentOverhead) - heaterCost,
+          total: upgradeCost,
         });
       }
     }
 
-    // Lights: first pool light included by default; numberOfLights adds extras
-    const poolLight = pricingData.equipment.lights.poolLights?.[0];
-    const poolLightCost = getEquipmentItemCost(poolLight as any, 1);
-    const totalPoolLights = Math.max(1, (equipment.numberOfLights ?? 0) + 1); // 1 default + extras
-    if (poolLightCost > 0 && totalPoolLights > 0) {
-      items.push({
-        category: 'Equipment',
-        description: 'Pool Lights',
-        unitPrice: poolLightCost,
-        quantity: totalPoolLights,
-        total: poolLightCost * totalPoolLights,
+    const addLightGroup = (lights: typeof poolLights, labelPrefix: string) => {
+      const grouped = new Map<string, { unitPrice: number; quantity: number }>();
+      lights.forEach((light) => {
+        const cost = getEquipmentItemCost(light as any, 1);
+        const key = light?.name || `${labelPrefix} Light`;
+        const current = grouped.get(key);
+        grouped.set(key, {
+          unitPrice: cost,
+          quantity: (current?.quantity ?? 0) + 1,
+        });
       });
-    }
 
-    // Spa light (included by default when spa exists)
-    if (hasSpa) {
-      const spaLight = pricingData.equipment.lights.spaLights?.[0];
-      const spaLightCost = getEquipmentItemCost(spaLight as any, 1);
-      if (spaLightCost > 0) {
+      grouped.forEach((value, name) => {
+        if (value.quantity <= 0) return;
         items.push({
           category: 'Equipment',
-          description: 'Spa Light',
-          unitPrice: spaLightCost,
-          quantity: 1,
-          total: spaLightCost,
+          description: `${labelPrefix} Light - ${name}`,
+          unitPrice: value.unitPrice,
+          quantity: value.quantity,
+          total: value.unitPrice * value.quantity,
         });
-      }
+      });
+    };
+
+    addLightGroup(poolLights, 'Pool');
+    if (hasSpa) {
+      addLightGroup(spaLights, 'Spa');
     }
 
     // Automation
     if (automationQty > 0) {
       items.push({
         category: 'Equipment',
-        description: equipment.automation.name,
+        description: normalizedEquipment.automation.name,
         unitPrice: automationCost,
         quantity: automationQty,
         total: automationCost * automationQty,
@@ -728,21 +732,21 @@ export class EquipmentCalculations {
     }
 
     // Additional automation zones
-    if (automationQty > 0 && equipment.automation.zones > 0) {
+    if (automationQty > 0 && normalizedEquipment.automation.zones > 0) {
       items.push({
         category: 'Equipment',
         description: 'Additional Automation Zones',
         unitPrice: pricingData.equipment.automationZoneAddon,
-        quantity: equipment.automation.zones,
-        total: pricingData.equipment.automationZoneAddon * equipment.automation.zones,
+        quantity: normalizedEquipment.automation.zones,
+        total: pricingData.equipment.automationZoneAddon * normalizedEquipment.automation.zones,
       });
     }
 
     // Salt system
-    if (saltCost > 0) {
+    if (saltCost > 0 && normalizedEquipment.saltSystem?.name) {
       items.push({
         category: 'Equipment',
-        description: equipment.saltSystem.name,
+        description: normalizedEquipment.saltSystem.name,
         unitPrice: saltCost,
         quantity: 1,
         total: saltCost,
@@ -750,7 +754,7 @@ export class EquipmentCalculations {
     }
 
     // Accessories
-    if (equipment.hasBlanketReel) {
+    if (normalizedEquipment.hasBlanketReel) {
       items.push({
         category: 'Equipment',
         description: 'Blanket Reel',
@@ -760,7 +764,7 @@ export class EquipmentCalculations {
       });
     }
 
-    if (equipment.hasSolarBlanket) {
+    if (normalizedEquipment.hasSolarBlanket) {
       items.push({
         category: 'Equipment',
         description: 'Solar Blanket',
@@ -770,7 +774,7 @@ export class EquipmentCalculations {
       });
     }
 
-    if (equipment.hasAutoFill) {
+    if (normalizedEquipment.hasAutoFill) {
       items.push({
         category: 'Equipment',
         description: 'Auto Fill',
@@ -780,7 +784,7 @@ export class EquipmentCalculations {
       });
     }
 
-    if (equipment.hasHandrail) {
+    if (normalizedEquipment.hasHandrail) {
       items.push({
         category: 'Equipment',
         description: 'Handrail',
@@ -790,7 +794,7 @@ export class EquipmentCalculations {
       });
     }
 
-    if (equipment.hasStartupChemicals) {
+    if (normalizedEquipment.hasStartupChemicals) {
       items.push({
         category: 'Equipment',
         description: 'Startup Chemicals',
@@ -816,12 +820,15 @@ export class EquipmentCalculations {
     return items;
   }
 
-  static calculateEquipmentSetCost(equipment: Equipment, _poolSpecs: PoolSpecs): CostLineItem[] {
+  static calculateEquipmentSetCost(equipment: Equipment, poolSpecs: PoolSpecs): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.misc.equipmentSet;
-    const heaterCost = getEquipmentItemCost(equipment.heater as any, 1);
+    const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const hasPool = hasPoolDefinition(poolSpecs);
+    const normalizedEquipment = normalizeEquipmentLighting(equipment, { hasPool, hasSpa, poolSpecs });
+    const heaterCost = getEquipmentItemCost(normalizedEquipment.heater as any, 1);
 
-    if (!this.hasEquipmentSelection(equipment)) {
+    if (!this.hasEquipmentSelection(normalizedEquipment)) {
       return items;
     }
 
@@ -835,7 +842,7 @@ export class EquipmentCalculations {
 
     // Heater set (for all heaters) - Excel PLUM!Row43: $200
     if (heaterCost > 0) {
-      const isHeatPump = equipment.heater.name.toLowerCase().includes('heat pump');
+      const isHeatPump = normalizedEquipment.heater.name.toLowerCase().includes('heat pump');
       items.push({
         category: 'Equipment Set',
         description: isHeatPump ? 'Heat Pump Set' : 'Heater',
@@ -855,9 +862,9 @@ export class EquipmentCalculations {
     });
 
     const auxiliaryPumpCount =
-      equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
-        ? equipment.auxiliaryPumps.length
-        : equipment?.auxiliaryPump
+      normalizedEquipment?.auxiliaryPumps && normalizedEquipment.auxiliaryPumps.length > 0
+        ? normalizedEquipment.auxiliaryPumps.length
+        : normalizedEquipment?.auxiliaryPump
           ? 1
           : 0;
 

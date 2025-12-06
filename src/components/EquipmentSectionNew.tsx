@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Equipment, PumpSelection } from '../types/proposal-new';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Equipment, PumpSelection, LightSelection } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
+import { normalizeEquipmentLighting } from '../utils/lighting';
 import './SectionStyles.css';
 
 interface Props {
   data: Equipment;
   onChange: (data: Equipment) => void;
   hasSpa: boolean;
+  hasPool: boolean;
 }
 
 const CompactInput = ({
@@ -78,7 +80,7 @@ const ButtonGroup = <T extends string | number>({
   </div>
 );
 
-function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
+function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const defaults = useMemo(() => {
     const byCost = <T,>(list: T[]) =>
       list.find((item: any) => getEquipmentItemCost(item) === 0) || list[0];
@@ -104,7 +106,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
   const costOf = (item: any, applyPumpOverhead?: boolean) =>
     getEquipmentItemCost(item, applyPumpOverhead ? pumpOverhead : 1);
 
-  const safeData: Equipment = {
+  const baseSafeData: Equipment = {
     pump: data?.pump || {
       name: defaults.pump.name,
       model: (defaults.pump as any).model,
@@ -146,8 +148,12 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     heaterQuantity:
       data?.heaterQuantity ?? (hasRealSelection(data?.heater?.name, 'no heater') ? 1 : 0),
     upgradeToVersaFlo: data?.upgradeToVersaFlo ?? false,
+    includePoolLights: data?.includePoolLights ?? true,
+    includeSpaLights: data?.includeSpaLights ?? hasSpa,
+    poolLights: data?.poolLights,
+    spaLights: data?.spaLights,
     numberOfLights: data?.numberOfLights ?? 0,
-    hasSpaLight: data?.hasSpaLight ?? true,
+    hasSpaLight: data?.hasSpaLight ?? false,
     automation: data?.automation || {
       name: defaults.automation.name,
       basePrice: (defaults.automation as any).basePrice,
@@ -168,6 +174,8 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     hasBeenEdited: data?.hasBeenEdited ?? false,
   };
 
+  const safeData = normalizeEquipmentLighting(baseSafeData, { hasPool, hasSpa });
+
   useEffect(() => {
     if (!data?.pump || !data?.filter || !data?.heater || !data?.automation || !data?.cleaner) {
       onChange(safeData);
@@ -179,7 +187,8 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
   const [includeFilter, setIncludeFilter] = useState<boolean>(() => (data?.filterQuantity ?? 0) > 0);
   const [includeCleaner, setIncludeCleaner] = useState<boolean>((safeData.cleanerQuantity ?? 0) > 0);
   const [includeHeater, setIncludeHeater] = useState<boolean>(() => hasRealSelection(data?.heater?.name, 'no heater'));
-  const [includeLighting, setIncludeLighting] = useState<boolean>((safeData.numberOfLights ?? 0) > 0 || safeData.hasSpaLight);
+  const [includePoolLights, setIncludePoolLights] = useState<boolean>(() => hasPool && safeData.includePoolLights !== false);
+  const [includeSpaLights, setIncludeSpaLights] = useState<boolean>(() => hasSpa && safeData.includeSpaLights !== false);
   const [includeAutomation, setIncludeAutomation] = useState<boolean>(() =>
     (data?.automationQuantity ?? 0) > 0 || (data?.automation?.zones ?? 0) > 0
   );
@@ -190,6 +199,10 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
   const filterQuantity = Math.max(safeData.filterQuantity ?? (includeFilter ? 1 : 0), 0);
   const heaterQuantity = Math.max(safeData.heaterQuantity ?? (includeHeater ? 1 : 0), 0);
   const automationQuantity = Math.max(safeData.automationQuantity ?? (includeAutomation ? 1 : 0), 0);
+  const poolLights = safeData.poolLights || [];
+  const spaLights = safeData.spaLights || [];
+  const poolLightsToggledRef = useRef(false);
+  const spaLightsToggledRef = useRef(false);
 
   const updateData = (updates: Partial<Equipment>) => {
     onChange({ ...safeData, ...updates, hasBeenEdited: true });
@@ -201,6 +214,39 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
 
   const setAuxiliaryPumps = (pumps: PumpSelection[]) => {
     updateData({ auxiliaryPumps: pumps, auxiliaryPump: pumps[0] });
+  };
+
+  const poolLightOptions = pricingData.equipment.lights.poolLights || [];
+  const spaLightOptions = pricingData.equipment.lights.spaLights || [];
+
+  const buildLightSelection = (option: any, type: 'pool' | 'spa'): LightSelection => ({
+    type,
+    name: option?.name || '',
+    basePrice: (option as any)?.basePrice ?? 0,
+    addCost1: (option as any)?.addCost1 ?? 0,
+    addCost2: (option as any)?.addCost2 ?? 0,
+    price: (option as any)?.price,
+  });
+
+  const commitLighting = (
+    nextPoolLights: LightSelection[],
+    nextSpaLights: LightSelection[],
+    nextIncludePool: boolean,
+    nextIncludeSpa: boolean,
+  ) => {
+    updateData({
+      includePoolLights: nextIncludePool,
+      includeSpaLights: nextIncludeSpa && hasSpa,
+      poolLights: nextIncludePool ? nextPoolLights : [],
+      spaLights: nextIncludeSpa && hasSpa ? nextSpaLights : [],
+      numberOfLights: nextIncludePool ? Math.max(nextPoolLights.length - 1, 0) : 0,
+      hasSpaLight: nextIncludeSpa && hasSpa && nextSpaLights.length > 0,
+    });
+  };
+
+  const findLightOption = (name: string, type: 'pool' | 'spa') => {
+    const list = type === 'pool' ? poolLightOptions : spaLightOptions;
+    return list.find(light => light.name === name) || list[0];
   };
 
   const togglePump = (val: boolean) => {
@@ -327,14 +373,111 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
     }
   };
 
-  const toggleLighting = (val: boolean) => {
-    setIncludeLighting(val);
-    if (!val) {
-      updateData({
-        numberOfLights: 0,
-        hasSpaLight: false,
-      });
+  useEffect(() => {
+    if (!hasPool) {
+      if (includePoolLights && poolLights.length > 0) {
+        commitLighting([], spaLights, includePoolLights, includeSpaLights);
+      }
+      return;
     }
+    if (!includePoolLights && !poolLightsToggledRef.current) {
+      setIncludePoolLights(true);
+    }
+    if (includePoolLights && poolLights.length === 0 && poolLightOptions.length > 0 && !poolLightsToggledRef.current) {
+      commitLighting([buildLightSelection(poolLightOptions[0], 'pool')], spaLights, true, includeSpaLights);
+    }
+  }, [hasPool, includePoolLights, poolLights.length, spaLights, includeSpaLights, poolLightOptions]);
+
+  useEffect(() => {
+    if (!hasSpa) {
+      if (includeSpaLights || spaLights.length > 0) {
+        commitLighting(poolLights, [], includePoolLights, false);
+        setIncludeSpaLights(false);
+      }
+      return;
+    }
+    if (!includeSpaLights && !spaLightsToggledRef.current) {
+      setIncludeSpaLights(true);
+    }
+    if (includeSpaLights && spaLights.length === 0 && spaLightOptions.length > 0 && !spaLightsToggledRef.current) {
+      commitLighting(poolLights, [buildLightSelection(spaLightOptions[0], 'spa')], includePoolLights, true);
+    }
+  }, [hasSpa, includeSpaLights, spaLights.length, poolLights, includePoolLights, spaLightOptions]);
+
+  const togglePoolLighting = (val: boolean) => {
+    poolLightsToggledRef.current = true;
+    setIncludePoolLights(val);
+    if (val) {
+      const defaultLight = poolLightOptions[0] ? buildLightSelection(poolLightOptions[0], 'pool') : undefined;
+      const nextPoolLights = poolLights.length > 0 ? poolLights : defaultLight ? [defaultLight] : [];
+      commitLighting(nextPoolLights, spaLights, true, includeSpaLights);
+    } else {
+      commitLighting([], spaLights, false, includeSpaLights);
+    }
+  };
+
+  const toggleSpaLighting = (val: boolean) => {
+    spaLightsToggledRef.current = true;
+    if (!hasSpa) {
+      setIncludeSpaLights(false);
+      return;
+    }
+    setIncludeSpaLights(val);
+    if (val) {
+      const defaultLight = spaLightOptions[0] ? buildLightSelection(spaLightOptions[0], 'spa') : undefined;
+      const nextSpaLights = spaLights.length > 0 ? spaLights : defaultLight ? [defaultLight] : [];
+      commitLighting(poolLights, nextSpaLights, includePoolLights, true);
+    } else {
+      commitLighting(poolLights, [], includePoolLights, false);
+    }
+  };
+
+  const addPoolLight = () => {
+    const defaultLight = poolLightOptions[0];
+    if (!defaultLight) return;
+    const nextPoolLights = [...poolLights, buildLightSelection(defaultLight, 'pool')];
+    commitLighting(nextPoolLights, spaLights, true, includeSpaLights);
+  };
+
+  const removePoolLight = (index: number) => {
+    const next = poolLights.filter((_, i) => i !== index);
+    if (next.length === 0) {
+      togglePoolLighting(false);
+    } else {
+      commitLighting(next, spaLights, true, includeSpaLights);
+    }
+  };
+
+  const handlePoolLightChange = (index: number, name: string) => {
+    const option = findLightOption(name, 'pool');
+    if (!option) return;
+    const next = [...poolLights];
+    next[index] = buildLightSelection(option, 'pool');
+    commitLighting(next, spaLights, true, includePoolLights);
+  };
+
+  const addSpaLight = () => {
+    const defaultLight = spaLightOptions[0];
+    if (!defaultLight || !hasSpa) return;
+    const nextSpaLights = [...spaLights, buildLightSelection(defaultLight, 'spa')];
+    commitLighting(poolLights, nextSpaLights, includePoolLights, true);
+  };
+
+  const removeSpaLight = (index: number) => {
+    const next = spaLights.filter((_, i) => i !== index);
+    if (next.length === 0) {
+      toggleSpaLighting(false);
+    } else {
+      commitLighting(poolLights, next, includePoolLights, true);
+    }
+  };
+
+  const handleSpaLightChange = (index: number, name: string) => {
+    const option = findLightOption(name, 'spa');
+    if (!option) return;
+    const next = [...spaLights];
+    next[index] = buildLightSelection(option, 'spa');
+    commitLighting(poolLights, next, includePoolLights, true);
   };
 
   const toggleAutomation = (val: boolean) => {
@@ -745,55 +888,107 @@ function EquipmentSectionNew({ data, onChange, hasSpa }: Props) {
         )}
       </div>
 
-      {/* Lighting */}
+      {/* Pool Lights */}
       <div className="spec-block">
         <div className="spec-block-header">
-          <h2 className="spec-block-title">Lighting</h2>
-          <p className="spec-block-subtitle">Toggle lighting and enter counts.</p>
+          <h2 className="spec-block-title">Pool Lights</h2>
+          <p className="spec-block-subtitle">Select pool lighting fixtures.</p>
           <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
             <button
               type="button"
-              className={`pool-type-btn ${includeLighting ? 'active' : ''}`}
-              onClick={() => toggleLighting(!includeLighting)}
+              className={`pool-type-btn ${includePoolLights ? 'active' : ''}`}
+              onClick={() => togglePoolLighting(!includePoolLights)}
             >
-              {includeLighting ? 'Remove Lighting' : 'Add Lighting'}
+              {includePoolLights ? 'Remove Pool Lights' : 'Add Pool Lights'}
             </button>
           </div>
         </div>
-        {includeLighting && (
-          <div className="spec-grid spec-grid-3">
-            <div className="spec-field">
-              <label className="spec-label">Pool Lights</label>
-              <CompactInput
-                value={safeData.numberOfLights ?? 0}
-                onChange={(e) => handleChange('numberOfLights', parseInt(e.target.value) || 0)}
-                unit="ea"
-                min="0"
-                step="1"
-                placeholder="Additional pool lights"
-              />
-              <small className="form-help">First pool light is included by default; this adds extras.</small>
-            </div>
-
-            {hasSpa ? (
-              <div className="spec-field">
-                <label className="spec-label">Spa Lights</label>
-                <CompactInput
-                  value={safeData.hasSpaLight ? 0 : 0}
-                  readOnly
-                  placeholder="Spa light included"
+        {includePoolLights && (
+          <div className="spec-field">
+            {poolLights.map((light, idx) => (
+              <div key={`pool-light-${idx}`} className="spec-subcard" style={{ marginTop: idx === 0 ? '0' : '12px' }}>
+                <div className="spec-subcard-header">
+                  <div className="spec-subcard-title">Pool Light #{idx + 1}</div>
+                  {poolLights.length > 1 && (
+                    <div className="spec-subcard-actions">
+                      <button type="button" className="link-btn danger" onClick={() => removePoolLight(idx)}>
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <ButtonGroup
+                  value={light?.name || poolLightOptions[0]?.name}
+                  onChange={(name) => handlePoolLightChange(idx, name)}
+                  options={poolLightOptions.map(option => ({
+                    label: option.name,
+                    value: option.name,
+                    badge: costOf(option) > 0 ? `$${costOf(option).toLocaleString()}` : 'Included',
+                  }))}
                 />
-                <div className="form-help">Spa light is included by default when a spa is present.</div>
               </div>
-            ) : (
-              <div className="spec-field">
-                <label className="spec-label">Spa Lights</label>
-                <CompactInput value="No spa included" readOnly type="text" />
-              </div>
-            )}
+            ))}
+
+            <div className="action-row" style={{ marginTop: poolLights.length ? '12px' : '0' }}>
+              <button type="button" className="action-btn secondary" onClick={addPoolLight}>
+                Add another Pool Light
+              </button>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Spa Lights */}
+      {hasSpa && (
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Spa Lights</h2>
+            <p className="spec-block-subtitle">Select spa lighting fixtures.</p>
+            <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
+              <button
+                type="button"
+                className={`pool-type-btn ${includeSpaLights ? 'active' : ''}`}
+                onClick={() => toggleSpaLighting(!includeSpaLights)}
+              >
+                {includeSpaLights ? 'Remove Spa Lights' : 'Add Spa Lights'}
+              </button>
+            </div>
+          </div>
+          {includeSpaLights && (
+            <div className="spec-field">
+              {spaLights.map((light, idx) => (
+                <div key={`spa-light-${idx}`} className="spec-subcard" style={{ marginTop: idx === 0 ? '0' : '12px' }}>
+                  <div className="spec-subcard-header">
+                    <div className="spec-subcard-title">Spa Light #{idx + 1}</div>
+                    {spaLights.length > 1 && (
+                      <div className="spec-subcard-actions">
+                        <button type="button" className="link-btn danger" onClick={() => removeSpaLight(idx)}>
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <ButtonGroup
+                    value={light?.name || spaLightOptions[0]?.name}
+                    onChange={(name) => handleSpaLightChange(idx, name)}
+                    options={spaLightOptions.map(option => ({
+                      label: option.name,
+                      value: option.name,
+                      badge: costOf(option) > 0 ? `$${costOf(option).toLocaleString()}` : 'Included',
+                    }))}
+                  />
+                </div>
+              ))}
+
+              <div className="action-row" style={{ marginTop: spaLights.length ? '12px' : '0' }}>
+                <button type="button" className="action-btn secondary" onClick={addSpaLight}>
+                  Add another Spa Light
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Automation */}
       <div className="spec-block">
