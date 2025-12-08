@@ -1,6 +1,6 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
-- Pricing model comparison breakdown
+- Pricing model comparison breakdown *****
 - Auto update without being public
 - Logo upload option for admin, makes available for franchise
 - Admin Pricing Menu Redesign
@@ -38,16 +38,15 @@ Long Term -
 ---------------------------------------------------------------------------------------------------------
 
 Confusion -
-- There is a $1250 kicker always present in retail cost (E309)
-- Spa Prep ($250) never included in COST-NEW (INTD25)?
-- Waterproofing not included (Daisy?)
-- Columns only bill when a facing is selected; otherwise ignored (stone/rockwork)
-    - Custom facing option?
-- Remodel workflow
-- Included cost workflow; what is included by default?
-- Sanitation remodel doesnt include Overhead like Pumps
-    - Some equip uses Remodel cost some use base?
-
+- Overall
+    - There is a $1250 kicker always present in retail cost (E309)
+    - Spa Prep ($250) never included in COST-NEW (INTD25)?
+    - 'Columns' only bill when a facing is selected; otherwise ignored (stone/rockwork)
+        - Custom facing option?
+    - Remodel workflow
+    - Included cost workflow; what is included by default?
+    - Sanitation remodel doesnt include Overhead like Pumps
+        - Some equip uses Remodel cost some use base?
 
 Question - 
 - Should things like Cleaner & Autofil run be inputs when entered on equip? Or stay in plumb
@@ -56,6 +55,13 @@ Question -
 
 - Find where equip additonal acc ties into
 
+
+
+---
+Daryl Difference
+- Water Feature Price
+- No heater in equip set
+- 
 
 
 

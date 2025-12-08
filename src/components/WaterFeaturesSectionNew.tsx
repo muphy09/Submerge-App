@@ -1,6 +1,12 @@
 import { useMemo } from 'react';
 import { WaterFeatures, WaterFeatureSelection, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import {
+  DEFAULT_WATER_FEATURE_MARGIN,
+  flattenWaterFeatures,
+  getWaterFeatureCogs,
+  getWaterFeatureRetail,
+} from '../utils/waterFeatureCost';
 import './SectionStyles.css';
 
 interface Props {
@@ -60,7 +66,8 @@ const sortSheerOptions = (options: any[]) => {
 };
 
 function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns }: Props) {
-  const catalog = pricingData.waterFeatures?.catalog ?? [];
+  const catalog = flattenWaterFeatures(pricingData.waterFeatures);
+  const retailMargin = pricingData.waterFeatures?.retailMargin ?? DEFAULT_WATER_FEATURE_MARGIN;
   const hasCatalog = catalog.length > 0;
 
   const catalogByCategory = useMemo(() => {
@@ -73,19 +80,31 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
     return grouped;
   }, [catalog]);
 
-  const sheerOptions = sortSheerOptions(catalogByCategory['Sheer Descents'] || []);
+  const findFeature = (featureId?: string) =>
+    catalog.find((f) => f.id === featureId) || catalog.find((f) => f.name === featureId);
+
+  const sheerOptions = sortSheerOptions(catalogByCategory['Sheer Descent'] || []);
   const jetOptions = catalogByCategory['Jets'] || [];
-  const wokWater = catalogByCategory['Precast Woks - Water Only'] || [];
-  const wokFire = catalogByCategory['Precast Woks - Fire Only'] || [];
-  const wokFireWater = catalogByCategory['Precast Woks - Fire & Water'] || [];
-  const ledBubbler = catalogByCategory['Bubblers & Lighting']?.find((f) => f.id === 'led-bubbler');
+  const wokWater = catalogByCategory['Wok Pots - Water Only'] || [];
+  const wokFire = catalogByCategory['Wok Pots - Fire Only'] || [];
+  const wokFireWater = catalogByCategory['Wok Pots - Water & Fire'] || [];
+  const bubblerOptions = catalogByCategory['Bubbler'] || [];
+  const ledBubbler = bubblerOptions.find((f) => f.id === 'led-bubbler') || bubblerOptions[0];
 
   const selections = data?.selections ?? [];
 
-  const calculateTotal = (selectionsList: WaterFeatureSelection[]) => {
-    const lookup = new Map(catalog.map((entry) => [entry.id, entry.unitPrice]));
-    return selectionsList.reduce((sum, sel) => sum + (lookup.get(sel.featureId) ?? 0) * (sel.quantity ?? 0), 0);
-  };
+  const cogsLookup = useMemo(
+    () => new Map(catalog.map((entry) => [entry.id, getWaterFeatureCogs(entry)])),
+    [catalog]
+  );
+
+  const retailLookup = useMemo(
+    () => new Map(catalog.map((entry) => [entry.id, getWaterFeatureRetail(entry, retailMargin)])),
+    [catalog, retailMargin]
+  );
+
+  const calculateTotal = (selectionsList: WaterFeatureSelection[]) =>
+    selectionsList.reduce((sum, sel) => sum + (cogsLookup.get(sel.featureId) ?? 0) * (sel.quantity ?? 0), 0);
 
   const updateSelections = (next: WaterFeatureSelection[]) => {
     onChange({
@@ -259,13 +278,20 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
   const hasSheer = !noSheer;
   const noJets = !activeJet;
   const noBubbler = bubblerQty <= 0;
-  const hasCatalogData = hasCatalog && sheerOptions.length > 0;
+  const hasCatalogData =
+    hasCatalog &&
+    (sheerOptions.length > 0 ||
+      jetOptions.length > 0 ||
+      wokWater.length > 0 ||
+      wokFire.length > 0 ||
+      wokFireWater.length > 0 ||
+      bubblerOptions.length > 0);
 
   return (
     <div className="section-form">
       {!hasCatalogData && (
         <div className="form-help" style={{ fontStyle: 'italic', marginBottom: '1rem' }}>
-          No catalog data found. Verify pricing data is loaded from Regular pricing.xlsx (Equip tab, column S).
+          No water feature pricing found. Add items in the Admin Pricing Model under Water Features (Name + Base/Adders).
         </div>
       )}
 
@@ -296,7 +322,7 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
         {hasSheer && (
           <>
             {sheerSelections.map((sel, idx) => {
-              const feature = catalog.find((f) => f.id === sel.featureId);
+              const feature = findFeature(sel.featureId);
               const requiresPump = !!(feature?.note && feature.note.toLowerCase().includes('requires second pump'));
               return (
                 <div key={`${sel.featureId}-${idx}`} className="spec-subcard">
@@ -355,7 +381,7 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
                     <div className="spec-field">
                       <label className="spec-label">Unit Price</label>
                       <div className="form-value">
-                        {feature ? formatCurrency(feature.unitPrice) : '--'}
+                        {feature ? formatCurrency(retailLookup.get(feature.id) ?? getWaterFeatureRetail(feature, retailMargin)) : '--'}
                       </div>
                     </div>
                   </div>
@@ -415,7 +441,7 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
               <div>
                 <div className="spec-subcard-title">Wok Pot Selection</div>
                 <div className="spec-subcard-subtitle">
-                  {catalog.find((f) => f.id === activeWok.featureId)?.name || 'Select Model'}
+                  {findFeature(activeWok.featureId)?.name || 'Select Model'}
                 </div>
               </div>
               <div className="spec-subcard-actions">
@@ -455,7 +481,10 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
               <div className="spec-field">
                 <label className="spec-label">Unit Price</label>
                 <div className="form-value">
-                  {formatCurrency(catalog.find((f) => f.id === activeWok.featureId)?.unitPrice || 0)}
+                  {formatCurrency(
+                    retailLookup.get(activeWok.featureId) ??
+                      getWaterFeatureRetail(findFeature(activeWok.featureId), retailMargin)
+                  )}
                 </div>
               </div>
             </div>
@@ -493,7 +522,7 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
               <div>
                 <div className="spec-subcard-title">Jet Selection</div>
                 <div className="spec-subcard-subtitle">
-                  {catalog.find((f) => f.id === activeJet.featureId)?.name || 'Select Jet'}
+                  {findFeature(activeJet.featureId)?.name || 'Select Jet'}
                 </div>
               </div>
               <div className="spec-subcard-actions">
@@ -531,7 +560,10 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
               <div className="spec-field">
                 <label className="spec-label">Unit Price</label>
                 <div className="form-value">
-                  {formatCurrency(catalog.find((f) => f.id === activeJet.featureId)?.unitPrice || 0)}
+                  {formatCurrency(
+                    retailLookup.get(activeJet.featureId) ??
+                      getWaterFeatureRetail(findFeature(activeJet.featureId), retailMargin)
+                  )}
                 </div>
               </div>
             </div>
@@ -565,13 +597,17 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
 
         {!noBubbler && ledBubbler && (
           <div className="spec-subcard">
-            <div className="spec-subcard-header">
-              <div>
-                <div className="spec-subcard-title">{ledBubbler.name}</div>
-                <div className="spec-subcard-subtitle">{formatCurrency(ledBubbler.unitPrice)}</div>
-              </div>
-              <div className="spec-subcard-actions">
-                <button type="button" className="link-btn danger" onClick={() => setBubblerEnabled(false)}>
+              <div className="spec-subcard-header">
+                <div>
+                  <div className="spec-subcard-title">{ledBubbler.name}</div>
+                  <div className="spec-subcard-subtitle">
+                    {formatCurrency(
+                      retailLookup.get(ledBubbler.id) ?? getWaterFeatureRetail(ledBubbler, retailMargin)
+                    )}
+                  </div>
+                </div>
+                <div className="spec-subcard-actions">
+                  <button type="button" className="link-btn danger" onClick={() => setBubblerEnabled(false)}>
                   Remove
                 </button>
               </div>

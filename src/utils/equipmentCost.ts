@@ -3,6 +3,9 @@ export type EquipmentCostLike = {
   addCost1?: number;
   addCost2?: number;
   price?: number;
+  // Automation-only flags used for category detection
+  zones?: number;
+  hasChemistry?: boolean;
 };
 
 /**
@@ -16,6 +19,11 @@ export function getEquipmentItemCost(
   const hasParts =
     item.basePrice !== undefined || item.addCost1 !== undefined || item.addCost2 !== undefined;
   const totalParts = (item.basePrice ?? 0) + (item.addCost1 ?? 0) + (item.addCost2 ?? 0);
-  const base = hasParts ? totalParts : item.price ?? 0;
+  const isAutomation = hasParts && (item.hasChemistry !== undefined || item.zones !== undefined);
+  const base = hasParts
+    ? isAutomation
+      ? totalParts / 0.75 // Automation COGS = (base + adders) ÷ 75% (EQUIP tab parity)
+      : totalParts
+    : item.price ?? 0;
   return base * overheadMultiplier;
 }

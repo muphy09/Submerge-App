@@ -6,6 +6,7 @@ import { PoolSpecs, Excavation, TileCopingDecking, Drainage, Equipment, WaterFea
 import pricingData from './pricingData';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
+import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasGuniteDimensions =
@@ -889,20 +890,22 @@ export class EquipmentCalculations {
 export class WaterFeaturesCalculations {
   static calculateWaterFeaturesCost(waterFeatures: WaterFeatures): CostLineItem[] {
     const items: CostLineItem[] = [];
-    const catalog = pricingData.waterFeatures?.catalog ?? [];
+    const catalog = flattenWaterFeatures(pricingData.waterFeatures);
     const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
     const selections = waterFeatures.selections ?? [];
 
     selections.forEach((selection) => {
-      const feature = lookup.get(selection.featureId);
+      const feature = lookup.get(selection.featureId) || catalog.find((f) => f.name === selection.featureId);
       if (!feature || selection.quantity <= 0) return;
+
+      const unitPrice = getWaterFeatureCogs(feature);
 
       items.push({
         category: 'Water Features',
         description: feature.name,
-        unitPrice: feature.unitPrice,
+        unitPrice,
         quantity: selection.quantity,
-        total: feature.unitPrice * selection.quantity,
+        total: unitPrice * selection.quantity,
         notes: feature.note,
       });
     });

@@ -5,6 +5,7 @@
 import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { CalculationModules } from './pricingEngineComplete';
+import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 
 const hasPoolDefinition = (poolSpecs: any): boolean => {
   if (!poolSpecs) return false;
@@ -362,6 +363,7 @@ export class MasterPricingEngine {
     const digCommissionRate = proposal.pricing?.digCommissionRate ?? 0.0275; // 2.75%
     const adminFeeRate = proposal.pricing?.adminFeeRate ?? 0.029; // 2.9%
     const closeoutCommissionRate = proposal.pricing?.closeoutCommissionRate ?? 0.0275; // 2.75%
+    const automationRetailMargin = 0.75; // Automation retail uses 75% margin (vs standard 70%)
     const manualAdjustments = proposal.manualAdjustments || (pricingData as any).manualAdjustments || {
       positive1: 0,
       positive2: 0,
@@ -377,14 +379,69 @@ export class MasterPricingEngine {
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 1250;
 
+    // Identify automation portion of costs to apply 75% retail margin (matches EQUIP tab behavior)
+    const automationCostBeforeOverhead = (() => {
+      const automationName = (equipment?.automation?.name || '').toLowerCase();
+      if (!automationName) return 0;
+
+      const normalizeDesc = (val?: string) => (val || '').toLowerCase();
+      const isAutomationLine = (item: CostLineItem) => {
+        const desc = normalizeDesc(item.description);
+        return (
+          item.category === 'Equipment' &&
+          (desc === automationName || desc === 'additional automation zones')
+        );
+      };
+
+      const equipmentLines = equipmentItems.filter((item) => item.category === 'Equipment');
+      if (!equipmentLines.length) return 0;
+
+      const automationSubtotal = equipmentLines
+        .filter(isAutomationLine)
+        .reduce((sum, item) => sum + (item.total ?? 0), 0);
+      if (automationSubtotal === 0) return 0;
+
+      const equipmentBaseSubtotal = equipmentLines
+        .filter((item) => {
+          const desc = normalizeDesc(item.description);
+          return !desc.includes('pap discount') && !desc.includes('tax');
+        })
+        .reduce((sum, item) => sum + (item.total ?? 0), 0);
+      const equipmentDiscountTotal = equipmentLines
+        .filter((item) => normalizeDesc(item.description).includes('pap discount'))
+        .reduce((sum, item) => sum + (item.total ?? 0), 0);
+      const equipmentTaxTotal = equipmentLines
+        .filter((item) => normalizeDesc(item.description).includes('tax'))
+        .reduce((sum, item) => sum + (item.total ?? 0), 0);
+
+      const discountShare =
+        equipmentBaseSubtotal > 0
+          ? equipmentDiscountTotal * (automationSubtotal / equipmentBaseSubtotal)
+          : 0;
+      const taxableBaseAfterDiscount = equipmentBaseSubtotal + equipmentDiscountTotal;
+      const automationTaxShare =
+        taxableBaseAfterDiscount > 0
+          ? equipmentTaxTotal * ((automationSubtotal + discountShare) / taxableBaseAfterDiscount)
+          : 0;
+
+      return automationSubtotal + discountShare + automationTaxShare;
+    })();
+
     // Step 1: Total costs before overhead
     const totalCostsBeforeOverhead = totals.grandTotal;
 
     // Step 2: Apply overhead multiplier
     const totalCOGS = totalCostsBeforeOverhead * overheadMultiplier;
 
-    // Step 3: Calculate base retail price (divide by target margin and round up to nearest $10 to match Excel)
-    const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 10) * 10;
+    // Step 3: Calculate base retail price (automation uses 75% margin; others use target margin; rounded to $10 to match Excel)
+    const automationCOGS = Math.min(Math.max(automationCostBeforeOverhead * overheadMultiplier, 0), totalCOGS);
+    const nonAutomationCOGS = Math.max(totalCOGS - automationCOGS, 0);
+    const baseRetailPrice = Math.ceil(
+      (
+        (automationCOGS > 0 ? automationCOGS / automationRetailMargin : 0) +
+        (nonAutomationCOGS > 0 ? nonAutomationCOGS / targetMargin : 0)
+      ) / 10
+    ) * 10;
 
     // Step 4: Add G3 upgrade and discount
     const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount + manualAdjustmentsTotal;
@@ -431,6 +488,8 @@ export class MasterPricingEngine {
   private static calculatePlansEngineering(poolSpecs: any, excavation: any, waterFeatures: any): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.plans;
+    const catalog = flattenWaterFeatures(pricingData.waterFeatures);
+    const featureLookup = new Map(catalog.map((entry) => [entry.id, entry]));
 
     if (!hasPoolDefinition(poolSpecs)) {
       return items;
@@ -457,13 +516,16 @@ export class MasterPricingEngine {
     // Waterfall cost from water features or explicit count
     const explicitWaterfalls =
       (poolSpecs as any).waterfallCount ?? (waterFeatures as any)?.waterfallCount ?? 0;
-    const waterfallCount = explicitWaterfalls > 0 ? explicitWaterfalls : (waterFeatures?.selections || [])
-      .filter((sel: any) => {
-        const catalog = pricingData.waterFeatures?.catalog ?? [];
-        const feature = catalog.find((f: any) => f.id === sel.featureId);
-        return feature?.name?.toLowerCase().includes('waterfall');
-      })
-      .reduce((sum: number, sel: any) => sum + (sel.quantity || 0), 0);
+    const waterfallCount =
+      explicitWaterfalls > 0
+        ? explicitWaterfalls
+        : (waterFeatures?.selections || [])
+            .filter((sel: any) => {
+              const feature =
+                featureLookup.get(sel.featureId) || catalog.find((f: any) => f.name === sel.featureId);
+              return feature?.name?.toLowerCase().includes('waterfall');
+            })
+            .reduce((sum: number, sel: any) => sum + (sel.quantity || 0), 0);
 
     if (waterfallCount > 0) {
       items.push({
@@ -477,8 +539,8 @@ export class MasterPricingEngine {
 
     // Water features (non-waterfall) counted directly from selections
     const waterFeatureCount = (waterFeatures?.selections || []).reduce((sum: number, sel: any) => {
-      const catalog = pricingData.waterFeatures?.catalog ?? [];
-      const feature = catalog.find((f: any) => f.id === sel.featureId);
+      const feature =
+        featureLookup.get(sel.featureId) || catalog.find((f: any) => f.name === sel.featureId);
       const isWaterfall =
         feature?.name?.toLowerCase().includes('waterfall') ||
         feature?.category?.toLowerCase().includes('waterfall');

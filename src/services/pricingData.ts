@@ -96,25 +96,38 @@ const pricingData = {
     travelPerMile: 5,
   },
   waterFeatures: {
-    // Pricing pulled from Regular pricing.xlsx, Equip tab, column S
-    catalog: [
-      { id: 'sheer-12', name: '12" Sheer Descent', category: 'Sheer Descents', unitPrice: 760, note: 'Cascading Water Feature' },
-      { id: 'sheer-18', name: '18" Sheer Descent', category: 'Sheer Descents', unitPrice: 780, note: 'Cascading Water Feature' },
-      { id: 'sheer-2', name: "2' Sheer Descent", category: 'Sheer Descents', unitPrice: 820, note: 'Cascading Water Feature' },
-      { id: 'sheer-3', name: "3' Sheer Descent", category: 'Sheer Descents', unitPrice: 880, note: 'Cascading Water Feature' },
-      { id: 'sheer-4', name: "4' Sheer Descent", category: 'Sheer Descents', unitPrice: 1000, note: 'Cascading Water Feature' },
-      { id: 'sheer-5', name: "5' Sheer Descent (Requires 2nd Pump)", category: 'Sheer Descents', unitPrice: 1120, note: 'Requires second pump' },
-      { id: 'sheer-6', name: "6' Sheer Descent (Requires 2nd Pump)", category: 'Sheer Descents', unitPrice: 1300, note: 'Requires second pump' },
-      { id: 'deck-jet', name: 'Deck Jet', category: 'Jets', unitPrice: 420 },
-      { id: 'laminar-jet', name: 'Laminar Jet', category: 'Jets', unitPrice: 1760 },
-      { id: 'wok-water-30', name: '30" Precast Wok - Water Only', category: 'Precast Woks - Water Only', unitPrice: 1920 },
-      { id: 'wok-water-32', name: '32" Precast Wok - Water Only', category: 'Precast Woks - Water Only', unitPrice: 2060 },
-      { id: 'wok-water-36', name: '36" Precast Wok - Water Only', category: 'Precast Woks - Water Only', unitPrice: 2260, note: 'Add $500 for Copper' },
-      { id: 'wok-fire-water-30', name: '30" Precast Wok - Fire & Water', category: 'Precast Woks - Fire & Water', unitPrice: 5060, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
-      { id: 'wok-fire-water-36', name: '36" Precast Wok - Fire & Water', category: 'Precast Woks - Fire & Water', unitPrice: 6020, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
-      { id: 'wok-fire-30', name: '30" Precast Wok - Fire Only', category: 'Precast Woks - Fire Only', unitPrice: 1760, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
-      { id: 'wok-fire-36', name: '36" Precast Wok - Fire Only', category: 'Precast Woks - Fire Only', unitPrice: 2100, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
-      { id: 'led-bubbler', name: 'LED Bubbler (with light)', category: 'Bubblers & Lighting', unitPrice: 1380, note: 'Includes bubbler and light; add matching light run + water feature run' },
+    // Pricing pulled from Regular pricing.xlsx, Equip tab (Name + Base + Adders)
+    retailMargin: 0.7, // Normal 70% retail margin applied to COGS
+    sheerDescents: [
+      { id: 'sheer-12', name: '12" Sheer Descent', basePrice: 760, addCost1: 0, addCost2: 0, note: 'Cascading Water Feature' },
+      { id: 'sheer-18', name: '18" Sheer Descent', basePrice: 780, addCost1: 0, addCost2: 0, note: 'Cascading Water Feature' },
+      { id: 'sheer-2', name: "2' Sheer Descent", basePrice: 820, addCost1: 0, addCost2: 0, note: 'Cascading Water Feature' },
+      { id: 'sheer-3', name: "3' Sheer Descent", basePrice: 880, addCost1: 0, addCost2: 0, note: 'Cascading Water Feature' },
+      { id: 'sheer-4', name: "4' Sheer Descent", basePrice: 1000, addCost1: 0, addCost2: 0, note: 'Cascading Water Feature' },
+      { id: 'sheer-5', name: "5' Sheer Descent (Requires 2nd Pump)", basePrice: 1120, addCost1: 0, addCost2: 0, note: 'Requires second pump' },
+      { id: 'sheer-6', name: "6' Sheer Descent (Requires 2nd Pump)", basePrice: 1300, addCost1: 0, addCost2: 0, note: 'Requires second pump' },
+    ],
+    jets: [
+      { id: 'deck-jet', name: 'Deck Jet', basePrice: 420, addCost1: 0, addCost2: 0 },
+      { id: 'laminar-jet', name: 'Laminar Jet', basePrice: 1760, addCost1: 0, addCost2: 0 },
+    ],
+    woks: {
+      waterOnly: [
+        { id: 'wok-water-30', name: '30" Precast Wok - Water Only', basePrice: 1920, addCost1: 0, addCost2: 0 },
+        { id: 'wok-water-32', name: '32" Precast Wok - Water Only', basePrice: 2060, addCost1: 0, addCost2: 0 },
+        { id: 'wok-water-36', name: '36" Precast Wok - Water Only', basePrice: 2260, addCost1: 0, addCost2: 0, note: 'Add $500 for Copper' },
+      ],
+      fireOnly: [
+        { id: 'wok-fire-30', name: '30" Precast Wok - Fire Only', basePrice: 1760, addCost1: 0, addCost2: 0, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
+        { id: 'wok-fire-36', name: '36" Precast Wok - Fire Only', basePrice: 2100, addCost1: 0, addCost2: 0, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
+      ],
+      waterAndFire: [
+        { id: 'wok-fire-water-30', name: '30" Precast Wok - Water & Fire', basePrice: 5060, addCost1: 0, addCost2: 0, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
+        { id: 'wok-fire-water-36', name: '36" Precast Wok - Water & Fire', basePrice: 6020, addCost1: 0, addCost2: 0, note: 'Match throw add $588, auto add $2134, add $500 for copper' },
+      ],
+    },
+    bubblers: [
+      { id: 'led-bubbler', name: 'LED Bubbler (with light)', basePrice: 1380, addCost1: 0, addCost2: 0, note: 'Includes bubbler and light; add matching light run + water feature run' },
     ],
   },
   electrical: {

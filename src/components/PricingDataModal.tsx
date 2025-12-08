@@ -46,6 +46,7 @@ type ListConfig = {
   path: Path;
   fields: ListField[];
   addLabel: string;
+  defaultItem?: Record<string, any> | (() => Record<string, any>);
 };
 
 type Group = {
@@ -295,7 +296,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
 
   const handleAddListItem = (list: ListConfig) => {
-    addPricingListItem(list.path, emptyFromFields(list.fields));
+    const defaults =
+      typeof list.defaultItem === 'function' ? list.defaultItem() : list.defaultItem || {};
+    addPricingListItem(list.path, { ...emptyFromFields(list.fields), ...defaults });
     setHasChanges(true);
   };
 
@@ -431,6 +434,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       }
     };
   }, []);
+
+  const waterFeatureFields: ListField[] = useMemo(
+    () => [
+      { key: 'name', label: 'Name', type: 'text', placeholder: 'Feature name' },
+      { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
+      { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
+      { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+    ],
+    []
+  );
 
   const sections: Section[] = useMemo(
     () => [
@@ -730,19 +743,64 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Water Features',
         groups: [
           {
-            title: 'Equip tab catalog (column S)',
+            title: 'Sheer Descent',
             lists: [
               {
-                title: 'Available water features',
-                path: ['waterFeatures', 'catalog'],
-                addLabel: 'Add water feature',
-                fields: [
-                  { key: 'id', label: 'Key', type: 'text', placeholder: 'unique-id' },
-                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Feature name' },
-                  { key: 'category', label: 'Category', type: 'text', placeholder: 'Group heading' },
-                  { key: 'unitPrice', label: 'Price (Equip!S)', type: 'number', placeholder: '0' },
-                  { key: 'note', label: 'Note', type: 'text', placeholder: 'Optional note' },
-                ],
+                title: 'Sheer Descents',
+                path: ['waterFeatures', 'sheerDescents'],
+                addLabel: 'Add sheer descent',
+                fields: waterFeatureFields,
+                defaultItem: () => ({ id: `wf-sheer-${Date.now()}` }),
+              },
+            ],
+          },
+          {
+            title: 'Jets',
+            lists: [
+              {
+                title: 'Jets',
+                path: ['waterFeatures', 'jets'],
+                addLabel: 'Add jet',
+                fields: waterFeatureFields,
+                defaultItem: () => ({ id: `wf-jet-${Date.now()}` }),
+              },
+            ],
+          },
+          {
+            title: 'Wok Pots',
+            lists: [
+              {
+                title: 'Water Only',
+                path: ['waterFeatures', 'woks', 'waterOnly'],
+                addLabel: 'Add water-only wok',
+                fields: waterFeatureFields,
+                defaultItem: () => ({ id: `wf-wok-water-${Date.now()}` }),
+              },
+              {
+                title: 'Fire Only',
+                path: ['waterFeatures', 'woks', 'fireOnly'],
+                addLabel: 'Add fire-only wok',
+                fields: waterFeatureFields,
+                defaultItem: () => ({ id: `wf-wok-fire-${Date.now()}` }),
+              },
+              {
+                title: 'Water & Fire',
+                path: ['waterFeatures', 'woks', 'waterAndFire'],
+                addLabel: 'Add water & fire wok',
+                fields: waterFeatureFields,
+                defaultItem: () => ({ id: `wf-wok-both-${Date.now()}` }),
+              },
+            ],
+          },
+          {
+            title: 'Bubbler',
+            lists: [
+              {
+                title: 'Bubbler models',
+                path: ['waterFeatures', 'bubblers'],
+                addLabel: 'Add bubbler',
+                fields: waterFeatureFields,
+                defaultItem: () => ({ id: `wf-bubbler-${Date.now()}` }),
               },
             ],
           },
