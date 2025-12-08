@@ -161,7 +161,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
       addCost2: (defaults.automation as any).addCost2,
       price: costOf(defaults.automation),
       zones: data?.automation?.zones ?? 0,
-      hasChemistry: defaults.automation.hasChemistry,
+      percentIncrease: (defaults.automation as any).percentIncrease,
     },
     automationQuantity: data?.automationQuantity ?? 0,
     saltSystem: data?.saltSystem,
@@ -494,7 +494,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
           addCost2: (selected as any)?.addCost2 ?? (defaults.automation as any).addCost2,
           price: costOf(selected || defaults.automation),
           zones: safeData.automation?.zones ?? 0,
-          hasChemistry: selected?.hasChemistry ?? defaults.automation.hasChemistry,
+          percentIncrease: (selected as any)?.percentIncrease ?? (defaults.automation as any).percentIncrease,
         },
         automationQuantity: Math.max(safeData.automationQuantity ?? 1, 1),
       });
@@ -507,7 +507,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
           addCost2: (defaults.automation as any).addCost2,
           price: costOf(defaults.automation),
           zones: 0,
-          hasChemistry: defaults.automation.hasChemistry,
+          percentIncrease: (defaults.automation as any).percentIncrease,
         },
         automationQuantity: 0,
       });
@@ -634,7 +634,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
           addCost2: (automation as any).addCost2,
           price: costOf(automation),
           zones: safeData.automation.zones,
-          hasChemistry: automation.hasChemistry,
+          percentIncrease: (automation as any).percentIncrease,
         },
         automationQuantity: Math.max(safeData.automationQuantity ?? 1, 1),
       });

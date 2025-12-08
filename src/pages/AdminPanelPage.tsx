@@ -4,6 +4,7 @@ import { Proposal } from '../types/proposal-new';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels, setDefaultPricingModel } from '../services/pricingModelsAdapter';
 import { listProposals as listProposalsRemote } from '../services/proposalsAdapter';
+import { initPricingDataStore } from '../services/pricingDataStore';
 import './AdminPanelPage.css';
 import {
   addFranchiseUser,
@@ -12,6 +13,21 @@ import {
   markDesignerProposalsDeleted,
   updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
+import {
+  getDefaultProposal,
+  getDefaultPoolSpecs,
+  getDefaultExcavation,
+  getDefaultPlumbing,
+  getDefaultElectrical,
+  getDefaultTileCopingDecking,
+  getDefaultDrainage,
+  getDefaultEquipment,
+  getDefaultWaterFeatures,
+  getDefaultCustomFeatures,
+  getDefaultInteriorFinish,
+  getDefaultManualAdjustments,
+} from '../utils/proposalDefaults';
+import { normalizeEquipmentLighting } from '../utils/lighting';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 
@@ -90,24 +106,56 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     setLoadingProposals(true);
     try {
       const data = await listProposalsRemote(targetFranchiseId);
-      const enriched = (data || []).map((proposal: Proposal) => {
+      const enriched: Proposal[] = [];
+
+      const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
+        const base = getDefaultProposal();
+        const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
+        const mergedEquipment = normalizeEquipmentLighting(
+          { ...getDefaultEquipment(), ...(input.equipment || {}) } as any,
+          { poolSpecs, hasSpa: poolSpecs.spaType !== 'none' }
+        );
+
+        return {
+          ...(base as Proposal),
+          ...input,
+          customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+          poolSpecs,
+          excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
+          plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
+          electrical: { ...getDefaultElectrical(), ...(input.electrical || {}) },
+          tileCopingDecking: { ...getDefaultTileCopingDecking(), ...(input.tileCopingDecking || {}) },
+          drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
+          equipment: mergedEquipment,
+          waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
+          customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+          interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
+          manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
+          papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+        };
+      };
+
+      for (const raw of data || []) {
         try {
+          const merged = mergeWithDefaults(raw);
+          await initPricingDataStore(merged.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID, merged.pricingModelId || undefined);
           const calculated = MasterPricingEngine.calculateCompleteProposal(
-            proposal,
-            (proposal as any).papDiscounts
+            merged,
+            (merged as any).papDiscounts
           );
-          return {
-            ...proposal,
+          enriched.push({
+            ...(merged as Proposal),
             pricing: calculated.pricing,
             costBreakdown: calculated.costBreakdown,
             subtotal: calculated.subtotal,
             totalCost: calculated.totalCost,
-          };
+          } as Proposal);
         } catch (error) {
-          console.warn(`Unable to recalc pricing for proposal ${proposal.proposalNumber}`, error);
-          return proposal;
+          console.warn(`Unable to recalc pricing for proposal ${raw.proposalNumber}`, error);
+          enriched.push(raw as Proposal);
         }
-      });
+      }
+
       setProposals(enriched);
     } catch (error) {
       console.error('Failed to load proposals for admin panel:', error);

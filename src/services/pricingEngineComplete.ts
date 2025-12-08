@@ -827,7 +827,7 @@ export class EquipmentCalculations {
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
     const hasPool = hasPoolDefinition(poolSpecs);
     const normalizedEquipment = normalizeEquipmentLighting(equipment, { hasPool, hasSpa, poolSpecs });
-    const heaterCost = getEquipmentItemCost(normalizedEquipment.heater as any, 1);
+    const heaterQty = Math.max(normalizedEquipment.heaterQuantity ?? 0, 0);
 
     if (!this.hasEquipmentSelection(normalizedEquipment)) {
       return items;
@@ -841,15 +841,16 @@ export class EquipmentCalculations {
       total: prices.base,
     });
 
-    // Heater set (for all heaters) - Excel PLUM!Row43: $200
-    if (heaterCost > 0) {
+    // Heater set (for all heaters) - Excel PLUM!Row43: $200 per heater
+    if (heaterQty > 0) {
       const isHeatPump = normalizedEquipment.heater.name.toLowerCase().includes('heat pump');
+      const unitPrice = isHeatPump ? prices.heatPump : prices.heater;
       items.push({
         category: 'Equipment Set',
         description: isHeatPump ? 'Heat Pump Set' : 'Heater',
-        unitPrice: isHeatPump ? prices.heatPump : 200,
-        quantity: 1,
-        total: isHeatPump ? prices.heatPump : 200,
+        unitPrice,
+        quantity: heaterQty,
+        total: unitPrice * heaterQty,
       });
     }
 
@@ -958,14 +959,17 @@ export class InteriorFinishCalculations {
     });
 
     // Spa finish
-    if (isGuniteSpa && interiorFinish.hasSpa) {
+    const surfaceArea = poolSpecs.surfaceArea ?? 0;
+    const spaPrepThreshold = prices.extras.poolPrepThreshold ?? 1200;
+
+    if (isGuniteSpa) {
       laborItems.push({
         category: 'Interior Finish',
-      description: 'Spa Finish',
-      unitPrice: finish?.spaFinishCost ?? 0,
-      quantity: 1,
-      total: finish?.spaFinishCost ?? 0,
-    });
+        description: 'Spa Finish',
+        unitPrice: finish?.spaFinishCost ?? 0,
+        quantity: 1,
+        total: finish?.spaFinishCost ?? 0,
+      });
     }
 
     // Pool prep up to 1,200 + overage
@@ -987,10 +991,10 @@ export class InteriorFinishCalculations {
       });
     }
 
-    if (isGuniteSpa && interiorFinish.hasSpa) {
+    if (isGuniteSpa && surfaceArea > spaPrepThreshold) {
       laborItems.push({
         category: 'Interior Finish',
-        description: 'Spa Prep',
+        description: 'Spa Prep over 1200 SQFT',
         unitPrice: prices.extras.spaPrep,
         quantity: 1,
         total: prices.extras.spaPrep,

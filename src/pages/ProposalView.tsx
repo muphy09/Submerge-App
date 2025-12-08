@@ -14,6 +14,22 @@ import summaryIconImg from '../../docs/img/summary.png';
 import submergeLogo from '../../Submerge Logo.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote } from '../services/proposalsAdapter';
+import { initPricingDataStore } from '../services/pricingDataStore';
+import {
+  getDefaultProposal,
+  getDefaultPoolSpecs,
+  getDefaultExcavation,
+  getDefaultPlumbing,
+  getDefaultElectrical,
+  getDefaultTileCopingDecking,
+  getDefaultDrainage,
+  getDefaultEquipment,
+  getDefaultWaterFeatures,
+  getDefaultCustomFeatures,
+  getDefaultInteriorFinish,
+  getDefaultManualAdjustments,
+} from '../utils/proposalDefaults';
+import { normalizeEquipmentLighting } from '../utils/lighting';
 
 function ProposalView() {
   const navigate = useNavigate();
@@ -27,22 +43,51 @@ function ProposalView() {
   const proposalRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
-  useEffect(() => {
-    if (proposalNumber) {
-      loadProposal(proposalNumber);
-    }
-  }, [proposalNumber]);
+  const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
+    const base = getDefaultProposal();
+    const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
+    const mergedEquipment = normalizeEquipmentLighting(
+      { ...getDefaultEquipment(), ...(input.equipment || {}) } as any,
+      { poolSpecs, hasSpa: poolSpecs.spaType !== 'none' }
+    );
+
+    return {
+      ...(base as Proposal),
+      ...input,
+      customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+      poolSpecs,
+      excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
+      plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
+      electrical: { ...getDefaultElectrical(), ...(input.electrical || {}) },
+      tileCopingDecking: { ...getDefaultTileCopingDecking(), ...(input.tileCopingDecking || {}) },
+      drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
+      equipment: mergedEquipment,
+      waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
+      customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+      interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
+      manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
+      papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+    };
+  };
 
   const loadProposal = async (num: string) => {
     try {
       const data = await getProposalRemote(num);
-      setProposal(data);
+      const merged = mergeProposalWithDefaults(data || {});
+      await initPricingDataStore(merged.franchiseId, merged.pricingModelId || undefined);
+      setProposal(merged as Proposal);
     } catch (error) {
       console.error('Failed to load proposal:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (proposalNumber) {
+      loadProposal(proposalNumber);
+    }
+  }, [proposalNumber]);
 
   const handleEdit = () => {
     navigate(`/proposal/edit/${proposalNumber}`);
@@ -272,7 +317,6 @@ function ProposalView() {
         { name: 'Drainage', items: costBreakdownForDisplay.drainage },
         { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered },
         { name: 'Equipment Set', items: costBreakdownForDisplay.equipmentSet },
-        { name: 'Water Features', items: costBreakdownForDisplay.waterFeatures },
         { name: 'Cleanup', items: costBreakdownForDisplay.cleanup },
         { name: 'Interior Finish', items: costBreakdownForDisplay.interiorFinish },
         { name: 'Water Truck', items: costBreakdownForDisplay.waterTruck },
@@ -328,7 +372,6 @@ function ProposalView() {
       'Drainage': 'drainage',
       'Equipment Ordered': 'equipment',
       'Equipment Set': 'equipment',
-      'Water Features': 'water-features',
       'Interior Finish': 'interior',
       'Fiberglass Shell': 'pool-specs',
       'Fiberglass Install': 'pool-specs',

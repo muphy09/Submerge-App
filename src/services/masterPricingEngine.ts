@@ -31,6 +31,26 @@ import {
   ShotcreteCalculations,
 } from './pricingEngine';
 
+function rebuildEquipmentTax(equipmentItems: CostLineItem[]): CostLineItem[] {
+  const taxRate = pricingData.equipment.taxRate ?? 0;
+  const withoutTax = equipmentItems.filter((item) => !item.description.toLowerCase().includes('tax'));
+  const subtotal = withoutTax.reduce((sum, item) => sum + (item.total ?? 0), 0);
+  if (subtotal > 0 && taxRate > 0) {
+    const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
+    return [
+      ...withoutTax,
+      {
+        category: 'Equipment',
+        description: 'Equipment Tax',
+        unitPrice: taxRate,
+        quantity: subtotal,
+        total: taxAmount,
+      },
+    ];
+  }
+  return withoutTax;
+}
+
 export class MasterPricingEngine {
   /**
    * Main entry point - calculates complete proposal with full cost breakdown
@@ -91,6 +111,11 @@ export class MasterPricingEngine {
     let equipmentItems = CalculationModules.Equipment.calculateEquipmentCost(equipment, poolSpecs);
     const equipmentSetItems = CalculationModules.Equipment.calculateEquipmentSetCost(equipment, poolSpecs);
     const waterFeaturesItems = CalculationModules.WaterFeatures.calculateWaterFeaturesCost(waterFeatures);
+    const waterFeaturesAsEquipment = waterFeaturesItems.map((item) => ({
+      ...item,
+      category: 'Equipment',
+    }));
+    equipmentItems = rebuildEquipmentTax([...equipmentItems, ...waterFeaturesAsEquipment]);
     const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);
     const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, normalizedExcavation, tileCopingDecking);
     const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(poolSpecs);
@@ -307,7 +332,7 @@ export class MasterPricingEngine {
       drainage: this.sumItems(drainageItems),
       equipmentOrdered: this.sumItems(equipmentItems),
       equipmentSet: this.sumItems(equipmentSetItems),
-      waterFeatures: this.sumItems(waterFeaturesItems),
+      waterFeatures: 0,
       cleanup: this.sumItems(cleanupItems),
       interiorFinish: this.sumItems([...interior.labor, ...interior.material]),
       waterTruck: this.sumItems(interior.waterTruck),
@@ -341,7 +366,7 @@ export class MasterPricingEngine {
       drainage: drainageItems,
       equipmentOrdered: equipmentItems,
       equipmentSet: equipmentSetItems,
-      waterFeatures: waterFeaturesItems,
+      waterFeatures: [],
       cleanup: cleanupItems,
       interiorFinish: [...interior.labor, ...interior.material],
       waterTruck: interior.waterTruck,
@@ -363,7 +388,6 @@ export class MasterPricingEngine {
     const digCommissionRate = proposal.pricing?.digCommissionRate ?? 0.0275; // 2.75%
     const adminFeeRate = proposal.pricing?.adminFeeRate ?? 0.029; // 2.9%
     const closeoutCommissionRate = proposal.pricing?.closeoutCommissionRate ?? 0.0275; // 2.75%
-    const automationRetailMargin = 0.75; // Automation retail uses 75% margin (vs standard 70%)
     const manualAdjustments = proposal.manualAdjustments || (pricingData as any).manualAdjustments || {
       positive1: 0,
       positive2: 0,
@@ -379,69 +403,14 @@ export class MasterPricingEngine {
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 1250;
 
-    // Identify automation portion of costs to apply 75% retail margin (matches EQUIP tab behavior)
-    const automationCostBeforeOverhead = (() => {
-      const automationName = (equipment?.automation?.name || '').toLowerCase();
-      if (!automationName) return 0;
-
-      const normalizeDesc = (val?: string) => (val || '').toLowerCase();
-      const isAutomationLine = (item: CostLineItem) => {
-        const desc = normalizeDesc(item.description);
-        return (
-          item.category === 'Equipment' &&
-          (desc === automationName || desc === 'additional automation zones')
-        );
-      };
-
-      const equipmentLines = equipmentItems.filter((item) => item.category === 'Equipment');
-      if (!equipmentLines.length) return 0;
-
-      const automationSubtotal = equipmentLines
-        .filter(isAutomationLine)
-        .reduce((sum, item) => sum + (item.total ?? 0), 0);
-      if (automationSubtotal === 0) return 0;
-
-      const equipmentBaseSubtotal = equipmentLines
-        .filter((item) => {
-          const desc = normalizeDesc(item.description);
-          return !desc.includes('pap discount') && !desc.includes('tax');
-        })
-        .reduce((sum, item) => sum + (item.total ?? 0), 0);
-      const equipmentDiscountTotal = equipmentLines
-        .filter((item) => normalizeDesc(item.description).includes('pap discount'))
-        .reduce((sum, item) => sum + (item.total ?? 0), 0);
-      const equipmentTaxTotal = equipmentLines
-        .filter((item) => normalizeDesc(item.description).includes('tax'))
-        .reduce((sum, item) => sum + (item.total ?? 0), 0);
-
-      const discountShare =
-        equipmentBaseSubtotal > 0
-          ? equipmentDiscountTotal * (automationSubtotal / equipmentBaseSubtotal)
-          : 0;
-      const taxableBaseAfterDiscount = equipmentBaseSubtotal + equipmentDiscountTotal;
-      const automationTaxShare =
-        taxableBaseAfterDiscount > 0
-          ? equipmentTaxTotal * ((automationSubtotal + discountShare) / taxableBaseAfterDiscount)
-          : 0;
-
-      return automationSubtotal + discountShare + automationTaxShare;
-    })();
-
     // Step 1: Total costs before overhead
     const totalCostsBeforeOverhead = totals.grandTotal;
 
     // Step 2: Apply overhead multiplier
     const totalCOGS = totalCostsBeforeOverhead * overheadMultiplier;
 
-    // Step 3: Calculate base retail price (automation uses 75% margin; others use target margin; rounded to $10 to match Excel)
-    const automationCOGS = Math.min(Math.max(automationCostBeforeOverhead * overheadMultiplier, 0), totalCOGS);
-    const nonAutomationCOGS = Math.max(totalCOGS - automationCOGS, 0);
-    const baseRetailPrice = Math.ceil(
-      (
-        (automationCOGS > 0 ? automationCOGS / automationRetailMargin : 0) +
-        (nonAutomationCOGS > 0 ? nonAutomationCOGS / targetMargin : 0)
-      ) / 10
-    ) * 10;
+    // Step 3: Calculate base retail price using a single target margin (matches COST - NEW!C181)
+    const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 10) * 10;
 
     // Step 4: Add G3 upgrade and discount
     const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount + manualAdjustmentsTotal;

@@ -622,14 +622,17 @@ export class ElectricalCalculations {
       });
     }
 
-    // Spa electrical (heater)
-    if (hasSpa) {
+    // Heater electrical (ELEC!Row7) - charge when a heater is selected (matches NEW POOL!B121)
+    const heaterQty = Math.max((normalizedEquipment as any)?.heaterQuantity ?? 0, 0);
+    // Prefer the editable heater electrical value (legacy key spaElectrical) and fall back to the new alias if present
+    const heaterElectricalCost = (prices as any).spaElectrical ?? (prices as any).heaterElectrical ?? 0;
+    if (heaterQty > 0) {
       items.push({
         category: 'Electrical',
-        description: 'Heater (Spa)',
-        unitPrice: prices.spaElectrical,
-        quantity: 1,
-        total: prices.spaElectrical,
+        description: 'Heater',
+        unitPrice: heaterElectricalCost,
+        quantity: heaterQty,
+        total: heaterElectricalCost * heaterQty,
       });
     }
 
@@ -639,7 +642,7 @@ export class ElectricalCalculations {
       (automationSelection.price ?? 0) > 0 ||
       (automationSelection.name && !automationSelection.name.toLowerCase().includes('no automation')) ||
       (automationSelection.zones ?? 0) > 0 ||
-      automationSelection.hasChemistry
+      Number.isFinite(automationSelection.percentIncrease)
     );
     if (hasAutomation) {
       items.push({
@@ -1103,6 +1106,7 @@ export class PricingEngine {
     const excavation = proposal.excavation!;
     const plumbing = proposal.plumbing!;
     const electrical = proposal.electrical!;
+    const equipment = proposal.equipment;
 
     // Plans & Engineering
     const plansItems = this.calculatePlansEngineering(poolSpecs);
@@ -1126,7 +1130,7 @@ export class PricingEngine {
     const steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
 
     // Electrical
-    const electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical);
+    const electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment);
 
     // Shotcrete
     const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation);

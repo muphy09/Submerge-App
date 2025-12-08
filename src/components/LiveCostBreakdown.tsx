@@ -114,7 +114,6 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     checkCategory('Drainage', prev.drainage, costBreakdown.drainage);
     checkCategory('Equipment Ordered', prev.equipmentOrdered, costBreakdown.equipmentOrdered);
     checkCategory('Equipment Set', prev.equipmentSet, costBreakdown.equipmentSet);
-    checkCategory('Water Features', prev.waterFeatures, costBreakdown.waterFeatures);
     checkCategory('Cleanup', prev.cleanup, costBreakdown.cleanup);
     checkCategory('Interior Finish', prev.interiorFinish, costBreakdown.interiorFinish);
     checkCategory('Water Truck', prev.waterTruck, costBreakdown.waterTruck);
@@ -233,7 +232,6 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     costBreakdown.drainage || [],
     costBreakdown.equipmentOrdered || [],
     costBreakdown.equipmentSet || [],
-    costBreakdown.waterFeatures || [],
     costBreakdown.cleanup || [],
     costBreakdown.interiorFinish || [],
     costBreakdown.waterTruck || [],
@@ -402,7 +400,6 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
         {renderLineItems(costBreakdown.drainage, 'Drainage')}
         {renderLineItems(costBreakdown.equipmentOrdered, 'Equipment Ordered')}
         {renderLineItems(costBreakdown.equipmentSet, 'Equipment Set')}
-        {renderLineItems(costBreakdown.waterFeatures, 'Water Features')}
         {renderLineItems(costBreakdown.cleanup, 'Cleanup')}
         {renderLineItems(costBreakdown.interiorFinish, 'Interior Finish')}
         {renderLineItems(costBreakdown.waterTruck, 'Water Truck')}

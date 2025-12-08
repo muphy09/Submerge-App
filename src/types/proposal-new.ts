@@ -269,7 +269,7 @@ export interface AutomationSelection {
   addCost1?: number;
   addCost2?: number;
   zones: number; // Additional zones beyond base
-  hasChemistry: boolean;
+  percentIncrease?: number; // Optional percent increase applied to summed parts
 }
 
 export interface LightSelection {

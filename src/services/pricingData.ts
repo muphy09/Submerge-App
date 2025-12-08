@@ -134,7 +134,8 @@ const pricingData = {
       baseElectrical: 1650, // Includes first 65ft of electric run
       overrunPerFt: 18, // Excel ELEC!B5
       overrunThreshold: 65,
-      spaElectrical: 255,
+      spaElectrical: 255, // Heater electrical cost (ELEC!Row7)
+      heaterElectrical: 255, // alias for naming clarity/backward compatibility
       lightAdditionalPerLight: 100, // Each light beyond the first
       lightRunPerFt: 2.75,
       lightRunConduitMultiplier: 1.25,
@@ -313,15 +314,15 @@ const pricingData = {
     },
     automation: [
       // Automation prices include the 6614 base panel and any required install adders (matches EQUIP sheet rows 61-69)
-      { name: 'No Automation', basePrice: 0, addCost1: 0, addCost2: 0, hasChemistry: false },
-      { name: '6614 APL BASE PANEL', basePrice: 1600, addCost1: 0, addCost2: 0, hasChemistry: false },
-      { name: 'Additional JVA', basePrice: 1800, addCost1: 0, addCost2: 0, hasChemistry: false }, // base panel + JVA
-      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', basePrice: 2250, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 650
-      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', basePrice: 2575, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 650 + install
-      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', basePrice: 3025, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 1100 + install
-      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', basePrice: 3722, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 1797 + install
-      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', basePrice: 4525, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 2600 + install
-      { name: 'IQ Pump 01', basePrice: 1721, addCost1: 0, addCost2: 0, hasChemistry: false }, // base + 121
+      { name: 'No Automation', basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: '6614 APL BASE PANEL', basePrice: 1600, addCost1: 0, addCost2: 0 },
+      { name: 'Additional JVA', basePrice: 1800, addCost1: 0, addCost2: 0 }, // base panel + JVA
+      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', basePrice: 2250, addCost1: 0, addCost2: 0 }, // base + 650
+      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', basePrice: 2575, addCost1: 0, addCost2: 0 }, // base + 650 + install
+      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', basePrice: 3025, addCost1: 0, addCost2: 0 }, // base + 1100 + install
+      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', basePrice: 3722, addCost1: 0, addCost2: 0 }, // base + 1797 + install
+      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', basePrice: 4525, addCost1: 0, addCost2: 0 }, // base + 2600 + install
+      { name: 'IQ Pump 01', basePrice: 1721, addCost1: 0, addCost2: 0 }, // base + 121
     ],
     automationZoneAddon: 365, // Per additional zone
     saltSystem: [

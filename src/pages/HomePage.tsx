@@ -8,6 +8,23 @@ import { listProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, getSessionUserName, type UserSession } from '../services/session';
 import syncGoodIcon from '../../docs/img/syncgood.png';
 import syncBadIcon from '../../docs/img/syncbad.png';
+import { initPricingDataStore } from '../services/pricingDataStore';
+import MasterPricingEngine from '../services/masterPricingEngine';
+import {
+  getDefaultProposal,
+  getDefaultPoolSpecs,
+  getDefaultExcavation,
+  getDefaultPlumbing,
+  getDefaultElectrical,
+  getDefaultTileCopingDecking,
+  getDefaultDrainage,
+  getDefaultEquipment,
+  getDefaultWaterFeatures,
+  getDefaultCustomFeatures,
+  getDefaultInteriorFinish,
+  getDefaultManualAdjustments,
+} from '../utils/proposalDefaults';
+import { normalizeEquipmentLighting } from '../utils/lighting';
 
 type HomePageProps = {
   session?: UserSession | null;
@@ -29,7 +46,54 @@ function HomePage({ session }: HomePageProps) {
       const filtered = sessionUserName
         ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === sessionUserName.toLowerCase())
         : data || [];
-      setProposals(filtered);
+
+      const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
+        const base = getDefaultProposal();
+        const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
+        const mergedEquipment = normalizeEquipmentLighting(
+          { ...getDefaultEquipment(), ...(input.equipment || {}) } as any,
+          { poolSpecs, hasSpa: poolSpecs.spaType !== 'none' }
+        );
+
+        return {
+          ...(base as Proposal),
+          ...input,
+          customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+          poolSpecs,
+          excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
+          plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
+          electrical: { ...getDefaultElectrical(), ...(input.electrical || {}) },
+          tileCopingDecking: { ...getDefaultTileCopingDecking(), ...(input.tileCopingDecking || {}) },
+          drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
+          equipment: mergedEquipment,
+          waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
+          customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+          interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
+          manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
+          papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+        };
+      };
+
+      const recalculated: Proposal[] = [];
+      for (const raw of filtered) {
+        try {
+          const merged = mergeWithDefaults(raw);
+          await initPricingDataStore(merged.franchiseId || sessionFranchiseId, merged.pricingModelId || undefined);
+          const calculated = MasterPricingEngine.calculateCompleteProposal(merged, (merged as any).papDiscounts);
+          recalculated.push({
+            ...(merged as Proposal),
+            pricing: calculated.pricing,
+            costBreakdown: calculated.costBreakdown,
+            subtotal: calculated.subtotal,
+            totalCost: calculated.totalCost,
+          } as Proposal);
+        } catch (error) {
+          console.warn(`Unable to recalc pricing for proposal ${raw.proposalNumber}`, error);
+          recalculated.push(raw as Proposal);
+        }
+      }
+
+      setProposals(recalculated);
     } catch (error) {
       console.error('Failed to load proposals:', error);
     } finally {

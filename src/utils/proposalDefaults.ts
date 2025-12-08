@@ -208,7 +208,7 @@ export function getDefaultEquipment(): Equipment {
       addCost2: (defaultAutomation as any).addCost2,
       price: getEquipmentItemCost(defaultAutomation as any, otherOverhead),
       zones: 0,
-      hasChemistry: defaultAutomation.hasChemistry,
+      percentIncrease: (defaultAutomation as any).percentIncrease,
     },
     automationQuantity: 0,
     saltSystem: undefined,

@@ -154,7 +154,6 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
     { name: 'Drainage', items: costBreakdown.drainage, showPAPInput: false },
     { name: 'Equipment Ordered', items: costBreakdown.equipmentOrdered, papDiscountKey: 'equipment', showPAPInput: true },
     { name: 'Equipment Set', items: costBreakdown.equipmentSet, showPAPInput: false },
-    { name: 'Water Features', items: costBreakdown.waterFeatures, showPAPInput: false },
     { name: 'Cleanup', items: costBreakdown.cleanup, showPAPInput: false },
     { name: 'Interior Finish', items: costBreakdown.interiorFinish, papDiscountKey: 'interiorFinish', showPAPInput: true },
     { name: 'Water Truck', items: costBreakdown.waterTruck, showPAPInput: false },
