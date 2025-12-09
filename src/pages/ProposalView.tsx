@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, MouseEvent as ReactMouseEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { CostLineItem, Proposal } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import SubmergeAdvantageWarranty from '../components/SubmergeAdvantageWarranty';
@@ -31,6 +33,13 @@ import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
 import { validateProposal } from '../utils/validation';
 
+type BreakdownType = 'customer' | 'cogs' | 'pre' | 'warranty';
+
+type BreakdownSelection = {
+  versionId: string;
+  type: BreakdownType;
+};
+
 function ProposalView() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
@@ -44,9 +53,22 @@ function ProposalView() {
   const [warrantyBreakdownVersionId, setWarrantyBreakdownVersionId] = useState<string | null>(null);
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
+  const [selectedBreakdowns, setSelectedBreakdowns] = useState<BreakdownSelection[]>([]);
+  const [exportSelections, setExportSelections] = useState<BreakdownSelection[]>([]);
+  const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<'print' | 'pdf' | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const proposalRef = useRef<HTMLDivElement>(null);
+  const exportContainerRef = useRef<HTMLDivElement>(null);
+  const exportControlRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
+  const breakdownLabels: Record<BreakdownType, string> = {
+    customer: 'Customer Breakdown',
+    cogs: 'COGS Cost Breakdown',
+    pre: 'Pre 1% COGS Breakdown',
+    warranty: 'Warranty Breakdown',
+  };
 
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
@@ -110,6 +132,36 @@ function ProposalView() {
       loadProposal(proposalNumber);
     }
   }, [proposalNumber]);
+
+  useEffect(() => {
+    if (!exportOptionsOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportControlRef.current && !exportControlRef.current.contains(event.target as Node)) {
+        setExportOptionsOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [exportOptionsOpen]);
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      document.body.classList.remove('breakdown-print-mode');
+      setIsExporting(false);
+      setExportMode(null);
+      setExportSelections([]);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedBreakdowns.length) {
+      setExportSelections([]);
+      setExportMode(null);
+      setExportOptionsOpen(false);
+    }
+  }, [selectedBreakdowns.length]);
 
   const handleEdit = (version?: Proposal) => {
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
@@ -319,6 +371,24 @@ function ProposalView() {
       return;
     }
     await persistStatusChange('submitted');
+  };
+
+  const isBreakdownSelected = (versionId: string, type: BreakdownType): boolean =>
+    selectedBreakdowns.some((item) => item.versionId === versionId && item.type === type);
+
+  const toggleBreakdownSelection = (event: ReactMouseEvent, versionId: string, type: BreakdownType) => {
+    event.stopPropagation();
+    event.preventDefault();
+    setSelectedBreakdowns((prev) => {
+      const exists = prev.some((item) => item.versionId === versionId && item.type === type);
+      const next = exists
+        ? prev.filter((item) => !(item.versionId === versionId && item.type === type))
+        : [...prev, { versionId, type }];
+      if (!next.length) {
+        setExportOptionsOpen(false);
+      }
+      return next;
+    });
   };
 
   const formatCurrency = (value: number): string =>
@@ -634,6 +704,34 @@ function ProposalView() {
     ? versionMap.get(warrantyBreakdownVersionId) || primaryView
     : null;
   const hasMultipleVersions = viewModels.length > 1;
+  type ExportTarget = {
+    selection: BreakdownSelection;
+    versionId: string;
+    breakdownLabel: string;
+    versionLabel: string;
+    view: ReturnType<typeof buildViewModel>;
+  };
+
+  const buildExportTargets = (selections: BreakdownSelection[]): ExportTarget[] => {
+    const uniqueKeys = new Set<string>();
+    return selections.reduce<ExportTarget[]>((acc, selection) => {
+      const key = `${selection.versionId}-${selection.type}`;
+      if (uniqueKeys.has(key)) return acc;
+      uniqueKeys.add(key);
+      const view = versionMap.get(selection.versionId) || primaryView;
+      if (!view) return acc;
+      acc.push({
+        selection,
+        versionId: selection.versionId,
+        breakdownLabel: breakdownLabels[selection.type],
+        versionLabel: getDisplayVersionLabel(view.proposal),
+        view,
+      });
+      return acc;
+    }, []);
+  };
+
+  const exportTargets = buildExportTargets(exportSelections);
 
   const categoryTotal = (items: CostLineItem[] = []): number =>
     items.reduce((sum, item) => sum + (item.total ?? 0), 0);
@@ -823,11 +921,134 @@ function ProposalView() {
     );
   };
 
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const prepareSelectionsForExport = (): BreakdownSelection[] | null => {
+    if (!selectedBreakdowns.length) {
+      showToast({ type: 'info', message: 'Select a Breakdown (or multiple) to Export first' });
+      return null;
+    }
+    return [...selectedBreakdowns];
+  };
+
+  const performPdfExport = async (selectionsForExport: BreakdownSelection[]) => {
+    try {
+      const targetsToRender = buildExportTargets(selectionsForExport);
+      if (!targetsToRender.length) {
+        showToast({ type: 'error', message: 'No breakdown data available to export.' });
+        return;
+      }
+      if (!exportContainerRef.current) {
+        showToast({ type: 'error', message: 'Unable to prepare export content.' });
+        return;
+      }
+
+      await wait(150);
+
+      const pages = Array.from(
+        exportContainerRef.current.querySelectorAll('.export-breakdown-page')
+      ) as HTMLElement[];
+
+      if (!pages.length) {
+        showToast({ type: 'error', message: 'Unable to prepare export content.' });
+        return;
+      }
+
+      const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'letter' });
+      for (let i = 0; i < pages.length; i += 1) {
+        const canvas = await html2canvas(pages[i], {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+        const imgWidth = canvas.width * ratio;
+        const imgHeight = canvas.height * ratio;
+        const marginX = (pageWidth - imgWidth) / 2;
+        const marginY = (pageHeight - imgHeight) / 2;
+        if (i > 0) {
+          pdf.addPage();
+        }
+        pdf.addImage(imgData, 'PNG', marginX, marginY, imgWidth, imgHeight);
+      }
+
+      const customerName = (proposal?.customerInfo.customerName || 'Proposal')
+        .replace(/[^a-z0-9\\-_ ]/gi, '')
+        .trim() || 'Proposal';
+      const today = new Date();
+      const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+        today.getDate()
+      ).padStart(2, '0')}`;
+      const fileName = `${customerName} ${formattedDate}.pdf`;
+      pdf.save(fileName);
+      showToast({ type: 'success', message: 'PDF ready to save.' });
+    } catch (error) {
+      console.error('Failed to export PDF', error);
+      showToast({ type: 'error', message: 'Could not generate PDF export.' });
+    } finally {
+      setIsExporting(false);
+      setExportMode(null);
+      setExportSelections([]);
+    }
+  };
+
+  const handleExportClick = () => {
+    if (!selectedBreakdowns.length) {
+      showToast({ type: 'info', message: 'Select a Breakdown (or multiple) to Export first' });
+      setExportSelections([]);
+      setExportMode(null);
+      return;
+    }
+    setExportOptionsOpen((prev) => !prev);
+  };
+
+  const handlePrintSelected = async () => {
+    const selectionsForExport = prepareSelectionsForExport();
+    if (!selectionsForExport) return;
+    setExportSelections(selectionsForExport);
+    setExportMode('print');
+    setIsExporting(true);
+    setExportOptionsOpen(false);
+    document.body.classList.add('breakdown-print-mode');
+    await wait(150);
+    window.print();
+  };
+
+  const handlePdfSelected = async () => {
+    const selectionsForExport = prepareSelectionsForExport();
+    if (!selectionsForExport) return;
+    setExportSelections(selectionsForExport);
+    setExportMode('pdf');
+    setIsExporting(true);
+    setExportOptionsOpen(false);
+    await wait(150);
+    await performPdfExport(selectionsForExport);
+  };
+
   const renderTiles = (vm: ReturnType<typeof buildViewModel>) => {
     const versionId = vm.proposal.versionId || 'original';
+    const renderSelectionToggle = (type: BreakdownType) => {
+      const selected = isBreakdownSelected(versionId, type);
+      return (
+        <span
+          className={`tile-select-toggle ${selected ? 'selected' : ''}`}
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={`Select ${breakdownLabels[type]} for export`}
+          onClick={(e) => toggleBreakdownSelection(e, versionId, type)}
+        >
+          <span className="tile-select-dot" />
+        </span>
+      );
+    };
+    const tileSelectionClass = (type: BreakdownType) => (isBreakdownSelected(versionId, type) ? 'selected' : '');
     return (
       <div className="tiles-grid">
-        <button className="summary-tile customer-tile" type="button" onClick={() => setCustomerBreakdownVersionId(versionId)}>
+        <button className={`summary-tile customer-tile ${tileSelectionClass('customer')}`} type="button" onClick={() => setCustomerBreakdownVersionId(versionId)}>
+          {renderSelectionToggle('customer')}
           <div className="tile-header">
             <div className="tile-icon customer-icon">
               <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
@@ -869,7 +1090,8 @@ function ProposalView() {
           </span>
         </button>
 
-        <button className="summary-tile cogs-tile" type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
+        <button className={`summary-tile cogs-tile ${tileSelectionClass('cogs')}`} type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
+          {renderSelectionToggle('cogs')}
           <div className="tile-header">
             <div className="tile-icon cogs-icon">
               <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
@@ -911,7 +1133,8 @@ function ProposalView() {
           </span>
         </button>
 
-        <button className="summary-tile pre-tile" type="button" onClick={() => setPreCogsBreakdownVersionId(versionId)}>
+        <button className={`summary-tile pre-tile ${tileSelectionClass('pre')}`} type="button" onClick={() => setPreCogsBreakdownVersionId(versionId)}>
+          {renderSelectionToggle('pre')}
           <div className="tile-header">
             <div className="tile-icon pre-icon">
               <img src={preCogsBreakIconImg} alt="Pre 1% COGS breakdown icon" className="pre-break-icon" />
@@ -947,7 +1170,8 @@ function ProposalView() {
           </span>
         </button>
 
-        <button className="summary-tile warranty-tile" type="button" onClick={() => setWarrantyBreakdownVersionId(versionId)}>
+        <button className={`summary-tile warranty-tile ${tileSelectionClass('warranty')}`} type="button" onClick={() => setWarrantyBreakdownVersionId(versionId)}>
+          {renderSelectionToggle('warranty')}
           <div className="tile-header">
             <div className="tile-icon warranty-icon">
               <svg width="32" height="32" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -980,6 +1204,151 @@ function ProposalView() {
           </span>
         </button>
       </div>
+    );
+  };
+
+  const renderExportBreakdownPage = (target: ExportTarget, index: number) => {
+    const { view, selection, breakdownLabel, versionLabel } = target;
+    const customerName = view.proposal.customerInfo.customerName || 'Proposal';
+    const cogsCategories =
+      selection.type === 'pre'
+        ? view.preOverheadCostLineItems
+        : selection.type === 'cogs'
+        ? view.costLineItems
+        : [];
+    const cogsFooter =
+      selection.type === 'pre'
+        ? `TOTAL COGS (No 1% Overhead): ${formatCurrency(view.totalCOGSWithoutOverhead)}`
+        : `Total COGS: ${formatCurrency(view.totalCOGS)}`;
+    const breakdownId = `${selection.type}-${versionLabel}-${index}`;
+
+    const renderCogsCard = (
+      category: { name: string; items: CostLineItem[]; subcategories?: { name: string; items: CostLineItem[] }[] }
+    ) => (
+      <div className={`cogs-category-card ${getCategoryClassName(category.name)}`} key={`${breakdownId}-${category.name}`}>
+        <div className="cogs-category-card-header">
+          <div className="cogs-category-icon">
+            {getCategoryIcon(category.name)}
+          </div>
+          <div className="cogs-category-title-wrapper">
+            <h3 className="cogs-category-title">{category.name}</h3>
+            <div className="cogs-category-total">{formatCurrency(categoryTotal(category.items))}</div>
+          </div>
+        </div>
+
+        {category.subcategories && category.subcategories.length > 0 ? (
+          <div className="cogs-subcategories">
+            {category.subcategories.map((subcategory) => (
+              <div key={`${category.name}-${subcategory.name}`} className="cogs-subcategory">
+                <div className="cogs-subcategory-header">
+                  <span className="cogs-subcategory-name">{subcategory.name}</span>
+                  <span className="cogs-subcategory-total">
+                    {formatCurrency(categoryTotal(subcategory.items))}
+                  </span>
+                </div>
+                <table className="cogs-category-table">
+                  <colgroup>
+                    <col style={{ width: '40%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '25%' }} />
+                    <col style={{ width: '25%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Description</th>
+                      <th>Qty</th>
+                      <th>Unit Price</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subcategory.items.map((item, idx) => (
+                      <tr key={`${category.name}-${subcategory.name}-${idx}`}>
+                        <td>{item.description}</td>
+                        <td>{renderQuantity(item)}</td>
+                        <td>{renderUnitPrice(item)}</td>
+                        <td>{formatCurrency(item.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <table className="cogs-category-table">
+            <colgroup>
+              <col style={{ width: '40%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '25%' }} />
+              <col style={{ width: '25%' }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {category.items.map((item, idx) => (
+                <tr key={`${category.name}-${idx}`}>
+                  <td>{item.description}</td>
+                  <td>{renderQuantity(item)}</td>
+                  <td>{renderUnitPrice(item)}</td>
+                  <td>{formatCurrency(item.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+
+    return (
+      <section
+        key={breakdownId}
+        className="export-breakdown-page"
+        data-breakdown-type={selection.type}
+        aria-label={`${breakdownLabel} for ${customerName}`}
+      >
+        {selection.type === 'customer' && (
+          <div className="export-body">
+            <CostBreakdownView
+              costBreakdown={view.costBreakdownForDisplay}
+              customerName={customerName}
+              proposal={view.proposal}
+              pricing={view.pricing}
+              showWarranty={false}
+              showZoomControl={false}
+            />
+          </div>
+        )}
+
+        {selection.type === 'warranty' && (
+          <div className="export-body">
+            <SubmergeAdvantageWarranty proposal={view.proposal} />
+          </div>
+        )}
+
+        {(selection.type === 'cogs' || selection.type === 'pre') && (
+          <div className="export-body">
+            {cogsCategories.length === 0 ? (
+              <div className="empty-state export-empty">No cost breakdown available for this proposal.</div>
+            ) : (
+              <div className="cogs-categories-grid">
+                {cogsCategories.map((category) => renderCogsCard(category))}
+              </div>
+            )}
+            {cogsCategories.length > 0 && (
+              <div className="cogs-footer export-footer">
+                <div className="cogs-footer-text">{cogsFooter}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
     );
   };
 
@@ -1117,13 +1486,44 @@ function ProposalView() {
               </svg>
               Build Another Version
             </button>
-            <button className="action-button">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Export
-            </button>
+            <div className="export-control" ref={exportControlRef}>
+              <button
+                className={`action-button export-button ${selectedBreakdowns.length ? 'has-selection' : ''} ${exportOptionsOpen ? 'open' : ''}`}
+                onClick={handleExportClick}
+                disabled={isExporting}
+                type="button"
+                aria-expanded={exportOptionsOpen}
+                aria-haspopup="listbox"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                  <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                Export
+              </button>
+              {exportOptionsOpen && (
+                <div className="export-dropdown" role="listbox">
+                  <button
+                    type="button"
+                    className="export-option"
+                    role="option"
+                    onClick={handlePrintSelected}
+                    disabled={isExporting}
+                  >
+                    Print
+                  </button>
+                  <button
+                    type="button"
+                    className="export-option"
+                    role="option"
+                    onClick={handlePdfSelected}
+                    disabled={isExporting}
+                  >
+                    PDF
+                  </button>
+                </div>
+              )}
+            </div>
             <button className="action-button" onClick={handleSaveAsDraft} disabled={loading}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1151,6 +1551,15 @@ function ProposalView() {
         <h1 className="page-title">Proposal Summary</h1>
         {viewModels.map((vm, index) => renderVersionSection(vm, index))}
       </div>
+      {exportTargets.length > 0 && (
+        <div
+          ref={exportContainerRef}
+          className={`export-print-area ${exportMode ? 'print-mode' : ''}`}
+          aria-hidden="true"
+        >
+          {exportTargets.map((target, idx) => renderExportBreakdownPage(target, idx))}
+        </div>
+      )}
       {showVersionNameModal && (
         <div className="modal-overlay" onClick={() => setShowVersionNameModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>

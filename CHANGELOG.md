@@ -4,8 +4,12 @@
 ### Changed
 - New 'Tile style' Proposal Summary screen
     - Different breakdown views; Customer, COGS, 1% COGS, Warranty
-    - Compare Price Models
-    -
+- Proposal 'Versions' added
+    - Comparable versions can be made with 'Build Another Version' in the summary screen
+    - Can set a specific version to be the 'Active' version
+        - Values for the active version are the ones displayed for the Proposal
+- Export & Mutli-export toggle options included
+- Changed workflow for Submitting proposal to be in the Summary screen
 - COGS & Retail Cost toggle added to Cost Breakdown
 - PAP Discount moved to Admin Price Model
 - Manual Adjustments added

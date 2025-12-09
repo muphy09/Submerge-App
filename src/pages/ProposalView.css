@@ -85,6 +85,57 @@
   border-color: #ef4444;
 }
 
+.export-control {
+  position: relative;
+}
+
+.action-button.export-button.has-selection {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.action-button.export-button.open {
+  background: #f0f5ff;
+  border-color: #3b82f6;
+}
+
+.export-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #d1dce8;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 12;
+}
+
+.export-option {
+  border: none;
+  background: transparent;
+  padding: 8px 10px;
+  text-align: left;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #1f2a3d;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.export-option:hover {
+  background: #eef3fb;
+  color: #0f62fe;
+}
+
+.export-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .version-switcher {
   display: inline-flex;
   align-items: center;
@@ -372,12 +423,58 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  position: relative;
 }
 
 .summary-tile:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
   border-color: #d0dae5;
+}
+
+.summary-tile.selected {
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.22);
+  border-color: #93b6f9;
+}
+
+.tile-select-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  left: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #c5d5f1;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.tile-select-toggle:hover {
+  border-color: #3b82f6;
+}
+
+.tile-select-toggle .tile-select-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.tile-select-toggle.selected {
+  border-color: #3b82f6;
+  background: #eef3ff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.tile-select-toggle.selected .tile-select-dot {
+  background: #3b82f6;
 }
 
 .summary-tile.warranty-tile {
@@ -1242,6 +1339,101 @@
   color: #1a2332;
 }
 
+.export-print-area {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1024px;
+  padding: 16px;
+  background: #ffffff;
+  z-index: -1;
+}
+
+.export-print-area.print-mode {
+  left: 0;
+  top: 0;
+  z-index: 0;
+}
+
+.export-breakdown-page {
+  background: #ffffff;
+  border: 1px solid #e5ebf1;
+  border-radius: 12px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.export-breakdown-page:not(:last-child) {
+  page-break-after: always;
+}
+
+.export-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.export-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  color: #3b82f6;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.export-title {
+  margin: 6px 0 4px;
+  font-size: 20px;
+  color: #1a2332;
+}
+
+.export-subtitle {
+  margin: 0 0 8px;
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.export-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.export-meta strong {
+  font-weight: 700;
+}
+
+.export-logo img {
+  max-height: 48px;
+}
+
+.export-body {
+  background: #ffffff;
+  border: 1px solid #e5ebf1;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.export-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e8eef4;
+}
+
+.export-empty {
+  padding: 20px;
+}
+
+.export-breakdown-page .cost-breakdown {
+  box-shadow: none;
+  border: none;
+}
+
 /* Responsive adjustments */
 @media (max-width: 1400px) {
   .cogs-categories-grid {
@@ -1422,6 +1614,24 @@
   .no-print,
   .modal-overlay {
     display: none !important;
+  }
+
+  body.breakdown-print-mode * {
+    visibility: hidden !important;
+  }
+
+  body.breakdown-print-mode .export-print-area,
+  body.breakdown-print-mode .export-print-area * {
+    visibility: visible !important;
+  }
+
+  body.breakdown-print-mode .export-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0 24px;
+    z-index: 1000;
   }
 
   .proposal-view {

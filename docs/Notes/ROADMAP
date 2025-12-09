@@ -1,6 +1,5 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
-- Pricing model comparison breakdown *****
 - Auto update without being public
 - Logo upload option for admin, makes available for franchise
 - Admin Pricing Menu Redesign
@@ -36,15 +35,12 @@ Long Term -
 ---------------------------------------------------------------------------------------------------------
 
 Confusion -
-- Overall
-    - There is a $1250 kicker always present in retail cost (E309)
-    - Spa Prep ($250) never included in COST-NEW (INTD25)?
-    - 'Columns' only bill when a facing is selected; otherwise ignored (stone/rockwork)
-        - Custom facing option?
-    - Remodel workflow
-    - Included cost workflow; what is included by default?
-    - Sanitation remodel doesnt include Overhead like Pumps
-        - Some equip uses Remodel cost some use base?
+- There is a $1250 kicker always present in retail cost (E309)
+- Spa Prep ($250) never included in COST-NEW (INTD25)?
+- 'Columns' only bill when a facing is selected; otherwise ignored (stone/rockwork)
+    - Custom facing option?
+- Remodel workflow
+    - Cant find tabs in excel?
 
 Question - 
 - Should things like Cleaner & Autofil run be inputs when entered on equip? Or stay in plumb
@@ -53,10 +49,10 @@ Question -
 - What stages a Proposal can be in;
         - Currently; Draft, Submitted, *deleted*.
         - Possibly; In Progress, Saved for Later, Archived, Submitted, Approved, Completed.
+- Proposal version needs to be included in the different breakdowns?
+- Costs / Equipment that is 'included' by default?
 
 
 - Find where equip additonal acc ties into
-
-
 
 
