@@ -14,6 +14,7 @@
 - PAP Discount moved to Admin Price Model
 - Manual Adjustments added
     - Logic for >18% discount (not admin approval)
+- Costs SHOULD line up with excel proposals much better
 - RLS Security in database
 - 
 

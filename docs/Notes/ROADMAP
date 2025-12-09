@@ -3,9 +3,10 @@ Short Term -
 - Auto update without being public
 - Logo upload option for admin, makes available for franchise
 - Admin Pricing Menu Redesign
-- Equip (after redo) show price difference from included as cost, not full cost
-- Equip Lightight infinite water color
-- Fix Homescreen title
+- Equip show price difference from included as cost, not full cost
+- Equip Lighting infinite water color
+- Fix Export formatting on page
+- 
 
 
 
@@ -13,12 +14,11 @@ Short Term -
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - 16x16 Decking implementation (Tile tab), over 16" add 33% cost
-- 'No Tile' selection, custom travertine, coping, decking
-- Oversized coping options
-- Custom plubming in Water Features
-- *Create another version* of proposal -> pull all values go back into editor -> on complete compare
-- Exposed pool wall
-- Custom Tile Tab
+- 'No Tile' selection, custom travertine, coping, decking**
+- Oversized coping options**
+- Custom plubming in Water Features**
+- Exposed pool wall**
+- Custom Tile Tab**
 - Fiberglass Shells
 - Performance Data for Admin overhaul
 - Proposal 'Complete' reconcile it, no input changes
@@ -28,9 +28,9 @@ Mid Term -
 Long Term - 
 - Presentation view
 - Templates
-    - Remodel
-    - Commercial Pool Pricing
-    - Sales Templates (when not in effect)
+    - Remodel**
+    - Commercial Pool Pricing**
+    - Sales Templates (when not in effect)**
 
 ---------------------------------------------------------------------------------------------------------
 
@@ -51,8 +51,3 @@ Question -
         - Possibly; In Progress, Saved for Later, Archived, Submitted, Approved, Completed.
 - Proposal version needs to be included in the different breakdowns?
 - Costs / Equipment that is 'included' by default?
-
-
-- Find where equip additonal acc ties into
-
-
