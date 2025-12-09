@@ -13,16 +13,20 @@ Short Term -
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-- 16x16 Decking implementation (Tile tab), over 16" add 33% cost
+- 16x16 Coping implementation (Tile tab), over 16" add 33% cost
+    - Option for 12x12 and 16x16
 - 'No Tile' selection, custom travertine, coping, decking**
 - Oversized coping options**
 - Custom plubming in Water Features**
 - Exposed pool wall**
+    - Has to allow for $8.50 of forming for every sqft of wall
+    -plus facing
+    - allow for increase of 33% concrete cost for sqft used
+    - Facing option
 - Custom Tile Tab**
 - Fiberglass Shells
 - Performance Data for Admin overhaul
 - Proposal 'Complete' reconcile it, no input changes
-
 
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
@@ -51,3 +55,95 @@ Question -
         - Possibly; In Progress, Saved for Later, Archived, Submitted, Approved, Completed.
 - Proposal version needs to be included in the different breakdowns?
 - Costs / Equipment that is 'included' by default?
+
+----------------------------------------------------------------------------------------------------------
+
+Specs: 
+Price: Black Friday
+Per - 93 Surf - 541 Shal- 3.5 End- 6 Max w- 21.5 Max l- 28 Step- 35 Deck- 867 
+Spa - 7,7, square, raised, ledge, 
+Tanning shelf
+
+Exc:
+Gravel install, dirt haul
+
+Plum: 
+Skim- 126
+Maind- 46
+Spar- 30
+
+Gas:
+Gas- 36
+Elec- 85
+Light- 165
+
+Tile: 
+Double bullnose- 28
+
+Drain:
+Down- 28
+Deck- 55
+
+Equip:
+Pump- Jandy 2.7HP
+Filter- 460SQFT
+Heater- Jandy400k BTU
+Light- 2, add spa
+Auto- PS-4 H.O
+Sanitation- Salt/Min
+
+Water:
+None
+
+Finish:
+Pebble SHEEN level 1
+
+Custom:
+16x16- 736.56
+Turf & Trav in Lay- 6240
+
+Cost Breakdown -> Discount
+-8000
+
+
+Permitting Jurisdiction
+
+Hide the cents in dollar amount
+
+Total main drain run - main
+
+
+Add aux pump - double main drain run. every pump gets same drain run
+
+Gas run - main gas, meter, tank, heater, aux gas run
+
+Double bullnose ask for in Spa selection - always spa perimeter
+
+Water feature run add logic to appear after selecting
+
+
+Admin Pricing Panel - last modified
+
+Hotkey keyboard navigation
+
+job tread
+
+Admin proposal overview breakdown all versions in a dropdown
+
+
+
+surface area not needed int finish 
+
+Facing for column - parched concrete
+    - $9 per sqft
+
+default inputs before creating
+
+Additional Cost included on Tile / Coping
+ - Equip
+ - 
+
+ Add aditional retaining wall, not just one
+
+
+ Permit costs per county
