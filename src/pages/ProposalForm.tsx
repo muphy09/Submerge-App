@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Proposal, WaterFeatures, PAPDiscounts, ManualAdjustments } from '../types/proposal-new';
 import {
   getDefaultProposal,
@@ -66,6 +66,7 @@ import {
   getSessionRole,
   getSessionUserName,
 } from '../services/session';
+import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 
 const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
   if (waterFeatures && Array.isArray((waterFeatures as any).selections)) {
@@ -194,6 +195,9 @@ function ProposalForm() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
+  const location = useLocation();
+  const versionIdFromState = (location.state as any)?.versionId as string | undefined;
+  const versionNameFromState = (location.state as any)?.versionName as string | undefined;
   const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
   const getInitialLeftNav = () => {
     if (typeof window === 'undefined') return true;
@@ -245,6 +249,9 @@ function ProposalForm() {
   const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
+  const [versionList, setVersionList] = useState<Proposal[]>([]);
+  const [activeVersionId, setActiveVersionId] = useState<string>('original');
+  const [editingVersionId, setEditingVersionId] = useState<string>('original');
 
   const syncPapDiscountsFromModel = () => {
     const snapshot = getPricingDataSnapshot();
@@ -518,6 +525,9 @@ function ProposalForm() {
       const freshProposal = getInitialProposal();
       previousSpaTypeRef.current = freshProposal.poolSpecs?.spaType ?? 'none';
       setProposal(freshProposal);
+      setVersionList([freshProposal as Proposal]);
+      setActiveVersionId((freshProposal as Proposal).activeVersionId || (freshProposal as Proposal).versionId || 'original');
+      setEditingVersionId((freshProposal as Proposal).versionId || 'original');
       setSelectedPricingModelId(freshProposal.pricingModelId || null);
       setSelectedPricingModelName(freshProposal.pricingModelName || null);
       setCurrentSection(0);
@@ -555,23 +565,46 @@ function ProposalForm() {
         freshData.createdDate = freshData.createdDate || new Date().toISOString();
         freshData.lastModified = freshData.lastModified || new Date().toISOString();
 
+        const versioned = applyActiveVersion(freshData as Proposal);
+        const allVersions = listAllVersions(freshData as Proposal);
+        const allVersionsWithDefaults = allVersions.map((v) => ({
+          ...(mergeWithDefaults(v) as Proposal),
+          versionId: v.versionId || 'original',
+          versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+          isOriginalVersion: v.isOriginalVersion,
+          activeVersionId: v.activeVersionId,
+          versions: [],
+        })) as Proposal[];
+        const desiredVersionId =
+          versionIdFromState || versioned.activeVersionId || versioned.versionId || 'original';
+        const targetVersion =
+          allVersionsWithDefaults.find((v) => v.versionId === desiredVersionId) ||
+          allVersionsWithDefaults.find((v) => v.versionId === versioned.versionId) ||
+          allVersionsWithDefaults[0] ||
+          (mergeWithDefaults(versioned) as Proposal);
+        const sanitizedTarget: Proposal = { ...(targetVersion as Proposal), versions: [] };
+        const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
+
         if (loadRequestRef.current === requestId) {
-          previousSpaTypeRef.current = freshData.poolSpecs?.spaType ?? 'none';
-          setProposal(freshData);
-          setSelectedPricingModelId(freshData.pricingModelId || null);
-          setSelectedPricingModelName(freshData.pricingModelName || null);
+          previousSpaTypeRef.current = sanitizedTarget.poolSpecs?.spaType ?? 'none';
+          setProposal(sanitizedTarget);
+          setVersionList(allVersionsWithDefaults);
+          setActiveVersionId(nextActiveId);
+          setEditingVersionId(sanitizedTarget.versionId || 'original');
+          setSelectedPricingModelId(sanitizedTarget.pricingModelId || null);
+          setSelectedPricingModelName(sanitizedTarget.pricingModelName || null);
           setCurrentSection(0);
           setCompletedByAdvance(createCompletionMap());
           // Load PAP discounts if they exist
-          if (freshData.papDiscounts) {
-            setPapDiscounts(freshData.papDiscounts);
+          if (sanitizedTarget.papDiscounts) {
+            setPapDiscounts(sanitizedTarget.papDiscounts);
             papDiscountSourceRef.current = 'proposal';
           } else {
             papDiscountSourceRef.current = 'pricingModel';
             setPapDiscounts(readPapDiscountsFromModel());
           }
-          if (freshData.manualAdjustments) {
-            setManualAdjustments(freshData.manualAdjustments);
+          if (sanitizedTarget.manualAdjustments) {
+            setManualAdjustments(sanitizedTarget.manualAdjustments);
             manualAdjustmentsSourceRef.current = 'proposal';
           } else {
             manualAdjustmentsSourceRef.current = 'pricingModel';
@@ -609,9 +642,18 @@ function ProposalForm() {
   const calculateTotals = (): Proposal => {
     const normalized = mergeWithDefaults(proposal);
     const result = MasterPricingEngine.calculateCompleteProposal(normalized, papDiscounts);
+    const versionId = proposal.versionId || editingVersionId || 'original';
+    const versionName =
+      proposal.versionName ||
+      (proposal.isOriginalVersion === false || versionId !== 'original' ? 'Version' : 'Original Version');
 
     return {
       ...normalized,
+      versionId,
+      versionName,
+      activeVersionId: activeVersionId || versionId,
+      isOriginalVersion: proposal.isOriginalVersion ?? versionId === 'original',
+      versions: [],
       franchiseId: normalized.franchiseId || getSessionFranchiseId(),
       designerName: normalized.designerName || getSessionUserName(),
       designerRole: normalized.designerRole || getSessionRole(),
@@ -645,6 +687,9 @@ function ProposalForm() {
   const handleSave = async (mode: 'draft' | 'submit', options?: { forceLocal?: boolean }): Promise<boolean> => {
     if (isSaving) return false;
 
+    const currentVersionId = proposal.versionId || editingVersionId || 'original';
+    const isVersionEdit = !(proposal.isOriginalVersion ?? currentVersionId === 'original');
+    const effectiveMode = isVersionEdit ? 'draft' : mode;
     const supabaseConnected = options?.forceLocal ? false : await hasSupabaseConnection();
     if (!supabaseConnected && !options?.forceLocal) {
       setPendingSaveMode(mode);
@@ -659,7 +704,7 @@ function ProposalForm() {
         await applyPricingModelSelection(defaultPricingModelId, def?.name, def?.isDefault);
       }
       // Validate if submitting
-      if (mode === 'submit') {
+      if (effectiveMode === 'submit') {
         const errors = validateProposal(proposal);
         if (errors.length > 0) {
           showToast({
@@ -672,10 +717,19 @@ function ProposalForm() {
 
       const totals = calculateTotals();
       const now = new Date().toISOString();
+      const versionName =
+        totals.versionName ||
+        versionNameFromState ||
+        (currentVersionId === 'original' ? 'Original Version' : `Version ${versionList.length}`);
       const finalProposal: Proposal = {
         ...totals,
         proposalNumber: proposal.proposalNumber || proposalNumber || `PROP-${Date.now()}`,
-        status: mode === 'submit' ? 'submitted' : 'draft',
+        status: effectiveMode === 'submit' ? 'submitted' : 'draft',
+        versionId: currentVersionId,
+        versionName,
+        isOriginalVersion: totals.isOriginalVersion ?? currentVersionId === 'original',
+        activeVersionId: activeVersionId || currentVersionId,
+        versions: [],
         lastModified: now,
         createdDate: totals.createdDate || now,
         franchiseId: totals.franchiseId || getSessionFranchiseId(),
@@ -689,15 +743,36 @@ function ProposalForm() {
       };
 
       const saveOptions = supabaseConnected && !options?.forceLocal ? {} : { forceLocal: true };
-      const saved = await saveProposalRemote(finalProposal, saveOptions);
 
-      setProposal(saved);
+      const cleanExistingVersions = versionList.length
+        ? versionList.map((v) => ({ ...v, versions: [] }))
+        : [{ ...finalProposal }];
+      const withoutTarget = cleanExistingVersions.filter(
+        (v) => (v.versionId || 'original') !== (finalProposal.versionId || currentVersionId)
+      );
+      const containerToSave = upsertVersionInContainer(
+        {
+          ...finalProposal,
+          versions: withoutTarget,
+          activeVersionId: activeVersionId || finalProposal.versionId || currentVersionId,
+        } as Proposal,
+        finalProposal as Proposal,
+        activeVersionId || finalProposal.versionId || currentVersionId
+      );
+
+      const saved = await saveProposalRemote(containerToSave, saveOptions);
+
+      const savedActive = applyActiveVersion(saved as Proposal);
+      setProposal({ ...(savedActive as Proposal) });
+      setVersionList(listAllVersions(saved as Proposal));
+      setActiveVersionId(savedActive.activeVersionId || currentVersionId);
+      setEditingVersionId(savedActive.versionId || currentVersionId);
       setHasEdits(false);
-      const isPending = saved.syncStatus === 'pending';
+      const isPending = (saved as any).syncStatus === 'pending';
       showToast({
         type: isPending ? 'warning' : 'success',
         message:
-          mode === 'submit'
+          effectiveMode === 'submit'
             ? isPending
               ? 'Saved locally. Will submit when cloud connection returns.'
               : 'Proposal submitted successfully!'
@@ -706,7 +781,9 @@ function ProposalForm() {
             : 'Proposal saved successfully!',
       });
 
-      if (mode === 'submit') {
+      if (effectiveMode === 'submit') {
+        navigate(`/proposal/view/${saved.proposalNumber}`);
+      } else if (isVersionEdit) {
         navigate(`/proposal/view/${saved.proposalNumber}`);
       } else {
         navigate('/');
@@ -1070,9 +1147,15 @@ function ProposalForm() {
   const isMobileLayout = viewportWidth < 1024;
   const customerTitle = (proposal.customerInfo?.customerName || '').trim();
   const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
+  const editingVersionKey = proposal.versionId || editingVersionId || 'original';
+  const isVersionEdit = !(proposal.isOriginalVersion ?? editingVersionKey === 'original');
 
   const handleSubmitClick = () => {
     if (!canSubmit || isSaving) return;
+    if (isVersionEdit) {
+      void handleSave('draft');
+      return;
+    }
     setShowSubmitConfirm(true);
   };
 
@@ -1186,7 +1269,7 @@ function ProposalForm() {
                   disabled={!canSubmit || isSaving}
                   title={submitTooltip}
                 >
-                  Submit Proposal
+                  {isVersionEdit ? 'Save Version' : 'Submit Proposal'}
                 </button>
               </div>
             </div>
@@ -1198,13 +1281,15 @@ function ProposalForm() {
               <button className="btn btn-secondary" onClick={handleHome} disabled={isSaving}>
                 Home
               </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => { void handleSave('draft'); }}
-                disabled={isSaving}
-              >
-                Save Draft
-              </button>
+              {!isVersionEdit && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => { void handleSave('draft'); }}
+                  disabled={isSaving}
+                >
+                  Save Draft
+                </button>
+              )}
             </div>
             <div className="right-actions">
               {currentSection > 0 && (

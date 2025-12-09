@@ -540,6 +540,14 @@ export interface Proposal {
   createdDate: string;
   lastModified: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected';
+  /**
+   * Versioning metadata
+   */
+  versionId?: string;
+  versionName?: string;
+  activeVersionId?: string;
+  versions?: Proposal[];
+  isOriginalVersion?: boolean;
   franchiseId?: string;
   designerName?: string;
   designerRole?: 'owner' | 'admin' | 'designer';

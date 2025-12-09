@@ -10,6 +10,7 @@ import {
   readSession,
 } from './session';
 import { isEnvFlagTrue } from './env';
+import { applyActiveVersion } from '../utils/proposalVersions';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
@@ -164,6 +165,16 @@ function ensureProposalMetadata(proposal: Proposal, session?: UserSession | null
   };
 }
 
+function normalizeForConsumption(proposal: Proposal, session?: UserSession | null): Proposal {
+  const withMeta = ensureProposalMetadata(proposal, session);
+  const active = applyActiveVersion(withMeta);
+  const normalizedVersions = (active.versions || []).map((v) => ensureProposalMetadata(v, session));
+  return {
+    ...ensureProposalMetadata(active, session),
+    versions: normalizedVersions,
+  };
+}
+
 function withSyncStatus(proposal: Proposal, status: SyncStatus, message?: string): Proposal {
   return {
     ...proposal,
@@ -206,7 +217,7 @@ async function loadLocalProposals(
           ? true
           : (proposal.franchiseId || DEFAULT_FRANCHISE_ID) === (franchiseId || DEFAULT_FRANCHISE_ID)
       )
-      .map((proposal: Proposal) => ensureProposalMetadata(proposal, session));
+      .map((proposal: Proposal) => normalizeForConsumption(proposal, session));
   } catch (error) {
     console.warn('Failed to list proposals from local store.', error);
     return [] as Proposal[];
@@ -217,7 +228,7 @@ async function loadLocalProposal(proposalNumber: string, session?: UserSession |
   try {
     if (!window.electron?.getProposal) return null;
     const proposal = await window.electron.getProposal(proposalNumber);
-    return proposal ? ensureProposalMetadata(proposal as Proposal, session) : null;
+    return proposal ? normalizeForConsumption(proposal as Proposal, session) : null;
   } catch (error) {
     console.warn('Failed to load proposal from local store.', error);
     return null;
@@ -234,7 +245,7 @@ async function fetchSupabaseProposals(franchiseId: string, session: UserSession 
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return (data || []).map((row: any) => withSyncStatus(
-    ensureProposalMetadata((row?.proposal_json || {}) as Proposal, session),
+    normalizeForConsumption((row?.proposal_json || {}) as Proposal, session),
     'synced',
     ONLINE_SYNC_MESSAGE
   ));
@@ -251,7 +262,7 @@ async function fetchSupabaseProposal(proposalNumber: string, session: UserSessio
   if (error) throw error;
   if (!data?.proposal_json) return null;
   return withSyncStatus(
-    ensureProposalMetadata(data.proposal_json as Proposal, session),
+    normalizeForConsumption(data.proposal_json as Proposal, session),
     'synced',
     ONLINE_SYNC_MESSAGE
   );
@@ -277,7 +288,7 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase not configured');
 
-  const normalized = ensureProposalMetadata(proposal);
+  const normalized = ensureProposalMetadata(applyActiveVersion(proposal));
   const now = nowIso();
 
   const { error } = await supabase
@@ -574,17 +585,21 @@ export async function saveProposal(proposal: Proposal, options: SaveOptions = {}
   const session = readSession();
   clearDeletedTombstone(proposal.proposalNumber);
   const normalized = ensureProposalMetadata(
-    {
+    applyActiveVersion({
       ...proposal,
       franchiseId: proposal.franchiseId || getSessionFranchiseId(),
       designerName: (proposal as any).designerName || getSessionUserName(),
       designerRole: (proposal as any).designerRole || getSessionRole(),
       designerCode: (proposal as any).designerCode || getSessionFranchiseCode(),
       lastModified: proposal.lastModified || now,
-    } as Proposal,
+    } as Proposal),
     session
   );
-  const franchiseId = normalized.franchiseId || DEFAULT_FRANCHISE_ID;
+  const normalizedWithVersions: Proposal = {
+    ...normalized,
+    versions: (normalized.versions || []).map((v) => ensureProposalMetadata(v, session)),
+  };
+  const franchiseId = normalizedWithVersions.franchiseId || DEFAULT_FRANCHISE_ID;
   const supabaseOnline = options.forceLocal ? false : await hasSupabaseConnection();
 
   if (SUPABASE_REQUIRED && !supabaseOnline && !isSupabaseEnabled()) {
@@ -593,7 +608,7 @@ export async function saveProposal(proposal: Proposal, options: SaveOptions = {}
 
   if (supabaseOnline && !options.forceLocal) {
     try {
-      const synced = await upsertToSupabase(normalized);
+      const synced = await upsertToSupabase(normalizedWithVersions);
       await persistLocalProposal(synced);
       return { ...synced, lastModified: synced.lastModified || now };
     } catch (error) {
@@ -614,9 +629,9 @@ export async function saveProposal(proposal: Proposal, options: SaveOptions = {}
 
   const pending = withSyncStatus(
     {
-      ...normalized,
+      ...normalizedWithVersions,
       franchiseId,
-      lastModified: normalized.lastModified || now,
+      lastModified: normalizedWithVersions.lastModified || now,
     },
     'pending',
     PENDING_MESSAGE

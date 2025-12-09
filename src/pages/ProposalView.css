@@ -75,12 +75,48 @@
   border-color: #3d6aa3;
 }
 
+.action-button.danger {
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.action-button.danger:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.version-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.version-switcher select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1dce8;
+  background: #fff;
+  font-weight: 600;
+}
+
 .proposal-summary-page {
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.version-section.has-divider {
+  padding-top: 24px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.version-divider {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(74,124,190,0.2), rgba(203,213,225,0.6), rgba(74,124,190,0.2));
+  margin: 8px 0 20px;
 }
 
 .page-title {
@@ -138,6 +174,61 @@
   line-height: 1.4;
   letter-spacing: 0;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.hero-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: #475569;
+  font-size: 12px;
+}
+
+.hero-submission-meta {
+  opacity: 0.8;
+}
+
+.version-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.version-pill.active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.hero-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.version-name-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  margin: 12px 0;
+}
+
+.version-name-input {
+  padding: 10px 12px;
+  border: 1px solid #d1dce8;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.version-name-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .hero-price-model {

@@ -350,6 +350,11 @@ export function getDefaultProposal(): Partial<Proposal> {
     createdDate: new Date().toISOString(),
     lastModified: new Date().toISOString(),
     status: 'draft',
+    versionId: 'original',
+    versionName: 'Original Version',
+    activeVersionId: 'original',
+    versions: [],
+    isOriginalVersion: true,
     customerInfo: {
       customerName: '',
       city: '',

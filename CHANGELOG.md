@@ -3,9 +3,13 @@
 ## [1.8.0]
 ### Changed
 - New 'Tile style' Proposal Summary screen
-    - Different breakdown views 
-- PAP Discount moved to Price Model
+    - Different breakdown views; Customer, COGS, 1% COGS, Warranty
+    - Compare Price Models
+    -
+- COGS & Retail Cost toggle added to Cost Breakdown
+- PAP Discount moved to Admin Price Model
 - Manual Adjustments added
+    - Logic for >18% discount (not admin approval)
 - RLS Security in database
 - 
 

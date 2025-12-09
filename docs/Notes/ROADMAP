@@ -6,9 +6,7 @@ Short Term -
 - Admin Pricing Menu Redesign
 - Equip (after redo) show price difference from included as cost, not full cost
 - Equip Lightight infinite water color
-- Cost Breakdown has Swap View button for COGS breakdown and Retail Breakdown
 - Fix Homescreen title
-- Automation Admin Pricing needs to include % additional, in addition to value additional
 
 
 
@@ -52,16 +50,13 @@ Question -
 - Should things like Cleaner & Autofil run be inputs when entered on equip? Or stay in plumb
 - Should Water Features (costs) be grouped into Equip cost breakdown (like excel) or separate like the app now
 - What other information can be included in the large Tile in proposal summary?
+- What stages a Proposal can be in;
+        - Currently; Draft, Submitted, *deleted*.
+        - Possibly; In Progress, Saved for Later, Archived, Submitted, Approved, Completed.
+
 
 - Find where equip additonal acc ties into
 
-
-
----
-Daryl Difference
-- Water Feature Price
-- No heater in equip set
-- 
 
 
 

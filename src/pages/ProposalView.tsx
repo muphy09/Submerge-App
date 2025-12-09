@@ -13,7 +13,7 @@ import preCogsBreakIconImg from '../../docs/img/1cogbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
 import submergeLogo from '../../Submerge Logo.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
-import { getProposal as getProposalRemote } from '../services/proposalsAdapter';
+import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { initPricingDataStore } from '../services/pricingDataStore';
 import {
   getDefaultProposal,
@@ -30,16 +30,21 @@ import {
   getDefaultManualAdjustments,
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
+import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
 
 function ProposalView() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [versions, setVersions] = useState<Proposal[]>([]);
+  const [activeVersionId, setActiveVersionId] = useState<string>('original');
   const [loading, setLoading] = useState(true);
-  const [showCustomerBreakdown, setShowCustomerBreakdown] = useState(false);
-  const [showCogsBreakdown, setShowCogsBreakdown] = useState(false);
-  const [showPreCogsBreakdown, setShowPreCogsBreakdown] = useState(false);
-  const [showWarrantyBreakdown, setShowWarrantyBreakdown] = useState(false);
+  const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
+  const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
+  const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
+  const [warrantyBreakdownVersionId, setWarrantyBreakdownVersionId] = useState<string | null>(null);
+  const [showVersionNameModal, setShowVersionNameModal] = useState(false);
+  const [newVersionName, setNewVersionName] = useState('');
   const proposalRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
@@ -73,9 +78,26 @@ function ProposalView() {
   const loadProposal = async (num: string) => {
     try {
       const data = await getProposalRemote(num);
-      const merged = mergeProposalWithDefaults(data || {});
-      await initPricingDataStore(merged.franchiseId, merged.pricingModelId || undefined);
-      setProposal(merged as Proposal);
+      const merged = mergeProposalWithDefaults(data || {}) as Proposal;
+      const allVersions = listAllVersions(merged as Proposal).map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      })) as Proposal[];
+      const activeApplied = applyActiveVersion(merged as Proposal);
+      const activeId = activeApplied.activeVersionId || activeApplied.versionId || 'original';
+      const activeVersion =
+        allVersions.find((v) => v.versionId === activeId) ||
+        (mergeProposalWithDefaults(activeApplied) as Proposal);
+
+      await initPricingDataStore(activeVersion.franchiseId, activeVersion.pricingModelId || undefined);
+
+      setVersions(allVersions);
+      setActiveVersionId(activeId);
+      setProposal({ ...(activeVersion as Proposal) });
     } catch (error) {
       console.error('Failed to load proposal:', error);
     } finally {
@@ -89,8 +111,135 @@ function ProposalView() {
     }
   }, [proposalNumber]);
 
-  const handleEdit = () => {
-    navigate(`/proposal/edit/${proposalNumber}`);
+  const handleEdit = (version?: Proposal) => {
+    const targetVersionId = version?.versionId || proposal?.versionId || 'original';
+    navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
+  };
+
+  const handleSetActiveVersion = async (versionId: string) => {
+    if (!proposal) return;
+    const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+    const target = all.find((v) => (v.versionId || 'original') === versionId);
+    if (!target) return;
+
+    try {
+      const submittedTarget: Proposal = { ...(target as Proposal), status: 'submitted' };
+      const container: Proposal = {
+        ...submittedTarget,
+        activeVersionId: versionId,
+        status: 'submitted',
+        versions: all
+          .filter((v) => (v.versionId || 'original') !== versionId)
+          .map((v) => ({
+            ...v,
+            status: v.status === 'approved' || v.status === 'rejected' ? v.status : 'draft',
+          })),
+      };
+      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      const saved = await saveProposalRemote(container);
+      const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = applyActiveVersion(saved as Proposal);
+      setActiveVersionId(versionId);
+      setVersions(updatedVersions);
+      setProposal(activeApplied as Proposal);
+      showToast({ type: 'success', message: 'Active version updated.' });
+    } catch (error) {
+      console.error('Failed to set active version', error);
+      showToast({ type: 'error', message: 'Could not set active version.' });
+    }
+  };
+
+  const handleDeleteVersion = async (versionId: string) => {
+    if (!proposal) return;
+    const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+    if (all.length <= 1) {
+      showToast({ type: 'warning', message: 'Cannot delete the only version.' });
+      return;
+    }
+    const target = all.find((v) => (v.versionId || 'original') === versionId);
+    if (!target || (target.isOriginalVersion ?? versionId === 'original')) {
+      showToast({ type: 'warning', message: 'The original version cannot be deleted.' });
+      return;
+    }
+
+    const remaining = all.filter((v) => (v.versionId || 'original') !== versionId);
+    const nextActive =
+      remaining.find((v) => (v.versionId || 'original') === activeVersionId) || remaining[0];
+
+    try {
+      const container: Proposal = {
+        ...(nextActive as Proposal),
+        activeVersionId: nextActive.versionId || 'original',
+        versions: remaining.filter((v) => (v.versionId || 'original') !== (nextActive.versionId || 'original')),
+      };
+      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      const saved = await saveProposalRemote(container);
+      const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = applyActiveVersion(saved as Proposal);
+      setActiveVersionId(activeApplied.activeVersionId || nextActive.versionId || 'original');
+      setVersions(updatedVersions);
+      setProposal(activeApplied as Proposal);
+      showToast({ type: 'success', message: 'Version deleted.' });
+    } catch (error) {
+      console.error('Failed to delete version', error);
+      showToast({ type: 'error', message: 'Could not delete version.' });
+    }
+  };
+
+  const handleBuildAnotherVersion = async () => {
+    if (!proposal) return;
+    const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
+    setNewVersionName(`Version ${count}`);
+    setShowVersionNameModal(true);
+  };
+
+  const handleConfirmCreateVersion = async () => {
+    if (!proposal) return;
+    try {
+      const container = {
+        ...(proposal as Proposal),
+        versions,
+        activeVersionId,
+      } as Proposal;
+      const { container: nextContainer } = createVersionFromProposal(
+        container,
+        proposal.versionId,
+        newVersionName && newVersionName.trim() ? newVersionName.trim() : undefined
+      );
+      await initPricingDataStore(nextContainer.franchiseId, nextContainer.pricingModelId || undefined);
+      const saved = await saveProposalRemote(nextContainer);
+      const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = applyActiveVersion(saved as Proposal);
+      setVersions(updatedVersions);
+      setProposal(activeApplied as Proposal);
+      setActiveVersionId(activeApplied.activeVersionId || activeVersionId);
+      setShowVersionNameModal(false);
+      showToast({ type: 'success', message: 'New version created.' });
+    } catch (error) {
+      console.error('Failed to build version', error);
+      showToast({ type: 'error', message: 'Could not create a new version.' });
+    }
   };
 
   const handlePrint = () => {
@@ -147,6 +296,234 @@ function ProposalView() {
     return suffix ? `${formatted} ${suffix}` : formatted;
   };
 
+  const buildViewModel = (input: Proposal) => {
+    const mergedProposal = mergeProposalWithDefaults(input) as Proposal;
+    let calculated: ReturnType<typeof MasterPricingEngine.calculateCompleteProposal> | null = null;
+    try {
+      calculated = MasterPricingEngine.calculateCompleteProposal(mergedProposal, mergedProposal.papDiscounts);
+    } catch (error) {
+      console.error('Failed to recalculate proposal for view:', error);
+    }
+
+    const costBreakdownForDisplay = calculated?.costBreakdown || mergedProposal.costBreakdown;
+    const subtotal = calculated?.subtotal ?? mergedProposal.subtotal ?? 0;
+    const totalCost = calculated?.totalCost ?? mergedProposal.totalCost ?? 0;
+    const pricing = calculated?.pricing ?? mergedProposal.pricing;
+    const retailPrice = pricing?.retailPrice ?? totalCost ?? subtotal ?? 0;
+    const digCommission = pricing?.digCommission ?? 0;
+    const adminFee = pricing?.adminFee ?? 0;
+    const closeoutCommission = pricing?.closeoutCommission ?? 0;
+    const totalCOGS =
+      pricing?.totalCOGS ??
+      costBreakdownForDisplay?.totals?.grandTotal ??
+      totalCost ??
+      subtotal ??
+      0;
+    const grossMargin =
+      pricing?.grossProfitMargin ??
+      (retailPrice > 0 ? ((retailPrice - totalCOGS) / retailPrice) * 100 : 0);
+    const papDiscountTotal = costBreakdownForDisplay
+      ? Object.entries(costBreakdownForDisplay).reduce((sum, [key, value]) => {
+          if (key === 'totals') return sum;
+          if (Array.isArray(value)) {
+            const papSum = value.reduce((innerSum, item) => {
+              const description = (item.description || '').toString().toLowerCase();
+              return description.includes('pap discount') ? innerSum + (item.total ?? 0) : innerSum;
+            }, 0);
+            return sum + papSum;
+          }
+          return sum;
+        }, 0)
+      : 0;
+
+    const overheadMultiplier = pricing?.overheadMultiplier ?? 1.01;
+    const totalCOGSBeforeOverhead =
+      pricing?.totalCostsBeforeOverhead ??
+      (overheadMultiplier > 0 ? totalCOGS / overheadMultiplier : totalCOGS);
+    const totalCOGSWithoutOverhead = Math.max(totalCOGSBeforeOverhead, 0);
+    const overheadReductionFactor =
+      totalCOGS > 0 ? Math.min(Math.max(totalCOGSWithoutOverhead / totalCOGS, 0), 1) : 1;
+    const preOverheadGrossProfit = retailPrice - totalCOGSWithoutOverhead - digCommission - adminFee - closeoutCommission;
+    const overheadDifferential = totalCOGS - totalCOGSWithoutOverhead;
+    const preOverheadGrossMarginPercent =
+      retailPrice > 0 ? (preOverheadGrossProfit / retailPrice) * 100 : 0;
+    const targetMargin = pricing?.targetMargin ?? 0.7;
+    const costsBeforePapDiscounts = (pricing?.totalCostsBeforeOverhead ?? subtotal ?? 0) - papDiscountTotal;
+    const baseRetailPriceBeforePap =
+      Math.ceil(((costsBeforePapDiscounts * overheadMultiplier) / targetMargin) / 10) * 10;
+    const g3UpgradeCost = pricing?.g3UpgradeCost ?? 1250;
+    const retailPriceBeforeDiscounts = baseRetailPriceBeforePap + g3UpgradeCost;
+    const retailSalePrice = retailPrice;
+    const totalSavings = retailPriceBeforeDiscounts - retailSalePrice;
+    const totalSavingsPercent = retailPriceBeforeDiscounts > 0 ? (totalSavings / retailPriceBeforeDiscounts) * 100 : 0;
+
+    const displayNumber = mergedProposal.proposalNumber.replace('PROP-', '');
+    const submissionDate = new Date(
+      mergedProposal.createdDate || mergedProposal.lastModified || Date.now()
+    ).toLocaleDateString();
+
+    const customerLocation = mergedProposal.customerInfo.city
+      ? `${mergedProposal.customerInfo.customerName} (${mergedProposal.customerInfo.city})`
+      : mergedProposal.customerInfo.customerName;
+
+    const proposalStatus = mergedProposal.status ? mergedProposal.status.charAt(0).toUpperCase() + mergedProposal.status.slice(1) : 'Draft';
+    const dateModified = new Date(mergedProposal.lastModified || Date.now()).toLocaleDateString();
+
+    // Designer name - using a placeholder for now, update with actual field when available
+    const designerName = 'Design Team';
+
+    // Get the pricing model used for this proposal
+    const priceModel = mergedProposal.pricingModelName || 'No Pricing Model';
+    const isPriceModelActive = mergedProposal.pricingModelIsDefault ?? false;
+    const isPriceModelRemoved = (mergedProposal.pricingModelName || '').toLowerCase().includes('removed');
+    const priceModelStatus = isPriceModelRemoved ? 'removed' : isPriceModelActive ? 'active' : 'inactive';
+
+    const poolTypeLabel =
+      mergedProposal.poolSpecs.poolType === 'gunite'
+        ? 'Gunite (Custom)'
+        : mergedProposal.poolSpecs.fiberglassModelName
+        ? `Fiberglass - ${mergedProposal.poolSpecs.fiberglassModelName}`
+        : 'Fiberglass';
+
+    const approximateGallons = Number.isFinite(mergedProposal.poolSpecs.approximateGallons)
+      ? mergedProposal.poolSpecs.approximateGallons.toLocaleString('en-US')
+      : 'N/A';
+
+    const maxWidth = formatNumber(mergedProposal.poolSpecs.maxWidth, 'ft');
+    const maxLength = formatNumber(mergedProposal.poolSpecs.maxLength, 'ft');
+    const shallowDepth = formatNumber(mergedProposal.poolSpecs.shallowDepth, 'ft');
+    const endDepth = formatNumber(mergedProposal.poolSpecs.endDepth, 'ft');
+    const spaLength = formatNumber(mergedProposal.poolSpecs.spaLength, 'ft');
+    const spaWidth = formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft');
+
+    const costLineItems: { name: string; items: CostLineItem[]; subcategories?: { name: string; items: CostLineItem[] }[] }[] = costBreakdownForDisplay
+      ? [
+          { name: 'Plans & Engineering', items: costBreakdownForDisplay.plansAndEngineering },
+          { name: 'Layout', items: costBreakdownForDisplay.layout },
+          { name: 'Permit', items: costBreakdownForDisplay.permit },
+          { name: 'Excavation', items: costBreakdownForDisplay.excavation },
+          { name: 'Plumbing', items: costBreakdownForDisplay.plumbing },
+          { name: 'Gas', items: costBreakdownForDisplay.gas },
+          { name: 'Steel', items: costBreakdownForDisplay.steel },
+          { name: 'Electrical', items: costBreakdownForDisplay.electrical },
+          {
+            name: 'Shotcrete',
+            items: [...costBreakdownForDisplay.shotcreteLabor, ...costBreakdownForDisplay.shotcreteMaterial],
+            subcategories: [
+              { name: 'Labor', items: costBreakdownForDisplay.shotcreteLabor },
+              { name: 'Material', items: costBreakdownForDisplay.shotcreteMaterial },
+            ].filter((sub) => sub.items.length > 0),
+          },
+          {
+            name: 'Tile',
+            items: [...costBreakdownForDisplay.tileLabor, ...costBreakdownForDisplay.tileMaterial],
+            subcategories: [
+              { name: 'Labor', items: costBreakdownForDisplay.tileLabor },
+              { name: 'Material', items: costBreakdownForDisplay.tileMaterial },
+            ].filter((sub) => sub.items.length > 0),
+          },
+          {
+            name: 'Coping/Decking',
+            items: [
+              ...costBreakdownForDisplay.copingDeckingLabor,
+              ...costBreakdownForDisplay.copingDeckingMaterial,
+            ],
+            subcategories: [
+              { name: 'Labor', items: costBreakdownForDisplay.copingDeckingLabor },
+              { name: 'Material', items: costBreakdownForDisplay.copingDeckingMaterial },
+            ].filter((sub) => sub.items.length > 0),
+          },
+          {
+            name: 'Stone/Rockwork',
+            items: [
+              ...costBreakdownForDisplay.stoneRockworkLabor,
+              ...costBreakdownForDisplay.stoneRockworkMaterial,
+            ],
+            subcategories: [
+              { name: 'Labor', items: costBreakdownForDisplay.stoneRockworkLabor },
+              { name: 'Material', items: costBreakdownForDisplay.stoneRockworkMaterial },
+            ].filter((sub) => sub.items.length > 0),
+          },
+          { name: 'Drainage', items: costBreakdownForDisplay.drainage },
+          { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered },
+          { name: 'Equipment Set', items: costBreakdownForDisplay.equipmentSet },
+          { name: 'Cleanup', items: costBreakdownForDisplay.cleanup },
+          { name: 'Interior Finish', items: costBreakdownForDisplay.interiorFinish },
+          { name: 'Water Truck', items: costBreakdownForDisplay.waterTruck },
+          { name: 'Fiberglass Shell', items: costBreakdownForDisplay.fiberglassShell },
+          { name: 'Fiberglass Install', items: costBreakdownForDisplay.fiberglassInstall },
+          { name: 'Startup/Orientation', items: costBreakdownForDisplay.startupOrientation },
+          { name: 'Custom Features', items: costBreakdownForDisplay.customFeatures },
+        ].filter((category) => (category.items || []).length > 0)
+      : [];
+
+    const adjustItemForNoOverhead = (item: CostLineItem): CostLineItem => ({
+      ...item,
+      unitPrice: (item.unitPrice ?? 0) * overheadReductionFactor,
+      total: (item.total ?? 0) * overheadReductionFactor,
+    });
+
+    const preOverheadCostLineItems = costLineItems.map((category) => ({
+      ...category,
+      items: category.items.map(adjustItemForNoOverhead),
+      subcategories: category.subcategories?.map((sub) => ({
+        ...sub,
+        items: sub.items.map(adjustItemForNoOverhead),
+      })),
+    }));
+
+    return {
+      proposal: mergedProposal,
+      calculated,
+      costBreakdownForDisplay,
+      subtotal,
+      totalCost,
+      pricing,
+      retailPrice,
+      digCommission,
+      adminFee,
+      closeoutCommission,
+      totalCOGS,
+      grossMargin,
+      papDiscountTotal,
+      overheadMultiplier,
+      totalCOGSBeforeOverhead,
+      totalCOGSWithoutOverhead,
+      overheadReductionFactor,
+      preOverheadGrossProfit,
+      overheadDifferential,
+      preOverheadGrossMarginPercent,
+      targetMargin,
+      costsBeforePapDiscounts,
+      baseRetailPriceBeforePap,
+      g3UpgradeCost,
+      retailPriceBeforeDiscounts,
+      retailSalePrice,
+      totalSavings,
+      totalSavingsPercent,
+      displayNumber,
+      submissionDate,
+      customerLocation,
+      proposalStatus,
+      dateModified,
+      designerName,
+      priceModel,
+      isPriceModelActive,
+      isPriceModelRemoved,
+      priceModelStatus,
+      poolTypeLabel,
+      approximateGallons,
+      maxWidth,
+      maxLength,
+      shallowDepth,
+      endDepth,
+      spaLength,
+      spaWidth,
+      costLineItems,
+      preOverheadCostLineItems,
+    };
+  };
+
   if (loading) {
     return (
       <div className="proposal-view">
@@ -168,179 +545,40 @@ function ProposalView() {
     );
   }
 
-  let calculated: ReturnType<typeof MasterPricingEngine.calculateCompleteProposal> | null = null;
-  try {
-    calculated = MasterPricingEngine.calculateCompleteProposal(proposal, proposal.papDiscounts);
-  } catch (error) {
-    console.error('Failed to recalculate proposal for view:', error);
-  }
-
-  const costBreakdownForDisplay = calculated?.costBreakdown || proposal.costBreakdown;
-  const subtotal = calculated?.subtotal ?? proposal.subtotal ?? 0;
-  const totalCost = calculated?.totalCost ?? proposal.totalCost ?? 0;
-  const pricing = calculated?.pricing ?? proposal.pricing;
-  const retailPrice = pricing?.retailPrice ?? totalCost ?? subtotal ?? 0;
-  const digCommission = pricing?.digCommission ?? 0;
-  const adminFee = pricing?.adminFee ?? 0;
-  const closeoutCommission = pricing?.closeoutCommission ?? 0;
-  const totalCOGS =
-    pricing?.totalCOGS ??
-    costBreakdownForDisplay?.totals?.grandTotal ??
-    totalCost ??
-    subtotal ??
-    0;
-  const grossMargin =
-    pricing?.grossProfitMargin ??
-    (retailPrice > 0 ? ((retailPrice - totalCOGS) / retailPrice) * 100 : 0);
-  const papDiscountTotal = costBreakdownForDisplay
-    ? Object.entries(costBreakdownForDisplay).reduce((sum, [key, value]) => {
-        if (key === 'totals') return sum;
-        if (Array.isArray(value)) {
-          const papSum = value.reduce((innerSum, item) => {
-            const description = (item.description || '').toString().toLowerCase();
-            return description.includes('pap discount') ? innerSum + (item.total ?? 0) : innerSum;
-          }, 0);
-          return sum + papSum;
-        }
-        return sum;
-      }, 0)
-    : 0;
-
-  const overheadMultiplier = pricing?.overheadMultiplier ?? 1.01;
-  const totalCOGSBeforeOverhead =
-    pricing?.totalCostsBeforeOverhead ??
-    (overheadMultiplier > 0 ? totalCOGS / overheadMultiplier : totalCOGS);
-  const totalCOGSWithoutOverhead = Math.max(totalCOGSBeforeOverhead, 0);
-  const overheadReductionFactor =
-    totalCOGS > 0 ? Math.min(Math.max(totalCOGSWithoutOverhead / totalCOGS, 0), 1) : 1;
-  const preOverheadGrossProfit = retailPrice - totalCOGSWithoutOverhead - digCommission - adminFee - closeoutCommission;
-  const overheadDifferential = totalCOGS - totalCOGSWithoutOverhead;
-  const preOverheadGrossMarginPercent =
-    retailPrice > 0 ? (preOverheadGrossProfit / retailPrice) * 100 : 0;
-  const targetMargin = pricing?.targetMargin ?? 0.7;
-  const costsBeforePapDiscounts = (pricing?.totalCostsBeforeOverhead ?? subtotal ?? 0) - papDiscountTotal;
-  const baseRetailPriceBeforePap =
-    Math.ceil(((costsBeforePapDiscounts * overheadMultiplier) / targetMargin) / 10) * 10;
-  const g3UpgradeCost = pricing?.g3UpgradeCost ?? 1250;
-  const retailPriceBeforeDiscounts = baseRetailPriceBeforePap + g3UpgradeCost;
-  const retailSalePrice = retailPrice;
-  const totalSavings = retailPriceBeforeDiscounts - retailSalePrice;
-  const totalSavingsPercent = retailPriceBeforeDiscounts > 0 ? (totalSavings / retailPriceBeforeDiscounts) * 100 : 0;
-
-  const displayNumber = proposal.proposalNumber.replace('PROP-', '');
-  const submissionDate = new Date(
-    proposal.createdDate || proposal.lastModified || Date.now()
-  ).toLocaleDateString();
-
-  const customerLocation = proposal.customerInfo.city
-    ? `${proposal.customerInfo.customerName} (${proposal.customerInfo.city})`
-    : proposal.customerInfo.customerName;
-
-  const proposalStatus = proposal.status ? proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1) : 'Draft';
-  const dateModified = new Date(proposal.lastModified || Date.now()).toLocaleDateString();
-
-  // Designer name - using a placeholder for now, update with actual field when available
-  const designerName = 'Design Team';
-
-  // Get the pricing model used for this proposal
-  const priceModel = proposal.pricingModelName || 'No Pricing Model';
-  const isPriceModelActive = proposal.pricingModelIsDefault ?? false;
-  const isPriceModelRemoved = (proposal.pricingModelName || '').toLowerCase().includes('removed');
-  const priceModelStatus = isPriceModelRemoved ? 'removed' : isPriceModelActive ? 'active' : 'inactive';
-
-  const poolTypeLabel =
-    proposal.poolSpecs.poolType === 'gunite'
-      ? 'Gunite (Custom)'
-      : proposal.poolSpecs.fiberglassModelName
-      ? `Fiberglass - ${proposal.poolSpecs.fiberglassModelName}`
-      : 'Fiberglass';
-
-  const approximateGallons = Number.isFinite(proposal.poolSpecs.approximateGallons)
-    ? proposal.poolSpecs.approximateGallons.toLocaleString('en-US')
-    : 'N/A';
-
-  const maxWidth = formatNumber(proposal.poolSpecs.maxWidth, 'ft');
-  const maxLength = formatNumber(proposal.poolSpecs.maxLength, 'ft');
-  const shallowDepth = formatNumber(proposal.poolSpecs.shallowDepth, 'ft');
-  const endDepth = formatNumber(proposal.poolSpecs.endDepth, 'ft');
-  const spaLength = formatNumber(proposal.poolSpecs.spaLength, 'ft');
-  const spaWidth = formatNumber(proposal.poolSpecs.spaWidth, 'ft');
-
-  const costLineItems: { name: string; items: CostLineItem[]; subcategories?: { name: string; items: CostLineItem[] }[] }[] = costBreakdownForDisplay
-    ? [
-        { name: 'Plans & Engineering', items: costBreakdownForDisplay.plansAndEngineering },
-        { name: 'Layout', items: costBreakdownForDisplay.layout },
-        { name: 'Permit', items: costBreakdownForDisplay.permit },
-        { name: 'Excavation', items: costBreakdownForDisplay.excavation },
-        { name: 'Plumbing', items: costBreakdownForDisplay.plumbing },
-        { name: 'Gas', items: costBreakdownForDisplay.gas },
-        { name: 'Steel', items: costBreakdownForDisplay.steel },
-        { name: 'Electrical', items: costBreakdownForDisplay.electrical },
-        {
-          name: 'Shotcrete',
-          items: [...costBreakdownForDisplay.shotcreteLabor, ...costBreakdownForDisplay.shotcreteMaterial],
-          subcategories: [
-            { name: 'Labor', items: costBreakdownForDisplay.shotcreteLabor },
-            { name: 'Material', items: costBreakdownForDisplay.shotcreteMaterial },
-          ].filter((sub) => sub.items.length > 0),
-        },
-        {
-          name: 'Tile',
-          items: [...costBreakdownForDisplay.tileLabor, ...costBreakdownForDisplay.tileMaterial],
-          subcategories: [
-            { name: 'Labor', items: costBreakdownForDisplay.tileLabor },
-            { name: 'Material', items: costBreakdownForDisplay.tileMaterial },
-          ].filter((sub) => sub.items.length > 0),
-        },
-        {
-          name: 'Coping/Decking',
-          items: [
-            ...costBreakdownForDisplay.copingDeckingLabor,
-            ...costBreakdownForDisplay.copingDeckingMaterial,
-          ],
-          subcategories: [
-            { name: 'Labor', items: costBreakdownForDisplay.copingDeckingLabor },
-            { name: 'Material', items: costBreakdownForDisplay.copingDeckingMaterial },
-          ].filter((sub) => sub.items.length > 0),
-        },
-        {
-          name: 'Stone/Rockwork',
-          items: [
-            ...costBreakdownForDisplay.stoneRockworkLabor,
-            ...costBreakdownForDisplay.stoneRockworkMaterial,
-          ],
-          subcategories: [
-            { name: 'Labor', items: costBreakdownForDisplay.stoneRockworkLabor },
-            { name: 'Material', items: costBreakdownForDisplay.stoneRockworkMaterial },
-          ].filter((sub) => sub.items.length > 0),
-        },
-        { name: 'Drainage', items: costBreakdownForDisplay.drainage },
-        { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered },
-        { name: 'Equipment Set', items: costBreakdownForDisplay.equipmentSet },
-        { name: 'Cleanup', items: costBreakdownForDisplay.cleanup },
-        { name: 'Interior Finish', items: costBreakdownForDisplay.interiorFinish },
-        { name: 'Water Truck', items: costBreakdownForDisplay.waterTruck },
-        { name: 'Fiberglass Shell', items: costBreakdownForDisplay.fiberglassShell },
-        { name: 'Fiberglass Install', items: costBreakdownForDisplay.fiberglassInstall },
-        { name: 'Startup/Orientation', items: costBreakdownForDisplay.startupOrientation },
-        { name: 'Custom Features', items: costBreakdownForDisplay.customFeatures },
-      ].filter((category) => (category.items || []).length > 0)
+  const versionsForRender = versions.length
+    ? versions
+    : proposal
+    ? listAllVersions(proposal as Proposal)
     : [];
 
-  const adjustItemForNoOverhead = (item: CostLineItem): CostLineItem => ({
-    ...item,
-    unitPrice: (item.unitPrice ?? 0) * overheadReductionFactor,
-    total: (item.total ?? 0) * overheadReductionFactor,
+  const sortedVersions = [...versionsForRender].sort((a, b) => {
+    const aIsOriginal = a.isOriginalVersion ?? (a.versionId || 'original') === 'original';
+    const bIsOriginal = b.isOriginalVersion ?? (b.versionId || 'original') === 'original';
+    if (aIsOriginal && !bIsOriginal) return -1;
+    if (bIsOriginal && !aIsOriginal) return 1;
+    return new Date(b.lastModified || b.createdDate).getTime() - new Date(a.lastModified || a.createdDate).getTime();
   });
 
-  const preOverheadCostLineItems = costLineItems.map((category) => ({
-    ...category,
-    items: category.items.map(adjustItemForNoOverhead),
-    subcategories: category.subcategories?.map((sub) => ({
-      ...sub,
-      items: sub.items.map(adjustItemForNoOverhead),
-    })),
-  }));
+  const viewModels = sortedVersions.map((v) => buildViewModel(v));
+  const versionMap = new Map<string, ReturnType<typeof buildViewModel>>();
+  viewModels.forEach((vm) => {
+    versionMap.set(vm.proposal.versionId || 'original', vm);
+  });
+
+  const primaryView = versionMap.get(activeVersionId) || viewModels[0];
+  const customerModalView = customerBreakdownVersionId
+    ? versionMap.get(customerBreakdownVersionId) || primaryView
+    : null;
+  const cogsModalView = cogsBreakdownVersionId
+    ? versionMap.get(cogsBreakdownVersionId) || primaryView
+    : null;
+  const preCogsModalView = preCogsBreakdownVersionId
+    ? versionMap.get(preCogsBreakdownVersionId) || primaryView
+    : null;
+  const warrantyModalView = warrantyBreakdownVersionId
+    ? versionMap.get(warrantyBreakdownVersionId) || primaryView
+    : null;
+  const hasMultipleVersions = viewModels.length > 1;
 
   const categoryTotal = (items: CostLineItem[] = []): number =>
     items.reduce((sum, item) => sum + (item.total ?? 0), 0);
@@ -530,6 +768,267 @@ function ProposalView() {
     );
   };
 
+  const renderTiles = (vm: ReturnType<typeof buildViewModel>) => {
+    const versionId = vm.proposal.versionId || 'original';
+    return (
+      <div className="tiles-grid">
+        <button className="summary-tile customer-tile" type="button" onClick={() => setCustomerBreakdownVersionId(versionId)}>
+          <div className="tile-header">
+            <div className="tile-icon customer-icon">
+              <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
+            </div>
+            <div className="tile-header-text">
+              <p className="tile-title">Customer<br/>Breakdown</p>
+            </div>
+          </div>
+          <div className="tile-content-box">
+            <div className="tile-metrics">
+              <div className="metric-row">
+                <p className="metric-label">Retail Price:</p>
+                <p className="metric-value">{formatCurrency(vm.retailPriceBeforeDiscounts)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Retail Sale Price:</p>
+                <p className="metric-value">{formatCurrency(vm.retailSalePrice)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Total Savings:</p>
+                <p className="metric-value">{formatCurrency(vm.totalSavings)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Total Savings %:</p>
+                <p className="metric-value">
+                  {Number.isFinite(vm.totalSavingsPercent) ? `${vm.totalSavingsPercent.toFixed(1)}%` : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+          <span className="tile-link">
+            View Detailed Breakdown
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </button>
+
+        <button className="summary-tile cogs-tile" type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
+          <div className="tile-header">
+            <div className="tile-icon cogs-icon">
+              <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
+            </div>
+            <div className="tile-header-text">
+              <p className="tile-title">COGS Cost<br/>Breakdown</p>
+            </div>
+          </div>
+          <div className="tile-content-box">
+            <div className="tile-metrics">
+              <div className="metric-row">
+                <p className="metric-label">Dig Commission:</p>
+                <p className="metric-value">{formatCurrency(vm.pricing?.digCommission ?? 0)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Admin Fee:</p>
+                <p className="metric-value">{formatCurrency(vm.pricing?.adminFee ?? 0)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Closeout Commission:</p>
+                <p className="metric-value">{formatCurrency(vm.pricing?.closeoutCommission ?? 0)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Gross Profit:</p>
+                <p className="metric-value">
+                  {formatCurrency(vm.pricing?.grossProfit ?? 0)} ({Number.isFinite(vm.grossMargin) ? `${vm.grossMargin.toFixed(1)}%` : 'N/A'})
+                </p>
+              </div>
+            </div>
+          </div>
+          <span className="tile-link">
+            View Detailed Breakdown
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </button>
+
+        <button className="summary-tile pre-tile" type="button" onClick={() => setPreCogsBreakdownVersionId(versionId)}>
+          <div className="tile-header">
+            <div className="tile-icon pre-icon">
+              <img src={preCogsBreakIconImg} alt="Pre 1% COGS breakdown icon" className="pre-break-icon" />
+            </div>
+            <div className="tile-header-text">
+              <p className="tile-title">Pre 1% COGS<br/>Breakdown</p>
+            </div>
+          </div>
+          <div className="tile-content-box">
+            <div className="tile-metrics">
+              <div className="metric-row">
+                <p className="metric-label">-1% Gross Profit:</p>
+                <p className="metric-value">
+                  {formatCurrency(vm.preOverheadGrossProfit)} (
+                  {Number.isFinite(vm.preOverheadGrossMarginPercent)
+                    ? `${vm.preOverheadGrossMarginPercent.toFixed(1)}%`
+                    : 'N/A'}
+                  )
+                </p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Overhead Differential:</p>
+                <p className="metric-value">{formatCurrency(vm.overheadDifferential)}</p>
+              </div>
+            </div>
+          </div>
+          <span className="tile-link">
+            View Detailed Breakdown
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </button>
+
+        <button className="summary-tile warranty-tile" type="button" onClick={() => setWarrantyBreakdownVersionId(versionId)}>
+          <div className="tile-header">
+            <div className="tile-icon warranty-icon">
+              <svg width="32" height="32" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 2L3 5v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V5l-7-3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M7 10l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="tile-header-text">
+              <p className="tile-title">Warranty<br/>Breakdown</p>
+            </div>
+          </div>
+          <div className="tile-content-box">
+            <div className="tile-metrics">
+              <div className="metric-row">
+                <p className="metric-label">Coverage:</p>
+                <p className="metric-value">Premier Advantage</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Status:</p>
+                <p className="metric-value">Active</p>
+              </div>
+            </div>
+          </div>
+          <span className="tile-link">
+            View Detailed Breakdown
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+    );
+  };
+
+  const renderVersionSection = (vm: ReturnType<typeof buildViewModel>, index: number) => {
+    const versionId = vm.proposal.versionId || `version-${index}`;
+    const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
+    const versionLabel = vm.proposal.versionName || (isOriginal ? 'Original Version' : 'Version');
+    const isActive = versionId === activeVersionId;
+
+    return (
+      <div key={versionId} className={`version-section ${index > 0 ? 'has-divider' : ''}`}>
+        {index > 0 && <div className="version-divider" />}
+        <div className="hero-card">
+          <div className="hero-header">
+            <div className="hero-icon">
+              <img src={summaryIconImg} alt="Proposal summary icon" className="summary-icon" />
+            </div>
+            <div className="hero-header-text">
+              <h2 className="hero-title">
+                {vm.customerLocation} - {vm.proposalStatus} {vm.dateModified}
+              </h2>
+              <div className="hero-subtitle">
+                <span className="version-pill">
+                  {versionLabel}
+                </span>
+                {isActive && <span className="version-pill active">Active</span>}
+              </div>
+            </div>
+            <div
+              className={`hero-price-model ${vm.priceModelStatus}`}
+              data-tooltip={
+                vm.priceModelStatus === 'active'
+                  ? 'Pricing Model is Current'
+                  : vm.priceModelStatus === 'removed'
+                  ? 'Pricing Model was removed; please select another'
+                  : 'Pricing Model is not active, consider changing'
+              }
+              aria-label={
+                vm.priceModelStatus === 'active'
+                  ? 'Pricing Model is Current'
+                  : vm.priceModelStatus === 'removed'
+                  ? 'Pricing Model was removed; please select another'
+                  : 'Pricing Model is not active, consider changing'
+              }
+            >
+              {vm.priceModel}{vm.priceModelStatus === 'active' ? ' (Active)' : ''}
+            </div>
+            <div className="hero-actions">
+              <button className="action-button" onClick={() => handleEdit(vm.proposal)}>
+                Edit Proposal
+              </button>
+              {!isOriginal && (
+                <button className="action-button danger" onClick={() => handleDeleteVersion(versionId)}>
+                  Delete Version
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="hero-grid">
+            <div className="hero-line">
+              <span className="hero-label">Pool Type:</span>
+              <span>{vm.poolTypeLabel}</span>
+            </div>
+            <div className="hero-line">
+              <span className="hero-label">Approximate Gallons:</span>
+              <span>{vm.approximateGallons}</span>
+            </div>
+            <div className="hero-line">
+              <span className="hero-label">Max Width:</span>
+              <span>{vm.maxWidth}</span>
+            </div>
+            <div className="hero-line">
+              <span className="hero-label">Max Length:</span>
+              <span>{vm.maxLength}</span>
+            </div>
+            <div className="hero-line">
+              <span className="hero-label">Shallow Depth:</span>
+              <span>{vm.shallowDepth}</span>
+            </div>
+            <div className="hero-line">
+              <span className="hero-label">End Depth:</span>
+              <span>{vm.endDepth}</span>
+            </div>
+            <div className="hero-line">
+              <span className="hero-label">Spa Length:</span>
+              <span>{vm.spaLength}</span>
+            </div>
+            <div className="hero-line">
+              <span className="hero-label">Spa Width:</span>
+              <span>{vm.spaWidth}</span>
+            </div>
+          </div>
+
+          <div className="hero-total">
+            <strong>Total Retail Value:</strong> {formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}
+          </div>
+        </div>
+
+        {renderTiles(vm)}
+      </div>
+    );
+  };
+
   return (
     <div className="proposal-view">
       <div className="view-actions no-print">
@@ -541,11 +1040,30 @@ function ProposalView() {
               </svg>
               Back to Home
             </button>
-            <button className="action-button" onClick={handleEdit}>
-              Edit Proposal
-            </button>
+            {hasMultipleVersions && (
+              <div className="version-switcher">
+                <label htmlFor="active-version">Active Version:</label>
+                <select
+                  id="active-version"
+                  value={activeVersionId}
+                  onChange={(e) => handleSetActiveVersion(e.target.value)}
+                >
+                  {viewModels.map((vm) => (
+                    <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
+                      {vm.proposal.versionName || (vm.proposal.isOriginalVersion ? 'Original Version' : 'Version')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <div className="action-bar-right">
+            <button className="action-button" onClick={handleBuildAnotherVersion}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              Build Another Version
+            </button>
             <button className="action-button" onClick={handlePrint}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M4 6V2h8v4M4 11H2V7h12v4h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -585,252 +1103,59 @@ function ProposalView() {
 
       <div ref={proposalRef} className="proposal-summary-page">
         <h1 className="page-title">Proposal Summary</h1>
-
-          <div className="hero-card">
-            <div className="hero-header">
-              <div className="hero-icon">
-                <img src={summaryIconImg} alt="Proposal summary icon" className="summary-icon" />
-              </div>
-              <div className="hero-header-text">
-                <h2 className="hero-title">
-                  {customerLocation} - {proposalStatus} {dateModified}
-                </h2>
-            </div>
-            <div
-              className={`hero-price-model ${priceModelStatus}`}
-              data-tooltip={
-                priceModelStatus === 'active'
-                  ? 'Pricing Model is Current'
-                  : priceModelStatus === 'removed'
-                  ? 'Pricing Model was removed; please select another'
-                  : 'Pricing Model is not active, consider changing'
-              }
-              aria-label={
-                priceModelStatus === 'active'
-                  ? 'Pricing Model is Current'
-                  : priceModelStatus === 'removed'
-                  ? 'Pricing Model was removed; please select another'
-                  : 'Pricing Model is not active, consider changing'
-              }
-            >
-              {priceModel}{priceModelStatus === 'active' ? ' (Active)' : ''}
-            </div>
-          </div>
-
-          <div className="hero-grid">
-            <div className="hero-line">
-              <span className="hero-label">Pool Type:</span>
-              <span>{poolTypeLabel}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Approximate Gallons:</span>
-              <span>{approximateGallons}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Max Width:</span>
-              <span>{maxWidth}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Max Length:</span>
-              <span>{maxLength}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Shallow Depth:</span>
-              <span>{shallowDepth}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">End Depth:</span>
-              <span>{endDepth}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Spa Length:</span>
-              <span>{spaLength}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Spa Width:</span>
-              <span>{spaWidth}</span>
-            </div>
-          </div>
-
-          <div className="hero-total">
-            <strong>Total Retail Value:</strong> {formatCurrency(retailPrice || subtotal || totalCost)}
-          </div>
-        </div>
-
-        <div className="tiles-grid">
-          <button className="summary-tile customer-tile" type="button" onClick={() => setShowCustomerBreakdown(true)}>
-            <div className="tile-header">
-              <div className="tile-icon customer-icon">
-                <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
-              </div>
-              <div className="tile-header-text">
-                <p className="tile-title">Customer<br/>Breakdown</p>
-              </div>
-            </div>
-            <div className="tile-content-box">
-              <div className="tile-metrics">
-                <div className="metric-row">
-                  <p className="metric-label">Retail Price:</p>
-                  <p className="metric-value">{formatCurrency(retailPriceBeforeDiscounts)}</p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Retail Sale Price:</p>
-                  <p className="metric-value">{formatCurrency(retailSalePrice)}</p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Total Savings:</p>
-                  <p className="metric-value">{formatCurrency(totalSavings)}</p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Total Savings %:</p>
-                  <p className="metric-value">
-                    {Number.isFinite(totalSavingsPercent) ? `${totalSavingsPercent.toFixed(1)}%` : 'N/A'}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <span className="tile-link">
-              View Detailed Breakdown
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </span>
-          </button>
-
-          <button className="summary-tile cogs-tile" type="button" onClick={() => setShowCogsBreakdown(true)}>
-            <div className="tile-header">
-              <div className="tile-icon cogs-icon">
-                <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
-              </div>
-              <div className="tile-header-text">
-                <p className="tile-title">COGS<br/>Breakdown</p>
-              </div>
-            </div>
-            <div className="tile-content-box">
-              <div className="tile-metrics">
-                <div className="metric-row">
-                  <p className="metric-label">Dig Commission:</p>
-                  <p className="metric-value">{formatCurrency(pricing?.digCommission ?? 0)}</p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Admin Fee:</p>
-                  <p className="metric-value">{formatCurrency(pricing?.adminFee ?? 0)}</p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Closeout Commission:</p>
-                  <p className="metric-value">{formatCurrency(pricing?.closeoutCommission ?? 0)}</p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Gross Profit:</p>
-                  <p className="metric-value">
-                    {formatCurrency(pricing?.grossProfit ?? 0)} ({Number.isFinite(grossMargin) ? `${grossMargin.toFixed(1)}%` : 'N/A'})
-                  </p>
-                </div>
-              </div>
-            </div>
-            <span className="tile-link">
-              View Detailed Breakdown
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </span>
-          </button>
-
-          <button className="summary-tile pre-tile" type="button" onClick={() => setShowPreCogsBreakdown(true)}>
-            <div className="tile-header">
-              <div className="tile-icon pre-icon">
-                <img src={preCogsBreakIconImg} alt="Pre 1% COGS breakdown icon" className="pre-break-icon" />
-              </div>
-              <div className="tile-header-text">
-                <p className="tile-title">Pre 1% COGS<br/>Breakdown</p>
-              </div>
-            </div>
-            <div className="tile-content-box">
-              <div className="tile-metrics">
-                <div className="metric-row">
-                  <p className="metric-label">-1% Gross Profit:</p>
-                  <p className="metric-value">
-                    {formatCurrency(preOverheadGrossProfit)} (
-                    {Number.isFinite(preOverheadGrossMarginPercent)
-                      ? `${preOverheadGrossMarginPercent.toFixed(1)}%`
-                      : 'N/A'}
-                    )
-                  </p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Overhead Differential:</p>
-                  <p className="metric-value">{formatCurrency(overheadDifferential)}</p>
-                </div>
-              </div>
-            </div>
-            <span className="tile-link">
-              View Detailed Breakdown
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </span>
-          </button>
-
-          <button className="summary-tile warranty-tile" type="button" onClick={() => setShowWarrantyBreakdown(true)}>
-            <div className="tile-header">
-              <div className="tile-icon warranty-icon">
-                <svg width="32" height="32" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M10 2L3 5v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V5l-7-3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M7 10l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <div className="tile-header-text">
-                <p className="tile-title">Warranty<br/>Breakdown</p>
-              </div>
-            </div>
-            <div className="tile-content-box">
-              <div className="tile-metrics">
-                <div className="metric-row">
-                  <p className="metric-label">Coverage:</p>
-                  <p className="metric-value">Premier Advantage</p>
-                </div>
-                <div className="metric-divider"></div>
-                <div className="metric-row">
-                  <p className="metric-label">Status:</p>
-                  <p className="metric-value">Active</p>
-                </div>
-              </div>
-            </div>
-            <span className="tile-link">
-              View Detailed Breakdown
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </span>
-          </button>
-        </div>
+        {viewModels.map((vm, index) => renderVersionSection(vm, index))}
       </div>
-
-      {showCustomerBreakdown && (
-        <div className="modal-overlay" onClick={() => setShowCustomerBreakdown(false)}>
+      {showVersionNameModal && (
+        <div className="modal-overlay" onClick={() => setShowVersionNameModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <p className="modal-eyebrow">New Version</p>
+                <h2>
+                  Name this version for '{proposal?.customerInfo.customerName || 'Proposal'}'
+                </h2>
+              </div>
+              <button className="modal-close" onClick={() => setShowVersionNameModal(false)} aria-label="Close version naming dialog">
+                x
+              </button>
+            </div>
+            <div className="modal-body-scroll">
+              <label className="version-name-label">
+                Version Name
+                <input
+                  type="text"
+                  value={newVersionName}
+                  onChange={(e) => setNewVersionName(e.target.value)}
+                  className="version-name-input"
+                  autoFocus
+                />
+              </label>
+              <div className="version-name-actions">
+                <button className="action-button" onClick={() => setShowVersionNameModal(false)}>Cancel</button>
+                <button className="action-button primary" onClick={handleConfirmCreateVersion}>Create</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {customerBreakdownVersionId && customerModalView && (
+        <div className="modal-overlay" onClick={() => setCustomerBreakdownVersionId(null)}>
           <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div>
                 <p className="modal-eyebrow">Customer Breakdown</p>
                 <h2>Job Cost Summary</h2>
               </div>
-              <button className="modal-close" onClick={() => setShowCustomerBreakdown(false)} aria-label="Close customer breakdown">
+              <button className="modal-close" onClick={() => setCustomerBreakdownVersionId(null)} aria-label="Close customer breakdown">
                 x
               </button>
             </div>
             <div className="modal-body-scroll">
               <CostBreakdownView
-                costBreakdown={costBreakdownForDisplay}
-                customerName={proposal.customerInfo.customerName}
-                proposal={proposal}
-                pricing={pricing}
+                costBreakdown={customerModalView.costBreakdownForDisplay}
+                customerName={customerModalView.proposal.customerInfo.customerName}
+                proposal={customerModalView.proposal}
+                pricing={customerModalView.pricing}
                 showWarranty={false}
                 showZoomControl={false}
               />
@@ -839,10 +1164,10 @@ function ProposalView() {
         </div>
       )}
 
-      {showCogsBreakdown && (
-        <div className="modal-overlay" onClick={() => setShowCogsBreakdown(false)}>
+      {cogsBreakdownVersionId && cogsModalView && (
+        <div className="modal-overlay" onClick={() => setCogsBreakdownVersionId(null)}>
           <div className="modal-content cogs-breakdown-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close-button" onClick={() => setShowCogsBreakdown(false)} aria-label="Close COGS breakdown">
+            <button className="modal-close-button" onClick={() => setCogsBreakdownVersionId(null)} aria-label="Close COGS breakdown">
               ×
             </button>
 
@@ -854,11 +1179,11 @@ function ProposalView() {
                   <div className="cogs-header-details">
                     <div className="cogs-header-detail-item">
                       <span className="cogs-header-detail-label">Customer:</span>
-                      <span className="cogs-header-detail-value">{proposal.customerInfo.customerName}</span>
+                      <span className="cogs-header-detail-value">{cogsModalView.proposal.customerInfo.customerName}</span>
                     </div>
                     <div className="cogs-header-detail-item">
                       <span className="cogs-header-detail-label">Date:</span>
-                      <span className="cogs-header-detail-value">{new Date(proposal.lastModified || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                      <span className="cogs-header-detail-value">{new Date(cogsModalView.proposal.lastModified || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                     </div>
                   </div>
                 </div>
@@ -869,11 +1194,11 @@ function ProposalView() {
             </div>
 
             <div className="modal-body-scroll">
-              {costLineItems.length === 0 ? (
+              {cogsModalView.costLineItems.length === 0 ? (
                 <div className="empty-state">No cost breakdown available for this proposal.</div>
               ) : (
                 <div className="cogs-categories-grid">
-                  {costLineItems.map((category) => (
+                  {cogsModalView.costLineItems.map((category) => (
                     <div className={`cogs-category-card ${getCategoryClassName(category.name)}`} key={category.name}>
                       <div className="cogs-category-card-header">
                         <div className="cogs-category-icon">
@@ -956,9 +1281,9 @@ function ProposalView() {
                   ))}
                 </div>
               )}
-              {costLineItems.length > 0 && (
+              {cogsModalView.costLineItems.length > 0 && (
                 <div className="cogs-footer">
-                  <div className="cogs-footer-text">Total COGS: {formatCurrency(totalCOGS)}</div>
+                  <div className="cogs-footer-text">Total COGS: {formatCurrency(cogsModalView.totalCOGS)}</div>
                 </div>
               )}
             </div>
@@ -966,10 +1291,10 @@ function ProposalView() {
         </div>
       )}
 
-      {showPreCogsBreakdown && (
-        <div className="modal-overlay" onClick={() => setShowPreCogsBreakdown(false)}>
+      {preCogsBreakdownVersionId && preCogsModalView && (
+        <div className="modal-overlay" onClick={() => setPreCogsBreakdownVersionId(null)}>
           <div className="modal-content cogs-breakdown-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close-button" onClick={() => setShowPreCogsBreakdown(false)} aria-label="Close pre-COGS breakdown">
+            <button className="modal-close-button" onClick={() => setPreCogsBreakdownVersionId(null)} aria-label="Close pre-COGS breakdown">
               A-
             </button>
 
@@ -981,11 +1306,11 @@ function ProposalView() {
                   <div className="cogs-header-details">
                     <div className="cogs-header-detail-item">
                       <span className="cogs-header-detail-label">Customer:</span>
-                      <span className="cogs-header-detail-value">{proposal.customerInfo.customerName}</span>
+                      <span className="cogs-header-detail-value">{preCogsModalView.proposal.customerInfo.customerName}</span>
                     </div>
                     <div className="cogs-header-detail-item">
                       <span className="cogs-header-detail-label">Date:</span>
-                      <span className="cogs-header-detail-value">{new Date(proposal.lastModified || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                      <span className="cogs-header-detail-value">{new Date(preCogsModalView.proposal.lastModified || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                     </div>
                   </div>
                 </div>
@@ -996,11 +1321,11 @@ function ProposalView() {
             </div>
 
             <div className="modal-body-scroll">
-              {preOverheadCostLineItems.length === 0 ? (
+              {preCogsModalView.preOverheadCostLineItems.length === 0 ? (
                 <div className="empty-state">No cost breakdown available for this proposal.</div>
               ) : (
                 <div className="cogs-categories-grid">
-                  {preOverheadCostLineItems.map((category) => (
+                  {preCogsModalView.preOverheadCostLineItems.map((category) => (
                     <div className={`cogs-category-card ${getCategoryClassName(category.name)}`} key={category.name}>
                       <div className="cogs-category-card-header">
                         <div className="cogs-category-icon">
@@ -1043,7 +1368,7 @@ function ProposalView() {
                                       <td>{item.description}</td>
                                       <td>{renderQuantity(item)}</td>
                                       <td>{renderUnitPrice(item)}</td>
-                                      <td>{formatCurrency(item.total)}</td>
+                                  <td>{formatCurrency(item.total)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -1083,9 +1408,9 @@ function ProposalView() {
                   ))}
                 </div>
               )}
-              {preOverheadCostLineItems.length > 0 && (
+              {preCogsModalView.preOverheadCostLineItems.length > 0 && (
                 <div className="cogs-footer">
-                  <div className="cogs-footer-text">TOTAL COGS (No 1% Overhead): {formatCurrency(totalCOGSWithoutOverhead)}</div>
+                  <div className="cogs-footer-text">TOTAL COGS (No 1% Overhead): {formatCurrency(preCogsModalView.totalCOGSWithoutOverhead)}</div>
                 </div>
               )}
             </div>
@@ -1093,20 +1418,20 @@ function ProposalView() {
         </div>
       )}
 
-      {showWarrantyBreakdown && (
-        <div className="modal-overlay" onClick={() => setShowWarrantyBreakdown(false)}>
+      {warrantyBreakdownVersionId && warrantyModalView && (
+        <div className="modal-overlay" onClick={() => setWarrantyBreakdownVersionId(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div>
                 <p className="modal-eyebrow">Warranty Breakdown</p>
                 <h2>Warranty & Inclusions</h2>
               </div>
-              <button className="modal-close" onClick={() => setShowWarrantyBreakdown(false)} aria-label="Close warranty breakdown">
+              <button className="modal-close" onClick={() => setWarrantyBreakdownVersionId(null)} aria-label="Close warranty breakdown">
                 x
               </button>
             </div>
             <div className="modal-body-scroll">
-              <SubmergeAdvantageWarranty proposal={proposal} />
+              <SubmergeAdvantageWarranty proposal={warrantyModalView.proposal} />
             </div>
           </div>
         </div>
@@ -1116,3 +1441,8 @@ function ProposalView() {
 }
 
 export default ProposalView;
+
+
+
+
+
