@@ -11,6 +11,7 @@ import {
 } from '../services/contractGenerator';
 import { useToast } from './Toast';
 import './ContractView.css';
+import submergeLogo from '../../Submerge Logo.png';
 
 type ContractViewProps = {
   proposal: Proposal;
@@ -95,7 +96,8 @@ export default function ContractView({
     () => (sheet?.colWidths || []).reduce((sum, width) => sum + (width || 0), 0),
     [sheet]
   );
-  const pageWidth = Math.max(Math.ceil(naturalWidth || 0), 816);
+  // Use a wider page width to match Excel's A4/Letter page layout (approx 816px for 8.5in @ 96dpi)
+  const pageWidth = Math.max(Math.ceil(naturalWidth * 1.1 || 0), 1000);
   const pageStyle = useMemo(
     () => ({ '--contract-page-width': `${pageWidth}px` } as CSSProperties),
     [pageWidth]
@@ -213,6 +215,11 @@ export default function ContractView({
         {pages.map((page, idx) => (
           <div className="contract-page" key={page.id} data-page={idx + 1} style={pageStyle}>
             <div className="contract-page-inner">
+              {idx === 0 && (
+                <div className="contract-logo-header">
+                  <img src={submergeLogo} alt="Submerge Logo" className="contract-logo" />
+                </div>
+              )}
               <table className="contract-table" aria-label={`Contract page ${idx + 1}`}>
                 <colgroup>
                   {sheet.colWidths.map((w, colIdx) => (
@@ -231,6 +238,21 @@ export default function ContractView({
                         const classNames = ['contract-cell'];
                         if (editable) classNames.push('editable');
                         if (hasFill) classNames.push('has-fill');
+
+                        // Apply Excel border styling if available
+                        const getBorderStyle = (borderDef: any) => {
+                          if (!borderDef || !borderDef.style) return undefined;
+                          const weight = borderDef.style === 'thick' || borderDef.style === 'medium' ? '2px' : '1px';
+                          return `${weight} solid #000`;
+                        };
+
+                        const borders = cell.style.border ? {
+                          borderTop: getBorderStyle(cell.style.border.top),
+                          borderRight: getBorderStyle(cell.style.border.right),
+                          borderBottom: getBorderStyle(cell.style.border.bottom),
+                          borderLeft: getBorderStyle(cell.style.border.left),
+                        } : {};
+
                       return (
                           <td
                             key={cellKey(cell)}
@@ -238,14 +260,16 @@ export default function ContractView({
                             rowSpan={cell.rowSpan}
                             title={unmappedCells.has(cell.address) ? 'Needs manual input' : undefined}
                             style={{
+                              ...borders,
                               background: cell.style.background || '#fff',
                               fontWeight: cell.style.bold ? 700 : 400,
                               fontStyle: cell.style.italic ? 'italic' : 'normal',
                               fontSize: cell.style.fontSize ? `${cell.style.fontSize}px` : undefined,
                               textAlign: cell.style.align || 'left',
-                              verticalAlign: cell.style.verticalAlign || 'top',
-                              whiteSpace: cell.style.wrap ? 'pre-wrap' : 'pre-line',
-                              wordBreak: cell.style.wrap ? 'break-word' : 'normal',
+                              verticalAlign: cell.style.verticalAlign || 'middle',
+                              whiteSpace: cell.style.wrap ? 'normal' : 'nowrap',
+                              wordBreak: 'normal',
+                              overflowWrap: cell.style.wrap ? 'break-word' : 'normal',
                             }}
                             className={classNames.join(' ')}
                           >

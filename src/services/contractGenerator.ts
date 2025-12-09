@@ -35,7 +35,12 @@ export type ContractCellRender = {
     align?: string;
     verticalAlign?: string;
     wrap?: boolean;
-    border?: string;
+    border?: {
+      top?: { style?: string; color?: string };
+      right?: { style?: string; color?: string };
+      bottom?: { style?: string; color?: string };
+      left?: { style?: string; color?: string };
+    };
   };
   colSpan?: number;
   rowSpan?: number;
@@ -422,6 +427,15 @@ function buildRenderGrid(
       const colSpan = merge ? merge.e.c - merge.s.c + 1 : undefined;
       const rowSpan = merge ? merge.e.r - merge.s.r + 1 : undefined;
 
+      // Extract border information
+      const borders = (cell as any)?.s?.border || {};
+      const borderInfo = {
+        top: borders.top ? { style: borders.top.style, color: borders.top.color } : undefined,
+        right: borders.right ? { style: borders.right.style, color: borders.right.color } : undefined,
+        bottom: borders.bottom ? { style: borders.bottom.style, color: borders.bottom.color } : undefined,
+        left: borders.left ? { style: borders.left.style, color: borders.left.color } : undefined,
+      };
+
       rowCells.push({
         address: addr,
         row: r + 1,
@@ -436,6 +450,7 @@ function buildRenderGrid(
           align: align?.horizontal,
           verticalAlign: align?.vertical,
           wrap: Boolean(align?.wrapText),
+          border: borderInfo,
         },
         colSpan,
         rowSpan,
@@ -450,9 +465,10 @@ function buildRenderGrid(
       if (c?.wpx) return c.wpx;
       if (c?.wch) {
         // Excel column width (wch) -> px approximation
-        return Math.round(c.wch * 7 + 5);
+        // Excel uses 7 pixels per character unit at 96 DPI, plus padding
+        return Math.round(c.wch * 7.5 + 5);
       }
-      return 64;
+      return 70;
     });
 
   const rowHeights = (sheet['!rows'] || [])
@@ -460,8 +476,8 @@ function buildRenderGrid(
     .map((r: any) => {
       if (r?.hpx) return r.hpx;
       if (r?.h) {
-        // Excel row height is stored in points
-        return Math.round(r.h * (96 / 72));
+        // Excel row height is stored in points (1 point = 1.333px at 96 DPI)
+        return Math.round(r.h * 1.333);
       }
       return 20;
     });

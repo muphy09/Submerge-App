@@ -2,10 +2,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  font-family: 'Arial Narrow', Arial, 'Calibri', sans-serif;
-  color: #0a0a0a;
-  font-size: 11px;
-  line-height: 1.12;
+  font-family: 'Calibri', 'Arial', sans-serif;
+  color: #000000;
+  font-size: 10pt;
+  line-height: 1.25;
 }
 
 .contract-toolbar {
@@ -78,15 +78,33 @@
 .contract-page {
   --contract-page-width: 1120px;
   background: #ffffff;
-  border: 2px solid #1f3b74;
-  padding: 14px 16px;
+  border: 1px solid #d1d1d1;
+  padding: 15px;
   width: var(--contract-page-width);
+  max-width: 100%;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: visible;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: relative;
 }
 
 .contract-page-inner {
-  width: var(--contract-page-width);
+  width: 100%;
+  position: relative;
+}
+
+.contract-logo-header {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.contract-logo {
+  height: 70px;
+  width: auto;
+  object-fit: contain;
 }
 
 .contract-table {
@@ -95,18 +113,28 @@
   border-spacing: 0;
   table-layout: fixed;
   color: inherit;
+  position: relative;
+  font-size: 10pt;
 }
 
 .contract-table td {
-  border: none;
-  padding: 1px 3px;
-  vertical-align: top;
-  line-height: 1.15;
+  padding: 2px 3px;
+  vertical-align: middle;
+  line-height: 1.3;
   box-sizing: border-box;
+  border: none;
+  min-height: 16px;
+  overflow: visible;
+  white-space: normal;
+  word-wrap: normal;
+}
+
+.contract-cell {
+  position: relative;
 }
 
 .contract-cell.has-fill {
-  border: 1px solid #9aa7bd;
+  /* Blue theme cells in Excel are typically lighter blue with borders */
 }
 
 .contract-cell.editable {
@@ -116,19 +144,22 @@
 .contract-input {
   width: 100%;
   height: 100%;
-  min-height: 16px;
-  border: 1px solid #6b6f76;
-  border-radius: 2px;
+  min-height: 20px;
+  border: 1px solid #4472c4;
+  border-radius: 0;
   padding: 2px 4px;
-  font: inherit;
-  background: #f6f8fc;
+  font-family: 'Calibri', 'Arial', sans-serif;
+  font-size: 10pt;
+  background: #ffffff;
   box-sizing: border-box;
-  color: inherit;
+  color: #000000;
+  outline: none;
 }
 
 .contract-input:focus {
   outline: none;
-  box-shadow: 0 0 0 1px #3a5ea8;
+  border: 2px solid #4472c4;
+  box-shadow: 0 0 0 1px rgba(68, 114, 196, 0.3);
 }
 
 .contract-view-empty {
@@ -151,13 +182,23 @@
     page-break-after: always;
     box-shadow: none;
     border: none;
-    padding: 0;
-    width: auto;
+    padding: 0.5in;
+    width: 8.5in;
+    height: 11in;
     margin: 0;
   }
 
   .contract-page-inner,
   .contract-table {
-    width: auto !important;
+    width: 100% !important;
+  }
+
+  .contract-logo-header {
+    top: 0.5in;
+    left: 0.5in;
+  }
+
+  .contract-logo {
+    height: 0.8in;
   }
 }
