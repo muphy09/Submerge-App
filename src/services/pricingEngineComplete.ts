@@ -212,7 +212,8 @@ export class TileCopingDeckingCalculations {
       copingLabelMap[type] ? copingLabelMap[type] : `${type} ${suffix}`;
     const formatDeckingLabel = (type: string, suffix: string) =>
       deckingLabelMap[type] ? deckingLabelMap[type] : `${type} ${suffix}`;
-    const copingRate = this.getCopingRate(tileCopingDecking.copingType, prices);
+    const isConcreteCoping = tileCopingDecking.copingType === 'concrete';
+    const copingRate = isConcreteCoping ? 0 : this.getCopingRate(tileCopingDecking.copingType, prices);
     if (copingRate > 0) {
       laborItems.push({
         category: 'Coping Labor',
@@ -542,6 +543,12 @@ export class DrainageCalculations {
 // ============================================================================
 
 export class EquipmentCalculations {
+  private static getValidHeaterQuantity(equipment: Equipment): number {
+    const heaterQty = Math.max(equipment.heaterQuantity ?? 0, 0);
+    const heaterName = equipment.heater?.name?.toLowerCase() || '';
+    return heaterQty > 0 && heaterName && !heaterName.includes('no heater') ? heaterQty : 0;
+  }
+
   private static hasEquipmentSelection(equipment: Equipment): boolean {
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
     const auxiliaryPrices = (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
@@ -551,7 +558,7 @@ export class EquipmentCalculations {
         : []
     ).map(p => getEquipmentItemCost(p as any, pumpOverhead));
     const filterQty = Math.max(equipment.filterQuantity ?? 0, 0);
-    const heaterQty = Math.max(equipment.heaterQuantity ?? 0, 0);
+    const heaterQty = this.getValidHeaterQuantity(equipment);
     const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
     const cleanerQty = Math.max(equipment.cleanerQuantity ?? 0, 0);
     const lightCounts = getLightCounts(equipment);
@@ -598,12 +605,12 @@ export class EquipmentCalculations {
           ? [normalizedEquipment.auxiliaryPump]
           : [];
     const filterQty = Math.max(normalizedEquipment.filterQuantity ?? 0, 0);
-    const heaterQty = Math.max(normalizedEquipment.heaterQuantity ?? 0, 0);
+    const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
     const automationQty = Math.max(normalizedEquipment.automationQuantity ?? 0, 0);
     const pumpCost = getEquipmentItemCost(normalizedEquipment.pump as any, pumpOverhead);
     const filterCost = getEquipmentItemCost(normalizedEquipment.filter as any, 1);
     const cleanerCost = getEquipmentItemCost(normalizedEquipment.cleaner as any, 1);
-    const heaterCost = getEquipmentItemCost(normalizedEquipment.heater as any, 1);
+    const heaterCost = heaterQty > 0 ? getEquipmentItemCost(normalizedEquipment.heater as any, 1) : 0;
     const automationCost = getEquipmentItemCost(normalizedEquipment.automation as any, 1);
     const saltCost = getEquipmentItemCost(normalizedEquipment.saltSystem as any, 1);
     const poolLights = normalizedEquipment.poolLights || [];
@@ -678,7 +685,7 @@ export class EquipmentCalculations {
     }
 
     // VersaFlo upgrade
-    if (normalizedEquipment.upgradeToVersaFlo && !normalizedEquipment.heater.isVersaFlo) {
+    if (heaterQty > 0 && normalizedEquipment.upgradeToVersaFlo && !normalizedEquipment.heater.isVersaFlo) {
       const upgrade = pricingData.equipment.heaters.find((h) => h.name.includes('VersaFlo'));
       if (upgrade) {
         const upgradeCost = getEquipmentItemCost(upgrade as any, pumpOverhead) - heaterCost;
@@ -827,7 +834,7 @@ export class EquipmentCalculations {
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
     const hasPool = hasPoolDefinition(poolSpecs);
     const normalizedEquipment = normalizeEquipmentLighting(equipment, { hasPool, hasSpa, poolSpecs });
-    const heaterQty = Math.max(normalizedEquipment.heaterQuantity ?? 0, 0);
+    const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
 
     if (!this.hasEquipmentSelection(normalizedEquipment)) {
       return items;

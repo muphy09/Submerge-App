@@ -105,6 +105,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
   const costOf = (item: any, applyPumpOverhead?: boolean) =>
     getEquipmentItemCost(item, applyPumpOverhead ? pumpOverhead : 1);
+  const hasHeaterSelection = hasRealSelection(data?.heater?.name, 'no heater');
 
   const baseSafeData: Equipment = {
     pump: data?.pump || {
@@ -145,8 +146,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
       price: costOf(defaults.heater),
       isVersaFlo: defaults.heater.isVersaFlo,
     },
-    heaterQuantity:
-      data?.heaterQuantity ?? (hasRealSelection(data?.heater?.name, 'no heater') ? 1 : 0),
+    heaterQuantity: hasHeaterSelection ? Math.max(data?.heaterQuantity ?? 1, 1) : 0,
     upgradeToVersaFlo: data?.upgradeToVersaFlo ?? false,
     includePoolLights: data?.includePoolLights ?? true,
     includeSpaLights: data?.includeSpaLights ?? hasSpa,
@@ -186,7 +186,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const [includePump, setIncludePump] = useState<boolean>(() => hasRealSelection(data?.pump?.name, 'no pump'));
   const [includeFilter, setIncludeFilter] = useState<boolean>(() => (data?.filterQuantity ?? 0) > 0);
   const [includeCleaner, setIncludeCleaner] = useState<boolean>((safeData.cleanerQuantity ?? 0) > 0);
-  const [includeHeater, setIncludeHeater] = useState<boolean>(() => hasRealSelection(data?.heater?.name, 'no heater'));
+  const [includeHeater, setIncludeHeater] = useState<boolean>(() => hasHeaterSelection);
   const [includePoolLights, setIncludePoolLights] = useState<boolean>(() => hasPool && safeData.includePoolLights !== false);
   const [includeSpaLights, setIncludeSpaLights] = useState<boolean>(() => hasSpa && safeData.includeSpaLights !== false);
   const [includeAutomation, setIncludeAutomation] = useState<boolean>(() =>

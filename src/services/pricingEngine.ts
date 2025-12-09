@@ -484,11 +484,14 @@ export class PlumbingCalculations {
       });
     }
 
-    // Conduit - Excel PLUM!Row26: ROUNDUP(electricalRun + (lightRun * 1.25), 0)
+    // Conduit - Excel rounds to the nearest whole foot using electrical run + (light run * conduit multiplier)
     // Note: electricRun lives on electrical module; grab it from either plumbing or pool specs for flexibility
     const electricalRun = plumbing.runs?.electricalRun ?? (plumbing as any).electricalRun ?? (poolSpecs as any).electricalRun ?? 0;
     const lightRun = plumbing.runs?.lightRun ?? (plumbing as any).lightRun ?? (poolSpecs as any).lightRun ?? 0;
-    const conduitQty = Math.ceil(electricalRun + (lightRun * 1.25));
+    const conduitMultiplier = pricingData.electrical.lightRunConduitMultiplier ?? 1.25;
+    const conduitQtyRaw = electricalRun + (lightRun * conduitMultiplier);
+    // Excel uses ROUNDUP; quantize first to avoid float drift then round up to nearest whole foot
+    const conduitQty = Math.ceil(Number(conduitQtyRaw.toFixed(6)));
     if (conduitQty > 0) {
       items.push({
         category: 'Plumbing',
@@ -624,9 +627,11 @@ export class ElectricalCalculations {
 
     // Heater electrical (ELEC!Row7) - charge when a heater is selected (matches NEW POOL!B121)
     const heaterQty = Math.max((normalizedEquipment as any)?.heaterQuantity ?? 0, 0);
+    const heaterName = (normalizedEquipment as any)?.heater?.name?.toLowerCase() || '';
+    const hasHeaterSelection = heaterQty > 0 && heaterName && !heaterName.includes('no heater');
     // Prefer the editable heater electrical value (legacy key spaElectrical) and fall back to the new alias if present
     const heaterElectricalCost = (prices as any).spaElectrical ?? (prices as any).heaterElectrical ?? 0;
-    if (heaterQty > 0) {
+    if (hasHeaterSelection) {
       items.push({
         category: 'Electrical',
         description: 'Heater',

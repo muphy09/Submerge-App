@@ -193,7 +193,7 @@ export function getDefaultEquipment(): Equipment {
       price: getEquipmentItemCost(defaultHeater as any, otherOverhead),
       isVersaFlo: defaultHeater.isVersaFlo,
     },
-    heaterQuantity: 1,
+    heaterQuantity: 0,
     upgradeToVersaFlo: false,
     includePoolLights: true,
     includeSpaLights: false,

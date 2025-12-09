@@ -118,7 +118,7 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
               onChange={(e) => handleRunChange('electricalRun', parseFloat(e.target.value) || 0)}
               unit="LNFT"
               min="0"
-              step="1"
+              step="0.1"
               placeholder="0"
             />
             <small className="form-help">House panel to equipment pad</small>
@@ -131,7 +131,7 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
               onChange={(e) => handleRunChange('lightRun', parseFloat(e.target.value) || 0)}
               unit="LNFT"
               min="0"
-              step="1"
+              step="0.1"
               placeholder="0"
             />
             <small className="form-help">All lights to equipment pad</small>

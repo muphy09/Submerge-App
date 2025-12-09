@@ -220,7 +220,7 @@ const pricingData = {
       pavers: 12,
       travertineLevel1: 12,
       travertineLevel2: 12,
-      concrete: 16.5,
+      concrete: 0,
       bullnoseLabor: 8,
       doubleBullnoseLabor: 8,
       spillwayLabor: 150,
@@ -245,7 +245,7 @@ const pricingData = {
         travertineLevel2: 12,
         travertinelevel1: 11,
         travertinelevel2: 12,
-        concrete: 7,
+        concrete: 0,
       },
         rockwork: {
           panelLedge: 13,

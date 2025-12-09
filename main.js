@@ -673,7 +673,8 @@ ipcMain.handle('get-proposal', async (_, proposalNumber) => {
       }
     }
 
-    console.log('Proposal not found:', proposalNumber);
+    // Quietly return null when the proposal is not present (likely already deleted)
+    // console.debug('Proposal not found:', proposalNumber);
     return null;
   } catch (error) {
     console.error('Failed to load proposal:', error);
@@ -736,7 +737,8 @@ ipcMain.handle('delete-proposal', async (_, proposalNumber) => {
       }
     }
 
-    console.log('Proposal not found:', proposalNumber);
+    // Swallow missing-proposal deletes to avoid noisy logs during resync
+    // console.debug('Proposal not found:', proposalNumber);
   } catch (error) {
     console.error('Failed to delete proposal:', error);
     throw error;

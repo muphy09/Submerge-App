@@ -15,6 +15,7 @@ const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
 type SaveResult = Proposal & { lastModified: string };
 type SyncStatus = 'synced' | 'pending' | 'error';
+type Tombstone = { proposalNumber: string; removedAt: string };
 type SaveOptions = {
   /**
    * Force a local-only save (used when the user explicitly agrees to offline mode).
@@ -28,6 +29,10 @@ type SaveOptions = {
 
 const PENDING_MESSAGE = 'Awaiting cloud sync';
 const ONLINE_SYNC_MESSAGE = 'Synced with cloud';
+const PENDING_DELETE_STORAGE_KEY = 'submerge.pendingProposalDeletes';
+const DELETED_TOMBSTONES_STORAGE_KEY = 'submerge.deletedProposalTombstones';
+
+type PendingDelete = { proposalNumber: string; franchiseId?: string | null };
 
 function nowIso() {
   return new Date().toISOString();
@@ -36,6 +41,111 @@ function nowIso() {
 function coerceTimestamp(value?: string | null): number {
   const ts = value ? Date.parse(value) : NaN;
   return Number.isFinite(ts) ? ts : 0;
+}
+
+let pendingDeleteCache: PendingDelete[] | null = null;
+
+function loadPendingDeletes(): PendingDelete[] {
+  if (pendingDeleteCache) return pendingDeleteCache;
+  if (typeof localStorage === 'undefined') {
+    pendingDeleteCache = [];
+    return pendingDeleteCache;
+  }
+  try {
+    const raw = localStorage.getItem(PENDING_DELETE_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as PendingDelete[]) : [];
+    pendingDeleteCache = Array.isArray(parsed) ? parsed.filter((r) => !!r?.proposalNumber) : [];
+  } catch (error) {
+    console.warn('Unable to read pending deletes from localStorage:', error);
+    pendingDeleteCache = [];
+  }
+  return pendingDeleteCache;
+}
+
+function persistPendingDeletes(records: PendingDelete[]) {
+  pendingDeleteCache = records;
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(PENDING_DELETE_STORAGE_KEY, JSON.stringify(records));
+  } catch (error) {
+    console.warn('Unable to persist pending deletes to localStorage:', error);
+  }
+}
+
+function addPendingDelete(proposalNumber: string, franchiseId?: string | null) {
+  const current = loadPendingDeletes().filter((r) => !!r?.proposalNumber);
+  const filtered = current.filter((r) => r.proposalNumber !== proposalNumber);
+  filtered.push({ proposalNumber, franchiseId: franchiseId || DEFAULT_FRANCHISE_ID });
+  persistPendingDeletes(filtered);
+}
+
+function clearPendingDelete(proposalNumber: string) {
+  const current = loadPendingDeletes();
+  const filtered = current.filter((r) => r.proposalNumber !== proposalNumber);
+  if (filtered.length !== current.length) {
+    persistPendingDeletes(filtered);
+  }
+}
+
+function isPendingDelete(proposalNumber: string) {
+  return loadPendingDeletes().some((r) => r.proposalNumber === proposalNumber);
+}
+
+function getPendingDeleteSet(): Set<string> {
+  return new Set(loadPendingDeletes().map((r) => r.proposalNumber));
+}
+
+let tombstoneCache: Tombstone[] | null = null;
+
+function loadDeletedTombstones(): Tombstone[] {
+  if (tombstoneCache) return tombstoneCache;
+  if (typeof localStorage === 'undefined') {
+    tombstoneCache = [];
+    return tombstoneCache;
+  }
+  try {
+    const raw = localStorage.getItem(DELETED_TOMBSTONES_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Tombstone[]) : [];
+    tombstoneCache = Array.isArray(parsed) ? parsed.filter((r) => !!r?.proposalNumber) : [];
+  } catch (error) {
+    console.warn('Unable to read delete tombstones from localStorage:', error);
+    tombstoneCache = [];
+  }
+  return tombstoneCache;
+}
+
+function persistDeletedTombstones(records: Tombstone[]) {
+  tombstoneCache = records;
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(DELETED_TOMBSTONES_STORAGE_KEY, JSON.stringify(records));
+  } catch (error) {
+    console.warn('Unable to persist delete tombstones to localStorage:', error);
+  }
+}
+
+function addDeletedTombstone(proposalNumber: string) {
+  const now = nowIso();
+  const current = loadDeletedTombstones().filter((r) => !!r?.proposalNumber);
+  const filtered = current.filter((r) => r.proposalNumber !== proposalNumber);
+  filtered.push({ proposalNumber, removedAt: now });
+  persistDeletedTombstones(filtered);
+}
+
+function clearDeletedTombstone(proposalNumber: string) {
+  const current = loadDeletedTombstones();
+  const filtered = current.filter((r) => r.proposalNumber !== proposalNumber);
+  if (filtered.length !== current.length) {
+    persistDeletedTombstones(filtered);
+  }
+}
+
+function getDeletedTombstoneSet(): Set<string> {
+  return new Set(loadDeletedTombstones().map((r) => r.proposalNumber));
+}
+
+function isDeletedTombstone(proposalNumber: string) {
+  return getDeletedTombstoneSet().has(proposalNumber);
 }
 
 function ensureProposalMetadata(proposal: Proposal, session?: UserSession | null): Proposal {
@@ -274,6 +384,59 @@ export async function syncPendingProposals() {
   }
 }
 
+let syncingPendingDeletes = false;
+
+export async function syncPendingDeletes() {
+  if (syncingPendingDeletes) return;
+  if (!isSupabaseEnabled()) return;
+
+  const supabaseOnline = await hasSupabaseConnection(true);
+  if (!supabaseOnline) return;
+
+  const pendingDeletes = loadPendingDeletes();
+  if (!pendingDeletes.length) return;
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+
+  const session = readSession();
+  syncingPendingDeletes = true;
+  try {
+    for (const record of pendingDeletes) {
+      try {
+        addDeletedTombstone(record.proposalNumber);
+        const franchiseId = record.franchiseId || session?.franchiseId || DEFAULT_FRANCHISE_ID;
+        const { error, data } = await supabase
+          .from('franchise_proposals')
+          .delete()
+          .eq('proposal_number', record.proposalNumber)
+          .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
+          .select('proposal_number');
+        if (error) throw error;
+
+        const deletedCount = (data || []).length;
+        if (!deletedCount) {
+          const fallback = await supabase
+            .from('franchise_proposals')
+            .delete()
+            .eq('proposal_number', record.proposalNumber)
+            .select('proposal_number');
+          if (fallback.error) throw fallback.error;
+          if ((fallback.data || []).length) {
+            clearPendingDelete(record.proposalNumber);
+          }
+        } else {
+          clearPendingDelete(record.proposalNumber);
+        }
+      } catch (error) {
+        console.warn('Failed to sync pending proposal delete', record.proposalNumber, error);
+      }
+    }
+  } finally {
+    syncingPendingDeletes = false;
+  }
+}
+
 function registerOnlineSyncListener() {
   if (typeof window === 'undefined') return;
   const anyWindow = window as any;
@@ -281,6 +444,7 @@ function registerOnlineSyncListener() {
   anyWindow.__submergeSyncListenerRegistered = true;
   window.addEventListener('online', () => {
     void syncPendingProposals();
+    void syncPendingDeletes();
   });
 }
 
@@ -290,18 +454,28 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   const session = readSession();
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
   const supabaseOnline = await hasSupabaseConnection();
+  if (supabaseOnline) {
+    await syncPendingDeletes();
+  }
+  const pendingDeletes = getPendingDeleteSet();
+  const deletedTombstones = getDeletedTombstoneSet();
+  const hiddenProposals = new Set<string>([...pendingDeletes, ...deletedTombstones]);
 
   const supabasePromise = (async () => {
     if (!supabaseOnline) return [] as Proposal[];
     try {
-      return await fetchSupabaseProposals(targetFranchiseId || DEFAULT_FRANCHISE_ID, session);
+      const rows = await fetchSupabaseProposals(targetFranchiseId || DEFAULT_FRANCHISE_ID, session);
+      return rows.filter((p) => !hiddenProposals.has(p.proposalNumber));
     } catch (error) {
       console.warn('Failed to list proposals from Supabase; using local copies.', error);
       return [] as Proposal[];
     }
   })();
 
-  const localPromise = loadLocalProposals(targetFranchiseId, session);
+  const localPromise = (async () => {
+    const rows = await loadLocalProposals(targetFranchiseId, session);
+    return rows.filter((p) => !hiddenProposals.has(p.proposalNumber));
+  })();
 
   const [supabaseRows, localRows] = await Promise.all([supabasePromise, localPromise]);
   const supabaseMap = new Map<string, Proposal>();
@@ -346,8 +520,14 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
 }
 
 export async function getProposal(proposalNumber: string): Promise<Proposal | null> {
+  if (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber)) return null;
+
   const session = readSession();
   const supabaseOnline = await hasSupabaseConnection();
+  if (supabaseOnline) {
+    await syncPendingDeletes();
+    if (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber)) return null;
+  }
 
   const supabasePromise = (async () => {
     if (!supabaseOnline) return null;
@@ -392,6 +572,7 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
 export async function saveProposal(proposal: Proposal, options: SaveOptions = {}): Promise<SaveResult> {
   const now = nowIso();
   const session = readSession();
+  clearDeletedTombstone(proposal.proposalNumber);
   const normalized = ensureProposalMetadata(
     {
       ...proposal,
@@ -447,40 +628,79 @@ export async function saveProposal(proposal: Proposal, options: SaveOptions = {}
 export async function deleteProposal(proposalNumber: string, franchiseId?: string) {
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
   const supabaseOnline = await hasSupabaseConnection();
+  const supabaseEnabled = isSupabaseEnabled();
   let connectivityFailure = false;
+  let supabaseDeleted = false;
+  let tombstoneAdded = false;
 
   if (supabaseOnline) {
     try {
       const supabase = getSupabaseClient();
       if (!supabase) throw new Error('Supabase not configured');
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('franchise_proposals')
         .delete()
         .eq('proposal_number', proposalNumber)
-        .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID);
+        .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
+        .select('proposal_number');
       if (error) throw error;
+
+      const deletedCount = (data || []).length;
+      if (!deletedCount) {
+        const fallback = await supabase
+          .from('franchise_proposals')
+          .delete()
+          .eq('proposal_number', proposalNumber)
+          .select('proposal_number');
+        if (fallback.error) throw fallback.error;
+        if ((fallback.data || []).length) {
+          supabaseDeleted = true;
+          clearPendingDelete(proposalNumber);
+        }
+      } else {
+        supabaseDeleted = true;
+        clearPendingDelete(proposalNumber);
+      }
+      addDeletedTombstone(proposalNumber);
+      tombstoneAdded = true;
     } catch (error) {
       connectivityFailure = isConnectivityError(error);
       if (!connectivityFailure) {
+        clearDeletedTombstone(proposalNumber);
         throw error;
       }
       console.warn('Supabase delete failed due to connectivity; will remove local copy only.', error);
     }
   }
 
-  if (!supabaseOnline || connectivityFailure || !isSupabaseEnabled()) {
+  if (!supabaseOnline || connectivityFailure || !supabaseEnabled || !supabaseDeleted) {
+    if (supabaseEnabled) {
+      addPendingDelete(proposalNumber, targetFranchiseId);
+    }
     if (!window.electron?.deleteProposal) {
+      if (!tombstoneAdded) clearDeletedTombstone(proposalNumber);
       throw new Error('No delete handler available (electron bridge missing).');
     }
     await window.electron.deleteProposal(proposalNumber);
+    if (!tombstoneAdded) {
+      addDeletedTombstone(proposalNumber);
+      tombstoneAdded = true;
+    }
     return;
   }
 
+  clearPendingDelete(proposalNumber);
   if (window.electron?.deleteProposal) {
     try {
       await window.electron.deleteProposal(proposalNumber);
     } catch (error) {
-      console.warn('Failed to delete proposal from local database after Supabase delete:', error);
+      addPendingDelete(proposalNumber, targetFranchiseId);
+      if (!tombstoneAdded) clearDeletedTombstone(proposalNumber);
+      throw new Error('Failed to delete proposal from local database after Supabase delete.');
     }
+  }
+
+  if (!tombstoneAdded) {
+    addDeletedTombstone(proposalNumber);
   }
 }

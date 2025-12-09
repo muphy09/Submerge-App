@@ -105,7 +105,7 @@ Inputs and how they apply (fields that affect calculations)
 - Water feature runs (`pricingData.plumbing.waterFeatureRun.setup`, `baseAllowanceFt`, `perFt`): For each water feature run > 0, the line item always includes the setup charge. Quantity is the overage beyond the base allowance (can be 0), and total is `setup + overage * perFt` (`src/services/pricingEngine.ts:440-462`).
 - Additional water feature run (`pricingData.plumbing.additionalWaterFeatureRunPerFt` or `waterFeatureRun.perFt` fallback): Adds a single line when any water feature run is present, quantity is the sum of each run capped at the base allowance, and unit price is the configured additional rate (`src/services/pricingEngine.ts:464-473`).
 - Infloor plumbing (`pricingData.plumbing.infloorPerFt`): If either infloor run value is > 0, quantity is `ceil(surfaceArea * 0.5)` (`src/services/pricingEngine.ts:476-485`).
-- Conduit (`pricingData.plumbing.conduitPerFt`): Quantity is `ceil(electricalRun + lightRun * 1.25)` using runs passed in from the electrical section; charged when quantity > 0 (`src/services/pricingEngine.ts:488-500`).
+- Conduit (`pricingData.plumbing.conduitPerFt`): Quantity rounds to the nearest whole foot using `electricalRun + lightRun * (lightRunConduitMultiplier)`, pulling runs from the electrical section; charged when quantity > 0 (`src/services/pricingEngine.ts:488-501`).
 - Manifold (`pricingData.plumbing.manifold`): Always added once; quantity 1 (`src/services/pricingEngine.ts:503-509`).
 - Strip forms (`pricingData.plumbing.stripForms`): Always added once; quantity 1 (`src/services/pricingEngine.ts:512-519`).
 - Cleaner line (`pricingData.plumbing.cleanerPerFt`): Added when `cleanerRun` > 0 (`src/services/pricingEngine.ts:521-529`).

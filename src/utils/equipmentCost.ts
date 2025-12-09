@@ -45,7 +45,8 @@ export function getEquipmentItemCost(
     : undefined;
   let totalParts = (target.basePrice ?? 0) + (target.addCost1 ?? 0) + (target.addCost2 ?? 0);
   if (hasParts && percentIncrease !== undefined) {
-    totalParts = totalParts * (1 + percentIncrease / 100);
+    const divisor = percentIncrease / 100;
+    totalParts = divisor !== 0 ? totalParts / divisor : totalParts;
   }
   const base = hasParts ? totalParts : target.price ?? 0;
   return base * overheadMultiplier;
