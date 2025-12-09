@@ -514,12 +514,13 @@ function ProposalView() {
       ? mergedProposal.poolSpecs.approximateGallons.toLocaleString('en-US')
       : 'N/A';
 
+    const hasSpaSelected = mergedProposal.poolSpecs.spaType !== 'none';
     const maxWidth = formatNumber(mergedProposal.poolSpecs.maxWidth, 'ft');
     const maxLength = formatNumber(mergedProposal.poolSpecs.maxLength, 'ft');
     const shallowDepth = formatNumber(mergedProposal.poolSpecs.shallowDepth, 'ft');
     const endDepth = formatNumber(mergedProposal.poolSpecs.endDepth, 'ft');
-    const spaLength = formatNumber(mergedProposal.poolSpecs.spaLength, 'ft');
-    const spaWidth = formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft');
+    const spaLength = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft') : 'No Spa';
+    const spaWidth = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft') : 'No Spa';
 
     const costLineItems: { name: string; items: CostLineItem[]; subcategories?: { name: string; items: CostLineItem[] }[] }[] = costBreakdownForDisplay
       ? [
@@ -1896,7 +1897,6 @@ function ProposalView() {
 }
 
 export default ProposalView;
-
 
 
 
