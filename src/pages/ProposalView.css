@@ -406,7 +406,7 @@
 
 .tiles-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
   margin-top: 16px;
 }
@@ -634,6 +634,36 @@
   font-weight: 700;
 }
 
+.summary-tile.contract-tile {
+  background: #ffffff;
+  border: 2px solid #60a5fa;
+  box-shadow: 0 4px 16px rgba(96, 165, 250, 0.25);
+}
+
+.summary-tile.contract-tile:hover {
+  box-shadow: 0 8px 22px rgba(59, 130, 246, 0.35);
+  border-color: #3b82f6;
+  transform: translateY(-3px);
+}
+
+.summary-tile.contract-tile .tile-header {
+  border-bottom-color: rgba(96, 165, 250, 0.3);
+  background: linear-gradient(135deg, #e8f0ff 0%, #d7e6ff 100%);
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin: -2px -2px 14px -2px;
+}
+
+.summary-tile.contract-tile .tile-icon {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+}
+
+.summary-tile.contract-tile .tile-link {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
 .tile-header {
   display: flex;
   align-items: center;
@@ -701,6 +731,11 @@
   width: 32px;
   height: 32px;
   object-fit: contain;
+}
+
+.tile-icon.contract-icon {
+  background: #e0eaff;
+  color: #1d4ed8;
 }
 
 .tile-icon.warranty-icon {
@@ -881,6 +916,11 @@
 
 .modal-content.wide {
   width: min(1400px, 100%);
+}
+
+.modal-content.contract-modal {
+  width: min(1500px, 100%);
+  max-width: 1500px;
 }
 
 .modal-header {
@@ -1612,7 +1652,7 @@
 
 @media print {
   .no-print,
-  .modal-overlay {
+  .modal-overlay:not(.contract-printable) {
     display: none !important;
   }
 

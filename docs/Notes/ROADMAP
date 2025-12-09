@@ -1,22 +1,28 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
-- Auto update without being public
-- Logo upload option for admin, makes available for franchise
-- Admin Pricing Menu Redesign
+
 - Equip show price difference from included as cost, not full cost
 - Equip Lighting infinite water color
 - Fix Export formatting on page
-- 
+- Total main drain run - main
+- Double bullnose ask for in Spa selection - always spa perimeter
+- Water feature run add logic to appear after selecting
+- Admin proposal overview breakdown all versions in a dropdown
+- Surface area not needed int finish
+- Add additional retaining wall, not just one
+- Add Custom Costs option per category
+***- Integrate Contract autofill and export
+- Add aux pump - double main drain run. every pump gets same drain run
 
 
 
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-- 16x16 Coping implementation (Tile tab), over 16" add 33% cost
-    - Option for 12x12 and 16x16
+- Oversized coping options**    
+    - 16x16 Coping implementation (Tile tab), over 16" add 33% cost
+        - Option for 12x12 and 16x16
 - 'No Tile' selection, custom travertine, coping, decking**
-- Oversized coping options**
 - Custom plubming in Water Features**
 - Exposed pool wall**
     - Has to allow for $8.50 of forming for every sqft of wall
@@ -27,6 +33,12 @@ Mid Term -
 - Fiberglass Shells
 - Performance Data for Admin overhaul
 - Proposal 'Complete' reconcile it, no input changes
+- Gas run - main gas, meter, tank, heater, aux gas run**
+- Hotkey keyboard navigation
+- Admin Pricing Menu Cleaup
+- Auto update without being public
+- Logo upload option for admin, makes available for franchise
+- Logic for stipulations / what specs require or omit what items
 
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
@@ -35,6 +47,7 @@ Long Term -
     - Remodel**
     - Commercial Pool Pricing**
     - Sales Templates (when not in effect)**
+- Permitting and County associated costs tied to City field
 
 ---------------------------------------------------------------------------------------------------------
 
@@ -104,9 +117,8 @@ Turf & Trav in Lay- 6240
 
 Cost Breakdown -> Discount
 -8000
+----------------------------------------------------------
 
-
-Permitting Jurisdiction
 
 Hide the cents in dollar amount
 

@@ -5,6 +5,7 @@ import { jsPDF } from 'jspdf';
 import { CostLineItem, Proposal } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import SubmergeAdvantageWarranty from '../components/SubmergeAdvantageWarranty';
+import ContractView from '../components/ContractView';
 import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
@@ -32,6 +33,7 @@ import {
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
 import { validateProposal } from '../utils/validation';
+import { ContractOverrides } from '../services/contractGenerator';
 
 type BreakdownType = 'customer' | 'cogs' | 'pre' | 'warranty';
 
@@ -51,6 +53,7 @@ function ProposalView() {
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
   const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
   const [warrantyBreakdownVersionId, setWarrantyBreakdownVersionId] = useState<string | null>(null);
+  const [contractVersionId, setContractVersionId] = useState<string | null>(null);
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
   const [selectedBreakdowns, setSelectedBreakdowns] = useState<BreakdownSelection[]>([]);
@@ -94,6 +97,7 @@ function ProposalView() {
       interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
       manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
       papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+      contractOverrides: (input as Proposal).contractOverrides || (base as Proposal).contractOverrides || {},
     };
   };
 
@@ -288,6 +292,59 @@ function ProposalView() {
     } catch (error) {
       console.error('Failed to build version', error);
       showToast({ type: 'error', message: 'Could not create a new version.' });
+    }
+  };
+
+  const handleSaveContractOverrides = async (versionId: string, overrides: ContractOverrides) => {
+    if (!proposal) return;
+    try {
+      const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+      const updated = all.map((v) => {
+        const id = v.versionId || 'original';
+        if (id !== versionId) return v;
+        return {
+          ...(v as Proposal),
+          contractOverrides: overrides,
+          lastModified: new Date().toISOString(),
+        };
+      });
+
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const active =
+        updated.find((v) => (v.versionId || 'original') === desiredActiveId) ||
+        updated[0];
+      if (!active) return;
+      const others = updated.filter(
+        (v) => (v.versionId || 'original') !== (active.versionId || 'original')
+      );
+
+      const container: Proposal = {
+        ...(active as Proposal),
+        versions: others,
+      };
+
+      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      const saved = await saveProposalRemote(container);
+      const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = applyActiveVersion(saved as Proposal);
+      setVersions(updatedVersions);
+      setProposal(activeApplied as Proposal);
+      setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
+      showToast({ type: 'success', message: 'Contract overrides saved.' });
+    } catch (error) {
+      console.error('Failed to save contract overrides', error);
+      showToast({ type: 'error', message: 'Could not save contract overrides.' });
     }
   };
 
@@ -704,6 +761,7 @@ function ProposalView() {
   const warrantyModalView = warrantyBreakdownVersionId
     ? versionMap.get(warrantyBreakdownVersionId) || primaryView
     : null;
+  const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
   const hasMultipleVersions = viewModels.length > 1;
   type ExportTarget = {
     selection: BreakdownSelection;
@@ -1204,6 +1262,40 @@ function ProposalView() {
             </svg>
           </span>
         </button>
+
+        <button className="summary-tile contract-tile" type="button" onClick={() => setContractVersionId(versionId)}>
+          <div className="tile-header">
+            <div className="tile-icon contract-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 3h8l4 4v14H7V3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M15 3v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 12h6M9 16h6M9 8h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="tile-header-text">
+              <p className="tile-title">Contract</p>
+            </div>
+          </div>
+          <div className="tile-content-box">
+            <div className="tile-metrics">
+              <div className="metric-row">
+                <p className="metric-label">Retail Price:</p>
+                <p className="metric-value">{formatCurrency(vm.pricing?.retailPrice ?? vm.retailPriceBeforeDiscounts)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Pool Type:</p>
+                <p className="metric-value">{vm.poolTypeLabel}</p>
+              </div>
+            </div>
+          </div>
+          <span className="tile-link">
+            View Contract
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </button>
       </div>
     );
   };
@@ -1594,6 +1686,28 @@ function ProposalView() {
           </div>
         </div>
       )}
+      {contractVersionId && contractModalView && (
+        <div className="modal-overlay contract-printable" onClick={() => setContractVersionId(null)}>
+          <div className="modal-content contract-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <p className="modal-eyebrow">Contract</p>
+                <h2>Contract Preview</h2>
+              </div>
+              <button className="modal-close" onClick={() => setContractVersionId(null)} aria-label="Close contract">
+                x
+              </button>
+            </div>
+            <div className="modal-body-scroll">
+              <ContractView
+                proposal={contractModalView.proposal}
+                overrides={contractModalView.proposal.contractOverrides || {}}
+                onSave={(next) => handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {customerBreakdownVersionId && customerModalView && (
         <div className="modal-overlay" onClick={() => setCustomerBreakdownVersionId(null)}>
           <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
@@ -1897,7 +2011,3 @@ function ProposalView() {
 }
 
 export default ProposalView;
-
-
-
-

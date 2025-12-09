@@ -1,0 +1,86 @@
+A1 | theme4:0.5999938962981048 | 'SHOTCRETE' | A:SHOTCRETE
+I3 | theme4:0.7999816888943144 | None | F:Buyer's Name:; P:Phone I:
+R3 | theme4:0.7999816888943144 | None | F:Buyer's Name:; P:Phone I:
+I4 | theme4:0.7999816888943144 | None | F:Job Site Address:; P:Phone II:
+R4 | theme4:0.7999816888943144 | None | F:Job Site Address:; P:Phone II:
+I5 | theme4:0.7999816888943144 | None | F:City:; M:Zip:
+N5 | theme4:0.7999816888943144 | None | F:City:; M:Zip:
+H7 | theme4:0.7999816888943144 | None | F:Email I:; N:Email II:
+P7 | theme4:0.7999816888943144 | None | F:Email I:; N:Email II:
+Q16 | theme4:0.7999816888943144 | 0 | A:swimming pool and related equipment to be installed at the ; I:=I4; N:for the cash price of ; Q:0; U:, and
+I20 | theme4:0.7999816888943144 | datetime.datetime(2025, 3, 1, 0, 0) | A:Construction to substanstially commence on or about:; I:2025-03-01 00:00:00
+I21 | theme4:0.7999816888943144 | datetime.datetime(2025, 9, 1, 0, 0) | A:Construction to be substanstially complete on or about:; I:2025-09-01 00:00:00
+N28 | theme4:0.7999816888943144 | None | A:Non-Refundable Deposit:; G:=Q17; L:Perimeter:; P:'     Surface Area:; U:SQFT
+S28 | theme4:0.7999816888943144 | None | A:Non-Refundable Deposit:; G:=Q17; L:Perimeter:; P:'     Surface Area:; U:SQFT
+N30 | theme4:0.7999816888943144 | None | A:=IF($A$1=$W$3,W29,AE29); G:=IF(A$1=W$3,AC29,AH29); L:Pool Size:; O:'   X; Q:'
+P30 | theme4:0.7999816888943144 | None | A:=IF($A$1=$W$3,W29,AE29); G:=IF(A$1=W$3,AC29,AH29); L:Pool Size:; O:'   X; Q:'
+N32 | theme4:0.7999816888943144 | None | A:=IF($A$1=$W$3,W31,AE31); G:=IF(A$1=W$3,AC31,AH31); L:Pool Depth:; O:'   X; Q:'   X; S:'
+P32 | theme4:0.7999816888943144 | None | A:=IF($A$1=$W$3,W31,AE31); G:=IF(A$1=W$3,AC31,AH31); L:Pool Depth:; O:'   X; Q:'   X; S:'
+R32 | theme4:0.7999816888943144 | None | A:=IF($A$1=$W$3,W31,AE31); G:=IF(A$1=W$3,AC31,AH31); L:Pool Depth:; O:'   X; Q:'   X; S:'
+Q39 | theme4:0.7999816888943144 | 'None' | A:1.  Standard Engineered Plans and Pool Permit; I:BY BUILDER; L:22. Auxiliary Pump I; Q:None
+Q40 | theme4:0.7999816888943144 | 'None' | A:2.  Pool layout and excavation ; I:BY BUILDER; L:23. Auxiliary Pump II; Q:None
+Q41 | theme4:0.7999816888943144 | 'Salt System' | A:3.  Removal of dirt on day of excavation only; I:BY BUILDER; L:24. Sanitation I; Q:Salt System
+Q42 | theme4:0.7999816888943144 | 'None' | A:4.  Removal of access wall or fence; I:BY BUYER; L:25. Sanitation II; Q:None
+Q43 | theme4:0.7999816888943144 | 'None' | A:5.  Replacement of access wall or fence; I:BY BUYER; L:26. Sanitation III; Q:None
+Q44 | theme4:0.7999816888943144 | 'None' | A:6.  Repair Damaged Utilities, Irrigation, Landscaping and; I:BY BUYER; L:27. Cleaner; Q:None
+Q45 | theme4:0.7999816888943144 | 'None' | A:     Concrete Sidewalk or Driveway; L:28. Heater; Q:None
+Q46 | theme4:0.7999816888943144 | 'None' | A:7.  Removal of trees in the access or pool area; I:BY BUYER; L:29. Gas line; Q:None
+Q47 | theme4:0.7999816888943144 | 'None' | A:8.  Removal of concrete in the access or pool area; I:BY BUYER; L:30. Line Type; Q:None
+F49 | theme4:0.7999816888943144 | 1 | A:10. This contract includes up to ; F:1; G:days of excavation.; L:POOL SHELL / TILE / COPING & DECKING
+T51 | theme4:0.7999816888943144 | 'Included' | A:12. 100% Non-Deductible Worker's Compensation; L:32. Waterline Tile; T:Included
+T52 | theme4:0.7999816888943144 | 'None' | A:      Insurance for all employees.; L:33. Accent Tile on steps and benches; T:None
+Q56 | theme4:0.7999816888943144 | 'None' | A:PLUMBING & EQUIPMENT; L:35. Raised Beam Facing I; Q:None
+F57 | theme4:0.7999816888943144 | 1 | A:15. Skimmer; E:QTY:; F:1; G:STD; I:BY BUILDER; L:36. Raised Beam Facing II; Q:None
+Q57 | theme4:0.7999816888943144 | 'None' | A:15. Skimmer; E:QTY:; F:1; G:STD; I:BY BUILDER; L:36. Raised Beam Facing II; Q:None
+F58 | theme4:0.7999816888943144 | 3 | A:16. Surface Returns; E:QTY:; F:3; G:STD; I:BY BUILDER; L:37. Coping; Q:3CM Travertine
+Q58 | theme4:0.7999816888943144 | '3CM Travertine' | A:16. Surface Returns; E:QTY:; F:3; G:STD; I:BY BUILDER; L:37. Coping; Q:3CM Travertine
+Q59 | theme4:0.7999816888943144 | 'Travertine' | A:17. Auto-Fill with Anti-Siphon Valve; I:BY BUYER; L:38. Decking; P:SF; Q:Travertine
+T60 | theme4:0.7999816888943144 | 'BY BUILDER' | A:18. All pool plumbing/piping and valves per plan; I:BY BUILDER; L:39. Decking Drainage; T:BY BUILDER
+T61 | theme4:0.7999816888943144 | 'BY BUYER' | A:19. Equipment pad for pool equipment; I:BY BUILDER; L:40. Downspout Drainage; R:Approx SF; T:BY BUYER
+F62 | theme4:0.7999816888943144 | '2.7HP Variable Speed' | A:20. Circulation Pump; F:2.7HP Variable Speed; L:Builder will ensure the pool deck will be installed with "fall" to ensure proper drainage. Getting water out of the yard is Buyer's responsibility.
+F63 | theme4:0.7999816888943144 | '580 SQFT Cartridge' | A:21. Filter; F:580 SQFT Cartridge
+I77 | theme4:0.7999816888943144 | 'BY BUILDER' | A:41. Electrical connection of pump(s) and underwater; I:BY BUILDER; L:64. Spa Perimeter:; T:LNFT:; U:-
+U77 | theme4:0.7999816888943144 | '-' | A:41. Electrical connection of pump(s) and underwater; I:BY BUILDER; L:64. Spa Perimeter:; T:LNFT:; U:-
+P78 | theme4:0.7999816888943144 | 'None' | A:      light(s) including required conduit; L:65. Spa Light:; P:None; T:QTY:; U:0
+U78 | theme4:0.7999816888943144 | 0 | A:      light(s) including required conduit; L:65. Spa Light:; P:None; T:QTY:; U:0
+I79 | theme4:0.7999816888943144 | 'BY BUILDER' | A:42.  Electrical bonding of pool ; I:BY BUILDER; L:66. Damwall:; Q:None
+Q79 | theme4:0.7999816888943144 | 'None' | A:42.  Electrical bonding of pool ; I:BY BUILDER; L:66. Damwall:; Q:None
+I80 | theme4:0.7999816888943144 | 'BY BUYER' | A:43. House panel upgrade or relocation of overhead; I:BY BUYER; L:67. Blower; T:NO 
+T80 | theme4:0.7999816888943144 | 'NO ' | A:43. House panel upgrade or relocation of overhead; I:BY BUYER; L:67. Blower; T:NO 
+Q81 | theme4:0.7999816888943144 | '=IF(U77="-","None",F102)' | A:      or underground lines - if required; L:68. Interior Finish; Q:=IF(U77="-","None",F102)
+E82 | theme4:0.7999816888943144 | '24 Watt - Nicheless' | A:44. Pool Light(s) I; E:24 Watt - Nicheless; I:QTY:; J:3; L:69. Low Water Returns; T:NO 
+J82 | theme4:0.7999816888943144 | 3 | A:44. Pool Light(s) I; E:24 Watt - Nicheless; I:QTY:; J:3; L:69. Low Water Returns; T:NO 
+T82 | theme4:0.7999816888943144 | 'NO ' | A:44. Pool Light(s) I; E:24 Watt - Nicheless; I:QTY:; J:3; L:69. Low Water Returns; T:NO 
+E83 | theme4:0.7999816888943144 | 'None' | A:45. Pool Light(s) II; E:None; I:QTY:; J:0; L:70. Booster Pump for Spa Jets; T:NO 
+J83 | theme4:0.7999816888943144 | 0 | A:45. Pool Light(s) II; E:None; I:QTY:; J:0; L:70. Booster Pump for Spa Jets; T:NO 
+T83 | theme4:0.7999816888943144 | 'NO ' | A:45. Pool Light(s) II; E:None; I:QTY:; J:0; L:70. Booster Pump for Spa Jets; T:NO 
+F84 | theme4:0.7999816888943144 | 'None' | A:46. Controls; F:None; L:71. Raised Spa; T:NO 
+T84 | theme4:0.7999816888943144 | 'NO ' | A:46. Controls; F:None; L:71. Raised Spa; T:NO 
+I85 | theme4:0.7999816888943144 | 'NO ' | A:47. Valve Actuator for Water Features; I:NO ; L:72. Raised Spa Facing; Q:None
+Q85 | theme4:0.7999816888943144 | 'None' | A:47. Valve Actuator for Water Features; I:NO ; L:72. Raised Spa Facing; Q:None
+E88 | theme4:0.7999816888943144 | 'None' | A:48. Sheer Descent I:; E:None; I:QTY:; J:0
+J88 | theme4:0.7999816888943144 | 0 | A:48. Sheer Descent I:; E:None; I:QTY:; J:0
+E89 | theme4:0.7999816888943144 | 'None' | A:49. Sheer Descent II:; E:None; I:QTY:; J:0; L:73.; M:N/A
+J89 | theme4:0.7999816888943144 | 0 | A:49. Sheer Descent II:; E:None; I:QTY:; J:0; L:73.; M:N/A
+E90 | theme4:0.7999816888943144 | 'None' | A:50. Bowls:; E:None; I:QTY:; J:0
+J90 | theme4:0.7999816888943144 | 0 | A:50. Bowls:; E:None; I:QTY:; J:0
+E91 | theme4:0.7999816888943144 | 'None' | A:51. Deck Jets; E:None; I:QTY:; J:0; L:74.; M:N/A
+J91 | theme4:0.7999816888943144 | 0 | A:51. Deck Jets; E:None; I:QTY:; J:0; L:74.; M:N/A
+E92 | theme4:0.7999816888943144 | 'None' | A:52. Laminar Jets; E:None; I:QTY:; J:0
+J92 | theme4:0.7999816888943144 | 0 | A:52. Laminar Jets; E:None; I:QTY:; J:0
+E93 | theme4:0.7999816888943144 | 'None' | A:53. Scuppers or Sconces; E:None; I:QTY:; J:0; L:75.; M:N/A
+J93 | theme4:0.7999816888943144 | 0 | A:53. Scuppers or Sconces; E:None; I:QTY:; J:0; L:75.; M:N/A
+E96 | theme4:0.7999816888943144 | 'None' | A:54. Rock Waterfall I; E:None; I:QTY:; J:0
+J96 | theme4:0.7999816888943144 | 0 | A:54. Rock Waterfall I; E:None; I:QTY:; J:0
+E97 | theme4:0.7999816888943144 | 'None' | A:55. Rock Waterfall II; E:None; I:QTY:; J:0; L:77.; M:N/A
+J97 | theme4:0.7999816888943144 | 0 | A:55. Rock Waterfall II; E:None; I:QTY:; J:0; L:77.; M:N/A
+E98 | theme4:0.7999816888943144 | 'None' | A:56. Beam Rock; E:None; I:LNFT:; J:0
+J98 | theme4:0.7999816888943144 | 0 | A:56. Beam Rock; E:None; I:LNFT:; J:0
+E99 | theme4:0.7999816888943144 | 'None' | A:57. Notched Rock; E:None; I:LNFT:; J:0; L:78.; M:N/A
+J99 | theme4:0.7999816888943144 | 0 | A:57. Notched Rock; E:None; I:LNFT:; J:0; L:78.; M:N/A
+F102 | theme4:0.7999816888943144 | 'Standard Pebble' | A:58. Interior Finish; F:Standard Pebble
+I103 | theme4:0.7999816888943144 | 'BY BUILDER' | A:59. Initial filling of pool and/or spa; I:BY BUILDER; L:80.; M:N/A
+I104 | theme4:0.7999816888943144 | 'BY BUYER' | A:60. Brushing of the pool interior; I:BY BUYER
+I105 | theme4:0.7999816888943144 | 'BY BUILDER' | A:61. Start-up ; I:BY BUILDER; L:81.; M:N/A
+I106 | theme4:0.7999816888943144 | '=IF(A1=W3,W85,W86)' | A:62. 30 Days of Chemical Only Pool Service; I:=IF(A1=W3,W85,W86)
+I107 | theme4:0.7999816888943144 | 'INCLUDED' | A:63. Test Kit, Leaf Skimmer, Pole, Brush & Thermometer; I:INCLUDED; L:82.; M:N/A

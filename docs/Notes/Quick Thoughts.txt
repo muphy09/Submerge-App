@@ -1,1 +1,9 @@
 Quick Thoughts
+
+Customer View -
+
+Nav in left column, modified build UI in middle, Live Item Breakdown on right column
+    - LIB dynamically adds the items selected to the column on the right
+    - Include way to view % without customer seeing (maybe Prop ID # in corner)
+
+Designers dont need to see COGS breakdown or reta

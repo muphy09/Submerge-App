@@ -377,5 +377,6 @@ export function getDefaultProposal(): Partial<Proposal> {
     taxRate: 0,
     taxAmount: 0,
     totalCost: 0,
+    contractOverrides: {},
   };
 }

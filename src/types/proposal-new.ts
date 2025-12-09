@@ -591,4 +591,7 @@ export interface Proposal {
   totalCost: number;
 
   notes?: string;
+
+  // Designer overrides for contract cells (cell address -> value)
+  contractOverrides?: Record<string, string | number | null>;
 }

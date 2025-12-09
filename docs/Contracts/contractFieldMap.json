@@ -1,0 +1,625 @@
+{
+  "sheet": "CONTRACT",
+  "columns": "A-U",
+  "fields": [
+    {
+      "cell": "A1",
+      "label": "Pool Type Banner",
+      "proposalPath": "poolSpecs.poolType",
+      "formatter": "poolType",
+      "fallback": "SHOTCRETE",
+      "notes": "Top-left banner. Render as SHOTCRETE/GUNITE/FIBERGLASS."
+    },
+    {
+      "cell": "I3",
+      "label": "Buyer Name",
+      "proposalPath": "customerInfo.customerName",
+      "formatter": "text",
+      "fallback": ""
+    },
+    {
+      "cell": "R3",
+      "label": "Phone I",
+      "proposalPath": "customerInfo.phone",
+      "formatter": "phone",
+      "fallback": ""
+    },
+    {
+      "cell": "I4",
+      "label": "Job Site Address",
+      "proposalPath": "customerInfo.address",
+      "formatter": "text",
+      "fallback": ""
+    },
+    {
+      "cell": "R4",
+      "label": "Phone II",
+      "proposalPath": null,
+      "formatter": "phone",
+      "fallback": "",
+      "notes": "No secondary phone in proposal; mirror Phone I or leave blank."
+    },
+    {
+      "cell": "I5",
+      "label": "City",
+      "proposalPath": "customerInfo.city",
+      "formatter": "text",
+      "fallback": ""
+    },
+    {
+      "cell": "N5",
+      "label": "Zip",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "",
+      "notes": "Zip not stored directly; attempt to parse from address."
+    },
+    {
+      "cell": "H7",
+      "label": "Email I",
+      "proposalPath": "customerInfo.email",
+      "formatter": "text",
+      "fallback": ""
+    },
+    {
+      "cell": "P7",
+      "label": "Email II",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "",
+      "notes": "Secondary email not captured; leave blank unless supplied manually."
+    },
+    {
+      "cell": "Q16",
+      "label": "Retail Price",
+      "proposalPath": "pricing.retailPrice",
+      "formatter": "currencyRaw",
+      "fallback": 0,
+      "notes": "Only price shown on contract."
+    },
+    {
+      "cell": "I20",
+      "label": "Approx Start Date",
+      "proposalPath": null,
+      "formatter": "date",
+      "fallback": null,
+      "notes": "Use proposal created date or override."
+    },
+    {
+      "cell": "I21",
+      "label": "Approx Completion Date",
+      "proposalPath": null,
+      "formatter": "date",
+      "fallback": null,
+      "notes": "Use start date + default duration; designer may override."
+    },
+    {
+      "cell": "N28",
+      "label": "Pool Perimeter (ft)",
+      "proposalPath": "poolSpecs.perimeter",
+      "formatter": "number",
+      "fallback": null,
+      "notes": "Fiberglass uses fiberglassPerimeter when available."
+    },
+    {
+      "cell": "S28",
+      "label": "Surface Area (sqft)",
+      "proposalPath": "poolSpecs.surfaceArea",
+      "formatter": "number",
+      "fallback": null
+    },
+    {
+      "cell": "N30",
+      "label": "Pool Size Length (ft)",
+      "proposalPath": "poolSpecs.maxLength",
+      "formatter": "number",
+      "fallback": null
+    },
+    {
+      "cell": "P30",
+      "label": "Pool Size Width (ft)",
+      "proposalPath": "poolSpecs.maxWidth",
+      "formatter": "number",
+      "fallback": null
+    },
+    {
+      "cell": "N32",
+      "label": "Pool Depth Shallow (ft)",
+      "proposalPath": "poolSpecs.shallowDepth",
+      "formatter": "number",
+      "fallback": null
+    },
+    {
+      "cell": "P32",
+      "label": "Pool Depth Deep (ft)",
+      "proposalPath": "poolSpecs.endDepth",
+      "formatter": "number",
+      "fallback": null
+    },
+    {
+      "cell": "R32",
+      "label": "Pool Depth Mid/Optional (ft)",
+      "proposalPath": null,
+      "formatter": "number",
+      "fallback": null,
+      "notes": "No mid-depth captured; designer input when needed."
+    },
+    {
+      "cell": "Q39",
+      "label": "Auxiliary Pump I",
+      "proposalPath": "equipment.auxiliaryPumps[0].name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "Q40",
+      "label": "Auxiliary Pump II",
+      "proposalPath": "equipment.auxiliaryPumps[1].name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "Q41",
+      "label": "Sanitation I",
+      "proposalPath": "equipment.saltSystem.name",
+      "formatter": "text",
+      "fallback": "None",
+      "notes": "Salt/chlorine system selection."
+    },
+    {
+      "cell": "Q42",
+      "label": "Sanitation II",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "Q43",
+      "label": "Sanitation III",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "Q44",
+      "label": "Cleaner",
+      "proposalPath": "equipment.cleaner.name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "Q45",
+      "label": "Heater",
+      "proposalPath": "equipment.heater.name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "Q46",
+      "label": "Gas Line",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "None",
+      "notes": "Set to Included if heater selected; otherwise None."
+    },
+    {
+      "cell": "Q47",
+      "label": "Line Type",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "None",
+      "notes": "No direct mapping; designer to confirm."
+    },
+    {
+      "cell": "F49",
+      "label": "Excavation Days Included",
+      "proposalPath": null,
+      "formatter": "number",
+      "fallback": 1
+    },
+    {
+      "cell": "T51",
+      "label": "Waterline Tile",
+      "proposalPath": "tileCopingDecking.tileLevel",
+      "formatter": "tileLevel",
+      "fallback": "Included"
+    },
+    {
+      "cell": "T52",
+      "label": "Accent Tile on Steps/Benches",
+      "proposalPath": "tileCopingDecking.hasTrimTileOnSteps",
+      "formatter": "yesNo",
+      "fallback": "None"
+    },
+    {
+      "cell": "Q56",
+      "label": "Raised Beam Facing I",
+      "proposalPath": "excavation.rbbLevels[0].facing",
+      "formatter": "facing",
+      "fallback": "None"
+    },
+    {
+      "cell": "F57",
+      "label": "Skimmer Quantity",
+      "proposalPath": "plumbing.runs.additionalSkimmers",
+      "formatter": "skimmerQty",
+      "fallback": 1
+    },
+    {
+      "cell": "Q57",
+      "label": "Raised Beam Facing II",
+      "proposalPath": "excavation.rbbLevels[1].facing",
+      "formatter": "facing",
+      "fallback": "None"
+    },
+    {
+      "cell": "F58",
+      "label": "Surface Returns Quantity",
+      "proposalPath": null,
+      "formatter": "number",
+      "fallback": 3,
+      "notes": "Not captured; default to 3."
+    },
+    {
+      "cell": "Q58",
+      "label": "Coping",
+      "proposalPath": "tileCopingDecking.copingType",
+      "formatter": "coping",
+      "fallback": "3CM Travertine"
+    },
+    {
+      "cell": "Q59",
+      "label": "Decking",
+      "proposalPath": "tileCopingDecking.deckingType",
+      "formatter": "decking",
+      "fallback": "Travertine"
+    },
+    {
+      "cell": "T60",
+      "label": "Decking Drainage",
+      "proposalPath": "drainage.deckDrainTotalLF",
+      "formatter": "drainageResponsibility",
+      "fallback": "BY BUYER"
+    },
+    {
+      "cell": "T61",
+      "label": "Downspout Drainage",
+      "proposalPath": "drainage.downspoutTotalLF",
+      "formatter": "drainageResponsibility",
+      "fallback": "BY BUYER"
+    },
+    {
+      "cell": "F62",
+      "label": "Circulation Pump",
+      "proposalPath": "equipment.pump.name",
+      "formatter": "text",
+      "fallback": "2.7HP Variable Speed"
+    },
+    {
+      "cell": "F63",
+      "label": "Filter",
+      "proposalPath": "equipment.filter.name",
+      "formatter": "text",
+      "fallback": "580 SQFT Cartridge"
+    },
+    {
+      "cell": "I77",
+      "label": "Electrical Connection Responsibility",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "BY BUILDER"
+    },
+    {
+      "cell": "U77",
+      "label": "Spa Perimeter (lnft)",
+      "proposalPath": "poolSpecs.spaPerimeter",
+      "formatter": "numberOrDash",
+      "fallback": "-"
+    },
+    {
+      "cell": "P78",
+      "label": "Spa Light Type",
+      "proposalPath": "equipment.spaLights[0].name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "U78",
+      "label": "Spa Light Qty",
+      "proposalPath": "equipment.spaLights",
+      "formatter": "lightCount",
+      "fallback": 0
+    },
+    {
+      "cell": "I79",
+      "label": "Electrical Bonding Responsibility",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "BY BUILDER"
+    },
+    {
+      "cell": "Q79",
+      "label": "Damwall",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "None",
+      "notes": "No direct proposal source."
+    },
+    {
+      "cell": "I80",
+      "label": "Panel Upgrade Responsibility",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "BY BUYER"
+    },
+    {
+      "cell": "T80",
+      "label": "Blower",
+      "proposalPath": null,
+      "formatter": "yesNo",
+      "fallback": "NO "
+    },
+    {
+      "cell": "Q81",
+      "label": "Interior Finish (Spa)",
+      "proposalPath": "interiorFinish.finishType",
+      "formatter": "finishOrNone",
+      "fallback": "None"
+    },
+    {
+      "cell": "E82",
+      "label": "Pool Light I Type",
+      "proposalPath": "equipment.poolLights[0].name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "J82",
+      "label": "Pool Light I Qty",
+      "proposalPath": "equipment.poolLights",
+      "formatter": "lightCount",
+      "fallback": 0
+    },
+    {
+      "cell": "T82",
+      "label": "Low Water Returns",
+      "proposalPath": null,
+      "formatter": "yesNo",
+      "fallback": "NO "
+    },
+    {
+      "cell": "E83",
+      "label": "Pool Light II Type",
+      "proposalPath": "equipment.poolLights[1].name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "J83",
+      "label": "Pool Light II Qty",
+      "proposalPath": "equipment.poolLights",
+      "formatter": "lightCountExtra",
+      "fallback": 0
+    },
+    {
+      "cell": "T83",
+      "label": "Booster Pump for Spa Jets",
+      "proposalPath": null,
+      "formatter": "yesNo",
+      "fallback": "NO "
+    },
+    {
+      "cell": "F84",
+      "label": "Controls / Automation",
+      "proposalPath": "equipment.automation.name",
+      "formatter": "text",
+      "fallback": "None"
+    },
+    {
+      "cell": "T84",
+      "label": "Raised Spa",
+      "proposalPath": "poolSpecs.spaType",
+      "formatter": "spaYesNo",
+      "fallback": "NO "
+    },
+    {
+      "cell": "I85",
+      "label": "Valve Actuator for Water Features",
+      "proposalPath": "waterFeatures.selections",
+      "formatter": "hasWaterFeaturesYesNo",
+      "fallback": "NO "
+    },
+    {
+      "cell": "Q85",
+      "label": "Raised Spa Facing",
+      "proposalPath": "poolSpecs.raisedSpaFacing",
+      "formatter": "facing",
+      "fallback": "None"
+    },
+    {
+      "cell": "E88",
+      "label": "Sheer Descent I",
+      "proposalPath": null,
+      "formatter": "waterFeature.sheer.0",
+      "fallback": "None"
+    },
+    {
+      "cell": "J88",
+      "label": "Sheer Descent I Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.sheer.0",
+      "fallback": 0
+    },
+    {
+      "cell": "E89",
+      "label": "Sheer Descent II",
+      "proposalPath": null,
+      "formatter": "waterFeature.sheer.1",
+      "fallback": "None"
+    },
+    {
+      "cell": "J89",
+      "label": "Sheer Descent II Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.sheer.1",
+      "fallback": 0
+    },
+    {
+      "cell": "E90",
+      "label": "Bowls",
+      "proposalPath": null,
+      "formatter": "waterFeature.bowl",
+      "fallback": "None"
+    },
+    {
+      "cell": "J90",
+      "label": "Bowls Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.bowl",
+      "fallback": 0
+    },
+    {
+      "cell": "E91",
+      "label": "Deck Jets",
+      "proposalPath": null,
+      "formatter": "waterFeature.deckJet",
+      "fallback": "None"
+    },
+    {
+      "cell": "J91",
+      "label": "Deck Jets Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.deckJet",
+      "fallback": 0
+    },
+    {
+      "cell": "E92",
+      "label": "Laminar Jets",
+      "proposalPath": null,
+      "formatter": "waterFeature.laminar",
+      "fallback": "None"
+    },
+    {
+      "cell": "J92",
+      "label": "Laminar Jets Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.laminar",
+      "fallback": 0
+    },
+    {
+      "cell": "E93",
+      "label": "Scuppers or Sconces",
+      "proposalPath": null,
+      "formatter": "waterFeature.sconce",
+      "fallback": "None",
+      "notes": "No direct source in proposal."
+    },
+    {
+      "cell": "J93",
+      "label": "Scuppers or Sconces Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.sconce",
+      "fallback": 0
+    },
+    {
+      "cell": "E96",
+      "label": "Rock Waterfall I",
+      "proposalPath": null,
+      "formatter": "waterFeature.rock1",
+      "fallback": "None"
+    },
+    {
+      "cell": "J96",
+      "label": "Rock Waterfall I Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.rock1",
+      "fallback": 0
+    },
+    {
+      "cell": "E97",
+      "label": "Rock Waterfall II",
+      "proposalPath": null,
+      "formatter": "waterFeature.rock2",
+      "fallback": "None"
+    },
+    {
+      "cell": "J97",
+      "label": "Rock Waterfall II Qty",
+      "proposalPath": null,
+      "formatter": "waterFeatureQty.rock2",
+      "fallback": 0
+    },
+    {
+      "cell": "E98",
+      "label": "Beam Rock Lnft",
+      "proposalPath": null,
+      "formatter": "number",
+      "fallback": 0,
+      "notes": "Not captured in proposal."
+    },
+    {
+      "cell": "J98",
+      "label": "Beam Rock Qty",
+      "proposalPath": null,
+      "formatter": "number",
+      "fallback": 0
+    },
+    {
+      "cell": "E99",
+      "label": "Notched Rock Lnft",
+      "proposalPath": null,
+      "formatter": "number",
+      "fallback": 0,
+      "notes": "Not captured in proposal."
+    },
+    {
+      "cell": "J99",
+      "label": "Notched Rock Qty",
+      "proposalPath": null,
+      "formatter": "number",
+      "fallback": 0
+    },
+    {
+      "cell": "F102",
+      "label": "Interior Finish",
+      "proposalPath": "interiorFinish",
+      "formatter": "finish",
+      "fallback": "Standard Pebble"
+    },
+    {
+      "cell": "I103",
+      "label": "Initial Fill Responsibility",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "BY BUILDER"
+    },
+    {
+      "cell": "I104",
+      "label": "Brushing Responsibility",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "BY BUYER"
+    },
+    {
+      "cell": "I105",
+      "label": "Start-up Responsibility",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "BY BUILDER"
+    },
+    {
+      "cell": "I106",
+      "label": "30 Day Chemical Service",
+      "proposalPath": "equipment.hasStartupChemicals",
+      "formatter": "yesNo",
+      "fallback": "YES"
+    },
+    {
+      "cell": "I107",
+      "label": "Test Kit Included",
+      "proposalPath": null,
+      "formatter": "text",
+      "fallback": "INCLUDED"
+    }
+  ]
+}
