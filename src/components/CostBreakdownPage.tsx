@@ -18,8 +18,11 @@ interface CategoryData {
   subcategories?: { name: string; items: CostLineItem[] }[];
 }
 
+type BreakdownViewMode = 'cogs' | 'retail';
+
 function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreakdownPageProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<BreakdownViewMode>('cogs');
   const papDiscounts: PAPDiscounts =
     proposal.papDiscounts || pricingData.papDiscountRates || {
       excavation: 0,
@@ -81,12 +84,25 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
     onAdjustmentsChange?.(updated);
   };
 
+  const roundToCents = (amount: number): number => Math.round((Number.isFinite(amount) ? amount : 0) * 100) / 100;
+
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
     }).format(amount);
+  };
+
+  const costBasis = pricing.totalCostsBeforeOverhead || costBreakdown.totals?.grandTotal || 0;
+  const retailTarget = pricing.retailPrice || proposal.totalCost || costBasis;
+  const retailFactor = viewMode === 'retail' && costBasis > 0 ? retailTarget / costBasis : 1;
+
+  const getDisplayValue = (amount: number): number => roundToCents((Number.isFinite(amount) ? amount : 0) * retailFactor);
+
+  const getDisplayUnitPrice = (item: CostLineItem): number => {
+    // Keep PAP discount rows showing percentages; all others scale with the active view
+    return getDisplayValue(item.unitPrice);
   };
 
   const isMaterialItem = (item: CostLineItem): boolean => {
@@ -206,18 +222,32 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
         <div className="cost-breakdown-main">
           <div className="cost-breakdown-left">
             <div className="cost-breakdown-left-header">
-              <div>
-                <p className="cost-breakdown-label">Detailed Breakdown</p>
-                <p className="cost-breakdown-helper">
-                  Expand a category to view labor/material details. PAP discounts reflect the active Pricing Model.
-                </p>
+              <div className="cost-breakdown-toggle" role="group" aria-label="Select breakdown view">
+                <button
+                  className={`cost-breakdown-toggle__option ${viewMode === 'cogs' ? 'active' : ''}`}
+                  onClick={() => setViewMode('cogs')}
+                  type="button"
+                  aria-pressed={viewMode === 'cogs'}
+                  title="Show cost of goods (COGS) amounts"
+                >
+                  COGS Breakdown
+                </button>
+                <button
+                  className={`cost-breakdown-toggle__option ${viewMode === 'retail' ? 'active' : ''}`}
+                  onClick={() => setViewMode('retail')}
+                  type="button"
+                  aria-pressed={viewMode === 'retail'}
+                  title="Show retail pricing amounts"
+                >
+                  Retail Cost Breakdown
+                </button>
               </div>
             </div>
 
             <div className="cost-breakdown-categories">
               {nonEmptyCategories.map((category) => {
                 const isExpanded = expandedCategories.has(category.name);
-                const categoryTotal = category.items.reduce((sum, item) => sum + item.total, 0);
+                const categoryTotal = category.items.reduce((sum, item) => sum + getDisplayValue(item.total), 0);
 
                 // Calculate labor and material subtotals if applicable
                 const adjustments = category.items.filter(isAdjustmentItem);
@@ -225,10 +255,10 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                 const hasLabor = visibleItems.some(isLaborItem);
                 const hasMaterial = visibleItems.some(isMaterialItem);
                 const laborSubtotal = hasLabor
-                  ? visibleItems.filter(isLaborItem).reduce((sum, item) => sum + item.total, 0)
+                  ? visibleItems.filter(isLaborItem).reduce((sum, item) => sum + getDisplayValue(item.total), 0)
                   : 0;
                 const materialSubtotal = hasMaterial
-                  ? visibleItems.filter(isMaterialItem).reduce((sum, item) => sum + item.total, 0)
+                  ? visibleItems.filter(isMaterialItem).reduce((sum, item) => sum + getDisplayValue(item.total), 0)
                   : 0;
                 const isWaterTruck = category.name === 'Water Truck';
                 const hasLaborSubcategory = Boolean(
@@ -294,14 +324,14 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                         const quantityDisplay = isPapDiscount ? '1' : item.quantity.toFixed(2);
                                         const unitPriceDisplay = isPapDiscount
                                           ? `${percentage.toFixed(2)}%`
-                                          : formatCurrency(item.unitPrice);
+                                          : formatCurrency(getDisplayUnitPrice(item));
 
                                         return (
                                           <tr key={idx}>
                                             <td>{item.description}</td>
                                             <td>{item.description.toLowerCase().includes('tax') ? '' : quantityDisplay}</td>
                                             <td>{item.description.toLowerCase().includes('tax') ? '' : unitPriceDisplay}</td>
-                                            <td>{formatCurrency(item.total)}</td>
+                                            <td>{formatCurrency(getDisplayValue(item.total))}</td>
                                           </tr>
                                         );
                                       })}
@@ -340,7 +370,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                   const quantityDisplay = isPapDiscount ? '1' : item.quantity.toFixed(2);
                                   const unitPriceDisplay = isPapDiscount
                                     ? `${percentage.toFixed(2)}%`
-                                    : formatCurrency(item.unitPrice);
+                                    : formatCurrency(getDisplayUnitPrice(item));
 
                                   return (
                                     <tr key={idx}>
@@ -358,7 +388,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                         <td>{isTaxLine ? '' : quantityDisplay}</td>
                                       )}
                                       <td>{isTaxLine ? '' : unitPriceDisplay}</td>
-                                      <td>{formatCurrency(item.total)}</td>
+                                      <td>{formatCurrency(getDisplayValue(item.total))}</td>
                                     </tr>
                                   );
                                 })}
@@ -396,7 +426,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                     return desc;
                                   })()}
                                 </span>
-                                <span>{formatCurrency(item.total)}</span>
+                                <span>{formatCurrency(getDisplayValue(item.total))}</span>
                               </div>
                             ))}
                           </div>

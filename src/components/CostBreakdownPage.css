@@ -106,7 +106,16 @@
 }
 
 .cost-breakdown-left-header {
-  padding: 6px 2px 0;
+  padding: 10px 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f5f8fd;
+  border-bottom: 1px solid #dce4f2;
+  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.06);
 }
 
 .cost-breakdown-label {
@@ -117,9 +126,43 @@
 }
 
 .cost-breakdown-helper {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: #55657f;
   font-size: 13px;
+}
+
+.cost-breakdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: #e2e9f6;
+  border-radius: 12px;
+  border: 1px solid #c8d4e8;
+  padding: 4px;
+  width: min(440px, 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.cost-breakdown-toggle__option {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #264166;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.cost-breakdown-toggle__option.active {
+  background: linear-gradient(180deg, #2f6fe7 0%, #2159c9 100%);
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(47, 111, 231, 0.35);
+}
+
+.cost-breakdown-toggle__option:not(.active):hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .cost-breakdown-categories {
