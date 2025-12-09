@@ -1086,34 +1086,6 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
         )}
       </div>
 
-      {/* Accessories */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Additional Accessories</h2>
-          <p className="spec-block-subtitle">Toggle accessories for this build.</p>
-        </div>
-        <div className="spec-grid spec-grid-2">
-          {[
-            { key: 'hasBlanketReel', label: 'Blanket Reel' },
-            { key: 'hasSolarBlanket', label: 'Solar Blanket' },
-            { key: 'hasAutoFill', label: 'Auto Fill' },
-            { key: 'hasHandrail', label: 'Handrail' },
-            { key: 'hasStartupChemicals', label: 'Startup Chemicals' },
-          ].map(item => (
-            <div key={item.key} className="spec-field">
-              <div className="pool-type-buttons">
-                <button
-                  type="button"
-                  className={`pool-type-btn ${(safeData as any)[item.key] ? 'active' : ''}`}
-                  onClick={() => handleChange(item.key as keyof Equipment, !(safeData as any)[item.key])}
-                >
-                  {item.label}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

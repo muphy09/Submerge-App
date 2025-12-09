@@ -741,6 +741,8 @@ export class SteelCalculations {
     excavation: Excavation
   ): CostLineItem[] {
     const items: CostLineItem[] = [];
+    if (!hasPoolDefinition(poolSpecs)) return items;
+
     const prices = pricingData.steel;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
     const isGuniteSpa = poolSpecs.spaType === 'gunite';
@@ -900,6 +902,10 @@ export class ShotcreteCalculations {
   ): { labor: CostLineItem[]; material: CostLineItem[] } {
     const laborItems: CostLineItem[] = [];
     const materialItems: CostLineItem[] = [];
+    if (!hasPoolDefinition(poolSpecs)) {
+      return { labor: laborItems, material: materialItems };
+    }
+
     const prices = pricingData.shotcrete;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
     const isGuniteSpa = poolSpecs.spaType === 'gunite';
