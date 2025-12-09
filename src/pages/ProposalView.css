@@ -110,13 +110,15 @@
 
 .version-section.has-divider {
   padding-top: 24px;
-  border-top: 1px dashed #cbd5e1;
+  border-top: 4px solid transparent;
+  border-image: linear-gradient(90deg, rgba(74,124,190,0.9), rgba(74,124,190,0.5), rgba(74,124,190,0.9)) 1;
 }
 
 .version-divider {
-  height: 1px;
-  background: linear-gradient(90deg, rgba(74,124,190,0.2), rgba(203,213,225,0.6), rgba(74,124,190,0.2));
-  margin: 8px 0 20px;
+  height: 4px;
+  background: linear-gradient(90deg, rgba(74,124,190,0.9), rgba(74,124,190,0.5), rgba(74,124,190,0.9));
+  border-radius: 4px;
+  margin: 12px 0 24px;
 }
 
 .page-title {
@@ -174,6 +176,10 @@
   line-height: 1.4;
   letter-spacing: 0;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .hero-subtitle {
@@ -190,16 +196,32 @@
 }
 
 .version-pill {
-  padding: 4px 10px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
   background: #e2e8f0;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 14px;
   color: #1e293b;
+  border: 1px solid #d1d5db;
 }
 
 .version-pill.active {
   background: #d1fae5;
   color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.version-pill.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecdd3;
+}
+
+.hero-title-separator {
+  color: #475569;
+  font-weight: 600;
 }
 
 .hero-actions {
@@ -238,7 +260,7 @@
   border-radius: 8px;
   border: 1px solid;
   white-space: nowrap;
-  align-self: flex-start;
+  align-self: center;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -335,6 +357,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
+  margin-top: 16px;
 }
 
 .summary-tile {

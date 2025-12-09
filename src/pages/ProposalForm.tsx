@@ -220,9 +220,9 @@ function ProposalForm() {
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showOfflineConfirm, setShowOfflineConfirm] = useState(false);
   const [pendingSaveMode, setPendingSaveMode] = useState<'draft' | 'submit' | null>(null);
+  const [pendingSaveOptions, setPendingSaveOptions] = useState<{ navigateToSummary?: boolean } | null>(null);
   const readPapDiscountsFromModel = (): PAPDiscounts => {
     const snapshot = getPricingDataSnapshot();
     return snapshot?.papDiscountRates ? { ...snapshot.papDiscountRates } : getDefaultPAPDiscounts();
@@ -684,7 +684,10 @@ function ProposalForm() {
     }
   };
 
-  const handleSave = async (mode: 'draft' | 'submit', options?: { forceLocal?: boolean }): Promise<boolean> => {
+  const handleSave = async (
+    mode: 'draft' | 'submit',
+    options?: { forceLocal?: boolean; navigateToSummary?: boolean }
+  ): Promise<boolean> => {
     if (isSaving) return false;
 
     const currentVersionId = proposal.versionId || editingVersionId || 'original';
@@ -693,6 +696,7 @@ function ProposalForm() {
     const supabaseConnected = options?.forceLocal ? false : await hasSupabaseConnection();
     if (!supabaseConnected && !options?.forceLocal) {
       setPendingSaveMode(mode);
+      setPendingSaveOptions(options || null);
       setShowOfflineConfirm(true);
       return false;
     }
@@ -721,10 +725,11 @@ function ProposalForm() {
         totals.versionName ||
         versionNameFromState ||
         (currentVersionId === 'original' ? 'Original Version' : `Version ${versionList.length}`);
+      const nextStatus = effectiveMode === 'submit' ? 'submitted' : proposal.status || 'draft';
       const finalProposal: Proposal = {
         ...totals,
         proposalNumber: proposal.proposalNumber || proposalNumber || `PROP-${Date.now()}`,
-        status: effectiveMode === 'submit' ? 'submitted' : 'draft',
+        status: nextStatus,
         versionId: currentVersionId,
         versionName,
         isOriginalVersion: totals.isOriginalVersion ?? currentVersionId === 'original',
@@ -781,9 +786,9 @@ function ProposalForm() {
             : 'Proposal saved successfully!',
       });
 
-      if (effectiveMode === 'submit') {
-        navigate(`/proposal/view/${saved.proposalNumber}`);
-      } else if (isVersionEdit) {
+      const shouldNavigateToSummary =
+        options?.navigateToSummary || effectiveMode === 'submit' || isVersionEdit;
+      if (shouldNavigateToSummary) {
         navigate(`/proposal/view/${saved.proposalNumber}`);
       } else {
         navigate('/');
@@ -804,6 +809,7 @@ function ProposalForm() {
     } finally {
       setIsSaving(false);
       setPendingSaveMode(null);
+      setPendingSaveOptions(null);
     }
   };
 
@@ -1150,13 +1156,9 @@ function ProposalForm() {
   const editingVersionKey = proposal.versionId || editingVersionId || 'original';
   const isVersionEdit = !(proposal.isOriginalVersion ?? editingVersionKey === 'original');
 
-  const handleSubmitClick = () => {
+  const handleCompleteClick = () => {
     if (!canSubmit || isSaving) return;
-    if (isVersionEdit) {
-      void handleSave('draft');
-      return;
-    }
-    setShowSubmitConfirm(true);
+    void handleSave('draft', { navigateToSummary: true });
   };
 
   return (
@@ -1265,11 +1267,11 @@ function ProposalForm() {
               <div className="section-title-actions" title={submitTooltip}>
                 <button
                   className="btn btn-success"
-                  onClick={handleSubmitClick}
+                  onClick={handleCompleteClick}
                   disabled={!canSubmit || isSaving}
                   title={submitTooltip}
                 >
-                  {isVersionEdit ? 'Save Version' : 'Submit Proposal'}
+                  Complete Proposal
                 </button>
               </div>
             </div>
@@ -1281,15 +1283,6 @@ function ProposalForm() {
               <button className="btn btn-secondary" onClick={handleHome} disabled={isSaving}>
                 Home
               </button>
-              {!isVersionEdit && (
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => { void handleSave('draft'); }}
-                  disabled={isSaving}
-                >
-                  Save Draft
-                </button>
-              )}
             </div>
             <div className="right-actions">
               {currentSection > 0 && (
@@ -1371,27 +1364,19 @@ function ProposalForm() {
         onConfirm={async () => {
           setShowOfflineConfirm(false);
           if (pendingSaveMode) {
-            await handleSave(pendingSaveMode, { forceLocal: true });
+            await handleSave(pendingSaveMode, {
+              forceLocal: true,
+              navigateToSummary: pendingSaveOptions?.navigateToSummary,
+            });
           }
           setPendingSaveMode(null);
+          setPendingSaveOptions(null);
         }}
         onCancel={() => {
           setShowOfflineConfirm(false);
           setPendingSaveMode(null);
+          setPendingSaveOptions(null);
         }}
-      />
-
-      <ConfirmDialog
-        open={showSubmitConfirm}
-        title="Ready to Submit?"
-        message="You can still make changes later."
-        confirmLabel="Submit"
-        cancelLabel="Keep Editing"
-        onConfirm={async () => {
-          setShowSubmitConfirm(false);
-          await handleSave('submit');
-        }}
-        onCancel={() => setShowSubmitConfirm(false)}
       />
 
       <ConfirmDialog

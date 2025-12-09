@@ -3,8 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { CostLineItem, Proposal } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import SubmergeAdvantageWarranty from '../components/SubmergeAdvantageWarranty';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
@@ -31,6 +29,7 @@ import {
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
+import { validateProposal } from '../utils/validation';
 
 function ProposalView() {
   const navigate = useNavigate();
@@ -47,6 +46,7 @@ function ProposalView() {
   const [newVersionName, setNewVersionName] = useState('');
   const proposalRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
+  const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
 
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
@@ -123,17 +123,14 @@ function ProposalView() {
     if (!target) return;
 
     try {
-      const submittedTarget: Proposal = { ...(target as Proposal), status: 'submitted' };
+      const targetStatus = (target as Proposal).status || (proposal as Proposal).status || 'draft';
       const container: Proposal = {
-        ...submittedTarget,
+        ...(target as Proposal),
         activeVersionId: versionId,
-        status: 'submitted',
+        status: targetStatus,
         versions: all
           .filter((v) => (v.versionId || 'original') !== versionId)
-          .map((v) => ({
-            ...v,
-            status: v.status === 'approved' || v.status === 'rejected' ? v.status : 'draft',
-          })),
+          .map((v) => ({ ...v, versions: [] })),
       };
       await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
       const saved = await saveProposalRemote(container);
@@ -242,44 +239,86 @@ function ProposalView() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleExportPDF = async () => {
-    if (!proposalRef.current || !proposal) return;
-
+  const persistStatusChange = async (nextStatus: 'draft' | 'submitted') => {
+    if (!proposal) return;
     try {
-      const canvas = await html2canvas(proposalRef.current, {
-        scale: 2,
-        logging: false,
-        useCORS: true,
+      const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const normalizedVersions = all.map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versions: [],
+      }));
+      const active =
+        normalizedVersions.find((v) => (v.versionId || 'original') === desiredActiveId) ||
+        normalizedVersions[0];
+      if (!active) return;
+
+      const others = normalizedVersions.filter(
+        (v) => (v.versionId || 'original') !== (active.versionId || 'original')
+      );
+
+      const container: Proposal = {
+        ...(active as Proposal),
+        status: nextStatus,
+        activeVersionId: active.versionId || 'original',
+        versions: others,
+      };
+
+      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      const saved = await saveProposalRemote(container);
+      const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = applyActiveVersion(saved as Proposal);
+      const isPending = (saved as any).syncStatus === 'pending';
+      setVersions(updatedVersions);
+      setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
+      setProposal(activeApplied as Proposal);
+      showToast({
+        type: isPending ? 'warning' : 'success',
+        message:
+          nextStatus === 'submitted'
+            ? isPending
+              ? 'Saved locally. Will submit when back online.'
+              : 'Proposal submitted successfully.'
+            : isPending
+            ? 'Saved locally. Will sync when back online.'
+            : 'Proposal saved as draft.',
       });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 10;
-
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
-      pdf.save(`Pool_Proposal_${proposal.proposalNumber}.pdf`);
     } catch (error) {
-      console.error('Failed to export PDF:', error);
-      showToast({ type: 'error', message: 'Failed to export PDF. Please try again.' });
+      console.error('Failed to update proposal status', error);
+      showToast({ type: 'error', message: 'Could not update proposal status.' });
     }
   };
 
-  const handleBuildComparison = () => {
-    showToast({ type: 'info', message: 'Build Comparison will be available soon.' });
+  const handleSaveAsDraft = async () => {
+    await persistStatusChange('draft');
   };
 
-  const handleBuildForCustomer = () => {
-    showToast({ type: 'info', message: 'Build for Customer will be available soon.' });
+  const handleSubmitProposal = async () => {
+    if (!proposal) return;
+    if (!canSubmitProposal) {
+      showToast({ type: 'error', message: 'Customer name is required to submit.' });
+      return;
+    }
+    const errors = validateProposal(proposal);
+    if (errors.length > 0) {
+      showToast({
+        type: 'error',
+        message: `Validation errors: ${errors.map((e) => e.message).join(', ')}`,
+      });
+      return;
+    }
+    await persistStatusChange('submitted');
   };
 
   const formatCurrency = (value: number): string =>
@@ -294,6 +333,22 @@ function ProposalView() {
     const num = value ?? 0;
     const formatted = num.toLocaleString('en-US', { maximumFractionDigits: 2 });
     return suffix ? `${formatted} ${suffix}` : formatted;
+  };
+
+  const getDisplayVersionLabel = (input: Proposal): string => {
+    const name = input.versionName?.trim() || '';
+    const versionId = input.versionId || 'original';
+    const isOriginal = input.isOriginalVersion ?? versionId === 'original';
+
+    if (isOriginal) {
+      const lower = name.toLowerCase();
+      if (!name || lower === 'version' || lower === 'original version') {
+        return 'Original';
+      }
+      return name;
+    }
+
+    return name || 'Version';
   };
 
   const buildViewModel = (input: Proposal) => {
@@ -931,7 +986,7 @@ function ProposalView() {
   const renderVersionSection = (vm: ReturnType<typeof buildViewModel>, index: number) => {
     const versionId = vm.proposal.versionId || `version-${index}`;
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
-    const versionLabel = vm.proposal.versionName || (isOriginal ? 'Original Version' : 'Version');
+    const versionLabel = getDisplayVersionLabel(vm.proposal);
     const isActive = versionId === activeVersionId;
 
     return (
@@ -944,14 +999,12 @@ function ProposalView() {
             </div>
             <div className="hero-header-text">
               <h2 className="hero-title">
-                {vm.customerLocation} - {vm.proposalStatus} {vm.dateModified}
-              </h2>
-              <div className="hero-subtitle">
-                <span className="version-pill">
+                <span className="hero-title-text">{vm.customerLocation}</span>
+                <span className="hero-title-separator">-</span>
+                <span className={`version-pill ${isActive ? 'active' : 'inactive'}`}>
                   {versionLabel}
                 </span>
-                {isActive && <span className="version-pill active">Active</span>}
-              </div>
+              </h2>
             </div>
             <div
               className={`hero-price-model ${vm.priceModelStatus}`}
@@ -1050,7 +1103,7 @@ function ProposalView() {
                 >
                   {viewModels.map((vm) => (
                     <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
-                      {vm.proposal.versionName || (vm.proposal.isOriginalVersion ? 'Original Version' : 'Version')}
+                      {getDisplayVersionLabel(vm.proposal)}
                     </option>
                   ))}
                 </select>
@@ -1064,38 +1117,31 @@ function ProposalView() {
               </svg>
               Build Another Version
             </button>
-            <button className="action-button" onClick={handlePrint}>
+            <button className="action-button">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M4 6V2h8v4M4 11H2V7h12v4h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <rect x="4" y="10" width="8" height="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              Print
+              Export
             </button>
-            <button className="action-button" onClick={handleExportPDF}>
+            <button className="action-button" onClick={handleSaveAsDraft} disabled={loading}>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9 2H3v12h10V6M9 2v4h4M9 2l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              Export PDF
+              Save as Draft
             </button>
-            <button className="action-button dropdown">
-              Multi-select Quick Export
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <button className="action-button primary" onClick={handleBuildComparison}>
+            <button
+              className="action-button primary"
+              onClick={handleSubmitProposal}
+              disabled={loading || !canSubmitProposal}
+              title={!canSubmitProposal ? 'Must include Customer Name' : undefined}
+            >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="5" height="12" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <rect x="9" y="2" width="5" height="12" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              Build Comparison
-            </button>
-            <button className="action-button primary" onClick={handleBuildForCustomer}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="8" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M3 13c0-2.5 2-4 5-4s5 1.5 5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Build for Customer
+              Submit Proposal
             </button>
           </div>
         </div>
@@ -1112,7 +1158,7 @@ function ProposalView() {
               <div>
                 <p className="modal-eyebrow">New Version</p>
                 <h2>
-                  Name this version for '{proposal?.customerInfo.customerName || 'Proposal'}'
+                  Name the alternate version for '{proposal?.customerInfo.customerName || 'Proposal'}'
                 </h2>
               </div>
               <button className="modal-close" onClick={() => setShowVersionNameModal(false)} aria-label="Close version naming dialog">
