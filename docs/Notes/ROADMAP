@@ -160,3 +160,6 @@ Additional Cost included on Tile / Coping
 
 
  Permit costs per county
+
+
+ A couple changes to make in the Proposal Summary screen. 1st, the large summary tile information needs to change. The 2x4 table instead needs to have (column 1) 'Customer Name:', 'Job Location:'(this is the city), 'Build Type:' (this will only be 'New Pool' for all proposals for now), 'Last Modified:' (this will be the date of the last modification OF THAT VERSION, other versions might have a different date). Column 2 - 'Price Model:' (displays the price model pill box), ' We need to get rid of the 'Pre 1% COGS Breakdown' tile. Next, add the export checkbox to the Contract tile just like it is for the other tiles. 

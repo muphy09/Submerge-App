@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf';
 import { CostLineItem, Proposal } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import SubmergeAdvantageWarranty from '../components/SubmergeAdvantageWarranty';
-import ContractView from '../components/ContractView';
+import ContractView, { ContractViewHandle } from '../components/ContractView';
 import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
@@ -54,6 +54,10 @@ function ProposalView() {
   const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
   const [warrantyBreakdownVersionId, setWarrantyBreakdownVersionId] = useState<string | null>(null);
   const [contractVersionId, setContractVersionId] = useState<string | null>(null);
+  const [contractExportOpen, setContractExportOpen] = useState(false);
+  const [contractDirty, setContractDirty] = useState(false);
+  const [contractExporting, setContractExporting] = useState(false);
+  const [contractSaving, setContractSaving] = useState(false);
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
   const [selectedBreakdowns, setSelectedBreakdowns] = useState<BreakdownSelection[]>([]);
@@ -64,6 +68,8 @@ function ProposalView() {
   const proposalRef = useRef<HTMLDivElement>(null);
   const exportContainerRef = useRef<HTMLDivElement>(null);
   const exportControlRef = useRef<HTMLDivElement>(null);
+  const contractExportControlRef = useRef<HTMLDivElement>(null);
+  const contractViewRef = useRef<ContractViewHandle | null>(null);
   const { showToast } = useToast();
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const breakdownLabels: Record<BreakdownType, string> = {
@@ -149,6 +155,17 @@ function ProposalView() {
   }, [exportOptionsOpen]);
 
   useEffect(() => {
+    if (!contractExportOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contractExportControlRef.current && !contractExportControlRef.current.contains(event.target as Node)) {
+        setContractExportOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [contractExportOpen]);
+
+  useEffect(() => {
     const handleAfterPrint = () => {
       document.body.classList.remove('breakdown-print-mode');
       setIsExporting(false);
@@ -166,6 +183,15 @@ function ProposalView() {
       setExportOptionsOpen(false);
     }
   }, [selectedBreakdowns.length]);
+
+  useEffect(() => {
+    if (!contractVersionId) {
+      setContractExportOpen(false);
+      setContractDirty(false);
+      setContractExporting(false);
+      setContractSaving(false);
+    }
+  }, [contractVersionId]);
 
   const handleEdit = (version?: Proposal) => {
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
@@ -346,6 +372,27 @@ function ProposalView() {
       console.error('Failed to save contract overrides', error);
       showToast({ type: 'error', message: 'Could not save contract overrides.' });
     }
+  };
+
+  const handleContractSaveClick = () => {
+    if (contractSaving) return;
+    contractViewRef.current?.saveOverrides();
+  };
+
+  const handleContractExportToggle = () => {
+    setContractExportOpen((prev) => !prev);
+  };
+
+  const handleContractPrint = () => {
+    setContractExportOpen(false);
+    if (!contractViewRef.current) return;
+    contractViewRef.current.printContract();
+  };
+
+  const handleContractPdf = () => {
+    setContractExportOpen(false);
+    if (!contractViewRef.current) return;
+    contractViewRef.current.exportPdf();
   };
 
   const persistStatusChange = async (nextStatus: 'draft' | 'submitted') => {
@@ -1689,20 +1736,79 @@ function ProposalView() {
       {contractVersionId && contractModalView && (
         <div className="modal-overlay contract-printable" onClick={() => setContractVersionId(null)}>
           <div className="modal-content contract-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+            <div className="modal-header contract-modal-header">
               <div>
                 <p className="modal-eyebrow">Contract</p>
-                <h2>Contract Preview</h2>
+                <h2>
+                  Contract Preview - {contractModalView.proposal.customerInfo.customerName || 'Customer'}
+                </h2>
               </div>
-              <button className="modal-close" onClick={() => setContractVersionId(null)} aria-label="Close contract">
-                x
-              </button>
+              <div className="contract-header-actions">
+                <div className="export-control" ref={contractExportControlRef}>
+                  <button
+                    className={`action-button export-button ${contractExportOpen ? 'open' : ''}`}
+                    type="button"
+                    onClick={handleContractExportToggle}
+                    disabled={contractExporting}
+                    aria-expanded={contractExportOpen}
+                    aria-haspopup="listbox"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                      <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    Export
+                  </button>
+                  {contractExportOpen && (
+                    <div className="export-dropdown" role="listbox">
+                      <button
+                        type="button"
+                        className="export-option"
+                        role="option"
+                        onClick={handleContractPrint}
+                        disabled={contractExporting}
+                      >
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        className="export-option"
+                        role="option"
+                        onClick={handleContractPdf}
+                        disabled={contractExporting}
+                      >
+                        PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="action-button primary"
+                  type="button"
+                  onClick={handleContractSaveClick}
+                  disabled={!contractDirty || contractSaving}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 2h8l2 2v10H3V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                    <path d="M5 2v4h6V2" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                    <path d="M6 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  {contractSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button className="modal-close" onClick={() => setContractVersionId(null)} aria-label="Close contract">
+                  x
+                </button>
+              </div>
             </div>
             <div className="modal-body-scroll">
               <ContractView
+                ref={contractViewRef}
                 proposal={contractModalView.proposal}
                 overrides={contractModalView.proposal.contractOverrides || {}}
                 onSave={(next) => handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)}
+                onDirtyChange={setContractDirty}
+                onExportingChange={setContractExporting}
+                onSavingChange={setContractSaving}
               />
             </div>
           </div>

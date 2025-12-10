@@ -22,6 +22,9 @@ export type ContractFieldRender = {
   label: string;
   color: 'blue' | 'yellow';
   value: string;
+  autoValue: string;
+  isAutoFilled: boolean;
+  isOverridden: boolean;
 };
 
 type ProposalWithPricing = Proposal & {
@@ -267,11 +270,15 @@ export async function getEditableContractFields(
           label: field.label,
           color: field.color,
           value: '',
+          autoValue: '',
+          isAutoFilled: false,
+          isOverridden: false,
         },
         normalized
       );
-      const overrideVal = overrides && field.id in (overrides || {}) ? overrides[field.id] : undefined;
-      const value = overrideVal !== undefined && overrideVal !== null ? String(overrideVal) : autoValue;
+      const hasOverride = overrides ? Object.prototype.hasOwnProperty.call(overrides, field.id) : false;
+      const overrideVal = hasOverride ? overrides?.[field.id] : undefined;
+      const value = hasOverride && overrideVal !== null && overrideVal !== undefined ? String(overrideVal) : autoValue;
       return {
         id: field.id,
         page: field.page,
@@ -282,6 +289,9 @@ export async function getEditableContractFields(
         label: field.label,
         color: field.color,
         value: value || '',
+        autoValue,
+        isAutoFilled: !hasOverride && Boolean(autoValue),
+        isOverridden: hasOverride,
       };
     });
 

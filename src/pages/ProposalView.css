@@ -931,6 +931,29 @@
   margin-bottom: 20px;
 }
 
+.contract-modal-header {
+  align-items: center;
+}
+
+.contract-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.contract-header-actions .action-button.primary:disabled {
+  background: #a9bfdc;
+  border-color: #a9bfdc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.contract-header-actions .action-button.export-button {
+  min-width: 102px;
+}
+
 .modal-eyebrow {
   margin: 0 0 4px 0;
   font-size: 11px;
@@ -1652,7 +1675,8 @@
 
 @media print {
   .no-print,
-  .modal-overlay:not(.contract-printable) {
+  .modal-overlay:not(.contract-printable),
+  .contract-header-actions {
     display: none !important;
   }
 

@@ -1,4 +1,13 @@
-import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  CSSProperties,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Proposal } from '../types/proposal-new';
@@ -6,7 +15,6 @@ import {
   ContractOverrides,
   ContractFieldRender,
   getEditableContractFields,
-  listUnmappedFields,
   validateContractInputs,
 } from '../services/contractGenerator';
 import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
@@ -15,8 +23,8 @@ import './ContractView.css';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const DISPLAY_SCALE = 1.6;
-const MAX_RENDER_DPR = 2;
+const DISPLAY_SCALE = 1.75;
+const MAX_RENDER_DPR = 3;
 
 type ContractViewProps = {
   proposal: Proposal;
@@ -24,19 +32,58 @@ type ContractViewProps = {
   readOnly?: boolean;
   onOverridesChange?: (overrides: ContractOverrides) => void;
   onSave?: (overrides: ContractOverrides) => Promise<void> | void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onExportingChange?: (exporting: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
 };
 
-export default function ContractView({
-  proposal,
-  overrides: incomingOverrides,
-  readOnly = false,
-  onOverridesChange,
-  onSave,
-}: ContractViewProps) {
+export type ContractViewHandle = {
+  exportPdf: () => Promise<void>;
+  printContract: () => void;
+  saveOverrides: () => Promise<void> | void;
+  hasUnsavedChanges: boolean;
+  isExporting: boolean;
+  isSaving: boolean;
+};
+
+function normalizeOverrides(map?: ContractOverrides): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!map) return result;
+  Object.entries(map).forEach(([key, value]) => {
+    if (value === undefined) return;
+    result[key] = value === null ? '' : String(value);
+  });
+  return result;
+}
+
+function areOverridesEqual(a?: ContractOverrides, b?: ContractOverrides): boolean {
+  const normalizedA = normalizeOverrides(a);
+  const normalizedB = normalizeOverrides(b);
+  const keys = new Set([...Object.keys(normalizedA), ...Object.keys(normalizedB)]);
+  for (const key of keys) {
+    if (normalizedA[key] !== normalizedB[key]) return false;
+  }
+  return true;
+}
+
+const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function ContractView(
+  {
+    proposal,
+    overrides: incomingOverrides,
+    readOnly = false,
+    onOverridesChange,
+    onSave,
+    onDirtyChange,
+    onExportingChange,
+    onSavingChange,
+  },
+  ref
+) {
   const { showToast } = useToast();
   const [overrides, setOverrides] = useState<ContractOverrides>(incomingOverrides || {});
+  const [baselineOverrides, setBaselineOverrides] = useState<ContractOverrides>(incomingOverrides || {});
   const [exporting, setExporting] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
   const [pdfFields, setPdfFields] = useState<ContractPdfFieldLayout[]>([]);
   const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[]>([]);
@@ -45,6 +92,7 @@ export default function ContractView({
 
   useEffect(() => {
     setOverrides(incomingOverrides || {});
+    setBaselineOverrides(incomingOverrides || {});
   }, [incomingOverrides]);
 
   useEffect(() => {
@@ -109,11 +157,13 @@ export default function ContractView({
           if (!canvas) continue;
           const ctx = canvas.getContext('2d');
           if (!ctx) continue;
+          ctx.imageSmoothingEnabled = true;
+          (ctx as any).imageSmoothingQuality = 'high';
           canvas.width = renderViewport.width;
           canvas.height = renderViewport.height;
           canvas.style.width = `${viewport.width}px`;
           canvas.style.height = `${viewport.height}px`;
-          await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+          await page.render({ canvasContext: ctx, viewport: renderViewport, canvas }).promise;
         }
         pdfDoc.destroy();
       })
@@ -127,12 +177,28 @@ export default function ContractView({
     };
   }, [pdfBytes, pageSizes]);
 
-  const unmapped = useMemo(() => listUnmappedFields(fields), [fields]);
   const unmappedIds = useMemo(
     () => new Set(fields.filter((f) => !f.value && f.color === 'blue').map((f) => f.id)),
     [fields]
   );
   const warnings = useMemo(() => validateContractInputs(proposal), [proposal]);
+
+  const hasUnsavedChanges = useMemo(
+    () => !areOverridesEqual(overrides, baselineOverrides),
+    [overrides, baselineOverrides]
+  );
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
+
+  useEffect(() => {
+    onExportingChange?.(exporting);
+  }, [exporting, onExportingChange]);
+
+  useEffect(() => {
+    onSavingChange?.(saving);
+  }, [saving, onSavingChange]);
 
   const valueMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -140,28 +206,59 @@ export default function ContractView({
     return map;
   }, [fields]);
 
-  const handleCellChange = (cellAddress: string, value: string) => {
-    const next = { ...overrides, [cellAddress]: value };
-    setOverrides(next);
-    setFields((prev) =>
-      prev.map((field) => (field.id === cellAddress ? { ...field, value } : field))
-    );
-    onOverridesChange?.(next);
-  };
+  const fieldMetaMap = useMemo(() => {
+    const map = new Map<string, ContractFieldRender>();
+    fields.forEach((field) => map.set(field.id, field));
+    return map;
+  }, [fields]);
 
-  const handleSave = async () => {
-    if (!onSave) return;
+  const handleCellChange = useCallback(
+    (cellAddress: string, value: string) => {
+      const fieldTemplate = fields.find((f) => f.id === cellAddress);
+      const autoValue = fieldTemplate?.autoValue ?? '';
+      const normalizedValue = value;
+      const next = { ...overrides };
+
+      if (normalizedValue === autoValue || (!normalizedValue && !autoValue)) {
+        delete next[cellAddress];
+      } else {
+        next[cellAddress] = normalizedValue;
+      }
+
+      setOverrides(next);
+      setFields((prev) =>
+        prev.map((field) => {
+          if (field.id !== cellAddress) return field;
+          const hasOverride = Object.prototype.hasOwnProperty.call(next, cellAddress);
+          return {
+            ...field,
+            value: normalizedValue,
+            isAutoFilled: !hasOverride && Boolean(field.autoValue),
+            isOverridden: hasOverride,
+          };
+        })
+      );
+      onOverridesChange?.(next);
+    },
+    [fields, onOverridesChange, overrides]
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!onSave || saving) return;
+    setSaving(true);
     try {
       await onSave(overrides);
-      showToast({ type: 'success', message: 'Contract overrides saved.' });
+      setBaselineOverrides(overrides);
     } catch (error) {
       console.error('Failed to save contract overrides', error);
       showToast({ type: 'error', message: 'Could not save contract overrides.' });
+    } finally {
+      setSaving(false);
     }
-  };
+  }, [onSave, overrides, saving, showToast]);
 
-  const exportPdf = async () => {
-    if (!fields.length) return;
+  const exportPdf = useCallback(async () => {
+    if (!fields.length || exporting) return;
     setExporting(true);
     try {
       if (warnings.length) {
@@ -180,7 +277,8 @@ export default function ContractView({
       const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
         today.getDate()
       ).padStart(2, '0')}`;
-      const blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
+      const pdfBytes = new Uint8Array(result.pdfBytes);
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -194,126 +292,126 @@ export default function ContractView({
     } finally {
       setExporting(false);
     }
-  };
+  }, [exporting, fields, proposal.customerInfo.customerName, showToast, warnings]);
 
-  if (!fields.length) {
-    return <div className="contract-view-empty">No contract data available.</div>;
-  }
+  const printContract = useCallback(() => {
+    if (warnings.length) {
+      showToast({
+        type: 'warning',
+        message: `Missing data: ${warnings.join(', ')}`,
+      });
+    }
+    window.print();
+  }, [showToast, warnings]);
 
   const pageCount = pageSizes.length || 0;
-  const editableEnabled = !readOnly && !previewMode;
+  const editableEnabled = !readOnly;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      exportPdf,
+      printContract,
+      saveOverrides: handleSave,
+      hasUnsavedChanges,
+      isExporting: exporting,
+      isSaving: saving,
+    }),
+    [exportPdf, handleSave, hasUnsavedChanges, printContract, exporting, saving]
+  );
 
   return (
     <div className="contract-view">
-      <div className="contract-toolbar">
-        <div className="contract-toolbar-left">
-          <button type="button" className="btn" onClick={() => setPreviewMode((prev) => !prev)}>
-            {previewMode ? 'Exit Read Only' : 'Toggle Read Only'}
-          </button>
-          <button type="button" className="btn" onClick={exportPdf} disabled={exporting}>
-            {exporting ? 'Exporting...' : 'Export PDF'}
-          </button>
-          <button type="button" className="btn" onClick={() => window.print()}>
-            Print
-          </button>
-        </div>
-        <div className="contract-toolbar-right">
-          {onSave && (
-            <button type="button" className="btn primary" onClick={handleSave}>
-              Save Contract Overrides
-            </button>
+      {!fields.length ? (
+        <div className="contract-view-empty">No contract data available.</div>
+      ) : (
+        <div className="contract-pages">
+          {!pdfBytes || !pageCount ? (
+            <div className="contract-view-empty">Preparing contract PDF...</div>
+          ) : (
+            Array.from({ length: pageCount }).map((_, pageIdx) => {
+              const pageSize = pageSizes[pageIdx] || { width: 612, height: 792 };
+              const fieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
+              const pageWidth = pageSize.width * DISPLAY_SCALE;
+              const pageHeight = pageSize.height * DISPLAY_SCALE;
+              return (
+                <div
+                  className="contract-page"
+                  key={`contract-page-${pageIdx + 1}`}
+                  data-page={pageIdx + 1}
+                  style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}
+                >
+                  <canvas
+                    ref={(el) => {
+                      canvasRefs.current[pageIdx] = el;
+                    }}
+                    className="contract-page-canvas"
+                  />
+                  <div className={`contract-field-layer ${editableEnabled ? '' : 'read-only'}`}>
+                    {fieldsForPage.map((field) => {
+                      const fieldMeta = fieldMetaMap.get(field.name);
+                      const baseColor = fieldMeta?.color || field.color;
+                      const left = field.x * DISPLAY_SCALE;
+                      const top = field.y * DISPLAY_SCALE;
+                      const width = field.width * DISPLAY_SCALE;
+                      const height = field.height * DISPLAY_SCALE;
+                      const value = fieldMeta?.value ?? valueMap.get(field.name);
+                      const isTextArea = (fieldMeta?.height ?? field.height) > 24;
+                      const isAutoFilled = Boolean(fieldMeta?.isAutoFilled) && baseColor !== 'yellow';
+                      const colorClass =
+                        baseColor === 'yellow'
+                          ? 'contract-input-yellow'
+                          : isAutoFilled
+                          ? 'contract-input-green'
+                          : 'contract-input-blue';
+                      const style: CSSProperties = {
+                        left: `${left}px`,
+                        top: `${top}px`,
+                        width: `${width}px`,
+                        height: `${height}px`,
+                        fontSize: `${field.fontSize || 10}pt`,
+                        textAlign: 'center',
+                      };
+                      const classNames = ['contract-input', colorClass];
+                      if (isAutoFilled) classNames.push('autofilled');
+                      if (unmappedIds.has(field.name)) classNames.push('unmapped');
+
+                      return (
+                        <div key={`${field.name}-${pageIdx}`} className="contract-input-wrapper" style={style}>
+                          {editableEnabled ? (
+                            isTextArea ? (
+                              <textarea
+                                className={classNames.join(' ')}
+                                value={value ?? ''}
+                                onChange={(e) => handleCellChange(field.name, e.target.value)}
+                              />
+                            ) : (
+                              <input
+                                className={classNames.join(' ')}
+                                value={value ?? ''}
+                                onChange={(e) => handleCellChange(field.name, e.target.value)}
+                              />
+                            )
+                          ) : (
+                            <div
+                              className={['contract-readonly-value', colorClass].join(' ')}
+                              aria-label={field.name}
+                            >
+                              {value}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
-      </div>
-
-      {unmapped.length ? (
-        <div className="contract-unmapped">
-          <strong>Designer inputs:</strong>{' '}
-          {unmapped.join(', ')} need manual confirmation.
-        </div>
-      ) : null}
-      {warnings.length ? (
-        <div className="contract-warnings">
-          <strong>Missing data:</strong> {warnings.join(', ')}
-        </div>
-      ) : null}
-
-      <div className="contract-pages">
-        {!pdfBytes || !pageCount ? (
-          <div className="contract-view-empty">Preparing contract PDF...</div>
-        ) : (
-          Array.from({ length: pageCount }).map((_, pageIdx) => {
-            const pageSize = pageSizes[pageIdx] || { width: 612, height: 792 };
-            const fieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
-            const pageWidth = pageSize.width * DISPLAY_SCALE;
-            const pageHeight = pageSize.height * DISPLAY_SCALE;
-            return (
-              <div
-                className="contract-page"
-                key={`contract-page-${pageIdx + 1}`}
-                data-page={pageIdx + 1}
-                style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}
-              >
-                <canvas
-                  ref={(el) => {
-                    canvasRefs.current[pageIdx] = el;
-                  }}
-                  className="contract-page-canvas"
-                />
-                <div className={`contract-field-layer ${editableEnabled ? '' : 'read-only'}`}>
-                  {fieldsForPage.map((field) => {
-                    const left = field.x * DISPLAY_SCALE;
-                    const top = field.y * DISPLAY_SCALE;
-                    const width = field.width * DISPLAY_SCALE;
-                    const height = field.height * DISPLAY_SCALE;
-                    const value = valueMap.get(field.name);
-                    const isTextArea = field.height > 24;
-                    const colorClass =
-                      field.color === 'yellow' ? 'contract-input-yellow' : 'contract-input-blue';
-                    const style: CSSProperties = {
-                      left: `${left}px`,
-                      top: `${top}px`,
-                      width: `${width}px`,
-                      height: `${height}px`,
-                      fontSize: `${field.fontSize || 10}pt`,
-                      textAlign: 'center',
-                    };
-                    const classNames = ['contract-input', colorClass];
-                    if (unmappedIds.has(field.name)) classNames.push('unmapped');
-
-                    return (
-                      <div key={`${field.name}-${pageIdx}`} className="contract-input-wrapper" style={style}>
-                        {editableEnabled ? (
-                          isTextArea ? (
-                            <textarea
-                              className={classNames.join(' ')}
-                              value={value ?? ''}
-                              onChange={(e) => handleCellChange(field.name, e.target.value)}
-                            />
-                          ) : (
-                            <input
-                              className={classNames.join(' ')}
-                              value={value ?? ''}
-                              onChange={(e) => handleCellChange(field.name, e.target.value)}
-                            />
-                          )
-                        ) : (
-                          <div
-                            className={['contract-readonly-value', colorClass].join(' ')}
-                            aria-label={field.name}
-                          >
-                            {value}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+      )}
     </div>
   );
-}
+});
+
+export default ContractView;
