@@ -1,104 +1,47 @@
-import * as XLSX from 'xlsx';
 import { Proposal, WaterFeatureSelection } from '../types/proposal-new';
-import pricingData from './pricingData';
 import MasterPricingEngine from './masterPricingEngine';
-import contractFieldMap from '../../docs/Contracts/contractFieldMap.json';
-
-type ContractField = {
-  cell: string;
-  label: string;
-  proposalPath?: string | null;
-  formatter?: string;
-  fallback?: any;
-  notes?: string;
-};
-
-type ContractMapping = {
-  sheet: string;
-  columns: string;
-  fields: ContractField[];
-};
+import contractTemplate from '../../docs/Contracts/ppasContractFieldLayout.json';
 
 export type ContractOverrides = Record<string, string | number | null>;
 
-export type ContractCellRender = {
-  address: string;
-  row: number;
-  col: number;
-  value: string | number | null;
-  editable: boolean;
-  style: {
-    background?: string;
-    bold?: boolean;
-    italic?: boolean;
-    fontSize?: number;
-    align?: string;
-    verticalAlign?: string;
-    wrap?: boolean;
-    border?: {
-      top?: { style?: string; color?: string };
-      right?: { style?: string; color?: string };
-      bottom?: { style?: string; color?: string };
-      left?: { style?: string; color?: string };
-    };
-  };
-  colSpan?: number;
-  rowSpan?: number;
+type TemplateField = {
+  id: string;
+  page: number;
+  rect: [number, number, number, number];
+  label: string;
+  color: 'blue' | 'yellow';
 };
 
-export type ContractSheetRender = {
-  name: string;
-  rows: ContractCellRender[][];
-  merges: XLSX.Range[];
-  colWidths: number[];
-  rowHeights: number[];
+export type ContractFieldRender = {
+  id: string;
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  color: 'blue' | 'yellow';
+  value: string;
 };
 
 type ProposalWithPricing = Proposal & {
   pricing?: Proposal['pricing'] & { retailPrice?: number };
 };
 
-const TEMPLATE_URL = new URL('../../docs/Contracts/CONTRACT.xlsx', import.meta.url).href;
-const BLUE_THEME = 4;
-const BLUE_TINT = 0.7999816888943144;
+const templateFields: TemplateField[] = contractTemplate as TemplateField[];
 
-const mapping = contractFieldMap as ContractMapping;
-
-const columnLimit = (() => {
-  const [start, end] = mapping.columns.split('-');
-  return { start, end };
-})();
-
-function isWithinColumns(addr: string): boolean {
-  const col = addr.replace(/[^A-Z]/g, '');
-  return col >= columnLimit.start && col <= columnLimit.end;
-}
-
-function getCellAddress(row: number, col: number): string {
-  const letters = XLSX.utils.encode_col(col);
-  return `${letters}${row + 1}`;
-}
-
-function deepGet(obj: any, pathStr?: string | null): any {
-  if (!pathStr) return undefined;
-  const parts = pathStr
-    .replace(/\[(\d+)\]/g, '.$1')
-    .split('.')
-    .filter(Boolean);
-  return parts.reduce((acc, key) => (acc && key in acc ? acc[key as keyof typeof acc] : undefined), obj);
-}
-
-function toHexColor(color: any): string | undefined {
-  if (!color) return undefined;
-  if (color.rgb) {
-    const rgb = color.rgb.replace(/^FF/, '');
-    return `#${rgb}`;
+function normalizeProposal(pr: Proposal): ProposalWithPricing {
+  try {
+    const calc = MasterPricingEngine.calculateCompleteProposal(pr, pr.papDiscounts);
+    return {
+      ...pr,
+      pricing: calc?.pricing || pr.pricing,
+      costBreakdown: calc?.costBreakdown || pr.costBreakdown,
+    };
+  } catch (error) {
+    console.warn('Failed to recalc proposal for contract view; using stored pricing.', error);
+    return pr;
   }
-  if (color.theme === BLUE_THEME) {
-    // Map Excel theme blue tint to a hex approximation
-    return color.tint === BLUE_TINT ? '#dae3f3' : '#b4c7e7';
-  }
-  return undefined;
 }
 
 function normalizePhone(value: any): string {
@@ -111,28 +54,28 @@ function normalizePhone(value: any): string {
   return digits;
 }
 
-function formatYesNo(value: any, defaultValue = 'NO '): string {
+function formatYesNo(value: any, defaultValue = 'NO'): string {
   if (value === undefined || value === null) return defaultValue;
   const truthy = typeof value === 'string' ? value.trim().length > 0 && value.toLowerCase() !== 'none' : Boolean(value);
   return truthy ? 'YES' : defaultValue;
 }
 
-function lookupWaterFeatureName(featureId: string): string {
-  const pools = pricingData as any;
-  const wf = pools.waterFeatures || {};
-  const collections = [
-    wf.sheerDescents,
-    wf.jets,
-    wf.woks?.waterOnly,
-    wf.woks?.fireOnly,
-    wf.woks?.waterAndFire,
-    wf.bubblers,
-  ].filter(Boolean) as any[];
-  for (const group of collections) {
-    const found = (group || []).find((item: any) => item.id === featureId);
-    if (found?.name) return found.name;
-  }
-  return featureId;
+function formatCurrency(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '$0.00';
+  return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+}
+
+function formatDate(val: Date | string | number | null | undefined): string {
+  if (!val) return '';
+  const d = val instanceof Date ? val : new Date(val);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString();
+}
+
+function parseZipFromAddress(address?: string | null): string {
+  if (!address) return '';
+  const zip = address.match(/\b\d{5}(?:-\d{4})?\b/);
+  return zip ? zip[0] : '';
 }
 
 function pickWaterFeatures(selections: WaterFeatureSelection[] | undefined) {
@@ -166,372 +109,189 @@ function pickWaterFeatures(selections: WaterFeatureSelection[] | undefined) {
   return byType;
 }
 
-function getWaterFeatureValue(
-  features: ReturnType<typeof pickWaterFeatures>,
-  formatter?: string
-): string | number | null {
-  if (!formatter) return null;
-  if (formatter.startsWith('waterFeatureQty.')) {
-    const [, type, indexRaw] = formatter.split('.');
-    const index = Number(indexRaw) || 0;
-    const list = (features as any)[type] as WaterFeatureSelection[] | undefined;
-    const target = list?.[index];
-    return target?.quantity ?? 0;
-  }
-  if (formatter.startsWith('waterFeature.')) {
-    const [, type, indexRaw] = formatter.split('.');
-    const index = Number(indexRaw) || 0;
-    const list = (features as any)[type] as WaterFeatureSelection[] | undefined;
-    const target = type === 'rock1' || type === 'rock2' ? features.other?.[index] : list?.[index];
-    if (!target) return 'None';
-    return lookupWaterFeatureName(target.featureId || '');
-  }
-  return null;
+function defaultFromLabel(label: string): string {
+  if (/by builder/i.test(label)) return 'BY BUILDER';
+  if (/by buyer/i.test(label)) return 'BY BUYER';
+  if (/none/i.test(label)) return 'None';
+  const qty = label.match(/qty:\s*([\d.-]+)/i);
+  if (qty) return qty[1];
+  if (/\$0\.00/.test(label)) return '$0.00';
+  const num = label.match(/\b\d+\b/);
+  if (num) return num[0];
+  return '';
 }
 
-function formatValue(
-  proposal: ProposalWithPricing,
-  field: ContractField,
-  overrides?: ContractOverrides
-): string | number | Date | null {
-  if (overrides && field.cell in overrides) {
-    return overrides[field.cell] as any;
-  }
+function getRetailPrice(proposal: ProposalWithPricing): number {
+  return (
+    proposal.pricing?.retailPrice ??
+    proposal.pricing?.baseRetailPrice ??
+    proposal.totalCost ??
+    proposal.subtotal ??
+    0
+  );
+}
 
-  const mergedValue = deepGet(proposal, field.proposalPath);
-  const formatter = field.formatter || 'text';
+function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPricing): string {
+  const label = field.label.toLowerCase();
+  const info = proposal.customerInfo || {};
+  const specs = proposal.poolSpecs || ({} as Proposal['poolSpecs']);
+  const pricing = getRetailPrice(proposal);
   const waterFeatures = pickWaterFeatures(proposal.waterFeatures?.selections);
 
-  switch (formatter) {
-    case 'poolType': {
-      const type = (mergedValue as string) || proposal.poolSpecs.poolType;
-      if (type?.toLowerCase() === 'fiberglass') return 'FIBERGLASS';
-      if (type?.toLowerCase() === 'gunite') return 'SHOTCRETE';
-      return (type || field.fallback || '').toString().toUpperCase();
-    }
-    case 'phone':
-      return normalizePhone(mergedValue || field.fallback);
-    case 'currencyRaw': {
-      const fromPricing =
-        proposal.pricing?.retailPrice ??
-        proposal.pricing?.baseRetailPrice ??
-        proposal.totalCost ??
-        proposal.subtotal ??
-        undefined;
-      return Number.isFinite(fromPricing) ? Number(fromPricing) : Number(field.fallback || 0);
-    }
-    case 'date': {
-      if (mergedValue) {
-        const d = new Date(mergedValue);
-        if (!Number.isNaN(d.getTime())) return d;
-      }
-      if (field.cell === 'I20') {
-        const created = new Date(proposal.createdDate || proposal.lastModified || Date.now());
-        return created;
-      }
-      if (field.cell === 'I21') {
-        const base = new Date(proposal.createdDate || proposal.lastModified || Date.now());
-        const estimate = new Date(base.getTime() + 120 * 24 * 60 * 60 * 1000);
-        return estimate;
-      }
-      return field.fallback ? new Date(field.fallback) : null;
-    }
-    case 'number':
-      if (mergedValue === 0 || Number.isFinite(mergedValue)) return Number(mergedValue);
-      return field.fallback ?? null;
-    case 'numberOrDash':
-      if (mergedValue === 0 || Number.isFinite(mergedValue)) return Number(mergedValue);
-      return '-';
-    case 'tileLevel': {
-      if (Number.isFinite(mergedValue)) return `Level ${mergedValue}`;
-      return field.fallback ?? 'Included';
-    }
-    case 'yesNo':
-      return formatYesNo(mergedValue ?? field.fallback ?? 'NO ');
-    case 'spaYesNo':
-      return proposal.poolSpecs.spaType !== 'none' ? 'YES' : 'NO ';
-    case 'skimmerQty': {
-      const additional = Number(mergedValue || 0);
-      return 1 + (Number.isFinite(additional) ? additional : 0);
-    }
-    case 'coping': {
-      const lookup: Record<string, string> = {
-        'travertine-level1': '3CM Travertine',
-        'travertine-level2': 'Travertine (Level 2)',
-        flagstone: 'Flagstone',
-        paver: 'Paver',
-        concrete: 'Concrete',
-        cantilever: 'Cantilever',
-      };
-      return lookup[mergedValue as string] || (mergedValue as string) || field.fallback || 'None';
-    }
-    case 'decking': {
-      const lookup: Record<string, string> = {
-        'travertine-level1': 'Travertine',
-        'travertine-level2': 'Travertine (Level 2)',
-        paver: 'Paver',
-        concrete: 'Concrete',
-      };
-      return lookup[mergedValue as string] || (mergedValue as string) || field.fallback || 'None';
-    }
-    case 'facing': {
-      const lookup: Record<string, string> = {
-        none: 'None',
-        tile: 'Tile',
-        'panel-ledge': 'Panel Ledge',
-        'stacked-stone': 'Stacked Stone',
-      };
-      return lookup[(mergedValue as string) || 'none'] || 'None';
-    }
-    case 'drainageResponsibility': {
-      const numeric = Number(mergedValue || 0);
-      return numeric > 0 ? 'BY BUILDER' : field.fallback || 'BY BUYER';
-    }
-    case 'finish': {
-      if (proposal.poolSpecs.poolType === 'fiberglass') return 'Fiberglass';
-      const finish = mergedValue?.finishType || mergedValue || proposal.interiorFinish?.finishType;
-      const color = mergedValue?.color || proposal.interiorFinish?.color;
-      return color ? `${finish || 'Interior Finish'} - ${color}` : finish || field.fallback || 'Interior Finish';
-    }
-    case 'finishOrNone': {
-      if (proposal.poolSpecs.spaType === 'none') return 'None';
-      return formatValue(proposal, { ...field, formatter: 'finish' }, overrides) as any;
-    }
-    case 'lightCount': {
-      if (Array.isArray(mergedValue)) return mergedValue.length || field.fallback || 0;
-      if (Number.isFinite(mergedValue)) return Number(mergedValue);
-      return field.fallback || 0;
-    }
-    case 'lightCountExtra': {
-      if (Array.isArray(mergedValue)) return Math.max(mergedValue.length - 1, 0);
-      if (Number.isFinite(mergedValue)) return Math.max(Number(mergedValue) - 1, 0);
-      return field.fallback || 0;
-    }
-    case 'hasWaterFeaturesYesNo':
-      return formatYesNo((mergedValue as any[])?.length, field.fallback || 'NO ');
-    default: {
-      if (formatter.startsWith('waterFeature')) {
-        const val = getWaterFeatureValue(waterFeatures, formatter);
-        if (val !== null && val !== undefined) return val as any;
-      }
-      if (mergedValue !== undefined && mergedValue !== null) return mergedValue as any;
-      return field.fallback ?? null;
-    }
-  }
-}
+  const overrideDefault = defaultFromLabel(field.label);
 
-function formatForDisplay(value: any): string {
-  if (value === null || value === undefined) return '';
-  if (value instanceof Date) return value.toLocaleDateString();
-  if (typeof value === 'number') return Number.isFinite(value) ? value.toString() : '';
-  return String(value);
-}
+  if (/job site/.test(label) || /address/.test(label)) return info.address || '';
+  if (/buyer/.test(label) && /name/.test(label)) return info.customerName || '';
+  if (/city/.test(label) && !/surface/.test(label)) return info.city || '';
+  if (/zip/.test(label)) return parseZipFromAddress(info.address) || '';
+  if (/phone/.test(label)) return normalizePhone(info.phone);
+  if (/email/.test(label)) return info.email || '';
 
-function cloneWorkbook(wb: XLSX.WorkBook): XLSX.WorkBook {
-  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
-  return XLSX.read(buffer, { type: 'buffer', cellStyles: true });
-}
-
-let cachedTemplate: XLSX.WorkBook | null = null;
-
-async function loadTemplate(): Promise<XLSX.WorkBook> {
-  if (cachedTemplate) return cloneWorkbook(cachedTemplate);
-
-  // Browser: fetch the template asset via Vite-served URL
-  if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-    const res = await fetch(TEMPLATE_URL);
-    const buffer = await res.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: 'array', cellStyles: true });
-    cachedTemplate = wb;
-    return cloneWorkbook(wb);
+  if (/cash price/.test(label) || /retail price/.test(label) || /\$0\.00.*cash/.test(label)) {
+    return formatCurrency(pricing);
   }
 
-  // Fallback for non-browser (electron main) environments
-  const nodePath = new URL('../../docs/Contracts/CONTRACT.xlsx', import.meta.url).pathname;
-  const wb = XLSX.readFile(nodePath, { cellStyles: true });
-  cachedTemplate = wb;
-  return cloneWorkbook(wb);
-}
+  if (/non-refundable deposit/.test(label)) return formatCurrency(pricing ? pricing * 0.1 : 0);
+  if (/prior to shotcete/.test(label) || /prior to excavation/.test(label)) return formatCurrency(pricing * 0.3);
+  if (/prior to decking/.test(label)) return formatCurrency(pricing * 0.3);
+  if (/prior to interior finish/.test(label)) return formatCurrency(pricing * 0.1);
 
-function applyValuesToSheet(
-  sheet: XLSX.Sheet,
-  proposal: ProposalWithPricing,
-  overrides?: ContractOverrides
-) {
-  const editableCells = new Set(mapping.fields.map((f) => f.cell));
-  const values = new Map<string, any>();
-
-  mapping.fields.forEach((field) => {
-    const value = formatValue(proposal, field, overrides);
-    values.set(field.cell, value);
-  });
-
-  values.forEach((value, cellAddress) => {
-    if (!isWithinColumns(cellAddress)) return;
-    const cell = sheet[cellAddress] || { t: 's' };
-    if (value instanceof Date) {
-      cell.t = 'd';
-      cell.v = value;
-    } else if (typeof value === 'number') {
-      cell.t = 'n';
-      cell.v = value;
-    } else {
-      cell.t = 's';
-      cell.v = value === null || value === undefined ? '' : value;
-    }
-    sheet[cellAddress] = cell as XLSX.CellObject;
-  });
-
-  return editableCells;
-}
-
-function buildRenderGrid(
-  sheet: XLSX.Sheet,
-  editableCells: Set<string>
-): ContractSheetRender {
-  const ref = sheet['!ref'] || 'A1:U1';
-  const range = XLSX.utils.decode_range(ref);
-  const maxCol = XLSX.utils.decode_col(columnLimit.end);
-  const maxRow = range.e.r;
-  const merges = (sheet['!merges'] || [])
-    .filter((m) => m.s.c <= maxCol) // keep merges that start within our visible columns
-    .map((m) => ({
-      s: { r: m.s.r, c: m.s.c },
-      e: { r: Math.min(m.e.r, maxRow), c: Math.min(m.e.c, maxCol) },
-    }));
-  const covered = new Set<string>();
-
-  merges.forEach((merge) => {
-    for (let r = merge.s.r; r <= merge.e.r; r += 1) {
-      for (let c = merge.s.c; c <= merge.e.c; c += 1) {
-        if (r === merge.s.r && c === merge.s.c) continue;
-        covered.add(getCellAddress(r, c));
-      }
-    }
-  });
-
-  const rows: ContractCellRender[][] = [];
-  for (let r = 0; r <= maxRow; r += 1) {
-    const rowCells: ContractCellRender[] = [];
-    for (let c = 0; c <= maxCol; c += 1) {
-      const addr = getCellAddress(r, c);
-      if (covered.has(addr)) continue;
-      const cell = sheet[addr] as XLSX.CellObject | undefined;
-      const value = cell?.v ?? '';
-      const editable = editableCells.has(addr);
-      const fill = (cell as any)?.s?.fgColor;
-      const font = (cell as any)?.s?.font || {};
-      const align = (cell as any)?.s?.alignment || {};
-
-      const merge = merges.find((m) => m.s.r === r && m.s.c === c);
-      const colSpan = merge ? merge.e.c - merge.s.c + 1 : undefined;
-      const rowSpan = merge ? merge.e.r - merge.s.r + 1 : undefined;
-
-      // Extract border information
-      const borders = (cell as any)?.s?.border || {};
-      const borderInfo = {
-        top: borders.top ? { style: borders.top.style, color: borders.top.color } : undefined,
-        right: borders.right ? { style: borders.right.style, color: borders.right.color } : undefined,
-        bottom: borders.bottom ? { style: borders.bottom.style, color: borders.bottom.color } : undefined,
-        left: borders.left ? { style: borders.left.style, color: borders.left.color } : undefined,
-      };
-
-      rowCells.push({
-        address: addr,
-        row: r + 1,
-        col: c + 1,
-        value: formatForDisplay(value),
-        editable,
-        style: {
-          background: toHexColor(fill),
-          bold: Boolean(font?.bold),
-          italic: Boolean(font?.italic),
-          fontSize: font?.sz,
-          align: align?.horizontal,
-          verticalAlign: align?.vertical,
-          wrap: Boolean(align?.wrapText),
-          border: borderInfo,
-        },
-        colSpan,
-        rowSpan,
-      });
-    }
-    rows.push(rowCells);
+  if (/construction to substanstially commence/.test(label)) {
+    const created = new Date(proposal.createdDate || proposal.lastModified || Date.now());
+    return formatDate(created);
+  }
+  if (/construction to be substanstially complete/.test(label)) {
+    const base = new Date(proposal.createdDate || proposal.lastModified || Date.now());
+    const estimate = new Date(base.getTime() + 120 * 24 * 60 * 60 * 1000);
+    return formatDate(estimate);
   }
 
-  const colWidths = (sheet['!cols'] || [])
-    .slice(0, maxCol + 1)
-    .map((c: any) => {
-      if (c?.wpx) return c.wpx;
-      if (c?.wch) {
-        // Excel column width (wch) -> px approximation
-        // Excel uses 7 pixels per character unit at 96 DPI, plus padding
-        return Math.round(c.wch * 7.5 + 5);
-      }
-      return 70;
-    });
+  if (/perimeter/.test(label) && /surface area/.test(label)) return String(specs.surfaceArea || '');
+  if (/perimeter/.test(label)) return String(specs.perimeter || specs.fiberglassPerimeter || '');
+  if (/surface area/.test(label)) return String(specs.surfaceArea || '');
+  if (/pool size/.test(label) && field.id === 'p1_12') return String(specs.maxLength || '');
+  if (/pool size/.test(label) && field.id === 'p1_13') return String(specs.maxWidth || '');
+  if (/pool depth/.test(label) && field.id === 'p1_14') return String(specs.shallowDepth || '');
+  if (/pool depth/.test(label) && field.id === 'p1_15') return String(specs.endDepth || '');
+  if (/pool depth/.test(label) && field.id === 'p1_16') return specs.endDepth ? 'POOL DEPTH DOES NOT PERMIT DIVING' : '';
 
-  const rowHeights = (sheet['!rows'] || [])
-    .slice(0, maxRow + 1)
-    .map((r: any) => {
-      if (r?.hpx) return r.hpx;
-      if (r?.h) {
-        // Excel row height is stored in points (1 point = 1.333px at 96 DPI)
-        return Math.round(r.h * 1.333);
-      }
-      return 20;
-    });
+  if (/hoa approval/.test(label)) return 'YES';
+  if (/financing required/.test(label)) return 'NO';
 
-  return {
-    name: mapping.sheet,
-    rows,
-    merges,
-    colWidths,
-    rowHeights,
-  };
-}
-
-function normalizeProposal(pr: Proposal): ProposalWithPricing {
-  try {
-    const calc = MasterPricingEngine.calculateCompleteProposal(pr, pr.papDiscounts);
-    return {
-      ...pr,
-      pricing: calc?.pricing || pr.pricing,
-      costBreakdown: calc?.costBreakdown || pr.costBreakdown,
+  if (/auxiliary pump i/.test(label)) return proposal.equipment?.auxiliaryPumps?.[0]?.name || overrideDefault || '';
+  if (/auxiliary pump ii/.test(label)) return proposal.equipment?.auxiliaryPumps?.[1]?.name || overrideDefault || '';
+  if (/sanitation i/.test(label)) return proposal.equipment?.saltSystem?.name || overrideDefault || '';
+  if (/sanitation ii/.test(label)) return overrideDefault;
+  if (/sanitation iii/.test(label)) return overrideDefault;
+  if (/cleaner/.test(label)) return proposal.equipment?.cleaner?.name || overrideDefault || '';
+  if (/heater/.test(label)) return proposal.equipment?.heater?.name || overrideDefault || '';
+  if (/gas line/.test(label)) {
+    const gasRun = proposal.plumbing?.runs?.gasRun;
+    return gasRun ? `${gasRun} LF` : overrideDefault;
+  }
+  if (/line type/.test(label)) return overrideDefault;
+  if (/waterline tile/.test(label)) return 'Included';
+  if (/accent tile/.test(label)) return proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Yes' : 'None';
+  if (/coping/.test(label)) {
+    const lookup: Record<string, string> = {
+      'travertine-level1': '3CM Travertine',
+      'travertine-level2': 'Travertine (Level 2)',
+      flagstone: 'Flagstone',
+      paver: 'Paver',
+      concrete: 'Concrete',
+      cantilever: 'Cantilever',
     };
-  } catch (error) {
-    console.warn('Failed to recalc proposal for contract view; using stored pricing.', error);
-    return pr;
+    return lookup[proposal.tileCopingDecking?.copingType as string] || overrideDefault;
   }
+  if (/decking drainage/.test(label)) return proposal.drainage?.deckDrainTotalLF ? 'BY BUILDER' : overrideDefault;
+  if (/decking\b/i.test(label)) return String(proposal.tileCopingDecking?.deckingArea || '');
+
+  if (/skimmer/.test(label)) {
+    const additional = proposal.plumbing?.runs?.additionalSkimmers || 0;
+    return String(1 + (Number.isFinite(additional) ? additional : 0));
+  }
+  if (/surface returns/.test(label)) {
+    const returns = proposal.plumbing?.runs?.mainDrainRun;
+    return returns ? String(returns) : overrideDefault;
+  }
+  if (/auto-fill/.test(label)) return formatYesNo(proposal.plumbing?.runs?.autoFillRun, overrideDefault || 'NO');
+  if (/circulation pump/.test(label)) return proposal.equipment?.pump?.name || proposal.equipment?.primaryPump?.name || overrideDefault;
+  if (/filter/.test(label) && !/interior/.test(label)) return proposal.equipment?.filter?.name || overrideDefault;
+  if (/spa perimeter/.test(label)) return proposal.poolSpecs?.spaPerimeter ? String(proposal.poolSpecs.spaPerimeter) : '';
+  if (/spa light/.test(label)) return proposal.poolSpecs?.spaType !== 'none' ? '1' : '0';
+  if (/blower/.test(label)) return proposal.poolSpecs?.spaType !== 'none' ? 'YES' : 'NO';
+  if (/interior finish/.test(label)) {
+    const finish = proposal.interiorFinish?.finishType || (specs.poolType === 'fiberglass' ? 'Fiberglass' : 'Interior Finish');
+    const color = proposal.interiorFinish?.color;
+    return color ? `${finish} - ${color}` : finish;
+  }
+  if (/laminar|sheer|jets|water features/.test(label)) {
+    const typeMap: Record<string, WaterFeatureSelection[]> = {
+      sheer: waterFeatures.sheer,
+      jets: waterFeatures.deckJet,
+      laminar: waterFeatures.laminar,
+      bowl: waterFeatures.bowl,
+      sconce: waterFeatures.sconce,
+      other: waterFeatures.other,
+    };
+    const entry = Object.entries(typeMap).find(([key]) => label.includes(key));
+    if (entry) {
+      const list = entry[1];
+      return list?.[0]?.quantity ? String(list[0].quantity) : overrideDefault;
+    }
+  }
+
+  if (overrideDefault) return overrideDefault;
+  return '';
 }
 
-export async function buildContractWorkbook(
+export async function getEditableContractFields(
   proposal: Proposal,
   overrides?: ContractOverrides
-): Promise<{ workbook: XLSX.WorkBook; editableCells: Set<string> }> {
+): Promise<ContractFieldRender[]> {
   const normalized = normalizeProposal(proposal);
-  const workbook = await loadTemplate();
-  const sheet = workbook.Sheets[mapping.sheet];
-  if (!sheet) {
-    throw new Error(`Missing contract sheet "${mapping.sheet}" in template.`);
-  }
-  const editableCells = applyValuesToSheet(sheet, normalized, overrides);
-  return { workbook, editableCells };
+  const fields: ContractFieldRender[] = templateFields
+    .filter((field) => (field.label || '').trim().length > 0)
+    .map((field) => {
+      const [x0, y0, x1, y1] = field.rect;
+      const width = x1 - x0;
+      const height = y1 - y0;
+      const autoValue = computeAutoValue(
+        {
+          id: field.id,
+          page: field.page,
+          x: x0,
+          y: y0,
+          width,
+          height,
+          label: field.label,
+          color: field.color,
+          value: '',
+        },
+        normalized
+      );
+      const overrideVal = overrides && field.id in (overrides || {}) ? overrides[field.id] : undefined;
+      const value = overrideVal !== undefined && overrideVal !== null ? String(overrideVal) : autoValue;
+      return {
+        id: field.id,
+        page: field.page,
+        x: x0,
+        y: y0,
+        width,
+        height,
+        label: field.label,
+        color: field.color,
+        value: value || '',
+      };
+    });
+
+  return fields;
 }
 
-export async function getEditableContractJson(
-  proposal: Proposal,
-  overrides?: ContractOverrides
-): Promise<ContractSheetRender> {
-  const { workbook, editableCells } = await buildContractWorkbook(proposal, overrides);
-  const sheet = workbook.Sheets[mapping.sheet];
-  return buildRenderGrid(sheet, editableCells);
-}
-
-export function listUnmappedFields(): ContractField[] {
-  return mapping.fields.filter(
-    (f) => !f.proposalPath && !(f.formatter || '').startsWith('waterFeature')
-  );
+export function listUnmappedFields(fields: ContractFieldRender[]): string[] {
+  return fields
+    .filter((f) => !f.value && f.color === 'blue' && (f.label || '').trim())
+    .map((f) => f.label || f.id);
 }
 
 export function validateContractInputs(proposal: Proposal): string[] {

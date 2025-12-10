@@ -4,17 +4,19 @@ import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Proposal } from '../types/proposal-new';
 import {
   ContractOverrides,
-  ContractSheetRender,
-  getEditableContractJson,
+  ContractFieldRender,
+  getEditableContractFields,
   listUnmappedFields,
   validateContractInputs,
 } from '../services/contractGenerator';
 import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
 import { useToast } from './Toast';
 import './ContractView.css';
-import submergeLogo from '../../Submerge Logo.png';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
+
+const DISPLAY_SCALE = 1.6;
+const MAX_RENDER_DPR = 2;
 
 type ContractViewProps = {
   proposal: Proposal;
@@ -33,13 +35,12 @@ export default function ContractView({
 }: ContractViewProps) {
   const { showToast } = useToast();
   const [overrides, setOverrides] = useState<ContractOverrides>(incomingOverrides || {});
-  const [sheet, setSheet] = useState<ContractSheetRender | null>(null);
   const [exporting, setExporting] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
   const [pdfFields, setPdfFields] = useState<ContractPdfFieldLayout[]>([]);
   const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[]>([]);
-  const [logoBytes, setLogoBytes] = useState<ArrayBuffer | null>(null);
+  const [fields, setFields] = useState<ContractFieldRender[]>([]);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
 
   useEffect(() => {
@@ -50,24 +51,8 @@ export default function ContractView({
     let canceled = false;
     (async () => {
       try {
-        const response = await fetch(submergeLogo);
-        const data = await response.arrayBuffer();
-        if (!canceled) setLogoBytes(data);
-      } catch (error) {
-        console.warn('Unable to load contract logo', error);
-      }
-    })();
-    return () => {
-      canceled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let canceled = false;
-    (async () => {
-      try {
-        const hydrated = await getEditableContractJson(proposal, overrides);
-        if (!canceled) setSheet(hydrated);
+        const hydrated = await getEditableContractFields(proposal, overrides);
+        if (!canceled) setFields(hydrated);
       } catch (error) {
         console.error('Unable to build contract view', error);
         if (!canceled) {
@@ -81,14 +66,13 @@ export default function ContractView({
   }, [proposal, overrides, showToast]);
 
   useEffect(() => {
-    if (!sheet) return;
+    if (!fields.length) return;
     let canceled = false;
     (async () => {
       try {
-        const result = await buildContractPdf(sheet, {
-          includeFormFields: true,
+        const result = await buildContractPdf(fields, {
+          includeFormFields: false,
           flatten: false,
-          logoBytes,
         });
         if (!canceled) {
           setPdfBytes(result.pdfBytes);
@@ -105,7 +89,7 @@ export default function ContractView({
     return () => {
       canceled = true;
     };
-  }, [sheet, logoBytes, showToast]);
+  }, [fields, showToast]);
 
   useEffect(() => {
     if (!pdfBytes || !pageSizes.length) return;
@@ -117,9 +101,10 @@ export default function ContractView({
         for (let i = 1; i <= pdfDoc.numPages; i += 1) {
           if (canceled) break;
           const page = await pdfDoc.getPage(i);
-          const viewport = page.getViewport({ scale: 1 });
-          const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-          const renderViewport = page.getViewport({ scale: dpr });
+          const viewport = page.getViewport({ scale: DISPLAY_SCALE });
+          const dpr =
+            typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR) : 1;
+          const renderViewport = page.getViewport({ scale: dpr * DISPLAY_SCALE });
           const canvas = canvasRefs.current[i - 1];
           if (!canvas) continue;
           const ctx = canvas.getContext('2d');
@@ -142,23 +127,25 @@ export default function ContractView({
     };
   }, [pdfBytes, pageSizes]);
 
-  const unmapped = useMemo(() => listUnmappedFields(), []);
-  const unmappedCells = useMemo(() => new Set(unmapped.map((f) => f.cell)), [unmapped]);
+  const unmapped = useMemo(() => listUnmappedFields(fields), [fields]);
+  const unmappedIds = useMemo(
+    () => new Set(fields.filter((f) => !f.value && f.color === 'blue').map((f) => f.id)),
+    [fields]
+  );
   const warnings = useMemo(() => validateContractInputs(proposal), [proposal]);
 
-  const cellValueMap = useMemo(() => {
-    const map = new Map<string, string | number | null>();
-    sheet?.rows.forEach((row) =>
-      row.forEach((cell) => {
-        map.set(cell.address, cell.value);
-      })
-    );
+  const valueMap = useMemo(() => {
+    const map = new Map<string, string>();
+    fields.forEach((field) => map.set(field.id, field.value));
     return map;
-  }, [sheet]);
+  }, [fields]);
 
   const handleCellChange = (cellAddress: string, value: string) => {
     const next = { ...overrides, [cellAddress]: value };
     setOverrides(next);
+    setFields((prev) =>
+      prev.map((field) => (field.id === cellAddress ? { ...field, value } : field))
+    );
     onOverridesChange?.(next);
   };
 
@@ -174,7 +161,7 @@ export default function ContractView({
   };
 
   const exportPdf = async () => {
-    if (!sheet) return;
+    if (!fields.length) return;
     setExporting(true);
     try {
       if (warnings.length) {
@@ -183,10 +170,9 @@ export default function ContractView({
           message: `Missing data: ${warnings.join(', ')}`,
         });
       }
-      const result = await buildContractPdf(sheet, {
+      const result = await buildContractPdf(fields, {
         flatten: true,
         includeFormFields: true,
-        logoBytes,
       });
 
       const customerName = proposal.customerInfo.customerName || 'Proposal';
@@ -210,19 +196,12 @@ export default function ContractView({
     }
   };
 
-  if (!sheet) {
+  if (!fields.length) {
     return <div className="contract-view-empty">No contract data available.</div>;
   }
 
   const pageCount = pageSizes.length || 0;
   const editableEnabled = !readOnly && !previewMode;
-
-  const getFieldValue = (address: string) => {
-    if (overrides[address] !== undefined && overrides[address] !== null) {
-      return overrides[address] as string | number;
-    }
-    return cellValueMap.get(address) ?? '';
-  };
 
   return (
     <div className="contract-view">
@@ -250,7 +229,7 @@ export default function ContractView({
       {unmapped.length ? (
         <div className="contract-unmapped">
           <strong>Designer inputs:</strong>{' '}
-          {unmapped.map((f) => f.label || f.cell).join(', ')} need manual confirmation.
+          {unmapped.join(', ')} need manual confirmation.
         </div>
       ) : null}
       {warnings.length ? (
@@ -266,12 +245,14 @@ export default function ContractView({
           Array.from({ length: pageCount }).map((_, pageIdx) => {
             const pageSize = pageSizes[pageIdx] || { width: 612, height: 792 };
             const fieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
+            const pageWidth = pageSize.width * DISPLAY_SCALE;
+            const pageHeight = pageSize.height * DISPLAY_SCALE;
             return (
               <div
                 className="contract-page"
                 key={`contract-page-${pageIdx + 1}`}
                 data-page={pageIdx + 1}
-                style={{ width: `${pageSize.width}px`, height: `${pageSize.height}px` }}
+                style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}
               >
                 <canvas
                   ref={(el) => {
@@ -281,22 +262,24 @@ export default function ContractView({
                 />
                 <div className={`contract-field-layer ${editableEnabled ? '' : 'read-only'}`}>
                   {fieldsForPage.map((field) => {
-                    const left = (field.x / pageSize.width) * 100;
-                    const top = (field.y / pageSize.height) * 100;
-                    const width = (field.width / pageSize.width) * 100;
-                    const height = (field.height / pageSize.height) * 100;
-                    const value = getFieldValue(field.name);
-                    const isTextArea = field.wrap || field.height > 28;
+                    const left = field.x * DISPLAY_SCALE;
+                    const top = field.y * DISPLAY_SCALE;
+                    const width = field.width * DISPLAY_SCALE;
+                    const height = field.height * DISPLAY_SCALE;
+                    const value = valueMap.get(field.name);
+                    const isTextArea = field.height > 24;
+                    const colorClass =
+                      field.color === 'yellow' ? 'contract-input-yellow' : 'contract-input-blue';
                     const style: CSSProperties = {
-                      left: `${left}%`,
-                      top: `${top}%`,
-                      width: `${width}%`,
-                      height: `${height}%`,
+                      left: `${left}px`,
+                      top: `${top}px`,
+                      width: `${width}px`,
+                      height: `${height}px`,
                       fontSize: `${field.fontSize || 10}pt`,
-                      textAlign: field.align || 'left',
+                      textAlign: 'center',
                     };
-                    const classNames = ['contract-input'];
-                    if (unmappedCells.has(field.name)) classNames.push('unmapped');
+                    const classNames = ['contract-input', colorClass];
+                    if (unmappedIds.has(field.name)) classNames.push('unmapped');
 
                     return (
                       <div key={`${field.name}-${pageIdx}`} className="contract-input-wrapper" style={style}>
@@ -315,7 +298,12 @@ export default function ContractView({
                             />
                           )
                         ) : (
-                          <div className="contract-readonly-value">{value}</div>
+                          <div
+                            className={['contract-readonly-value', colorClass].join(' ')}
+                            aria-label={field.name}
+                          >
+                            {value}
+                          </div>
                         )}
                       </div>
                     );
