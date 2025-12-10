@@ -76,87 +76,73 @@
 }
 
 .contract-page {
-  --contract-page-width: 1120px;
   background: #ffffff;
   border: 1px solid #d1d1d1;
-  padding: 15px;
-  width: var(--contract-page-width);
-  max-width: 100%;
-  margin: 0 auto;
-  overflow: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: auto;
+  max-width: none;
   position: relative;
 }
 
-.contract-page-inner {
+.contract-page-canvas {
   width: 100%;
+  height: auto;
+  display: block;
   position: relative;
+  z-index: 1;
 }
 
-.contract-logo-header {
+.contract-field-layer {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 10;
+  inset: 0;
+  z-index: 2;
+}
+
+.contract-field-layer.read-only {
   pointer-events: none;
 }
 
-.contract-logo {
-  height: 70px;
-  width: auto;
-  object-fit: contain;
-}
-
-.contract-table {
-  width: 100%;
-  border-collapse: collapse;
-  border-spacing: 0;
-  table-layout: fixed;
-  color: inherit;
-  position: relative;
-  font-size: 10pt;
-}
-
-.contract-table td {
-  padding: 2px 3px;
-  vertical-align: middle;
-  line-height: 1.3;
+.contract-input-wrapper {
+  position: absolute;
   box-sizing: border-box;
-  border: none;
-  min-height: 16px;
-  overflow: visible;
-  white-space: normal;
-  word-wrap: normal;
 }
 
-.contract-cell {
-  position: relative;
-}
-
-.contract-cell.has-fill {
-  /* Blue theme cells in Excel are typically lighter blue with borders */
-}
-
-.contract-cell.editable {
-  position: relative;
-}
-
-.contract-input {
+.contract-input,
+.contract-readonly-value,
+.contract-input-wrapper textarea {
   width: 100%;
   height: 100%;
-  min-height: 20px;
   border: 1px solid #4472c4;
   border-radius: 0;
   padding: 2px 4px;
   font-family: 'Calibri', 'Arial', sans-serif;
   font-size: 10pt;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.95);
   box-sizing: border-box;
   color: #000000;
   outline: none;
 }
 
-.contract-input:focus {
+.contract-input-wrapper textarea {
+  resize: none;
+}
+
+.contract-readonly-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+  padding: 2px 4px;
+}
+
+.contract-input.unmapped {
+  border-color: #d97706;
+  box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.2);
+}
+
+.contract-input:focus,
+.contract-input-wrapper textarea:focus {
   outline: none;
   border: 2px solid #4472c4;
   box-shadow: 0 0 0 1px rgba(68, 114, 196, 0.3);
@@ -182,23 +168,16 @@
     page-break-after: always;
     box-shadow: none;
     border: none;
-    padding: 0.5in;
     width: 8.5in;
     height: 11in;
-    margin: 0;
   }
 
-  .contract-page-inner,
-  .contract-table {
+  .contract-field-layer {
+    pointer-events: none;
+  }
+
+  .contract-page-canvas {
     width: 100% !important;
-  }
-
-  .contract-logo-header {
-    top: 0.5in;
-    left: 0.5in;
-  }
-
-  .contract-logo {
-    height: 0.8in;
+    height: auto !important;
   }
 }

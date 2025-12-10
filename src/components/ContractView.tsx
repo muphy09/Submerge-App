@@ -1,6 +1,6 @@
-﻿import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Proposal } from '../types/proposal-new';
 import {
   ContractOverrides,
@@ -9,9 +9,12 @@ import {
   listUnmappedFields,
   validateContractInputs,
 } from '../services/contractGenerator';
+import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
 import { useToast } from './Toast';
 import './ContractView.css';
 import submergeLogo from '../../Submerge Logo.png';
+
+GlobalWorkerOptions.workerSrc = pdfWorker;
 
 type ContractViewProps = {
   proposal: Proposal;
@@ -20,40 +23,6 @@ type ContractViewProps = {
   onOverridesChange?: (overrides: ContractOverrides) => void;
   onSave?: (overrides: ContractOverrides) => Promise<void> | void;
 };
-
-type PageBlock = {
-  id: string;
-  rows: ContractSheetRender['rows'];
-};
-
-function splitIntoPages(sheet: ContractSheetRender): PageBlock[] {
-  const breaks: number[] = [];
-  sheet.rows.forEach((row, idx) => {
-    const hasMarker = row.some(
-      (cell) => typeof cell.value === 'string' && /Page \\d+ of 6/i.test(cell.value as string)
-    );
-    if (hasMarker) breaks.push(idx);
-  });
-
-  if (!breaks.length) {
-    return [{ id: 'page-1', rows: sheet.rows }];
-  }
-
-  const pages: PageBlock[] = [];
-  let start = 0;
-  breaks.forEach((brk, idx) => {
-    pages.push({ id: `page-${idx + 1}`, rows: sheet.rows.slice(start, brk + 1) });
-    start = brk + 1;
-  });
-  if (start < sheet.rows.length) {
-    pages.push({ id: `page-${pages.length + 1}`, rows: sheet.rows.slice(start) });
-  }
-  return pages;
-}
-
-function cellKey(cell: { address: string; row: number; col: number }) {
-  return `${cell.address}-${cell.row}-${cell.col}`;
-}
 
 export default function ContractView({
   proposal,
@@ -67,11 +36,31 @@ export default function ContractView({
   const [sheet, setSheet] = useState<ContractSheetRender | null>(null);
   const [exporting, setExporting] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
+  const [pdfFields, setPdfFields] = useState<ContractPdfFieldLayout[]>([]);
+  const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[]>([]);
+  const [logoBytes, setLogoBytes] = useState<ArrayBuffer | null>(null);
+  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
 
   useEffect(() => {
     setOverrides(incomingOverrides || {});
   }, [incomingOverrides]);
+
+  useEffect(() => {
+    let canceled = false;
+    (async () => {
+      try {
+        const response = await fetch(submergeLogo);
+        const data = await response.arrayBuffer();
+        if (!canceled) setLogoBytes(data);
+      } catch (error) {
+        console.warn('Unable to load contract logo', error);
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let canceled = false;
@@ -91,20 +80,81 @@ export default function ContractView({
     };
   }, [proposal, overrides, showToast]);
 
-  const pages = useMemo(() => (sheet ? splitIntoPages(sheet) : []), [sheet]);
-  const naturalWidth = useMemo(
-    () => (sheet?.colWidths || []).reduce((sum, width) => sum + (width || 0), 0),
-    [sheet]
-  );
-  // Use a wider page width to match Excel's A4/Letter page layout (approx 816px for 8.5in @ 96dpi)
-  const pageWidth = Math.max(Math.ceil(naturalWidth * 1.1 || 0), 1000);
-  const pageStyle = useMemo(
-    () => ({ '--contract-page-width': `${pageWidth}px` } as CSSProperties),
-    [pageWidth]
-  );
+  useEffect(() => {
+    if (!sheet) return;
+    let canceled = false;
+    (async () => {
+      try {
+        const result = await buildContractPdf(sheet, {
+          includeFormFields: true,
+          flatten: false,
+          logoBytes,
+        });
+        if (!canceled) {
+          setPdfBytes(result.pdfBytes);
+          setPdfFields(result.fields);
+          setPageSizes(result.pageSizes);
+        }
+      } catch (error) {
+        console.error('Unable to build contract PDF', error);
+        if (!canceled) {
+          showToast({ type: 'error', message: 'Could not build contract PDF.' });
+        }
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [sheet, logoBytes, showToast]);
+
+  useEffect(() => {
+    if (!pdfBytes || !pageSizes.length) return;
+    const loadingTask = getDocument({ data: pdfBytes });
+    let canceled = false;
+
+    loadingTask.promise
+      .then(async (pdfDoc) => {
+        for (let i = 1; i <= pdfDoc.numPages; i += 1) {
+          if (canceled) break;
+          const page = await pdfDoc.getPage(i);
+          const viewport = page.getViewport({ scale: 1 });
+          const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+          const renderViewport = page.getViewport({ scale: dpr });
+          const canvas = canvasRefs.current[i - 1];
+          if (!canvas) continue;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+          canvas.width = renderViewport.width;
+          canvas.height = renderViewport.height;
+          canvas.style.width = `${viewport.width}px`;
+          canvas.style.height = `${viewport.height}px`;
+          await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+        }
+        pdfDoc.destroy();
+      })
+      .catch((error) => {
+        console.error('Failed to render contract PDF', error);
+      });
+
+    return () => {
+      canceled = true;
+      loadingTask.destroy();
+    };
+  }, [pdfBytes, pageSizes]);
+
   const unmapped = useMemo(() => listUnmappedFields(), []);
   const unmappedCells = useMemo(() => new Set(unmapped.map((f) => f.cell)), [unmapped]);
   const warnings = useMemo(() => validateContractInputs(proposal), [proposal]);
+
+  const cellValueMap = useMemo(() => {
+    const map = new Map<string, string | number | null>();
+    sheet?.rows.forEach((row) =>
+      row.forEach((cell) => {
+        map.set(cell.address, cell.value);
+      })
+    );
+    return map;
+  }, [sheet]);
 
   const handleCellChange = (cellAddress: string, value: string) => {
     const next = { ...overrides, [cellAddress]: value };
@@ -124,7 +174,7 @@ export default function ContractView({
   };
 
   const exportPdf = async () => {
-    if (!containerRef.current) return;
+    if (!sheet) return;
     setExporting(true);
     try {
       if (warnings.length) {
@@ -133,36 +183,24 @@ export default function ContractView({
           message: `Missing data: ${warnings.join(', ')}`,
         });
       }
-      const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'letter' });
-      const pageNodes = Array.from(
-        containerRef.current.querySelectorAll('.contract-page')
-      ) as HTMLElement[];
-
-      for (let i = 0; i < pageNodes.length; i += 1) {
-        const page = pageNodes[i];
-        const canvas = await html2canvas(page, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-        });
-        const imgData = canvas.toDataURL('image/png');
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-        const imgWidth = canvas.width * ratio;
-        const imgHeight = canvas.height * ratio;
-        const marginX = (pageWidth - imgWidth) / 2;
-        const marginY = (pageHeight - imgHeight) / 2;
-        if (i > 0) pdf.addPage();
-        pdf.addImage(imgData, 'PNG', marginX, marginY, imgWidth, imgHeight);
-      }
+      const result = await buildContractPdf(sheet, {
+        flatten: true,
+        includeFormFields: true,
+        logoBytes,
+      });
 
       const customerName = proposal.customerInfo.customerName || 'Proposal';
       const today = new Date();
       const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
         today.getDate()
       ).padStart(2, '0')}`;
-      pdf.save(`${customerName}-contract-${formattedDate}.pdf`);
+      const blob = new Blob([result.pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${customerName}-contract-${formattedDate}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
       showToast({ type: 'success', message: 'Contract PDF generated.' });
     } catch (error) {
       console.error('Failed to export contract PDF', error);
@@ -175,6 +213,16 @@ export default function ContractView({
   if (!sheet) {
     return <div className="contract-view-empty">No contract data available.</div>;
   }
+
+  const pageCount = pageSizes.length || 0;
+  const editableEnabled = !readOnly && !previewMode;
+
+  const getFieldValue = (address: string) => {
+    if (overrides[address] !== undefined && overrides[address] !== null) {
+      return overrides[address] as string | number;
+    }
+    return cellValueMap.get(address) ?? '';
+  };
 
   return (
     <div className="contract-view">
@@ -211,89 +259,73 @@ export default function ContractView({
         </div>
       ) : null}
 
-      <div className="contract-pages" ref={containerRef}>
-        {pages.map((page, idx) => (
-          <div className="contract-page" key={page.id} data-page={idx + 1} style={pageStyle}>
-            <div className="contract-page-inner">
-              {idx === 0 && (
-                <div className="contract-logo-header">
-                  <img src={submergeLogo} alt="Submerge Logo" className="contract-logo" />
+      <div className="contract-pages">
+        {!pdfBytes || !pageCount ? (
+          <div className="contract-view-empty">Preparing contract PDF...</div>
+        ) : (
+          Array.from({ length: pageCount }).map((_, pageIdx) => {
+            const pageSize = pageSizes[pageIdx] || { width: 612, height: 792 };
+            const fieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
+            return (
+              <div
+                className="contract-page"
+                key={`contract-page-${pageIdx + 1}`}
+                data-page={pageIdx + 1}
+                style={{ width: `${pageSize.width}px`, height: `${pageSize.height}px` }}
+              >
+                <canvas
+                  ref={(el) => {
+                    canvasRefs.current[pageIdx] = el;
+                  }}
+                  className="contract-page-canvas"
+                />
+                <div className={`contract-field-layer ${editableEnabled ? '' : 'read-only'}`}>
+                  {fieldsForPage.map((field) => {
+                    const left = (field.x / pageSize.width) * 100;
+                    const top = (field.y / pageSize.height) * 100;
+                    const width = (field.width / pageSize.width) * 100;
+                    const height = (field.height / pageSize.height) * 100;
+                    const value = getFieldValue(field.name);
+                    const isTextArea = field.wrap || field.height > 28;
+                    const style: CSSProperties = {
+                      left: `${left}%`,
+                      top: `${top}%`,
+                      width: `${width}%`,
+                      height: `${height}%`,
+                      fontSize: `${field.fontSize || 10}pt`,
+                      textAlign: field.align || 'left',
+                    };
+                    const classNames = ['contract-input'];
+                    if (unmappedCells.has(field.name)) classNames.push('unmapped');
+
+                    return (
+                      <div key={`${field.name}-${pageIdx}`} className="contract-input-wrapper" style={style}>
+                        {editableEnabled ? (
+                          isTextArea ? (
+                            <textarea
+                              className={classNames.join(' ')}
+                              value={value ?? ''}
+                              onChange={(e) => handleCellChange(field.name, e.target.value)}
+                            />
+                          ) : (
+                            <input
+                              className={classNames.join(' ')}
+                              value={value ?? ''}
+                              onChange={(e) => handleCellChange(field.name, e.target.value)}
+                            />
+                          )
+                        ) : (
+                          <div className="contract-readonly-value">{value}</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-              <table className="contract-table" aria-label={`Contract page ${idx + 1}`}>
-                <colgroup>
-                  {sheet.colWidths.map((w, colIdx) => (
-                    <col key={`col-${colIdx}`} style={{ width: `${w}px` }} />
-                  ))}
-                </colgroup>
-                <tbody>
-                  {page.rows.map((row, rowIdx) => (
-                    <tr
-                      key={`row-${rowIdx}-${row[0]?.row || rowIdx}`}
-                      style={{ height: `${sheet.rowHeights[row[0]?.row - 1] || 18}px` }}
-                    >
-                      {row.map((cell) => {
-                        const editable = cell.editable && !readOnly && !previewMode;
-                        const hasFill = Boolean(cell.style.background && cell.style.background !== '#fff');
-                        const classNames = ['contract-cell'];
-                        if (editable) classNames.push('editable');
-                        if (hasFill) classNames.push('has-fill');
-
-                        // Apply Excel border styling if available
-                        const getBorderStyle = (borderDef: any) => {
-                          if (!borderDef || !borderDef.style) return undefined;
-                          const weight = borderDef.style === 'thick' || borderDef.style === 'medium' ? '2px' : '1px';
-                          return `${weight} solid #000`;
-                        };
-
-                        const borders = cell.style.border ? {
-                          borderTop: getBorderStyle(cell.style.border.top),
-                          borderRight: getBorderStyle(cell.style.border.right),
-                          borderBottom: getBorderStyle(cell.style.border.bottom),
-                          borderLeft: getBorderStyle(cell.style.border.left),
-                        } : {};
-
-                      return (
-                          <td
-                            key={cellKey(cell)}
-                            colSpan={cell.colSpan}
-                            rowSpan={cell.rowSpan}
-                            title={unmappedCells.has(cell.address) ? 'Needs manual input' : undefined}
-                            style={{
-                              ...borders,
-                              background: cell.style.background || '#fff',
-                              fontWeight: cell.style.bold ? 700 : 400,
-                              fontStyle: cell.style.italic ? 'italic' : 'normal',
-                              fontSize: cell.style.fontSize ? `${cell.style.fontSize}px` : undefined,
-                              textAlign: cell.style.align || 'left',
-                              verticalAlign: cell.style.verticalAlign || 'middle',
-                              whiteSpace: cell.style.wrap ? 'normal' : 'nowrap',
-                              wordBreak: 'normal',
-                              overflowWrap: cell.style.wrap ? 'break-word' : 'normal',
-                            }}
-                            className={classNames.join(' ')}
-                          >
-                            {editable ? (
-                              <input
-                                className="contract-input"
-                                value={cell.value ?? ''}
-                                onChange={(e) => handleCellChange(cell.address, e.target.value)}
-                              />
-                            ) : (
-                              cell.value
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
 }
-
