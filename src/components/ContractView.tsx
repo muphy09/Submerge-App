@@ -1,4 +1,4 @@
-import {
+import React, {
   CSSProperties,
   forwardRef,
   useCallback,
@@ -25,6 +25,53 @@ GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const DISPLAY_SCALE = 1.75;
 const MAX_RENDER_DPR = 3;
+const CONTRACT_DATE_FIELD_IDS = new Set(['p1_8', 'p1_9']);
+
+type DateParts = { year: number; month: number; day: number };
+
+function parseDateParts(raw?: string | null): DateParts | null {
+  if (raw === null || raw === undefined) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    const year = Number(y);
+    const month = Number(m);
+    const day = Number(d);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) return { year, month, day };
+  }
+
+  const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slashMatch) {
+    const [, m, d, y] = slashMatch;
+    const month = Number(m);
+    const day = Number(d);
+    const year = y.length === 2 ? 2000 + Number(y) : Number(y);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) return { year, month, day };
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return { year: parsed.getFullYear(), month: parsed.getMonth() + 1, day: parsed.getDate() };
+  }
+
+  return null;
+}
+
+function toDateInputValue(raw?: string | null): string {
+  const parts = parseDateParts(raw);
+  if (!parts) return '';
+  const { year, month, day } = parts;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function formatDateForDisplay(raw?: string | null): string {
+  const parts = parseDateParts(raw);
+  if (!parts) return '';
+  return `${parts.month}/${parts.day}/${parts.year}`;
+}
 
 type ContractViewProps = {
   proposal: Proposal;
@@ -356,6 +403,24 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                       const width = field.width * DISPLAY_SCALE;
                       const height = field.height * DISPLAY_SCALE;
                       const value = fieldMeta?.value ?? valueMap.get(field.name);
+                      const isDateField = CONTRACT_DATE_FIELD_IDS.has(field.name);
+                      const parsedDateValue = isDateField ? toDateInputValue(value ?? '') : '';
+                      const displayValue = isDateField ? parsedDateValue : value ?? '';
+                      const placeholderValue =
+                        isDateField && !parsedDateValue ? (value ? String(value) : undefined) : undefined;
+                      const readOnlyValue = isDateField ? formatDateForDisplay(value ?? '') || value : value;
+                      const handleValueChange = (nextValue: string) =>
+                        handleCellChange(field.name, isDateField ? formatDateForDisplay(nextValue) : nextValue);
+                      const handleDateMouseDown = (event: React.MouseEvent<HTMLInputElement>) => {
+                        if (!isDateField) return;
+                        const input = event.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                        if (typeof input.showPicker === 'function') {
+                          event.preventDefault();
+                          input.showPicker();
+                          return;
+                        }
+                        input.focus();
+                      };
                       const isTextArea = (fieldMeta?.height ?? field.height) > 24;
                       const isAutoFilled = Boolean(fieldMeta?.isAutoFilled) && baseColor !== 'yellow';
                       const colorClass =
@@ -382,14 +447,17 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                             isTextArea ? (
                               <textarea
                                 className={classNames.join(' ')}
-                                value={value ?? ''}
-                                onChange={(e) => handleCellChange(field.name, e.target.value)}
+                                value={displayValue}
+                                onChange={(e) => handleValueChange(e.target.value)}
                               />
                             ) : (
                               <input
                                 className={classNames.join(' ')}
-                                value={value ?? ''}
-                                onChange={(e) => handleCellChange(field.name, e.target.value)}
+                                type={isDateField ? 'date' : 'text'}
+                                value={displayValue}
+                                placeholder={placeholderValue}
+                                onMouseDown={handleDateMouseDown}
+                                onChange={(e) => handleValueChange(e.target.value)}
                               />
                             )
                           ) : (
@@ -397,7 +465,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                               className={['contract-readonly-value', colorClass].join(' ')}
                               aria-label={field.name}
                             >
-                              {value}
+                              {readOnlyValue}
                             </div>
                           )}
                         </div>

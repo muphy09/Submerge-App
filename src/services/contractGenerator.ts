@@ -68,13 +68,6 @@ function formatCurrency(value: number | null | undefined): string {
   return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 }
 
-function formatDate(val: Date | string | number | null | undefined): string {
-  if (!val) return '';
-  const d = val instanceof Date ? val : new Date(val);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString();
-}
-
 function parseZipFromAddress(address?: string | null): string {
   if (!address) return '';
   const zip = address.match(/\b\d{5}(?:-\d{4})?\b/);
@@ -154,20 +147,14 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return formatCurrency(pricing);
   }
 
-  if (/non-refundable deposit/.test(label)) return formatCurrency(pricing ? pricing * 0.1 : 0);
-  if (/prior to shotcete/.test(label) || /prior to excavation/.test(label)) return formatCurrency(pricing * 0.3);
-  if (/prior to decking/.test(label)) return formatCurrency(pricing * 0.3);
-  if (/prior to interior finish/.test(label)) return formatCurrency(pricing * 0.1);
+  // Payment schedule amounts are now designer-entered; leave empty.
+  if (/non-refundable deposit/.test(label)) return '';
+  if (/prior to shotcete/.test(label) || /prior to excavation/.test(label)) return '';
+  if (/prior to decking/.test(label)) return '';
+  if (/prior to interior finish/.test(label)) return '';
 
-  if (/construction to substanstially commence/.test(label)) {
-    const created = new Date(proposal.createdDate || proposal.lastModified || Date.now());
-    return formatDate(created);
-  }
-  if (/construction to be substanstially complete/.test(label)) {
-    const base = new Date(proposal.createdDate || proposal.lastModified || Date.now());
-    const estimate = new Date(base.getTime() + 120 * 24 * 60 * 60 * 1000);
-    return formatDate(estimate);
-  }
+  if (/construction to substanstially commence/.test(label)) return '';
+  if (/construction to be substanstially complete/.test(label)) return '';
 
   if (/perimeter/.test(label) && /surface area/.test(label)) return String(specs.surfaceArea || '');
   if (/perimeter/.test(label)) return String(specs.perimeter || specs.fiberglassPerimeter || '');

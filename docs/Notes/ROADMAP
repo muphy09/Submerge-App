@@ -72,6 +72,12 @@ Question -
 
 ----------------------------------------------------------------------------------------------------------
 
+Contract - 
+- Payment Schedule doesnt not autofil
+
+
+
+
 Specs: 
 Price: Black Friday
 Per - 93 Surf - 541 Shal- 3.5 End- 6 Max w- 21.5 Max l- 28 Step- 35 Deck- 867 
@@ -162,4 +168,4 @@ Additional Cost included on Tile / Coping
  Permit costs per county
 
 
- A couple changes to make in the Proposal Summary screen. 1st, the large summary tile information needs to change. The 2x4 table instead needs to have (column 1) 'Customer Name:', 'Job Location:'(this is the city), 'Build Type:' (this will only be 'New Pool' for all proposals for now), 'Last Modified:' (this will be the date of the last modification OF THAT VERSION, other versions might have a different date). Column 2 - 'Price Model:' (displays the price model pill box), ' We need to get rid of the 'Pre 1% COGS Breakdown' tile. Next, add the export checkbox to the Contract tile just like it is for the other tiles. 
+ A couple changes to make in the Proposal Summary screen. 1st, the large summary tile information needs to change. The 2x4 table instead needs to have (column 1) 'Customer Name:', 'Job Location:'(this is the city), 'Build Type:' (this will only be 'New Pool' for all proposals for now), 'Last Modified:' (this will be the date of the last modification OF THAT VERSION, other versions might have a different date). Column 2 - 'Price Model:' (displays the price model pill box, instead of in the top right), ' We need to get rid of the 'Pre 1% COGS Breakdown' tile. Next, add the export checkbox to the Contract tile just like it is for the other tiles. 
