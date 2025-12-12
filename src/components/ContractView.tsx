@@ -26,6 +26,34 @@ GlobalWorkerOptions.workerSrc = pdfWorker;
 const DISPLAY_SCALE = 1.75;
 const MAX_RENDER_DPR = 3;
 const CONTRACT_DATE_FIELD_IDS = new Set(['p1_8', 'p1_9']);
+const OPTIONAL_FIELD_IDS = new Set(['p1_16']); // optional: freeform depth note
+const BINARY_FIELD_GROUPS = [
+  { yesId: 'p1_17', noId: 'p1_18' }, // HOA approval required
+  { yesId: 'p1_19', noId: 'p1_20' }, // Financing required
+] as const;
+const RESPONSIBILITY_FIELD_IDS = new Set([
+  'p1_gc_1',
+  'p1_gc_2',
+  'p1_gc_3',
+  'p1_gc_4',
+  'p1_gc_5',
+  'p1_gc_6',
+  'p1_gc_7',
+  'p1_gc_8',
+  'p1_gc_9',
+  'p1_35', // Plumbing & Equipment - Skimmer responsibility
+  'p1_37', // Plumbing & Equipment - Surface Returns responsibility
+  'p1_38', // Plumbing & Equipment - Auto-Fill responsibility
+  'p1_39', // Plumbing & Equipment - Plumbing/piping responsibility
+  'p1_40', // Plumbing & Equipment - Equipment pad responsibility
+]);
+const RESPONSIBILITY_OPTIONS = ['BY BUILDER', 'BY BUYER'];
+const BINARY_FIELD_MAP = new Map<string, { yesId: string; noId: string }>(
+  BINARY_FIELD_GROUPS.flatMap((group) => [
+    [group.yesId, group],
+    [group.noId, group],
+  ])
+);
 
 type DateParts = { year: number; month: number; day: number };
 
@@ -225,7 +253,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   }, [pdfBytes, pageSizes]);
 
   const unmappedIds = useMemo(
-    () => new Set(fields.filter((f) => !f.value && f.color === 'blue').map((f) => f.id)),
+    () => new Set(fields.filter((f) => !f.value && f.color === 'blue' && !OPTIONAL_FIELD_IDS.has(f.id)).map((f) => f.id)),
     [fields]
   );
   const warnings = useMemo(() => validateContractInputs(proposal), [proposal]);
@@ -288,6 +316,32 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       onOverridesChange?.(next);
     },
     [fields, onOverridesChange, overrides]
+  );
+
+  const handleBinaryChoice = useCallback(
+    (targetId: string) => {
+      const group = BINARY_FIELD_MAP.get(targetId);
+      if (!group) return;
+      const otherId = targetId === group.yesId ? group.noId : group.yesId;
+      const next = { ...overrides, [targetId]: 'X' };
+      delete next[otherId];
+
+      setOverrides(next);
+      setFields((prev) =>
+        prev.map((field) => {
+          if (field.id === targetId) {
+            return { ...field, value: 'X', isAutoFilled: false, isOverridden: true };
+          }
+          if (field.id === otherId) {
+            const autoValue = field.autoValue || '';
+            return { ...field, value: autoValue, isAutoFilled: Boolean(autoValue), isOverridden: false };
+          }
+          return field;
+        })
+      );
+      onOverridesChange?.(next);
+    },
+    [overrides, onOverridesChange]
   );
 
   const handleSave = useCallback(async () => {
@@ -378,7 +432,26 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
           ) : (
             Array.from({ length: pageCount }).map((_, pageIdx) => {
               const pageSize = pageSizes[pageIdx] || { width: 612, height: 792 };
-              const fieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
+              const pdfFieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
+              const responsibilityFallbackFields = fields
+                .filter((f) => RESPONSIBILITY_FIELD_IDS.has(f.id) && f.page === pageIdx + 1)
+                .filter((f) => !pdfFieldsForPage.some((pf) => pf.name === f.id))
+                .map((f) => ({
+                  name: f.id,
+                  pageIndex: pageIdx,
+                  x: f.x,
+                  y: f.y,
+                  width: f.width,
+                  height: f.height,
+                  fontSize: Math.min(10, f.height || 10),
+                  color: f.color,
+                }));
+              const fieldsForPage = [...pdfFieldsForPage, ...responsibilityFallbackFields].sort((a, b) => {
+                const aResp = RESPONSIBILITY_FIELD_IDS.has(a.name);
+                const bResp = RESPONSIBILITY_FIELD_IDS.has(b.name);
+                if (aResp === bResp) return 0;
+                return aResp ? 1 : -1;
+              });
               const pageWidth = pageSize.width * DISPLAY_SCALE;
               const pageHeight = pageSize.height * DISPLAY_SCALE;
               return (
@@ -422,11 +495,13 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                         input.focus();
                       };
                       const isTextArea = (fieldMeta?.height ?? field.height) > 24;
+                      const isResponsibilitySelect = RESPONSIBILITY_FIELD_IDS.has(field.name);
                       const isAutoFilled = Boolean(fieldMeta?.isAutoFilled) && baseColor !== 'yellow';
+                      const showAutoFilledState = isResponsibilitySelect ? false : isAutoFilled;
                       const colorClass =
                         baseColor === 'yellow'
                           ? 'contract-input-yellow'
-                          : isAutoFilled
+                          : showAutoFilledState
                           ? 'contract-input-green'
                           : 'contract-input-blue';
                       const style: CSSProperties = {
@@ -438,12 +513,68 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                         textAlign: 'center',
                       };
                       const classNames = ['contract-input', colorClass];
-                      if (isAutoFilled) classNames.push('autofilled');
+                      if (showAutoFilledState) classNames.push('autofilled');
                       if (unmappedIds.has(field.name)) classNames.push('unmapped');
-
+                      const binaryGroup = BINARY_FIELD_MAP.get(field.name);
+                      const isBinaryChoice = Boolean(binaryGroup);
+                      let binarySelectedId: string | null = null;
+                      if (binaryGroup) {
+                        const yesVal =
+                          (fieldMetaMap.get(binaryGroup.yesId)?.value ?? valueMap.get(binaryGroup.yesId) ?? '').trim();
+                        const noVal =
+                          (fieldMetaMap.get(binaryGroup.noId)?.value ?? valueMap.get(binaryGroup.noId) ?? '').trim();
+                        binarySelectedId = yesVal ? binaryGroup.yesId : noVal ? binaryGroup.noId : null;
+                      }
+                      const isBinarySelected = isBinaryChoice && field.name === binarySelectedId;
+                      const hasBinarySelection = Boolean(binarySelectedId);
+                      const binaryClasses = [
+                        'contract-choice',
+                        colorClass,
+                        isBinarySelected ? 'selected' : '',
+                        !hasBinarySelection ? 'unmapped' : '',
+                        editableEnabled ? '' : 'read-only',
+                      ]
+                        .filter(Boolean)
+                        .join(' ');
+                      const wrapperClassNames = ['contract-input-wrapper'];
+                      if (isResponsibilitySelect) wrapperClassNames.push('responsibility-wrapper');
                       return (
-                        <div key={`${field.name}-${pageIdx}`} className="contract-input-wrapper" style={style}>
-                          {editableEnabled ? (
+                        <div key={`${field.name}-${pageIdx}`} className={wrapperClassNames.join(' ')} style={style}>
+                          {isBinaryChoice ? (
+                            <button
+                              type="button"
+                              className={binaryClasses}
+                              onClick={() => {
+                                if (!editableEnabled) return;
+                                handleBinaryChoice(field.name);
+                              }}
+                              aria-pressed={isBinarySelected}
+                              aria-label={`${field.label || field.name} ${isBinarySelected ? 'selected' : 'not selected'}`}
+                            >
+                              {isBinarySelected ? 'X' : ''}
+                            </button>
+                          ) : isResponsibilitySelect ? (
+                            editableEnabled ? (
+                              <select
+                                className={[...classNames, 'contract-select'].join(' ')}
+                                value={displayValue}
+                                onChange={(e) => handleValueChange(e.target.value)}
+                              >
+                                {RESPONSIBILITY_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div
+                                className={['contract-readonly-value', colorClass].join(' ')}
+                                aria-label={field.name}
+                              >
+                                {readOnlyValue}
+                              </div>
+                            )
+                          ) : editableEnabled ? (
                             isTextArea ? (
                               <textarea
                                 className={classNames.join(' ')}

@@ -29,7 +29,6 @@ const MIN_FONT_SIZE = 6;
 const HEIGHT_MARGIN = 2; // leave more headroom so text sits cleanly inside shallow fields
 const HEIGHT_SCALE = 0.92; // reduce further to account for field padding/appearance
 const WIDTH_PADDING = 2;
-const NEUTRAL_BORDER = rgb(0, 0, 0);
 const BLUE_FILL = rgb(232 / 255, 240 / 255, 255 / 255);
 const YELLOW_FILL = rgb(255 / 255, 247 / 255, 209 / 255);
 
@@ -80,14 +79,16 @@ export async function buildContractPdf(
   if (flatten) {
     form.getFields().forEach((field) => {
       try {
-        field.setText('');
+        form.removeField(field);
       } catch {
         /* ignore */
       }
     });
-    // Refresh appearances after clearing so old defaults do not get flattened underneath our new text.
-    form.updateFieldAppearances(font);
-    form.flatten();
+    try {
+      form.flatten();
+    } catch {
+      /* ignore */
+    }
   }
 
   const pageSizes: { width: number; height: number }[] = pdf.getPages().map((p) => ({
@@ -133,8 +134,7 @@ export async function buildContractPdf(
           width: rectWidth,
           height: rectHeight,
           color: fillColor,
-          borderColor: NEUTRAL_BORDER,
-          borderWidth: 0.5,
+          borderWidth: 0,
         });
       }
     }

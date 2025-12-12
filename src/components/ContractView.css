@@ -75,6 +75,17 @@
   font-weight: 600;
 }
 
+.contract-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding: 0 2px;
+  font-size: 9pt;
+  line-height: 1.1;
+  background-position: right 2px center;
+  background-repeat: no-repeat;
+}
+
 .contract-input-blue,
 .contract-readonly-value.contract-input-blue,
 .contract-input-wrapper textarea.contract-input-blue {
@@ -118,11 +129,60 @@
   box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.2);
 }
 
+.contract-choice.unmapped {
+  border-color: #d97706;
+  box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.2);
+}
+
 .contract-input:focus,
 .contract-input-wrapper textarea:focus {
   outline: none;
   border: 1.2px solid #1a1a1a;
   box-shadow: 0 0 0 0.8px rgba(0, 0, 0, 0.2);
+}
+
+.contract-choice {
+  width: 100%;
+  height: 100%;
+  border: 0.9px solid #1a1a1a;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  font-family: 'Calibri', 'Arial', sans-serif;
+  font-size: 10pt;
+  font-weight: 700;
+  line-height: 1;
+  background: #ffffff;
+  color: #0c1424;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 0.35px rgba(0, 0, 0, 0.05);
+}
+
+.contract-choice.selected {
+  color: #0c1424;
+}
+
+.contract-choice.read-only {
+  cursor: default;
+}
+
+.contract-choice.contract-input-blue {
+  background: #e8f0ff;
+}
+
+.contract-choice.contract-input-green {
+  background: #dff6e8;
+}
+
+.contract-choice.contract-input-yellow {
+  background: #fff7d1;
+}
+
+.contract-input-wrapper.responsibility-wrapper {
+  z-index: 3;
 }
 
 .contract-view-empty {
@@ -145,6 +205,15 @@
   .contract-input-wrapper textarea.contract-input-green {
     background: #e8f0ff !important;
     border-color: #1a1a1a !important;
+  }
+
+  .contract-input,
+  .contract-readonly-value,
+  .contract-input-wrapper textarea,
+  .contract-choice {
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
   }
 
   .contract-page {

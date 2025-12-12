@@ -32,6 +32,8 @@ type ProposalWithPricing = Proposal & {
 };
 
 const templateFields: TemplateField[] = contractTemplate as TemplateField[];
+const OPTIONAL_UNMAPPED_FIELD_IDS = new Set(['p1_16']);
+const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set(['p1_35', 'p1_37', 'p1_38', 'p1_39', 'p1_40']);
 
 function normalizeProposal(pr: Proposal): ProposalWithPricing {
   try {
@@ -135,6 +137,15 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   const waterFeatures = pickWaterFeatures(proposal.waterFeatures?.selections);
 
   const overrideDefault = defaultFromLabel(field.label);
+  const isPlumbingResponsibilityField = PLUMBING_RESPONSIBILITY_FIELD_IDS.has(field.id);
+
+  if (isPlumbingResponsibilityField) {
+    if (field.id === 'p1_38') {
+      const hasAutoFillRun = Boolean(proposal.plumbing?.runs?.autoFillRun);
+      return hasAutoFillRun ? 'BY BUILDER' : overrideDefault || 'BY BUYER';
+    }
+    return overrideDefault || 'BY BUILDER';
+  }
 
   if (/job site/.test(label) || /address/.test(label)) return info.address || '';
   if (/buyer/.test(label) && /name/.test(label)) return info.customerName || '';
@@ -147,7 +158,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return formatCurrency(pricing);
   }
 
-  // Payment schedule amounts are now designer-entered; leave empty.
+  // Payment schedule amounts are designer-entered; leave empty.
+  if (field.id.startsWith('p1_pay_')) return '';
   if (/non-refundable deposit/.test(label)) return '';
   if (/prior to shotcete/.test(label) || /prior to excavation/.test(label)) return '';
   if (/prior to decking/.test(label)) return '';
@@ -156,6 +168,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/construction to substanstially commence/.test(label)) return '';
   if (/construction to be substanstially complete/.test(label)) return '';
 
+  if (['p1_17', 'p1_18', 'p1_19', 'p1_20'].includes(field.id)) return '';
+
   if (/perimeter/.test(label) && /surface area/.test(label)) return String(specs.surfaceArea || '');
   if (/perimeter/.test(label)) return String(specs.perimeter || specs.fiberglassPerimeter || '');
   if (/surface area/.test(label)) return String(specs.surfaceArea || '');
@@ -163,7 +177,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/pool size/.test(label) && field.id === 'p1_13') return String(specs.maxWidth || '');
   if (/pool depth/.test(label) && field.id === 'p1_14') return String(specs.shallowDepth || '');
   if (/pool depth/.test(label) && field.id === 'p1_15') return String(specs.endDepth || '');
-  if (/pool depth/.test(label) && field.id === 'p1_16') return specs.endDepth ? 'POOL DEPTH DOES NOT PERMIT DIVING' : '';
+  if (/pool depth/.test(label) && field.id === 'p1_16') return '';
 
   if (/hoa approval/.test(label)) return 'YES';
   if (/financing required/.test(label)) return 'NO';
@@ -246,7 +260,7 @@ export async function getEditableContractFields(
       const [x0, y0, x1, y1] = field.rect;
       const width = x1 - x0;
       const height = y1 - y0;
-      const autoValue = computeAutoValue(
+      let autoValue = computeAutoValue(
         {
           id: field.id,
           page: field.page,
@@ -263,9 +277,11 @@ export async function getEditableContractFields(
         },
         normalized
       );
+      if (field.id === 'p1_30') autoValue = '1';
       const hasOverride = overrides ? Object.prototype.hasOwnProperty.call(overrides, field.id) : false;
       const overrideVal = hasOverride ? overrides?.[field.id] : undefined;
       const value = hasOverride && overrideVal !== null && overrideVal !== undefined ? String(overrideVal) : autoValue;
+      const shouldAutoFill = field.id === 'p1_30' ? false : !hasOverride && Boolean(autoValue);
       return {
         id: field.id,
         page: field.page,
@@ -277,7 +293,7 @@ export async function getEditableContractFields(
         color: field.color,
         value: value || '',
         autoValue,
-        isAutoFilled: !hasOverride && Boolean(autoValue),
+        isAutoFilled: shouldAutoFill,
         isOverridden: hasOverride,
       };
     });
@@ -287,6 +303,7 @@ export async function getEditableContractFields(
 
 export function listUnmappedFields(fields: ContractFieldRender[]): string[] {
   return fields
+    .filter((f) => !OPTIONAL_UNMAPPED_FIELD_IDS.has(f.id))
     .filter((f) => !f.value && f.color === 'blue' && (f.label || '').trim())
     .map((f) => f.label || f.id);
 }

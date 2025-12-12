@@ -127,7 +127,7 @@
       381.54998779296875,
       342.8900146484375
     ],
-    "label": "Non-Refundable Deposit: $0.00 Perimeter:",
+    "label": "Pool Specifications - Perimeter",
     "color": "blue",
     "id": "p1_10"
   },
@@ -139,7 +139,7 @@
       495.94000244140625,
       342.8900146484375
     ],
-    "label": "Non-Refundable Deposit: $0.00 Perimeter: ' Surface Area:",
+    "label": "Pool Specifications - Surface Area",
     "color": "blue",
     "id": "p1_11"
   },
@@ -151,7 +151,7 @@
       358.75,
       361.6099853515625
     ],
-    "label": "30% - Prior to Shotcete $0.00 Pool Size:",
+    "label": "Pool Specifications - Pool Size Length",
     "color": "blue",
     "id": "p1_12"
   },
@@ -163,7 +163,7 @@
       404.3500061035156,
       361.6099853515625
     ],
-    "label": "30% - Prior to Shotcete $0.00 Pool Size: ' X",
+    "label": "Pool Specifications - Pool Size Width",
     "color": "blue",
     "id": "p1_13"
   },
@@ -175,7 +175,7 @@
       358.75,
       380.3299865722656
     ],
-    "label": "10% - Prior to Interior Finish $0.00 Pool Depth:",
+    "label": "Pool Specifications - Pool Depth Shallow",
     "color": "blue",
     "id": "p1_14"
   },
@@ -187,7 +187,7 @@
       404.3500061035156,
       380.3299865722656
     ],
-    "label": "10% - Prior to Interior Finish $0.00 Pool Depth: ' X",
+    "label": "Pool Specifications - Pool Depth Deep",
     "color": "blue",
     "id": "p1_15"
   },
@@ -199,7 +199,7 @@
       449.9739990234375,
       380.3299865722656
     ],
-    "label": "- Prior to Interior Finish $0.00 Pool Depth: ' X ' X",
+    "label": "Pool Specifications - Pool Depth Notes",
     "color": "blue",
     "id": "p1_16"
   },
@@ -211,8 +211,8 @@
       211.5800018310547,
       402.5299987792969
     ],
-    "label": "HOA APPROVAL REQUIRED?",
-    "color": "yellow",
+    "label": "HOA Approval Required - Yes",
+    "color": "blue",
     "id": "p1_17"
   },
   {
@@ -223,8 +223,8 @@
       257.57000732421875,
       402.5299987792969
     ],
-    "label": "HOA APPROVAL REQUIRED? YES",
-    "color": "yellow",
+    "label": "HOA Approval Required - No",
+    "color": "blue",
     "id": "p1_18"
   },
   {
@@ -235,8 +235,8 @@
       449.9739990234375,
       402.5299987792969
     ],
-    "label": "HOA APPROVAL REQUIRED? YES NO FINANCING REQUIRED?",
-    "color": "yellow",
+    "label": "Financing Required - Yes",
+    "color": "blue",
     "id": "p1_19"
   },
   {
@@ -247,8 +247,8 @@
       495.94000244140625,
       402.5299987792969
     ],
-    "label": "HOA APPROVAL REQUIRED? YES NO FINANCING REQUIRED? YES",
-    "color": "yellow",
+    "label": "Financing Required - No",
+    "color": "blue",
     "id": "p1_20"
   },
   {
@@ -538,6 +538,174 @@
     "label": "Initials Initials",
     "color": "yellow",
     "id": "p1_44"
+  },
+  {
+    "page": 1,
+    "rect": [
+      226.25,
+      334.55120849609375,
+      243.5664825439453,
+      342.3116149902344
+    ],
+    "label": "Payment - Non-Refundable Deposit Amount",
+    "color": "blue",
+    "id": "p1_pay_deposit"
+  },
+  {
+    "page": 1,
+    "rect": [
+      226.25,
+      343.91119384765625,
+      243.5664825439453,
+      351.6716003417969
+    ],
+    "label": "Payment - Prior to Excavation Amount",
+    "color": "blue",
+    "id": "p1_pay_excavation"
+  },
+  {
+    "page": 1,
+    "rect": [
+      226.25,
+      353.2712097167969,
+      243.5664825439453,
+      361.0316162109375
+    ],
+    "label": "Payment - Prior to Shotcete Amount",
+    "color": "blue",
+    "id": "p1_pay_shotcete"
+  },
+  {
+    "page": 1,
+    "rect": [
+      226.25,
+      362.6311950683594,
+      243.5664825439453,
+      370.3916015625
+    ],
+    "label": "Payment - Prior to Decking Amount",
+    "color": "blue",
+    "id": "p1_pay_decking"
+  },
+  {
+    "page": 1,
+    "rect": [
+      226.25,
+      371.9912109375,
+      243.5664825439453,
+      379.7516174316406
+    ],
+    "label": "Payment - Prior to Interior Finish Amount",
+    "color": "blue",
+    "id": "p1_pay_interior_finish"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      419.8912048339844,
+      278.5349426269531,
+      427.651611328125
+    ],
+    "label": "General Construction 1 - BY BUILDER",
+    "color": "blue",
+    "id": "p1_gc_1"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      429.2511901855469,
+      278.5349426269531,
+      437.0115966796875
+    ],
+    "label": "General Construction 2 - BY BUILDER",
+    "color": "blue",
+    "id": "p1_gc_2"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      438.6112060546875,
+      278.5349426269531,
+      446.3716125488281
+    ],
+    "label": "General Construction 3 - BY BUILDER",
+    "color": "blue",
+    "id": "p1_gc_3"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      447.97119140625,
+      278.5349426269531,
+      455.7315979003906
+    ],
+    "label": "General Construction 4 - BY BUYER",
+    "color": "blue",
+    "id": "p1_gc_4"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      457.3312072753906,
+      278.5349426269531,
+      465.09161376953125
+    ],
+    "label": "General Construction 5 - BY BUYER",
+    "color": "blue",
+    "id": "p1_gc_5"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      466.6911926269531,
+      278.5349426269531,
+      474.45159912109375
+    ],
+    "label": "General Construction 6 - BY BUYER",
+    "color": "blue",
+    "id": "p1_gc_6"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      485.41119384765625,
+      278.5349426269531,
+      493.1716003417969
+    ],
+    "label": "General Construction 7 - BY BUYER",
+    "color": "blue",
+    "id": "p1_gc_7"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      494.7712097167969,
+      278.5349426269531,
+      502.5316162109375
+    ],
+    "label": "General Construction 8 - BY BUYER",
+    "color": "blue",
+    "id": "p1_gc_8"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      504.1311950683594,
+      278.5349426269531,
+      511.8916015625
+    ],
+    "label": "General Construction 9 - BY BUYER",
+    "color": "blue",
+    "id": "p1_gc_9"
   },
   {
     "page": 2,
