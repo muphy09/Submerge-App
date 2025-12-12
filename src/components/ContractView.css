@@ -79,9 +79,20 @@
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  padding: 0 2px;
-  font-size: 9pt;
-  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 1px 3px;
+  font-family: 'Calibri', 'Arial', sans-serif;
+  font-size: 10pt;
+  line-height: 1.2;
+  font-weight: 600;
+  color: #0c1424;
+  text-align: center;
+  text-align-last: center;
+  background-color: inherit;
   background-position: right 2px center;
   background-repeat: no-repeat;
 }
@@ -183,6 +194,23 @@
 
 .contract-input-wrapper.responsibility-wrapper {
   z-index: 3;
+}
+
+.contract-input-wrapper.gc-responsibility {
+  align-items: center;
+}
+
+.contract-input.gc-responsibility,
+.contract-select.gc-responsibility,
+.contract-readonly-value.gc-responsibility {
+  padding: 0 4px;
+  line-height: 1.05;
+  font-size: 10pt;
+}
+
+.contract-readonly-value.gc-responsibility {
+  align-items: center;
+  justify-content: center;
 }
 
 .contract-view-empty {

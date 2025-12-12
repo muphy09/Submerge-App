@@ -34,6 +34,7 @@ type ProposalWithPricing = Proposal & {
 const templateFields: TemplateField[] = contractTemplate as TemplateField[];
 const OPTIONAL_UNMAPPED_FIELD_IDS = new Set(['p1_16']);
 const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set(['p1_35', 'p1_37', 'p1_38', 'p1_39', 'p1_40']);
+const SANITATION_NONE_FIELD_IDS = new Set(['p1_24', 'p1_25']);
 
 function normalizeProposal(pr: Proposal): ProposalWithPricing {
   try {
@@ -129,7 +130,16 @@ function getRetailPrice(proposal: ProposalWithPricing): number {
   );
 }
 
+function isMeaningfulAutoValue(value: string | number | null | undefined): boolean {
+  if (value === null || value === undefined) return false;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized !== 'none';
+}
+
 function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPricing): string {
+  if (SANITATION_NONE_FIELD_IDS.has(field.id)) return 'None';
+
   const label = field.label.toLowerCase();
   const info = proposal.customerInfo || {};
   const specs = proposal.poolSpecs || ({} as Proposal['poolSpecs']);
@@ -182,18 +192,33 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/hoa approval/.test(label)) return 'YES';
   if (/financing required/.test(label)) return 'NO';
 
-  if (/auxiliary pump i/.test(label)) return proposal.equipment?.auxiliaryPumps?.[0]?.name || overrideDefault || '';
-  if (/auxiliary pump ii/.test(label)) return proposal.equipment?.auxiliaryPumps?.[1]?.name || overrideDefault || '';
-  if (/sanitation i/.test(label)) return proposal.equipment?.saltSystem?.name || overrideDefault || '';
-  if (/sanitation ii/.test(label)) return overrideDefault;
-  if (/sanitation iii/.test(label)) return overrideDefault;
-  if (/cleaner/.test(label)) return proposal.equipment?.cleaner?.name || overrideDefault || '';
-  if (/heater/.test(label)) return proposal.equipment?.heater?.name || overrideDefault || '';
-  if (/gas line/.test(label)) {
-    const gasRun = proposal.plumbing?.runs?.gasRun;
-    return gasRun ? `${gasRun} LF` : overrideDefault;
+  if (/auxiliary pump i/.test(label)) {
+    const auxPumps = proposal.equipment?.auxiliaryPumps?.filter(Boolean) || [];
+    const legacyAux = !auxPumps.length && proposal.equipment?.auxiliaryPump ? [proposal.equipment.auxiliaryPump] : [];
+    const pumps = [...auxPumps, ...legacyAux];
+    return pumps[0]?.name || 'None';
   }
-  if (/line type/.test(label)) return overrideDefault;
+  if (/auxiliary pump ii/.test(label)) {
+    const auxPumps = proposal.equipment?.auxiliaryPumps?.filter(Boolean) || [];
+    const legacyAux = !auxPumps.length && proposal.equipment?.auxiliaryPump ? [proposal.equipment.auxiliaryPump] : [];
+    const pumps = [...auxPumps, ...legacyAux];
+    return pumps[1]?.name || 'None';
+  }
+  if (/sanitation i/.test(label)) return proposal.equipment?.saltSystem?.name || 'None';
+  if (/sanitation ii/.test(label)) return 'None';
+  if (/sanitation iii/.test(label)) return 'None';
+  if (/cleaner/.test(label)) {
+    const cleanerQty = proposal.equipment?.cleanerQuantity ?? 0;
+    return cleanerQty > 0 ? proposal.equipment?.cleaner?.name || '' : 'None';
+  }
+  if (/heater/.test(label)) {
+    const heaterQty = proposal.equipment?.heaterQuantity ?? 0;
+    return heaterQty > 0 ? proposal.equipment?.heater?.name || '' : 'None';
+  }
+  if (/gas line/.test(label)) {
+    return 'None';
+  }
+  if (/line type/.test(label)) return 'None';
   if (/waterline tile/.test(label)) return 'Included';
   if (/accent tile/.test(label)) return proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Yes' : 'None';
   if (/coping/.test(label)) {
@@ -281,7 +306,7 @@ export async function getEditableContractFields(
       const hasOverride = overrides ? Object.prototype.hasOwnProperty.call(overrides, field.id) : false;
       const overrideVal = hasOverride ? overrides?.[field.id] : undefined;
       const value = hasOverride && overrideVal !== null && overrideVal !== undefined ? String(overrideVal) : autoValue;
-      const shouldAutoFill = field.id === 'p1_30' ? false : !hasOverride && Boolean(autoValue);
+      const shouldAutoFill = field.id === 'p1_30' ? false : !hasOverride && isMeaningfulAutoValue(autoValue);
       return {
         id: field.id,
         page: field.page,

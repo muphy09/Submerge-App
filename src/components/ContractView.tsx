@@ -47,7 +47,24 @@ const RESPONSIBILITY_FIELD_IDS = new Set([
   'p1_39', // Plumbing & Equipment - Plumbing/piping responsibility
   'p1_40', // Plumbing & Equipment - Equipment pad responsibility
 ]);
+const GENERAL_CONSTRUCTION_RESPONSIBILITY_IDS = new Set([
+  'p1_gc_1',
+  'p1_gc_2',
+  'p1_gc_3',
+  'p1_gc_4',
+  'p1_gc_5',
+  'p1_gc_6',
+  'p1_gc_7',
+  'p1_gc_8',
+  'p1_gc_9',
+]);
+const GENERAL_CONSTRUCTION_MIN_WIDTH = 78;
+const GENERAL_CONSTRUCTION_MIN_HEIGHT = 18;
 const RESPONSIBILITY_OPTIONS = ['BY BUILDER', 'BY BUYER'];
+const CUSTOM_SELECT_FIELDS: Record<string, string[]> = {
+  p1_28: ['None', 'BY BUILDER', 'BY BUYER'], // Gas line
+  p1_29: ['None', 'NATURAL GAS', 'PROPANE'], // Line type
+};
 const BINARY_FIELD_MAP = new Map<string, { yesId: string; noId: string }>(
   BINARY_FIELD_GROUPS.flatMap((group) => [
     [group.yesId, group],
@@ -471,10 +488,10 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                     {fieldsForPage.map((field) => {
                       const fieldMeta = fieldMetaMap.get(field.name);
                       const baseColor = fieldMeta?.color || field.color;
-                      const left = field.x * DISPLAY_SCALE;
-                      const top = field.y * DISPLAY_SCALE;
-                      const width = field.width * DISPLAY_SCALE;
-                      const height = field.height * DISPLAY_SCALE;
+                      const baseLeft = field.x * DISPLAY_SCALE;
+                      const baseTop = field.y * DISPLAY_SCALE;
+                      const baseWidth = field.width * DISPLAY_SCALE;
+                      const baseHeight = field.height * DISPLAY_SCALE;
                       const value = fieldMeta?.value ?? valueMap.get(field.name);
                       const isDateField = CONTRACT_DATE_FIELD_IDS.has(field.name);
                       const parsedDateValue = isDateField ? toDateInputValue(value ?? '') : '';
@@ -496,6 +513,20 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                       };
                       const isTextArea = (fieldMeta?.height ?? field.height) > 24;
                       const isResponsibilitySelect = RESPONSIBILITY_FIELD_IDS.has(field.name);
+                      const isGeneralConstructionResponsibility =
+                        isResponsibilitySelect && GENERAL_CONSTRUCTION_RESPONSIBILITY_IDS.has(field.name);
+                      const customSelectOptions = CUSTOM_SELECT_FIELDS[field.name];
+                      const isCustomSelect = Boolean(customSelectOptions);
+                      const normalizedDisplayValue =
+                        displayValue === undefined || displayValue === null ? '' : String(displayValue);
+                      const displayMatchesCustomOption =
+                        isCustomSelect && Boolean(customSelectOptions?.includes(normalizedDisplayValue));
+                      const customSelectValue = isCustomSelect
+                        ? displayMatchesCustomOption || !normalizedDisplayValue
+                          ? normalizedDisplayValue || customSelectOptions?.[0] || ''
+                          : normalizedDisplayValue
+                        : '';
+                      const hasCustomSelectValue = isCustomSelect && Boolean(normalizedDisplayValue) && !displayMatchesCustomOption;
                       const isAutoFilled = Boolean(fieldMeta?.isAutoFilled) && baseColor !== 'yellow';
                       const showAutoFilledState = isResponsibilitySelect ? false : isAutoFilled;
                       const colorClass =
@@ -504,6 +535,22 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                           : showAutoFilledState
                           ? 'contract-input-green'
                           : 'contract-input-blue';
+                      let left = baseLeft;
+                      let top = baseTop;
+                      let width = baseWidth;
+                      let height = baseHeight;
+                      if (isGeneralConstructionResponsibility) {
+                        if (width < GENERAL_CONSTRUCTION_MIN_WIDTH) {
+                          const delta = GENERAL_CONSTRUCTION_MIN_WIDTH - width;
+                          left -= delta / 2;
+                          width = GENERAL_CONSTRUCTION_MIN_WIDTH;
+                        }
+                        if (height < GENERAL_CONSTRUCTION_MIN_HEIGHT) {
+                          const delta = GENERAL_CONSTRUCTION_MIN_HEIGHT - height;
+                          top -= delta / 2;
+                          height = GENERAL_CONSTRUCTION_MIN_HEIGHT;
+                        }
+                      }
                       const style: CSSProperties = {
                         left: `${left}px`,
                         top: `${top}px`,
@@ -515,6 +562,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                       const classNames = ['contract-input', colorClass];
                       if (showAutoFilledState) classNames.push('autofilled');
                       if (unmappedIds.has(field.name)) classNames.push('unmapped');
+                      if (isGeneralConstructionResponsibility) classNames.push('gc-responsibility');
                       const binaryGroup = BINARY_FIELD_MAP.get(field.name);
                       const isBinaryChoice = Boolean(binaryGroup);
                       let binarySelectedId: string | null = null;
@@ -538,6 +586,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                         .join(' ');
                       const wrapperClassNames = ['contract-input-wrapper'];
                       if (isResponsibilitySelect) wrapperClassNames.push('responsibility-wrapper');
+                      if (isGeneralConstructionResponsibility) wrapperClassNames.push('gc-responsibility');
                       return (
                         <div key={`${field.name}-${pageIdx}`} className={wrapperClassNames.join(' ')} style={style}>
                           {isBinaryChoice ? (
@@ -561,6 +610,36 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                                 onChange={(e) => handleValueChange(e.target.value)}
                               >
                                 {RESPONSIBILITY_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div
+                                className={[
+                                  'contract-readonly-value',
+                                  colorClass,
+                                  isGeneralConstructionResponsibility ? 'gc-responsibility' : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')}
+                                aria-label={field.name}
+                              >
+                                {readOnlyValue}
+                              </div>
+                            )
+                          ) : isCustomSelect ? (
+                            editableEnabled ? (
+                              <select
+                                className={[...classNames, 'contract-select'].join(' ')}
+                                value={customSelectValue}
+                                onChange={(e) => handleValueChange(e.target.value)}
+                              >
+                                {hasCustomSelectValue ? (
+                                  <option value={normalizedDisplayValue}>{normalizedDisplayValue}</option>
+                                ) : null}
+                                {(customSelectOptions || []).map((option) => (
                                   <option key={option} value={option}>
                                     {option}
                                   </option>
