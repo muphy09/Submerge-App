@@ -14,7 +14,8 @@ import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
 import { assertDesignerAllowed, ensureAdminUser } from './services/franchiseUsersAdapter';
-import { setSupabaseContext } from './services/supabaseClient';
+import { getSupabaseReachability, isSupabaseEnabled, setSupabaseContext } from './services/supabaseClient';
+import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
 import './App.css';
 
 type UserSession = {
@@ -36,6 +37,7 @@ function AppContent() {
   const [showPricingData, setShowPricingData] = useState(false);
   const [session, setSession] = useState<UserSession | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [cloudIssue, setCloudIssue] = useState<CloudConnectionIssue>(null);
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
     try {
@@ -163,6 +165,39 @@ function AppContent() {
     }
   };
 
+  useEffect(() => {
+    if (!isSupabaseEnabled()) return;
+    let cancelled = false;
+
+    const updateCloudStatus = async (forceRefresh = false) => {
+      const reachability = await getSupabaseReachability(forceRefresh);
+      if (cancelled) return;
+      if (!reachability.reachable && (reachability.reason === 'no-internet' || reachability.reason === 'server-issue')) {
+        setCloudIssue(reachability.reason);
+      } else {
+        setCloudIssue(null);
+      }
+    };
+
+    const handleOffline = () => setCloudIssue('no-internet');
+    const handleOnline = () => void updateCloudStatus(true);
+
+    void updateCloudStatus(true);
+    const intervalId = window.setInterval(() => {
+      void updateCloudStatus(true);
+    }, 15000);
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
   // Show navigation bar on main pages, hide it on proposal form/view pages
   const showNavigation = !location.pathname.startsWith('/proposal/');
 
@@ -204,6 +239,7 @@ function AppContent() {
         onInstall={handleInstallUpdate}
         errorMessage={updateError}
       />
+      <CloudConnectionNotice reason={cloudIssue} />
       {session && location.pathname === '/' && (
         <div className="app-session-meta">
           <div className="app-session-line">

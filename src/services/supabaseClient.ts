@@ -17,9 +17,17 @@ let currentContext: SupabaseContext = {};
 // Cache Supabase reachability checks so we do not spam the endpoint
 let lastReachabilityCheck = 0;
 let lastReachabilityResult = false;
+let lastReachabilityReason: SupabaseReachabilityReason = null;
 
 const REACHABILITY_CACHE_MS = 5000;
 const REACHABILITY_TIMEOUT_MS = 4500;
+
+export type SupabaseReachabilityReason = 'no-internet' | 'server-issue' | 'disabled' | null;
+
+export type SupabaseReachability = {
+  reachable: boolean;
+  reason: SupabaseReachabilityReason;
+};
 
 function buildHeaders(context: SupabaseContext) {
   const headers: Record<string, string> = {};
@@ -76,25 +84,35 @@ export function setSupabaseContext(context: SupabaseContext) {
   currentContext = { ...context };
 }
 
+function cacheReachability(
+  reachable: boolean,
+  reason: SupabaseReachabilityReason,
+  timestamp = Date.now()
+): SupabaseReachability {
+  lastReachabilityCheck = timestamp;
+  lastReachabilityResult = reachable;
+  lastReachabilityReason = reason;
+  return { reachable, reason };
+}
+
 /**
  * Lightweight connectivity check to confirm we can talk to Supabase.
  * Uses a HEAD request against the proposals table with a short timeout.
  */
-export async function hasSupabaseConnection(forceRefresh = false): Promise<boolean> {
-  if (!isSupabaseEnabled()) return false;
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
-
+export async function getSupabaseReachability(forceRefresh = false): Promise<SupabaseReachability> {
   const now = Date.now();
+  if (!isSupabaseEnabled()) return cacheReachability(false, 'disabled', now);
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return cacheReachability(false, 'no-internet', now);
+  }
   if (!forceRefresh && now - lastReachabilityCheck < REACHABILITY_CACHE_MS) {
-    return lastReachabilityResult;
+    return { reachable: lastReachabilityResult, reason: lastReachabilityReason };
   }
 
   const url = getEnvVar('VITE_SUPABASE_URL');
   const key = getEnvVar('VITE_SUPABASE_ANON_KEY');
   if (!url || !key) {
-    lastReachabilityCheck = now;
-    lastReachabilityResult = false;
-    return false;
+    return cacheReachability(false, 'disabled', now);
   }
 
   const controller = new AbortController();
@@ -113,13 +131,16 @@ export async function hasSupabaseConnection(forceRefresh = false): Promise<boole
         signal: controller.signal,
       }
     );
-    lastReachabilityResult = response.ok;
-    return lastReachabilityResult;
+    return cacheReachability(response.ok, response.ok ? null : 'server-issue');
   } catch (error) {
-    lastReachabilityResult = false;
-    return false;
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    return cacheReachability(false, offline ? 'no-internet' : 'server-issue');
   } finally {
-    lastReachabilityCheck = now;
     clearTimeout(timeout);
   }
+}
+
+export async function hasSupabaseConnection(forceRefresh = false): Promise<boolean> {
+  const result = await getSupabaseReachability(forceRefresh);
+  return result.reachable;
 }
