@@ -86,6 +86,30 @@
   {
     "page": 1,
     "rect": [
+      373.21727999999985,
+      166.33999999999992,
+      474.46,
+      175.10000976562493
+    ],
+    "label": "Buyer Name (Contract Body)",
+    "color": "blue",
+    "id": "p1_body_buyer_name"
+  },
+  {
+    "page": 1,
+    "rect": [
+      233.94072000000006,
+      174.98000000000002,
+      337.27,
+      183.74000976562505
+    ],
+    "label": "Job Site Address (Contract Body)",
+    "color": "blue",
+    "id": "p1_body_job_site_address"
+  },
+  {
+    "page": 1,
+    "rect": [
       404.2300109863281,
       175.219970703125,
       495.93402099609375,
@@ -94,6 +118,30 @@
     "label": "equipment to be installed at the 0 for the cash price of",
     "color": "blue",
     "id": "p1_7"
+  },
+  {
+    "page": 1,
+    "rect": [
+      404.2300109863281,
+      183.8599853515625,
+      495.8139953613281,
+      192.5
+    ],
+    "label": "Deposit amount $0.00",
+    "color": "blue",
+    "id": "p1_deposit_amount"
+  },
+  {
+    "page": 1,
+    "rect": [
+      188.66000366210938,
+      191.780029296875,
+      211.5800018310547,
+      201.260009765625
+    ],
+    "label": "Installment count 4",
+    "color": "blue",
+    "id": "p1_installment_count"
   },
   {
     "page": 1,
@@ -398,6 +446,102 @@
   {
     "page": 1,
     "rect": [
+      316.71,
+      560.14,
+      334.71,
+      567.9004064941406
+    ],
+    "label": "34. Raised Beam 6\"",
+    "color": "blue",
+    "id": "p1_rbb_6"
+  },
+  {
+    "page": 1,
+    "rect": [
+      362.31,
+      560.14,
+      380.31,
+      567.9004064941406
+    ],
+    "label": "34. Raised Beam 12\"",
+    "color": "blue",
+    "id": "p1_rbb_12"
+  },
+  {
+    "page": 1,
+    "rect": [
+      407.91,
+      560.14,
+      425.91,
+      567.9004064941406
+    ],
+    "label": "34. Raised Beam 18\"",
+    "color": "blue",
+    "id": "p1_rbb_18"
+  },
+  {
+    "page": 1,
+    "rect": [
+      453.78,
+      560.14,
+      471.78,
+      567.9004064941406
+    ],
+    "label": "34. Raised Beam 24\"",
+    "color": "blue",
+    "id": "p1_rbb_24"
+  },
+  {
+    "page": 1,
+    "rect": [
+      316.71,
+      569.5,
+      334.71,
+      577.2604064941406
+    ],
+    "label": "34. Raised Beam 30\"",
+    "color": "blue",
+    "id": "p1_rbb_30"
+  },
+  {
+    "page": 1,
+    "rect": [
+      362.31,
+      569.5,
+      380.31,
+      577.2604064941406
+    ],
+    "label": "34. Raised Beam 36\"",
+    "color": "blue",
+    "id": "p1_rbb_36"
+  },
+  {
+    "page": 1,
+    "rect": [
+      407.91,
+      569.5,
+      425.91,
+      577.2604064941406
+    ],
+    "label": "34. Raised Beam 42\"",
+    "color": "blue",
+    "id": "p1_rbb_42"
+  },
+  {
+    "page": 1,
+    "rect": [
+      453.78,
+      569.5,
+      471.78,
+      577.2604064941406
+    ],
+    "label": "34. Raised Beam 48\"",
+    "color": "blue",
+    "id": "p1_rbb_48"
+  },
+  {
+    "page": 1,
+    "rect": [
       404.2300109863281,
       578.6199951171875,
       559.4400024414062,
@@ -418,6 +562,18 @@
     "label": "15. Skimmer QTY:",
     "color": "blue",
     "id": "p1_34"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      587.97998046875,
+      278.5349426269531,
+      597.4600219726562
+    ],
+    "label": "15. Skimmer Responsibility",
+    "color": "blue",
+    "id": "p1_15_resp"
   },
   {
     "page": 1,
@@ -446,6 +602,18 @@
   {
     "page": 1,
     "rect": [
+      237.2899932861328,
+      597.3400268554688,
+      278.5349426269531,
+      606.8200073242188
+    ],
+    "label": "16. Surface Returns Responsibility",
+    "color": "blue",
+    "id": "p1_16_resp"
+  },
+  {
+    "page": 1,
+    "rect": [
       404.2300109863281,
       597.3400268554688,
       559.4400024414062,
@@ -454,6 +622,18 @@
     "label": "16. Surface Returns QTY: 3 STD BY BUILDER 37. Coping",
     "color": "blue",
     "id": "p1_37"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      606.7000122070312,
+      278.5349426269531,
+      616.1799926757812
+    ],
+    "label": "17. Auto-Fill Responsibility",
+    "color": "blue",
+    "id": "p1_17_resp"
   },
   {
     "page": 1,
@@ -470,6 +650,18 @@
   {
     "page": 1,
     "rect": [
+      237.2899932861328,
+      616.0599975585938,
+      278.5349426269531,
+      625.5399780273438
+    ],
+    "label": "18. Plumbing/Piping Responsibility",
+    "color": "blue",
+    "id": "p1_18_resp"
+  },
+  {
+    "page": 1,
+    "rect": [
       473.0199890136719,
       616.0599975585938,
       559.4439697265625,
@@ -478,6 +670,18 @@
     "label": "All pool plumbing/piping and valves per plan BY BUILDER 39. Decking Drainage",
     "color": "blue",
     "id": "p1_39"
+  },
+  {
+    "page": 1,
+    "rect": [
+      237.2899932861328,
+      625.4199829101562,
+      278.5349426269531,
+      634.9000244140625
+    ],
+    "label": "19. Equipment Pad Responsibility",
+    "color": "blue",
+    "id": "p1_19_resp"
   },
   {
     "page": 1,
@@ -1334,6 +1538,126 @@
   {
     "page": 2,
     "rect": [
+      313.010009765625,
+      260.9000244140625,
+      559.4400024414062,
+      270.3800048828125
+    ],
+    "label": "73. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_73"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      279.6500244140625,
+      559.4400024414062,
+      289.1300048828125
+    ],
+    "label": "74. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_74"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      298.3699951171875,
+      559.4400024414062,
+      307.8500061035156
+    ],
+    "label": "75. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_75"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      317.0899963378906,
+      559.4400024414062,
+      326.57000732421875
+    ],
+    "label": "76. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_76"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      335.80999755859375,
+      559.4400024414062,
+      345.2900085449219
+    ],
+    "label": "77. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_77"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      354.5299987792969,
+      559.4400024414062,
+      364.010009765625
+    ],
+    "label": "78. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_78"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      373.25,
+      559.4400024414062,
+      382.7300109863281
+    ],
+    "label": "79. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_79"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      391.9700012207031,
+      559.4400024414062,
+      401.45001220703125
+    ],
+    "label": "80. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_80"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      410.6860046386719,
+      559.4400024414062,
+      420.19000244140625
+    ],
+    "label": "81. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_81"
+  },
+  {
+    "page": 2,
+    "rect": [
+      313.010009765625,
+      429.42999267578125,
+      559.4400024414062,
+      438.9100036621094
+    ],
+    "label": "82. Additional Specification",
+    "color": "blue",
+    "id": "p2_additional_spec_82"
+  },
+  {
+    "page": 2,
+    "rect": [
       97.44000244140625,
       476.7099914550781,
       211.5800018310547,
@@ -1406,6 +1730,18 @@
   {
     "page": 3,
     "rect": [
+      358.6300048828125,
+      54.96002197265625,
+      559.3200073242188,
+      66.719970703125
+    ],
+    "label": "Customer Name:",
+    "color": "blue",
+    "id": "p3_customer_name"
+  },
+  {
+    "page": 3,
+    "rect": [
       51.84000015258789,
       73.20001220703125,
       559.4400024414062,
@@ -1474,6 +1810,18 @@
     "label": "Initials Initials",
     "color": "yellow",
     "id": "p3_107"
+  },
+  {
+    "page": 4,
+    "rect": [
+      358.6300048828125,
+      54.96002197265625,
+      559.3200073242188,
+      66.719970703125
+    ],
+    "label": "Customer Name:",
+    "color": "blue",
+    "id": "p4_customer_name"
   },
   {
     "page": 4,
@@ -1594,6 +1942,18 @@
     "label": "Initials Initials",
     "color": "yellow",
     "id": "p4_117"
+  },
+  {
+    "page": 5,
+    "rect": [
+      358.6300048828125,
+      54.96002197265625,
+      559.3200073242188,
+      66.719970703125
+    ],
+    "label": "Customer Name:",
+    "color": "blue",
+    "id": "p5_customer_name"
   },
   {
     "page": 5,
@@ -1798,6 +2158,18 @@
     "label": "",
     "color": "yellow",
     "id": "p5_134"
+  },
+  {
+    "page": 6,
+    "rect": [
+      358.6300048828125,
+      54.96002197265625,
+      559.3200073242188,
+      66.719970703125
+    ],
+    "label": "Customer Name:",
+    "color": "blue",
+    "id": "p6_customer_name"
   },
   {
     "page": 6,

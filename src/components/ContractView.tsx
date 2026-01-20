@@ -26,7 +26,30 @@ GlobalWorkerOptions.workerSrc = pdfWorker;
 const DISPLAY_SCALE = 1.75;
 const MAX_RENDER_DPR = 3;
 const CONTRACT_DATE_FIELD_IDS = new Set(['p1_8', 'p1_9']);
-const OPTIONAL_FIELD_IDS = new Set(['p1_16']); // optional: freeform depth note
+const ADDITIONAL_SPEC_FIELD_IDS = [
+  'p2_additional_spec_73',
+  'p2_additional_spec_74',
+  'p2_additional_spec_75',
+  'p2_additional_spec_76',
+  'p2_additional_spec_77',
+  'p2_additional_spec_78',
+  'p2_additional_spec_79',
+  'p2_additional_spec_80',
+  'p2_additional_spec_81',
+  'p2_additional_spec_82',
+];
+const OPTIONAL_FIELD_IDS = new Set([
+  'p1_16', // optional: freeform depth note
+  'p1_rbb_6',
+  'p1_rbb_12',
+  'p1_rbb_18',
+  'p1_rbb_24',
+  'p1_rbb_30',
+  'p1_rbb_36',
+  'p1_rbb_42',
+  'p1_rbb_48',
+  ...ADDITIONAL_SPEC_FIELD_IDS,
+]);
 const BINARY_FIELD_GROUPS = [
   { yesId: 'p1_17', noId: 'p1_18' }, // HOA approval required
   { yesId: 'p1_19', noId: 'p1_20' }, // Financing required
@@ -41,11 +64,16 @@ const RESPONSIBILITY_FIELD_IDS = new Set([
   'p1_gc_7',
   'p1_gc_8',
   'p1_gc_9',
-  'p1_35', // Plumbing & Equipment - Skimmer responsibility
-  'p1_37', // Plumbing & Equipment - Surface Returns responsibility
-  'p1_38', // Plumbing & Equipment - Auto-Fill responsibility
-  'p1_39', // Plumbing & Equipment - Plumbing/piping responsibility
-  'p1_40', // Plumbing & Equipment - Equipment pad responsibility
+  'p1_39', // Plumbing & Equipment - Decking drainage responsibility
+  'p1_40', // Plumbing & Equipment - Downspout drainage responsibility
+  'p1_15_resp', // Plumbing & Equipment - Skimmer responsibility (left column)
+  'p1_16_resp', // Plumbing & Equipment - Surface Returns responsibility (left column)
+  'p1_17_resp', // Plumbing & Equipment - Auto-Fill responsibility (left column)
+  'p1_18_resp', // Plumbing & Equipment - Plumbing/piping responsibility (left column)
+  'p1_19_resp', // Plumbing & Equipment - Equipment pad responsibility (left column)
+  'p2_51', // Electrical connection responsibility
+  'p2_55', // Electrical bonding responsibility
+  'p2_57', // House panel upgrade responsibility
 ]);
 const GENERAL_CONSTRUCTION_RESPONSIBILITY_IDS = new Set([
   'p1_gc_1',
@@ -61,9 +89,25 @@ const GENERAL_CONSTRUCTION_RESPONSIBILITY_IDS = new Set([
 const GENERAL_CONSTRUCTION_MIN_WIDTH = 78;
 const GENERAL_CONSTRUCTION_MIN_HEIGHT = 18;
 const RESPONSIBILITY_OPTIONS = ['BY BUILDER', 'BY BUYER'];
+const FIELD_PLACEHOLDERS: Record<string, string> = Object.fromEntries(
+  ADDITIONAL_SPEC_FIELD_IDS.map((id) => [id, 'N/A'])
+);
 const CUSTOM_SELECT_FIELDS: Record<string, string[]> = {
   p1_28: ['None', 'BY BUILDER', 'BY BUYER'], // Gas line
   p1_29: ['None', 'NATURAL GAS', 'PROPANE'], // Line type
+  p1_32: ['None', 'Trim Tile', 'Marker Tiles'], // Accent tile on steps/benches
+  p2_68: ['NO', 'YES'], // Valve actuator for water features
+  p2_74: ['NONE', 'CONCRETE', 'METAL', 'OTHER'], // Bowls
+  p2_80: ['NONE', 'STANDARD', 'METAL'], // Scuppers or sconces
+  p2_91: ['BY BUILDER', 'BY BUYER'], // Initial filling responsibility
+  p2_92: ['BY BUILDER', 'BY BUYER'], // Brushing responsibility
+  p2_93: ['BY BUILDER', 'BY BUYER'], // Start-up responsibility
+  p2_94: ['YES', 'NO'], // 30 days service
+  p2_56: ['NONE', 'Tile', 'Travertine', 'Stone'], // Damwall
+  p2_58: ['NO', 'YES'], // Blower
+  p2_62: ['NO', 'YES'], // Low water returns
+  p2_65: ['NO', 'YES'], // Booster pump for spa jets
+  p2_67: ['NO', 'YES'], // Raised spa
 };
 const BINARY_FIELD_MAP = new Map<string, { yesId: string; noId: string }>(
   BINARY_FIELD_GROUPS.flatMap((group) => [
@@ -496,8 +540,13 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                       const isDateField = CONTRACT_DATE_FIELD_IDS.has(field.name);
                       const parsedDateValue = isDateField ? toDateInputValue(value ?? '') : '';
                       const displayValue = isDateField ? parsedDateValue : value ?? '';
-                      const placeholderValue =
-                        isDateField && !parsedDateValue ? (value ? String(value) : undefined) : undefined;
+                      const placeholderValue = isDateField
+                        ? !parsedDateValue
+                          ? value
+                            ? String(value)
+                            : undefined
+                          : undefined
+                        : FIELD_PLACEHOLDERS[field.name];
                       const readOnlyValue = isDateField ? formatDateForDisplay(value ?? '') || value : value;
                       const handleValueChange = (nextValue: string) =>
                         handleCellChange(field.name, isDateField ? formatDateForDisplay(nextValue) : nextValue);
