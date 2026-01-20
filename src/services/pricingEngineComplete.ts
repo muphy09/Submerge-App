@@ -354,6 +354,37 @@ export class TileCopingDeckingCalculations {
       });
     }
 
+    const copingSize = tileCopingDecking.copingSize ?? '12x12';
+    if (copingSize === '16x16') {
+      const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+      const laborSubtotal = laborItems
+        .filter(item => item.category === 'Coping Labor')
+        .reduce((sum, item) => sum + item.total, 0);
+      const materialSubtotal = materialItems
+        .filter(item => item.category === 'Coping Material')
+        .reduce((sum, item) => sum + item.total, 0);
+      const laborIncrease = roundCurrency(laborSubtotal * 0.33);
+      const materialIncrease = roundCurrency(materialSubtotal * 0.33);
+      if (laborIncrease > 0) {
+        laborItems.push({
+          category: 'Coping Labor',
+          description: '16x16 coping',
+          unitPrice: laborIncrease,
+          quantity: 1,
+          total: laborIncrease,
+        });
+      }
+      if (materialIncrease > 0) {
+        materialItems.push({
+          category: 'Coping Material',
+          description: '16x16 coping',
+          unitPrice: materialIncrease,
+          quantity: 1,
+          total: materialIncrease,
+        });
+      }
+    }
+
     // Stone / Rockwork (panel ledge / stacked stone / tile)
     const rockworkEntries: Array<{
       key: keyof typeof prices.decking.rockworkLabor;
@@ -1425,7 +1456,22 @@ export class MasonryCalculations {
     const labor: CostLineItem[] = [];
     const material: CostLineItem[] = [];
     const prices = pricingData.masonry;
-    const retaining = prices.retainingWalls?.find((r: any) => r.name === excavation.retainingWallType);
+    const hasLegacyRetaining =
+      (excavation.retainingWallType &&
+        excavation.retainingWallType !== 'None' &&
+        excavation.retainingWallType !== 'No Retaining Wall') ||
+      (excavation.retainingWallLength ?? 0) > 0;
+    const retainingWalls =
+      excavation.retainingWalls && excavation.retainingWalls.length > 0
+        ? excavation.retainingWalls
+        : hasLegacyRetaining
+          ? [
+              {
+                type: excavation.retainingWallType || '',
+                length: excavation.retainingWallLength ?? 0,
+              },
+            ]
+          : [];
 
     const normalizeFacingKey = (facing: string): string => {
       const key = (facing || '').toLowerCase().replace(/\s+/g, '');
@@ -1528,26 +1574,36 @@ export class MasonryCalculations {
     }
 
     // Retaining wall (from MASONRY sheet)
-    if (retaining && (excavation.retainingWallLength ?? 0) > 0 && retaining.costPerSqft > 0) {
-      const sqft = retaining.heightFt * (excavation.retainingWallLength ?? 0);
-      const lnft = excavation.retainingWallLength ?? 0;
+    const hasMultipleRetainingWalls = retainingWalls.length > 1;
+    retainingWalls.forEach((wall, index) => {
+      const typeName = (wall.type || '').trim();
+      if (!typeName || typeName === 'None' || typeName === 'No Retaining Wall') return;
+      const retaining = prices.retainingWalls?.find((r: any) => r.name === typeName);
+      const lnft = wall.length ?? 0;
+      if (!retaining || lnft <= 0 || retaining.costPerSqft <= 0) return;
+      const sqft = retaining.heightFt * lnft;
       // Cost per sqft is already uplifted in sheet; we separate labor/material evenly
       const total = retaining.costPerSqft * sqft;
+      const description = hasMultipleRetainingWalls
+        ? `Retaining Wall #${index + 1} - ${retaining.name}`
+        : retaining.name;
       labor.push({
         category: 'Masonry Labor',
-        description: `${retaining.name}`,
+        description,
         unitPrice: total,
         quantity: 1,
         total,
       });
       material.push({
         category: 'Masonry Material',
-        description: `${retaining.name} Material`,
+        description: hasMultipleRetainingWalls
+          ? `Retaining Wall #${index + 1} - ${retaining.name} Material`
+          : `${retaining.name} Material`,
         unitPrice: 0,
         quantity: lnft,
         total: 0,
       });
-    }
+    });
 
     return { labor, material };
   }

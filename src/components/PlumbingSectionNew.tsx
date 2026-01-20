@@ -1,5 +1,6 @@
 import { Plumbing, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { getSessionRole } from '../services/session';
 import './SectionStyles.css';
 
 interface Props {
@@ -50,6 +51,9 @@ const CompactInput = ({
 };
 
 function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
+  const sessionRole = getSessionRole();
+  const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
+
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
     onChange({
       ...data,
@@ -60,6 +64,10 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
   const SKIMMER_THRESHOLD = pricingData.plumbing.poolOverrunThreshold;
   const SKIMMER_RATE = pricingData.plumbing.poolOverrunPerFt;
   const skimmerOverrun = Math.max(0, (data.runs.skimmerRun || 0) - SKIMMER_THRESHOLD);
+  const skimmerOverrunCost = skimmerOverrun * SKIMMER_RATE;
+  const skimmerOverrunMessage = canViewCostAmounts
+    ? `Additional charges added - $${skimmerOverrunCost.toLocaleString()}`
+    : 'Additional charges apply';
 
   const renderRunInput = (
     label: string,
@@ -110,9 +118,7 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
 
         {skimmerOverrun > 0 && (
           <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
-            <strong>Skimmer Overrun:</strong> {skimmerOverrun} ft over {SKIMMER_THRESHOLD} ft maximum. Additional charges added - ${(
-              skimmerOverrun * SKIMMER_RATE
-            ).toLocaleString()}
+            <strong>Skimmer Overrun:</strong> {skimmerOverrun} ft over {SKIMMER_THRESHOLD} ft maximum. {skimmerOverrunMessage}
           </div>
         )}
 
@@ -138,16 +144,6 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         </div>
       </div>
 
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Additional Plumbing</h2>
-        </div>
-
-        <div className="spec-grid spec-grid-2">
-          {renderRunInput('I/F Valve to Equipment', 'infloorValveToEQ')}
-          {renderRunInput('I/F Valve to Pool', 'infloorValveToPool')}
-        </div>
-      </div>
     </div>
   );
 }

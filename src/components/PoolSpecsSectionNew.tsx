@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { CustomerInfo, PoolSpecs } from '../types/proposal-new';
+import { CustomerInfo, PoolSpecs, TileCopingDecking } from '../types/proposal-new';
 import { CalculationModules } from '../services/pricingEngineComplete';
 import pricingData from '../services/pricingData';
 import './SectionStyles.css';
@@ -9,6 +9,8 @@ interface Props {
   onChange: (data: PoolSpecs) => void;
   customerInfo: CustomerInfo;
   onChangeCustomerInfo: (info: CustomerInfo) => void;
+  tileCopingDecking?: TileCopingDecking;
+  onChangeTileCopingDecking?: (data: TileCopingDecking) => void;
   pricingModels?: { id: string; name: string; isDefault?: boolean }[];
   selectedPricingModelId?: string | null;
   selectedPricingModelName?: string | null;
@@ -62,6 +64,8 @@ function PoolSpecsSectionNew({
   onChange,
   customerInfo,
   onChangeCustomerInfo,
+  tileCopingDecking,
+  onChangeTileCopingDecking,
   pricingModels = [],
   selectedPricingModelId,
   selectedPricingModelName,
@@ -120,6 +124,25 @@ function PoolSpecsSectionNew({
 
   const isFiberglass = data.poolType === 'fiberglass';
   const isGuniteSpa = data.spaType === 'gunite';
+  const hasSpaDimensions = isGuniteSpa && data.spaLength > 0 && data.spaWidth > 0;
+  const doubleBullnoseLnft = tileCopingDecking?.doubleBullnoseLnft ?? 0;
+  const isDoubleBullnoseIncluded = doubleBullnoseLnft > 0;
+  const doubleBullnoseDisabled = !hasSpaDimensions || !tileCopingDecking || !onChangeTileCopingDecking;
+  const doubleBullnoseSelectValue = !doubleBullnoseDisabled && isDoubleBullnoseIncluded ? 'yes' : 'none';
+  const spilloverSelectValue = data.hasSpillover ? 'yes' : 'none';
+  const raisedSpaSelectValue = data.isRaisedSpa ? 'yes' : 'none';
+
+  const handleDoubleBullnoseSelect = (value: string) => {
+    if (doubleBullnoseDisabled || !tileCopingDecking || !onChangeTileCopingDecking) {
+      return;
+    }
+    if (value === 'yes') {
+      const spaPerimeter = CalculationModules.Pool.calculateSpaPerimeter(data);
+      onChangeTileCopingDecking({ ...tileCopingDecking, doubleBullnoseLnft: spaPerimeter });
+      return;
+    }
+    onChangeTileCopingDecking({ ...tileCopingDecking, doubleBullnoseLnft: 0 });
+  };
 
   return (
     <div className="section-form">
@@ -479,17 +502,29 @@ function PoolSpecsSectionNew({
               </div>
             </div>
 
-            <div className="spec-grid-3" style={{ marginTop: '15px' }}>
+            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
-                <div className="pool-type-buttons">
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${data.hasSpillover ? 'active' : ''}`}
-                    onClick={() => handleChange('hasSpillover', !data.hasSpillover)}
-                  >
-                    Include Spillover
-                  </button>
-                </div>
+                <label className="spec-label">Double Bullnose</label>
+                <select
+                  className="compact-input"
+                  value={doubleBullnoseSelectValue}
+                  onChange={(e) => handleDoubleBullnoseSelect(e.target.value)}
+                  disabled={doubleBullnoseDisabled}
+                >
+                  <option value="none">None</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+              <div className="spec-field">
+                <label className="spec-label">Spillover</label>
+                <select
+                  className="compact-input"
+                  value={spilloverSelectValue}
+                  onChange={(e) => handleChange('hasSpillover', e.target.value === 'yes')}
+                >
+                  <option value="none">None</option>
+                  <option value="yes">Yes</option>
+                </select>
               </div>
             </div>
           </>
@@ -541,47 +576,60 @@ function PoolSpecsSectionNew({
               </div>
             </div>
 
-            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
+            <div className="spec-grid-3-fixed" style={{ marginTop: '15px' }}>
+              <div className="spec-field">
+                <label className="spec-label">Double Bullnose</label>
+                <select
+                  className="compact-input"
+                  value={doubleBullnoseSelectValue}
+                  onChange={(e) => handleDoubleBullnoseSelect(e.target.value)}
+                  disabled={doubleBullnoseDisabled}
+                >
+                  <option value="none">None</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+
               <div className="spec-field">
                 <label className="spec-label">Spillover</label>
-                <div className="pool-type-buttons">
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${data.hasSpillover ? 'active' : ''}`}
-                    onClick={() => handleChange('hasSpillover', !data.hasSpillover)}
-                  >
-                    Include Spillover
-                  </button>
-                </div>
+                <select
+                  className="compact-input"
+                  value={spilloverSelectValue}
+                  onChange={(e) => handleChange('hasSpillover', e.target.value === 'yes')}
+                >
+                  <option value="none">None</option>
+                  <option value="yes">Yes</option>
+                </select>
               </div>
 
               <div className="spec-field">
                 <label className="spec-label">Raised Spa</label>
-                <div className="pool-type-buttons">
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${data.isRaisedSpa ? 'active' : ''}`}
-                    onClick={() => handleChange('isRaisedSpa', !data.isRaisedSpa)}
-                  >
-                    Raised Spa (+18")
-                  </button>
-                </div>
+                <select
+                  className="compact-input"
+                  value={raisedSpaSelectValue}
+                  onChange={(e) => handleChange('isRaisedSpa', e.target.value === 'yes')}
+                >
+                  <option value="none">None</option>
+                  <option value="yes">Yes (+18")</option>
+                </select>
               </div>
             </div>
 
             {data.isRaisedSpa && (
-              <div className="spec-field" style={{ marginTop: '10px' }}>
-                <label className="spec-label">Raised Spa Facing</label>
-                <select
-                  className="compact-input"
-                  value={data.raisedSpaFacing}
-                  onChange={(e) => handleChange('raisedSpaFacing', e.target.value)}
-                >
-                  <option value="none">None</option>
-                  <option value="tile">Tile</option>
-                  <option value="ledgestone">Ledgestone</option>
-                  <option value="stacked-stone">Stacked Stone</option>
-                </select>
+              <div className="spec-grid-3-fixed" style={{ marginTop: '10px' }}>
+                <div className="spec-field spa-facing-field">
+                  <label className="spec-label">Raised Spa Facing</label>
+                  <select
+                    className="compact-input"
+                    value={data.raisedSpaFacing}
+                    onChange={(e) => handleChange('raisedSpaFacing', e.target.value)}
+                  >
+                    <option value="none">None</option>
+                    <option value="tile">Tile</option>
+                    <option value="ledgestone">Ledgestone</option>
+                    <option value="stacked-stone">Stacked Stone</option>
+                  </select>
+                </div>
               </div>
             )}
           </>

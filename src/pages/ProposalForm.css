@@ -916,9 +916,9 @@
 }
 
 .section-title-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 8px 0 6px 0;
   border-bottom: 2px solid #e5e7eb;
@@ -927,14 +927,15 @@
   top: 0;
   z-index: 10;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  flex-wrap: wrap;
 }
 
 .section-title {
   color: #1f2937;
   font-size: clamp(1.4rem, 2vw, 1.8rem);
   margin: 0;
-  flex: 1;
+  text-align: center;
+  justify-self: center;
+  grid-column: 2;
 }
 
 .section-title-actions .btn-success {
@@ -947,6 +948,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  justify-self: end;
+  grid-column: 3;
 }
 
 .form-actions {
@@ -969,6 +972,19 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.middle-actions {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.proposal-gp-indicator {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.2px;
 }
 
 .btn {
@@ -1049,6 +1065,33 @@
   justify-items: stretch;
   justify-content: center;
   width: 100%;
+}
+
+.nav-retail-price {
+  background: white;
+  border: 2px solid #c3d2e8;
+  border-radius: 12px;
+  padding: clamp(8px, 1.2vh, 12px) 12px;
+  box-shadow: 0 4px 10px rgba(12, 34, 67, 0.12);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.nav-retail-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #0c2243;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.nav-retail-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0c2243;
 }
 
 /* Cost Modal Button */
@@ -1226,6 +1269,17 @@
 @media (max-width: 900px) {
   .section-title-row {
     padding: 16px 0 12px 0;
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .section-title,
+  .section-title-actions {
+    grid-column: auto;
+  }
+
+  .section-title-actions {
+    justify-self: center;
   }
 
   .form-actions {

@@ -13,7 +13,7 @@ import { initPricingDataStore, setActiveFranchiseId } from './services/pricingDa
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
-import { assertDesignerAllowed, ensureAdminUser } from './services/franchiseUsersAdapter';
+import { assertUserAllowed, ensureAdminUser } from './services/franchiseUsersAdapter';
 import { getSupabaseReachability, isSupabaseEnabled, setSupabaseContext } from './services/supabaseClient';
 import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
 import './App.css';
@@ -122,20 +122,23 @@ function AppContent() {
     const trimmedCode = String(franchiseCode || '').trim().toUpperCase();
     const isOwnerLogin = trimmedCode === '1111-A';
     const isAdminLogin = trimmedCode.endsWith('-A');
-    const nextRole: UserSession['role'] = isOwnerLogin ? 'owner' : isAdminLogin ? 'admin' : 'designer';
-
-    setSupabaseContext({
+    const baseContext = {
       franchiseId: response.franchiseId,
       franchiseCode: response.franchiseCode,
       userName,
-      role: nextRole,
-    });
+    };
+    const initialRole: UserSession['role'] = isOwnerLogin ? 'owner' : isAdminLogin ? 'admin' : 'designer';
+    let resolvedRole = initialRole;
+    setSupabaseContext({ ...baseContext, role: initialRole });
 
     // Validate or create user in Supabase
     if (isAdminLogin) {
       await ensureAdminUser(response.franchiseId, userName, isOwnerLogin ? 'owner' : 'admin');
     } else {
-      await assertDesignerAllowed(response.franchiseId, userName);
+      resolvedRole = await assertUserAllowed(response.franchiseId, userName);
+      if (resolvedRole !== initialRole) {
+        setSupabaseContext({ ...baseContext, role: resolvedRole });
+      }
     }
 
     const nextSession: UserSession = {
@@ -143,7 +146,7 @@ function AppContent() {
       franchiseId: response.franchiseId,
       franchiseName: response.franchiseName,
       franchiseCode: response.franchiseCode,
-      role: nextRole,
+      role: resolvedRole,
     };
 
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));

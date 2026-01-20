@@ -10,12 +10,12 @@ import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
-import preCogsBreakIconImg from '../../docs/img/1cogbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
 import submergeLogo from '../../Submerge Logo.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { initPricingDataStore } from '../services/pricingDataStore';
+import { getSessionRole } from '../services/session';
 import {
   getDefaultProposal,
   getDefaultPoolSpecs,
@@ -71,6 +71,8 @@ function ProposalView() {
   const contractExportControlRef = useRef<HTMLDivElement>(null);
   const contractViewRef = useRef<ContractViewHandle | null>(null);
   const { showToast } = useToast();
+  const sessionRole = getSessionRole();
+  const canViewFullSummary = sessionRole === 'admin' || sessionRole === 'owner';
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const breakdownLabels: Record<BreakdownType, string> = {
     customer: 'Customer Breakdown',
@@ -501,6 +503,18 @@ function ProposalView() {
       currency: 'USD',
       minimumFractionDigits: 2,
     }).format(Number.isFinite(value) ? value : 0);
+
+  const formatGrossMarginIndicator = (value?: number): string => {
+    const safeValue = Number.isFinite(value) ? (value as number) : 0;
+    const sign = safeValue < 0 ? '-' : '';
+    const fixed = Math.abs(safeValue).toFixed(2);
+    const [whole, decimal] = fixed.split('.');
+    const paddedWhole = (whole || '0').padStart(2, '0');
+    return `${sign}${paddedWhole}.${decimal}`;
+  };
+
+  const buildProposalIndicator = (value?: number): string =>
+    `Proposal #26${formatGrossMarginIndicator(value)}`;
 
   const formatNumber = (value: number | undefined, suffix?: string): string => {
     if (!Number.isFinite(value)) return 'N/A';
@@ -1153,128 +1167,96 @@ function ProposalView() {
     const tileSelectionClass = (type: BreakdownType) => (isBreakdownSelected(versionId, type) ? 'selected' : '');
     return (
       <div className="tiles-grid">
-        <button className={`summary-tile customer-tile ${tileSelectionClass('customer')}`} type="button" onClick={() => setCustomerBreakdownVersionId(versionId)}>
-          {renderSelectionToggle('customer')}
-          <div className="tile-header">
-            <div className="tile-icon customer-icon">
-              <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
-            </div>
-            <div className="tile-header-text">
-              <p className="tile-title">Customer<br/>Breakdown</p>
-            </div>
-          </div>
-          <div className="tile-content-box">
-            <div className="tile-metrics">
-              <div className="metric-row">
-                <p className="metric-label">Retail Price:</p>
-                <p className="metric-value">{formatCurrency(vm.retailPriceBeforeDiscounts)}</p>
+        {canViewFullSummary && (
+          <>
+            <button className={`summary-tile customer-tile ${tileSelectionClass('customer')}`} type="button" onClick={() => setCustomerBreakdownVersionId(versionId)}>
+              {renderSelectionToggle('customer')}
+              <div className="tile-header">
+                <div className="tile-icon customer-icon">
+                  <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
+                </div>
+                <div className="tile-header-text">
+                  <p className="tile-title">Customer<br/>Breakdown</p>
+                </div>
               </div>
-              <div className="metric-divider"></div>
-              <div className="metric-row">
-                <p className="metric-label">Retail Sale Price:</p>
-                <p className="metric-value">{formatCurrency(vm.retailSalePrice)}</p>
+              <div className="tile-content-box">
+                <div className="tile-metrics">
+                  <div className="metric-row">
+                    <p className="metric-label">Retail Price:</p>
+                    <p className="metric-value">{formatCurrency(vm.retailPriceBeforeDiscounts)}</p>
+                  </div>
+                  <div className="metric-divider"></div>
+                  <div className="metric-row">
+                    <p className="metric-label">Retail Sale Price:</p>
+                    <p className="metric-value">{formatCurrency(vm.retailSalePrice)}</p>
+                  </div>
+                  <div className="metric-divider"></div>
+                  <div className="metric-row">
+                    <p className="metric-label">Total Savings:</p>
+                    <p className="metric-value">{formatCurrency(vm.totalSavings)}</p>
+                  </div>
+                  <div className="metric-divider"></div>
+                  <div className="metric-row">
+                    <p className="metric-label">Total Savings %:</p>
+                    <p className="metric-value">
+                      {Number.isFinite(vm.totalSavingsPercent) ? `${vm.totalSavingsPercent.toFixed(1)}%` : 'N/A'}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="metric-divider"></div>
-              <div className="metric-row">
-                <p className="metric-label">Total Savings:</p>
-                <p className="metric-value">{formatCurrency(vm.totalSavings)}</p>
-              </div>
-              <div className="metric-divider"></div>
-              <div className="metric-row">
-                <p className="metric-label">Total Savings %:</p>
-                <p className="metric-value">
-                  {Number.isFinite(vm.totalSavingsPercent) ? `${vm.totalSavingsPercent.toFixed(1)}%` : 'N/A'}
-                </p>
-              </div>
-            </div>
-          </div>
-          <span className="tile-link">
-            View Detailed Breakdown
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </span>
-        </button>
+              <span className="tile-link">
+                View Detailed Breakdown
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+            </button>
 
-        <button className={`summary-tile cogs-tile ${tileSelectionClass('cogs')}`} type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
-          {renderSelectionToggle('cogs')}
-          <div className="tile-header">
-            <div className="tile-icon cogs-icon">
-              <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
-            </div>
-            <div className="tile-header-text">
-              <p className="tile-title">COGS Cost<br/>Breakdown</p>
-            </div>
-          </div>
-          <div className="tile-content-box">
-            <div className="tile-metrics">
-              <div className="metric-row">
-                <p className="metric-label">Dig Commission:</p>
-                <p className="metric-value">{formatCurrency(vm.pricing?.digCommission ?? 0)}</p>
+            <button className={`summary-tile cogs-tile ${tileSelectionClass('cogs')}`} type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
+              {renderSelectionToggle('cogs')}
+              <div className="tile-header">
+                <div className="tile-icon cogs-icon">
+                  <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
+                </div>
+                <div className="tile-header-text">
+                  <p className="tile-title">COGS Cost<br/>Breakdown</p>
+                </div>
               </div>
-              <div className="metric-divider"></div>
-              <div className="metric-row">
-                <p className="metric-label">Admin Fee:</p>
-                <p className="metric-value">{formatCurrency(vm.pricing?.adminFee ?? 0)}</p>
+              <div className="tile-content-box">
+                <div className="tile-metrics">
+                  <div className="metric-row">
+                    <p className="metric-label">Dig Commission:</p>
+                    <p className="metric-value">{formatCurrency(vm.pricing?.digCommission ?? 0)}</p>
+                  </div>
+                  <div className="metric-divider"></div>
+                  <div className="metric-row">
+                    <p className="metric-label">Admin Fee:</p>
+                    <p className="metric-value">{formatCurrency(vm.pricing?.adminFee ?? 0)}</p>
+                  </div>
+                  <div className="metric-divider"></div>
+                  <div className="metric-row">
+                    <p className="metric-label">Closeout Commission:</p>
+                    <p className="metric-value">{formatCurrency(vm.pricing?.closeoutCommission ?? 0)}</p>
+                  </div>
+                  <div className="metric-divider"></div>
+                  <div className="metric-row">
+                    <p className="metric-label">Gross Profit:</p>
+                    <p className="metric-value">
+                      {formatCurrency(vm.pricing?.grossProfit ?? 0)} ({Number.isFinite(vm.grossMargin) ? `${vm.grossMargin.toFixed(1)}%` : 'N/A'})
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="metric-divider"></div>
-              <div className="metric-row">
-                <p className="metric-label">Closeout Commission:</p>
-                <p className="metric-value">{formatCurrency(vm.pricing?.closeoutCommission ?? 0)}</p>
-              </div>
-              <div className="metric-divider"></div>
-              <div className="metric-row">
-                <p className="metric-label">Gross Profit:</p>
-                <p className="metric-value">
-                  {formatCurrency(vm.pricing?.grossProfit ?? 0)} ({Number.isFinite(vm.grossMargin) ? `${vm.grossMargin.toFixed(1)}%` : 'N/A'})
-                </p>
-              </div>
-            </div>
-          </div>
-          <span className="tile-link">
-            View Detailed Breakdown
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </span>
-        </button>
+              <span className="tile-link">
+                View Detailed Breakdown
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+            </button>
 
-        <button className={`summary-tile pre-tile ${tileSelectionClass('pre')}`} type="button" onClick={() => setPreCogsBreakdownVersionId(versionId)}>
-          {renderSelectionToggle('pre')}
-          <div className="tile-header">
-            <div className="tile-icon pre-icon">
-              <img src={preCogsBreakIconImg} alt="Pre 1% COGS breakdown icon" className="pre-break-icon" />
-            </div>
-            <div className="tile-header-text">
-              <p className="tile-title">Pre 1% COGS<br/>Breakdown</p>
-            </div>
-          </div>
-          <div className="tile-content-box">
-            <div className="tile-metrics">
-              <div className="metric-row">
-                <p className="metric-label">-1% Gross Profit:</p>
-                <p className="metric-value">
-                  {formatCurrency(vm.preOverheadGrossProfit)} (
-                  {Number.isFinite(vm.preOverheadGrossMarginPercent)
-                    ? `${vm.preOverheadGrossMarginPercent.toFixed(1)}%`
-                    : 'N/A'}
-                  )
-                </p>
-              </div>
-              <div className="metric-divider"></div>
-              <div className="metric-row">
-                <p className="metric-label">Overhead Differential:</p>
-                <p className="metric-value">{formatCurrency(vm.overheadDifferential)}</p>
-              </div>
-            </div>
-          </div>
-          <span className="tile-link">
-            View Detailed Breakdown
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </span>
-        </button>
+          </>
+        )}
 
         <button className={`summary-tile warranty-tile ${tileSelectionClass('warranty')}`} type="button" onClick={() => setWarrantyBreakdownVersionId(versionId)}>
           {renderSelectionToggle('warranty')}
@@ -1497,10 +1479,16 @@ function ProposalView() {
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
     const versionLabel = getDisplayVersionLabel(vm.proposal);
     const isActive = versionId === activeVersionId;
+    const proposalIndicator = buildProposalIndicator(vm.grossMargin);
 
     return (
       <div key={versionId} className={`version-section ${index > 0 ? 'has-divider' : ''}`}>
-        {index > 0 && <div className="version-divider" />}
+        {index > 0 && (
+          <>
+            <div className="version-divider-title">Additional Version - {versionLabel}</div>
+            <div className="version-divider" />
+          </>
+        )}
         <div className="hero-card">
           <div className="hero-header">
             <div className="hero-icon">
@@ -1582,7 +1570,10 @@ function ProposalView() {
           </div>
 
           <div className="hero-total">
-            <strong>Total Retail Value:</strong> {formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}
+            <span className="proposal-gp-indicator">{proposalIndicator}</span>
+            <span className="hero-total-amount">
+              <strong>Total Retail Cost:</strong> {formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}
+            </span>
           </div>
         </div>
 

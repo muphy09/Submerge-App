@@ -1,12 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { WaterFeatures, WaterFeatureSelection, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
-import {
-  DEFAULT_WATER_FEATURE_MARGIN,
-  flattenWaterFeatures,
-  getWaterFeatureCogs,
-  getWaterFeatureRetail,
-} from '../utils/waterFeatureCost';
+import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
 import './SectionStyles.css';
 
 interface Props {
@@ -52,12 +47,19 @@ const CompactInput = ({
   );
 };
 
-const formatCurrency = (val: number) => `$${(val || 0).toLocaleString()}`;
+const waterFeatureRunFields: Array<keyof PlumbingRuns> = [
+  'waterFeature1Run',
+  'waterFeature2Run',
+  'waterFeature3Run',
+  'waterFeature4Run',
+];
+
+const noneOptionValue = 'none';
 
 const sortSheerOptions = (options: any[]) => {
   const parseSpan = (name: string) => {
     const matchInch = name.match(/(\d+)"?/);
-    const matchFoot = name.match(/(\d+(?:\\.\\d+)?)'?/);
+    const matchFoot = name.match(/(\d+(?:\.\d+)?)'?/);
     if (matchInch) return parseFloat(matchInch[1]);
     if (matchFoot) return parseFloat(matchFoot[1]) * 12;
     return 0;
@@ -65,9 +67,18 @@ const sortSheerOptions = (options: any[]) => {
   return [...options].sort((a, b) => parseSpan(a.name) - parseSpan(b.name));
 };
 
+const buildRunKeys = (prefix: string, selections: WaterFeatureSelection[]) => {
+  const counts = new Map<string, number>();
+  return selections.map((sel) => {
+    const featureId = sel.featureId || 'unknown';
+    const count = counts.get(featureId) ?? 0;
+    counts.set(featureId, count + 1);
+    return `${prefix}-${featureId}-${count}`;
+  });
+};
+
 function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns }: Props) {
   const catalog = flattenWaterFeatures(pricingData.waterFeatures);
-  const retailMargin = pricingData.waterFeatures?.retailMargin ?? DEFAULT_WATER_FEATURE_MARGIN;
   const hasCatalog = catalog.length > 0;
 
   const catalogByCategory = useMemo(() => {
@@ -80,27 +91,19 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
     return grouped;
   }, [catalog]);
 
-  const findFeature = (featureId?: string) =>
-    catalog.find((f) => f.id === featureId) || catalog.find((f) => f.name === featureId);
-
   const sheerOptions = sortSheerOptions(catalogByCategory['Sheer Descent'] || []);
   const jetOptions = catalogByCategory['Jets'] || [];
   const wokWater = catalogByCategory['Wok Pots - Water Only'] || [];
   const wokFire = catalogByCategory['Wok Pots - Fire Only'] || [];
   const wokFireWater = catalogByCategory['Wok Pots - Water & Fire'] || [];
+  const wokOptions = [...wokWater, ...wokFire, ...wokFireWater];
   const bubblerOptions = catalogByCategory['Bubbler'] || [];
-  const ledBubbler = bubblerOptions.find((f) => f.id === 'led-bubbler') || bubblerOptions[0];
 
   const selections = data?.selections ?? [];
 
   const cogsLookup = useMemo(
     () => new Map(catalog.map((entry) => [entry.id, getWaterFeatureCogs(entry)])),
     [catalog]
-  );
-
-  const retailLookup = useMemo(
-    () => new Map(catalog.map((entry) => [entry.id, getWaterFeatureRetail(entry, retailMargin)])),
-    [catalog, retailMargin]
   );
 
   const calculateTotal = (selectionsList: WaterFeatureSelection[]) =>
@@ -114,178 +117,218 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
     });
   };
 
-  const setQuantityForFeature = (featureId: string, quantity: number) => {
-    const sanitized = Math.max(0, quantity);
-    const remaining = selections.filter((s) => s.featureId !== featureId);
-    const next = sanitized > 0 ? [...remaining, { featureId, quantity: sanitized }] : remaining;
-    updateSelections(next);
+  const filterSelections = (options: Array<{ id: string }>) =>
+    selections.filter((sel) => options.some((opt) => opt.id === sel.featureId));
+
+  const updateCategorySelections = (options: Array<{ id: string }>, nextCategorySelections: WaterFeatureSelection[]) => {
+    const remaining = selections.filter((sel) => !options.some((opt) => opt.id === sel.featureId));
+    updateSelections([...remaining, ...nextCategorySelections]);
   };
 
-  // =================== SHEER DESCENTS ===================
-  const sheerSelections = selections.filter((sel) => sheerOptions.some((opt) => opt.id === sel.featureId));
-
-  const addSheer = () => {
-    const first = sheerOptions[0];
-    if (!first) return;
-    updateSelections([...selections, { featureId: first.id, quantity: 1 }]);
-  };
-
-  const updateSheer = (index: number, field: 'featureId' | 'quantity', value: any) => {
-    const next = [...selections];
-    const sheerIndexes = selections
-      .map((sel, idx) => ({ sel, idx }))
-      .filter(({ sel }) => sheerOptions.some((opt) => opt.id === sel.featureId))
-      .map(({ idx }) => idx);
-    const targetIdx = sheerIndexes[index];
-    if (targetIdx === undefined) return;
-    const target = { ...next[targetIdx] };
-    if (field === 'featureId') {
-      target.featureId = value;
-      if (!target.quantity || target.quantity <= 0) target.quantity = 1;
-    } else {
-      target.quantity = Math.max(0, value);
-    }
-    next[targetIdx] = target;
-    updateSelections(next);
-  };
-
-  const removeSheer = (index: number) => {
-    const sheerIndexes = selections
-      .map((sel, idx) => ({ sel, idx }))
-      .filter(({ sel }) => sheerOptions.some((opt) => opt.id === sel.featureId))
-      .map(({ idx }) => idx);
-    const targetIdx = sheerIndexes[index];
-    if (targetIdx === undefined) return;
-    const next = selections.filter((_, i) => i !== targetIdx);
-    updateSelections(next);
-  };
-
-  // =================== WOK POTS ===================
-  const withoutWoks = () =>
-    selections.filter(
-      (sel) =>
-        !wokWater.some((w) => w.id === sel.featureId) &&
-        !wokFire.some((w) => w.id === sel.featureId) &&
-        !wokFireWater.some((w) => w.id === sel.featureId)
-    );
-
-  const clearWoks = () => {
-    updateSelections(withoutWoks());
-  };
-
-  const setWok = (category: 'water' | 'fire' | 'both') => {
-    const options = category === 'water' ? wokWater : category === 'fire' ? wokFire : wokFireWater;
-    if (options.length === 0) return;
-    const base = withoutWoks();
-    const preservedQty = Math.max(activeWok?.quantity ?? 1, 1);
-    updateSelections([...base, { featureId: options[0].id, quantity: preservedQty }]);
-  };
-
-  const activeWok = selections.find(
-    (sel) =>
-      wokWater.some((w) => w.id === sel.featureId) ||
-      wokFire.some((w) => w.id === sel.featureId) ||
-      wokFireWater.some((w) => w.id === sel.featureId)
-  );
-
-  const wokCategory = activeWok
-    ? wokWater.some((w) => w.id === activeWok.featureId)
-      ? 'water'
-      : wokFire.some((w) => w.id === activeWok.featureId)
-        ? 'fire'
-        : 'both'
-    : 'none';
-
-  const updateWokSelection = (featureId: string) => {
-    const next = selections.filter(
-      (sel) =>
-        !wokWater.some((w) => w.id === sel.featureId) &&
-        !wokFire.some((w) => w.id === sel.featureId) &&
-        !wokFireWater.some((w) => w.id === sel.featureId)
-    );
-    const existingQty = activeWok?.quantity ?? 1;
-    updateSelections([...next, { featureId, quantity: Math.max(1, existingQty) }]);
-  };
-
-  const updateWokQuantity = (qty: number) => {
-    if (!activeWok) return;
-    const sanitized = Math.max(0, qty);
-    const next = selections.map((sel) =>
-      sel.featureId === activeWok.featureId ? { ...sel, quantity: sanitized } : sel
-    );
-    updateSelections(next);
-  };
-
-  // =================== JETS ===================
-  const clearJets = () => selections.filter((sel) => !jetOptions.some((j) => j.id === sel.featureId));
-  const activeJet = selections.find((sel) => jetOptions.some((j) => j.id === sel.featureId));
-
-  const setJet = (enabled: boolean) => {
-    if (!enabled) {
-      updateSelections(clearJets());
+  const updateCategoryFeature = (
+    options: Array<{ id: string }>,
+    categorySelections: WaterFeatureSelection[],
+    index: number,
+    featureId: string
+  ) => {
+    if (featureId === noneOptionValue) {
+      const next = categorySelections.filter((_, rowIndex) => rowIndex !== index);
+      updateCategorySelections(options, next);
       return;
     }
-    const first = jetOptions[0];
+
+    const next = [...categorySelections];
+    if (next[index]) {
+      const existingQty = next[index].quantity ?? 1;
+      next[index] = { ...next[index], featureId, quantity: existingQty };
+    } else {
+      next.push({ featureId, quantity: 1 });
+    }
+    updateCategorySelections(options, next);
+  };
+
+  const updateCategoryQuantity = (
+    options: Array<{ id: string }>,
+    categorySelections: WaterFeatureSelection[],
+    index: number,
+    quantity: number
+  ) => {
+    if (!categorySelections[index]) return;
+    const next = [...categorySelections];
+    next[index] = { ...next[index], quantity: Math.max(0, quantity) };
+    updateCategorySelections(options, next);
+  };
+
+  const addCategorySelection = (options: Array<{ id: string }>, categorySelections: WaterFeatureSelection[]) => {
+    const first = options[0];
     if (!first) return;
-    updateSelections([...clearJets(), { featureId: first.id, quantity: 1 }]);
+    updateCategorySelections(options, [...categorySelections, { featureId: first.id, quantity: 1 }]);
   };
 
-  const updateJetSelection = (featureId: string) => {
-    const qty = activeJet?.quantity ?? 1;
-    updateSelections([...clearJets(), { featureId, quantity: Math.max(1, qty) }]);
-  };
+  const sheerSelections = filterSelections(sheerOptions);
+  const wokSelections = filterSelections(wokOptions);
+  const jetSelections = filterSelections(jetOptions);
+  const bubblerSelections = filterSelections(bubblerOptions);
 
-  const updateJetQuantity = (qty: number) => {
-    if (!activeJet) return;
-    updateSelections(
-      selections.map((sel) =>
-        sel.featureId === activeJet.featureId ? { ...sel, quantity: Math.max(0, qty) } : sel
-      )
+  const sheerRunKeys = useMemo(() => buildRunKeys('sheer', sheerSelections), [sheerSelections]);
+  const wokRunKeys = useMemo(() => buildRunKeys('wok', wokSelections), [wokSelections]);
+  const jetRunKeys = useMemo(() => buildRunKeys('jet', jetSelections), [jetSelections]);
+  const bubblerRunKeys = useMemo(() => buildRunKeys('bubbler', bubblerSelections), [bubblerSelections]);
+
+  const runOrderKeys = useMemo(
+    () => [...sheerRunKeys, ...wokRunKeys, ...jetRunKeys, ...bubblerRunKeys],
+    [sheerRunKeys, wokRunKeys, jetRunKeys, bubblerRunKeys]
+  );
+
+  const runKeyByFeature = useMemo(() => {
+    const map = new Map<string, keyof PlumbingRuns>();
+    runOrderKeys.forEach((key, index) => {
+      const runField = waterFeatureRunFields[index];
+      if (runField) {
+        map.set(key, runField);
+      }
+    });
+    return map;
+  }, [runOrderKeys]);
+
+  const prevRunKeysRef = useRef<string[] | null>(null);
+  const runOrderSignature = runOrderKeys.join('|');
+
+  useEffect(() => {
+    if (prevRunKeysRef.current === null) {
+      prevRunKeysRef.current = runOrderKeys;
+      return;
+    }
+
+    const prevKeys = prevRunKeysRef.current;
+    if (prevKeys.join('|') === runOrderSignature) {
+      return;
+    }
+
+    const nextRuns = { ...plumbingRuns };
+    const prevValueMap = new Map<string, number>();
+    if (prevKeys.length > 0) {
+      prevKeys.forEach((key, index) => {
+        const runField = waterFeatureRunFields[index];
+        if (!runField) return;
+        prevValueMap.set(key, plumbingRuns[runField] ?? 0);
+      });
+    }
+
+    waterFeatureRunFields.forEach((runField) => {
+      nextRuns[runField] = 0;
+    });
+
+    runOrderKeys.forEach((key, index) => {
+      const runField = waterFeatureRunFields[index];
+      if (!runField) return;
+      const preservedValue =
+        prevKeys.length > 0
+          ? (prevValueMap.get(key) ?? 0)
+          : (plumbingRuns[runField] ?? 0);
+      nextRuns[runField] = preservedValue;
+    });
+
+    const runsChanged = waterFeatureRunFields.some(
+      (runField) => (nextRuns[runField] ?? 0) !== (plumbingRuns[runField] ?? 0)
+    );
+    if (runsChanged) {
+      onChangePlumbingRuns(nextRuns);
+    }
+
+    prevRunKeysRef.current = runOrderKeys;
+  }, [runOrderSignature, runOrderKeys, plumbingRuns, onChangePlumbingRuns]);
+
+  const renderRunInput = (field?: keyof PlumbingRuns) => {
+    if (!field) return null;
+    return (
+      <div className="spec-field">
+        <label className="spec-label">Water Feature Run</label>
+        <CompactInput
+          value={plumbingRuns[field] ?? 0}
+          onChange={(e) => onChangePlumbingRuns({ ...plumbingRuns, [field]: parseFloat(e.target.value) || 0 })}
+          unit="LNFT"
+          min="0"
+          step="1"
+          placeholder="0"
+        />
+      </div>
     );
   };
 
-  // =================== LED BUBBLERS ===================
-  const bubblerQty = selections.find((sel) => sel.featureId === ledBubbler?.id)?.quantity ?? 0;
-  const setBubblerEnabled = (enabled: boolean) => {
-    if (!ledBubbler) return;
-    if (!enabled) {
-      setQuantityForFeature(ledBubbler.id, 0);
-    } else {
-      setQuantityForFeature(ledBubbler.id, Math.max(1, bubblerQty || 1));
-    }
-  };
-  const addBubbler = () => {
-    if (!ledBubbler) return;
-    setQuantityForFeature(ledBubbler.id, Math.max(1, bubblerQty + 1));
+  const buildRowLabel = (label: string, index: number) =>
+    index === 0 ? label : `Additional ${label} ${index}`;
+
+  const renderCategoryRows = (
+    label: string,
+    options: Array<{ id: string; name: string }>,
+    categorySelections: WaterFeatureSelection[],
+    runKeys: string[]
+  ) => {
+    const rows = categorySelections.length > 0 ? categorySelections : [null];
+    return rows.map((selection, index) => {
+      const isSelected = Boolean(selection);
+      const runField = isSelected ? runKeyByFeature.get(runKeys[index]) : undefined;
+      const showAddAnother = isSelected && index === categorySelections.length - 1;
+      return (
+        <div
+          key={`${label}-${selection?.featureId || 'none'}-${index}`}
+          className="spec-grid-4-fixed water-feature-row"
+        >
+          <div className="spec-field">
+            <label className="spec-label">{buildRowLabel(label, index)}</label>
+            <select
+              className="compact-input"
+              value={selection?.featureId ?? noneOptionValue}
+              onChange={(e) => updateCategoryFeature(options, categorySelections, index, e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {options.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {isSelected && (
+            <>
+              <div className="spec-field">
+                <label className="spec-label">Quantity</label>
+                <CompactInput
+                  value={selection?.quantity ?? 0}
+                  onChange={(e) =>
+                    updateCategoryQuantity(options, categorySelections, index, parseInt(e.target.value, 10) || 0)
+                  }
+                  unit="ea"
+                  min="0"
+                  step="1"
+                  placeholder="1"
+                />
+              </div>
+              {runField ? renderRunInput(runField) : <div className="spec-field water-feature-placeholder" aria-hidden="true" />}
+              <div className="spec-field water-feature-action">
+                <label className="spec-label" aria-hidden="true">&nbsp;</label>
+                {showAddAnother && (
+                  <button
+                    type="button"
+                    className="link-btn small"
+                    onClick={() => addCategorySelection(options, categorySelections)}
+                  >
+                    Add Another
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    });
   };
 
-  // =================== RUN INPUTS ===================
-  const renderRunInput = (label: string, field: keyof PlumbingRuns) => (
-    <div className="spec-field">
-      <label className="spec-label">{label}</label>
-      <CompactInput
-        value={plumbingRuns[field] ?? 0}
-        onChange={(e) => onChangePlumbingRuns({ ...plumbingRuns, [field]: parseFloat(e.target.value) || 0 })}
-        unit="LNFT"
-        min="0"
-        step="1"
-        placeholder="0"
-      />
-    </div>
-  );
-
-  const noSheer = sheerSelections.length === 0;
-  const hasSheer = !noSheer;
-  const noJets = !activeJet;
-  const noBubbler = bubblerQty <= 0;
   const hasCatalogData =
     hasCatalog &&
-    (sheerOptions.length > 0 ||
-      jetOptions.length > 0 ||
-      wokWater.length > 0 ||
-      wokFire.length > 0 ||
-      wokFireWater.length > 0 ||
-      bubblerOptions.length > 0);
+    (sheerOptions.length > 0 || jetOptions.length > 0 || wokOptions.length > 0 || bubblerOptions.length > 0);
 
   return (
     <div className="section-form">
@@ -295,359 +338,32 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
         </div>
       )}
 
-      {/* ==================== SHEER DESCENTS ==================== */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Sheer Descents</h2>
-          <p className="spec-block-subtitle">Add sheer descents with size and quantity.</p>
         </div>
-
-        <div className="pool-type-buttons stackable">
-          <button
-            type="button"
-            className={`pool-type-btn ${noSheer ? 'active' : ''}`}
-            onClick={() => updateSelections(selections.filter((sel) => !sheerOptions.some((opt) => opt.id === sel.featureId)))}
-          >
-            No Sheer Descent
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${hasSheer ? 'active' : ''}`}
-            onClick={() => (hasSheer ? null : addSheer())}
-          >
-            Add Sheer Descent
-          </button>
-        </div>
-
-        {hasSheer && (
-          <>
-            {sheerSelections.map((sel, idx) => {
-              const feature = findFeature(sel.featureId);
-              const requiresPump = !!(feature?.note && feature.note.toLowerCase().includes('requires second pump'));
-              return (
-                <div key={`${sel.featureId}-${idx}`} className="spec-subcard">
-                  <div className="spec-subcard-header">
-                    <div>
-                      <div className="spec-subcard-title">Sheer Descent #{idx + 1}</div>
-                      {!requiresPump && feature && (
-                        <div className="spec-subcard-subtitle">{feature.name}</div>
-                      )}
-                    </div>
-                    <div className="spec-subcard-actions">
-                      <button type="button" className="link-btn danger" onClick={() => removeSheer(idx)}>
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                  <div className="spec-grid spec-grid-3">
-                    <div className="spec-field">
-                      <label className="spec-label">Select Size</label>
-                      <select
-                        className="compact-input"
-                        value={sel.featureId}
-                        onChange={(e) => updateSheer(idx, 'featureId', e.target.value)}
-                      >
-                        {sheerOptions.map((opt) => (
-                          <option key={opt.id} value={opt.id}>
-                            {opt.name}
-                          </option>
-                        ))}
-                      </select>
-                      {requiresPump && (
-                        <div
-                          className="info-box"
-                          style={{
-                            marginTop: '6px',
-                            background: '#fff7ed',
-                            borderColor: '#fdba74',
-                            color: '#9a3412',
-                          }}
-                        >
-                          Will Require a 2nd Pump
-                        </div>
-                      )}
-                    </div>
-                    <div className="spec-field">
-                      <label className="spec-label">Quantity</label>
-                      <CompactInput
-                        value={sel.quantity ?? 0}
-                        onChange={(e) => updateSheer(idx, 'quantity', parseInt(e.target.value, 10) || 0)}
-                        unit="ea"
-                        min="0"
-                        step="1"
-                        placeholder="1"
-                      />
-                    </div>
-                    <div className="spec-field">
-                      <label className="spec-label">Unit Price</label>
-                      <div className="form-value">
-                        {feature ? formatCurrency(retailLookup.get(feature.id) ?? getWaterFeatureRetail(feature, retailMargin)) : '--'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            <div className="action-row" style={{ marginTop: '12px' }}>
-              <button type="button" className="action-btn secondary" onClick={addSheer}>
-                Add Another
-              </button>
-            </div>
-          </>
-        )}
+        {renderCategoryRows('Sheer Descent', sheerOptions, sheerSelections, sheerRunKeys)}
       </div>
 
-      {/* ==================== WOK POTS ==================== */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Wok Pots</h2>
-          <p className="spec-block-subtitle">Choose water, fire, or combination bowls.</p>
         </div>
-
-        <div className="pool-type-buttons stackable">
-          <button
-            type="button"
-            className={`pool-type-btn ${wokCategory === 'none' ? 'active' : ''}`}
-            onClick={clearWoks}
-          >
-            No Wok Pot
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${wokCategory === 'water' ? 'active' : ''}`}
-            onClick={() => setWok('water')}
-          >
-            Water Only
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${wokCategory === 'fire' ? 'active' : ''}`}
-            onClick={() => setWok('fire')}
-          >
-            Fire Only
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${wokCategory === 'both' ? 'active' : ''}`}
-            onClick={() => setWok('both')}
-          >
-            Water and Fire
-          </button>
-        </div>
-
-        {activeWok && (
-          <div className="spec-subcard">
-            <div className="spec-subcard-header">
-              <div>
-                <div className="spec-subcard-title">Wok Pot Selection</div>
-                <div className="spec-subcard-subtitle">
-                  {findFeature(activeWok.featureId)?.name || 'Select Model'}
-                </div>
-              </div>
-              <div className="spec-subcard-actions">
-                <button type="button" className="link-btn danger" onClick={clearWoks}>
-                  Remove
-                </button>
-              </div>
-            </div>
-            <div className="spec-grid spec-grid-3">
-              <div className="spec-field">
-                <label className="spec-label">Select Model</label>
-                <select
-                  className="compact-input"
-                  value={activeWok.featureId}
-                  onChange={(e) => updateWokSelection(e.target.value)}
-                >
-                  {(wokCategory === 'water' ? wokWater : wokCategory === 'fire' ? wokFire : wokFireWater).map(
-                    (opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.name}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Quantity</label>
-                <CompactInput
-                  value={activeWok.quantity ?? 0}
-                  onChange={(e) => updateWokQuantity(parseInt(e.target.value, 10) || 0)}
-                  unit="ea"
-                  min="0"
-                  step="1"
-                  placeholder="1"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Unit Price</label>
-                <div className="form-value">
-                  {formatCurrency(
-                    retailLookup.get(activeWok.featureId) ??
-                      getWaterFeatureRetail(findFeature(activeWok.featureId), retailMargin)
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderCategoryRows('Wok Pot', wokOptions, wokSelections, wokRunKeys)}
       </div>
 
-      {/* ==================== JETS ==================== */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Jets</h2>
-          <p className="spec-block-subtitle">Add deck or laminar jets.</p>
         </div>
-
-        <div className="pool-type-buttons stackable">
-          <button
-            type="button"
-            className={`pool-type-btn ${noJets ? 'active' : ''}`}
-            onClick={() => setJet(false)}
-          >
-            No Jet
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${!noJets ? 'active' : ''}`}
-            onClick={() => setJet(true)}
-          >
-            Add Jet
-          </button>
-        </div>
-
-        {!noJets && activeJet && (
-          <div className="spec-subcard">
-            <div className="spec-subcard-header">
-              <div>
-                <div className="spec-subcard-title">Jet Selection</div>
-                <div className="spec-subcard-subtitle">
-                  {findFeature(activeJet.featureId)?.name || 'Select Jet'}
-                </div>
-              </div>
-              <div className="spec-subcard-actions">
-                <button type="button" className="link-btn danger" onClick={() => setJet(false)}>
-                  Remove
-                </button>
-              </div>
-            </div>
-            <div className="spec-grid spec-grid-3">
-              <div className="spec-field">
-                <label className="spec-label">Jet Type</label>
-                <select
-                  className="compact-input"
-                  value={activeJet.featureId}
-                  onChange={(e) => updateJetSelection(e.target.value)}
-                >
-                  {jetOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Quantity</label>
-                <CompactInput
-                  value={activeJet.quantity ?? 0}
-                  onChange={(e) => updateJetQuantity(parseInt(e.target.value, 10) || 0)}
-                  unit="ea"
-                  min="0"
-                  step="1"
-                  placeholder="1"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Unit Price</label>
-                <div className="form-value">
-                  {formatCurrency(
-                    retailLookup.get(activeJet.featureId) ??
-                      getWaterFeatureRetail(findFeature(activeJet.featureId), retailMargin)
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {renderCategoryRows('Jet Type', jetOptions, jetSelections, jetRunKeys)}
       </div>
 
-      {/* ==================== LED BUBBLERS ==================== */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">LED Bubblers</h2>
-          <p className="spec-block-subtitle">Add LED bubblers with integrated lights.</p>
         </div>
-
-        <div className="pool-type-buttons stackable">
-          <button
-            type="button"
-            className={`pool-type-btn ${noBubbler ? 'active' : ''}`}
-            onClick={() => setBubblerEnabled(false)}
-          >
-            No LED Bubbler
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${!noBubbler ? 'active' : ''}`}
-            onClick={() => setBubblerEnabled(true)}
-          >
-            Add LED Bubbler
-          </button>
-        </div>
-
-        {!noBubbler && ledBubbler && (
-          <div className="spec-subcard">
-              <div className="spec-subcard-header">
-                <div>
-                  <div className="spec-subcard-title">{ledBubbler.name}</div>
-                  <div className="spec-subcard-subtitle">
-                    {formatCurrency(
-                      retailLookup.get(ledBubbler.id) ?? getWaterFeatureRetail(ledBubbler, retailMargin)
-                    )}
-                  </div>
-                </div>
-                <div className="spec-subcard-actions">
-                  <button type="button" className="link-btn danger" onClick={() => setBubblerEnabled(false)}>
-                  Remove
-                </button>
-              </div>
-            </div>
-            <div className="spec-field" style={{ maxWidth: '220px' }}>
-              <label className="spec-label">Quantity</label>
-              <CompactInput
-                value={bubblerQty}
-                onChange={(e) => setQuantityForFeature(ledBubbler.id, parseInt(e.target.value, 10) || 0)}
-                unit="ea"
-                min="0"
-                step="1"
-                placeholder="1"
-              />
-            </div>
-            <div className="action-row" style={{ marginTop: '10px' }}>
-              <button type="button" className="action-btn secondary" onClick={addBubbler}>
-                Add Another
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ==================== WATER FEATURE RUNS ==================== */}
-      <div className="spec-block" style={{ marginTop: '1.5rem' }}>
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Water Feature Runs</h2>
-          <p className="spec-block-subtitle">Enter LNFT per feature run.</p>
-        </div>
-
-        <div className="spec-grid spec-grid-2">
-          {renderRunInput('Water Feature 1 Run', 'waterFeature1Run')}
-          {renderRunInput('Water Feature 2 Run', 'waterFeature2Run')}
-          {renderRunInput('Water Feature 3 Run', 'waterFeature3Run')}
-          {renderRunInput('Water Feature 4 Run', 'waterFeature4Run')}
-        </div>
-        <div className="form-help" style={{ fontStyle: 'italic', fontSize: '0.9rem' }}>
-          Pricing reflected in Plumbing
-        </div>
+        {renderCategoryRows('LED Bubbler', bubblerOptions, bubblerSelections, bubblerRunKeys)}
       </div>
     </div>
   );

@@ -172,6 +172,15 @@
   margin: 12px 0 24px;
 }
 
+.version-divider-title {
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1f2937;
+  letter-spacing: 0.3px;
+  margin: 14px 0 10px;
+}
+
 .page-title {
   color: #1a2332;
   font-size: 26px;
@@ -397,11 +406,27 @@
   color: #1a2332;
   font-weight: 600;
   font-size: 16px;
-  text-align: right;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .hero-total strong {
   font-weight: 700;
+}
+
+.hero-total-amount {
+  font-weight: 600;
+}
+
+.proposal-gp-indicator {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.2px;
 }
 
 .tiles-grid {

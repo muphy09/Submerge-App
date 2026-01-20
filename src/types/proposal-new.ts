@@ -92,6 +92,11 @@ export interface ColumnSpec {
   facing: 'none' | 'tile' | 'panel-ledge' | 'stacked-stone';
 }
 
+export interface RetainingWallSelection {
+  type: string;
+  length: number; // LNFT
+}
+
 export interface Excavation {
   // RBB (Raised Bond Beam)
   rbbLevels: RBBLevel[];
@@ -113,6 +118,7 @@ export interface Excavation {
   needsSoilSampleEngineer: boolean;
 
   // Retaining walls
+  retainingWalls?: RetainingWallSelection[];
   retainingWallType?: string;
   retainingWallLength?: number; // LNFT
 
@@ -178,6 +184,7 @@ export interface Electrical {
 export type TileLevel = 1 | 2 | 3;
 export type CopingType = 'cantilever' | 'flagstone' | 'paver' | 'travertine-level1' | 'travertine-level2' | 'concrete';
 export type DeckingType = 'paver' | 'travertine-level1' | 'travertine-level2' | 'concrete';
+export type CopingSize = '12x12' | '16x16';
 
 export interface TileCopingDecking {
   // Tile
@@ -187,6 +194,7 @@ export interface TileCopingDecking {
 
   // Coping
   copingType: CopingType;
+  copingSize: CopingSize;
   copingLength: number; // Auto-calculated from perimeter
 
   // Decking

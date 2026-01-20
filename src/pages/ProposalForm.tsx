@@ -18,6 +18,7 @@ import {
 } from '../utils/proposalDefaults';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import MasterPricingEngine from '../services/masterPricingEngine';
+import { CalculationModules } from '../services/pricingEngineComplete';
 import { validateProposal } from '../utils/validation';
 import PoolSpecsSectionNew from '../components/PoolSpecsSectionNew';
 import ExcavationSectionNew from '../components/ExcavationSectionNew';
@@ -81,6 +82,17 @@ const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
     totalCost: 0,
   };
 };
+
+const formatGrossMarginIndicator = (value?: number): string => {
+  const safeValue = Number.isFinite(value) ? (value as number) : 0;
+  const sign = safeValue < 0 ? '-' : '';
+  const fixed = Math.abs(safeValue).toFixed(2);
+  const [whole, decimal] = fixed.split('.');
+  const paddedWhole = (whole || '0').padStart(2, '0');
+  return `${sign}${paddedWhole}.${decimal}`;
+};
+
+const buildProposalIndicator = (value?: number): string => `Proposal #26${formatGrossMarginIndicator(value)}`;
 
 type SectionKey =
   | 'poolSpecs'
@@ -152,6 +164,14 @@ const toFiniteNumber = (value: any): number => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(amount);
+};
+
 const hasPoolDefinition = (poolSpecs?: Proposal['poolSpecs']) => {
   if (!poolSpecs) return false;
   const hasGuniteDimensions =
@@ -196,6 +216,8 @@ function ProposalForm() {
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
   const location = useLocation();
+  const sessionRole = getSessionRole();
+  const canViewCostBreakdown = sessionRole === 'admin' || sessionRole === 'owner';
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
   const versionNameFromState = (location.state as any)?.versionName as string | undefined;
   const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -639,6 +661,34 @@ function ProposalForm() {
     }
   };
 
+  useEffect(() => {
+    if (!proposal.poolSpecs || !proposal.tileCopingDecking) return;
+
+    const hasSpaDimensions =
+      proposal.poolSpecs.spaType === 'gunite' &&
+      (proposal.poolSpecs.spaLength ?? 0) > 0 &&
+      (proposal.poolSpecs.spaWidth ?? 0) > 0;
+    const currentDoubleBullnose = proposal.tileCopingDecking.doubleBullnoseLnft ?? 0;
+
+    if (!hasSpaDimensions) {
+      if (currentDoubleBullnose !== 0) {
+        updateProposal('tileCopingDecking', { ...proposal.tileCopingDecking, doubleBullnoseLnft: 0 });
+      }
+      return;
+    }
+
+    const spaPerimeter = CalculationModules.Pool.calculateSpaPerimeter(proposal.poolSpecs);
+    if (currentDoubleBullnose > 0 && currentDoubleBullnose !== spaPerimeter) {
+      updateProposal('tileCopingDecking', { ...proposal.tileCopingDecking, doubleBullnoseLnft: spaPerimeter });
+    }
+  }, [
+    proposal.poolSpecs?.spaType,
+    proposal.poolSpecs?.spaLength,
+    proposal.poolSpecs?.spaWidth,
+    proposal.poolSpecs?.spaShape,
+    proposal.tileCopingDecking?.doubleBullnoseLnft,
+  ]);
+
   const calculateTotals = (): Proposal => {
     const normalized = mergeWithDefaults(proposal);
     const result = MasterPricingEngine.calculateCompleteProposal(normalized, papDiscounts);
@@ -845,6 +895,8 @@ function ProposalForm() {
               customerInfo={proposal.customerInfo!}
               onChangeCustomerInfo={(info) => updateProposal('customerInfo', info)}
               onChange={(data) => updateProposal('poolSpecs', data)}
+              tileCopingDecking={proposal.tileCopingDecking}
+              onChangeTileCopingDecking={(data) => updateProposal('tileCopingDecking', data)}
               pricingModels={pricingModels}
               selectedPricingModelId={selectedPricingModelId}
               selectedPricingModelName={selectedPricingModelName}
@@ -933,7 +985,6 @@ function ProposalForm() {
             <InteriorFinishSectionNew
               data={proposal.interiorFinish!}
               onChange={(data) => updateProposal('interiorFinish', data)}
-              poolSurfaceArea={proposal.poolSpecs.surfaceArea || 0}
               hasSpa={hasSpa}
             />
           );
@@ -1006,6 +1057,7 @@ function ProposalForm() {
         poolSpecs.hasSpillover);
 
     const excavation = proposal.excavation;
+    const retainingWalls = excavation?.retainingWalls ?? [];
     const hasExcavationData =
       !!excavation &&
       ((excavation.rbbLevels?.length ?? 0) > 0 ||
@@ -1023,6 +1075,11 @@ function ProposalForm() {
         hasPositive(excavation.additionalBench) ||
         hasPositive(excavation.doubleCurtainLength) ||
         excavation.needsSoilSampleEngineer ||
+        retainingWalls.some(
+          (wall) =>
+            (wall.length ?? 0) > 0 ||
+            (!!wall.type && wall.type !== 'None' && wall.type !== 'No Retaining Wall')
+        ) ||
         (excavation.retainingWallType &&
           excavation.retainingWallType !== 'None' &&
           excavation.retainingWallType !== 'none') ||
@@ -1155,6 +1212,15 @@ function ProposalForm() {
   const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
   const editingVersionKey = proposal.versionId || editingVersionId || 'original';
   const isVersionEdit = !(proposal.isOriginalVersion ?? editingVersionKey === 'original');
+  const retailPrice = toFiniteNumber(
+    currentCostBreakdown.pricing.retailPrice ??
+      currentCostBreakdown.totalCost ??
+      proposal.totalCost ??
+      0
+  );
+  const formattedRetailPrice = formatCurrency(retailPrice);
+  const proposalIndicator = buildProposalIndicator(currentCostBreakdown.pricing?.grossProfitMargin);
+  const showCostSidebar = canViewCostBreakdown && showRightCost;
 
   const handleCompleteClick = () => {
     if (!canSubmit || isSaving) return;
@@ -1171,7 +1237,7 @@ function ProposalForm() {
       </header>
 
       <div
-        className={`form-layout ${isCompactLayout ? 'is-compact' : ''} ${isMobileLayout ? 'is-mobile' : ''} ${!showRightCost ? 'no-cost' : ''} ${!showLeftNav ? 'no-nav' : ''}`}
+        className={`form-layout ${isCompactLayout ? 'is-compact' : ''} ${isMobileLayout ? 'is-mobile' : ''} ${!showCostSidebar ? 'no-cost' : ''} ${!showLeftNav ? 'no-nav' : ''}`}
       >
         {showLeftNav && (
           <nav className={`section-nav ${showLeftNav ? 'open' : ''}`}>
@@ -1199,30 +1265,37 @@ function ProposalForm() {
             </button>
             <div className="nav-action-space" aria-hidden="true">
               <span className="nav-divider" />
-              <div className="nav-action-buttons">
-                <button
-                  className="cost-modal-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowCostBreakdownPage(true);
-                  }}
-                  title="View Cost Breakdown"
-                >
-                  <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
-                  <span className="cost-modal-label">Cost Breakdown</span>
-                </button>
-                <button
-                  className="cost-modal-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowCostModal(true);
-                  }}
-                  title="View Customer Proposal"
-                >
-                  <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
-                  <span className="cost-modal-label">Customer Proposal</span>
-                </button>
-              </div>
+              {canViewCostBreakdown ? (
+                <div className="nav-action-buttons">
+                  <button
+                    className="cost-modal-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCostBreakdownPage(true);
+                    }}
+                    title="View Cost Breakdown"
+                  >
+                    <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
+                    <span className="cost-modal-label">Cost Breakdown</span>
+                  </button>
+                  <button
+                    className="cost-modal-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCostModal(true);
+                    }}
+                    title="View Customer Proposal"
+                  >
+                    <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
+                    <span className="cost-modal-label">Customer Proposal</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="nav-retail-price">
+                  <span className="nav-retail-label">Retail Price:</span>
+                  <span className="nav-retail-value">{formattedRetailPrice}</span>
+                </div>
+              )}
               <span className="nav-divider" />
             </div>
             <div className="section-nav-grid">
@@ -1260,7 +1333,7 @@ function ProposalForm() {
           </button>
         )}
 
-        <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showRightCost ? 'no-right-cost' : ''}`}>
+        <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showCostSidebar ? 'no-right-cost' : ''}`}>
           <div className="section-content" ref={sectionContentRef}>
             <div className="section-title-row">
               <h2 className="section-title">{sections[currentSection]?.label}</h2>
@@ -1284,6 +1357,9 @@ function ProposalForm() {
                 Home
               </button>
             </div>
+            <div className="middle-actions">
+              <span className="proposal-gp-indicator">{proposalIndicator}</span>
+            </div>
             <div className="right-actions">
               {currentSection > 0 && (
                 <button className="btn btn-secondary" onClick={handlePrevious} disabled={isSaving}>
@@ -1299,7 +1375,7 @@ function ProposalForm() {
           </div>
         </div>
 
-        {showRightCost && (
+        {showCostSidebar && (
           <aside className="cost-sidebar">
             <LiveCostBreakdown
               costBreakdown={currentCostBreakdown.costBreakdown}
@@ -1312,7 +1388,7 @@ function ProposalForm() {
           </aside>
         )}
 
-        {!showRightCost && (
+        {canViewCostBreakdown && !showCostSidebar && (
           <button
             className="sidebar-show-button right-show"
             onClick={() => {

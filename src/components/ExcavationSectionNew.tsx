@@ -88,12 +88,17 @@ const formatColumnsTitle = (columns: Excavation['columns']) => {
 function ExcavationSectionNew({ data, onChange }: Props) {
   const [activeRBBIndex, setActiveRBBIndex] = useState<number | null>(null);
   const [columnsEditing, setColumnsEditing] = useState<boolean>(data.columns.count > 0);
-  const [retainingOpen, setRetainingOpen] = useState<boolean>(
-    (data.retainingWallType && data.retainingWallType !== 'None' && data.retainingWallType !== 'No Retaining Wall') ||
-      (data.retainingWallLength ?? 0) > 0,
-  );
   const [doubleCurtainActive, setDoubleCurtainActive] = useState<boolean>(data.doubleCurtainLength > 0);
   const [sitePrepActive, setSitePrepActive] = useState<boolean>(data.additionalSitePrepHours > 0);
+  const retainingWallOptions = pricingData.masonry.retainingWalls.filter(
+    (option: any) => option.name && option.name !== 'No Retaining Wall' && option.name !== 'None',
+  );
+  const defaultRetainingWallType =
+    retainingWallOptions[0]?.name ||
+    pricingData.masonry.retainingWalls[0]?.name ||
+    'No Retaining Wall';
+  const retainingWalls = data.retainingWalls ?? [];
+  const retainingActive = retainingWalls.length > 0;
 
   useEffect(() => {
     if (data.rbbLevels.length === 0) {
@@ -112,6 +117,24 @@ function ExcavationSectionNew({ data, onChange }: Props) {
       setSitePrepActive(true);
     }
   }, [data.additionalSitePrepHours, sitePrepActive]);
+
+  useEffect(() => {
+    const hasLegacySelection =
+      (data.retainingWallType &&
+        data.retainingWallType !== 'None' &&
+        data.retainingWallType !== 'No Retaining Wall') ||
+      (data.retainingWallLength ?? 0) > 0;
+    if ((!data.retainingWalls || data.retainingWalls.length === 0) && hasLegacySelection) {
+      const legacyType =
+        data.retainingWallType &&
+        data.retainingWallType !== 'None' &&
+        data.retainingWallType !== 'No Retaining Wall'
+          ? data.retainingWallType
+          : defaultRetainingWallType;
+      setRetainingWalls([{ type: legacyType, length: data.retainingWallLength ?? 0 }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.retainingWallType, data.retainingWallLength, data.retainingWalls?.length, defaultRetainingWallType]);
 
   const handleChange = (field: keyof Excavation, value: any) => {
     onChange({ ...data, [field]: value });
@@ -169,19 +192,45 @@ function ExcavationSectionNew({ data, onChange }: Props) {
     handleChange('columns', { ...data.columns, count: nextCount });
   };
 
+  const setRetainingWalls = (walls: { type: string; length: number }[]) => {
+    const primary = walls[0];
+    onChange({
+      ...data,
+      retainingWalls: walls,
+      retainingWallType: primary?.type ?? 'No Retaining Wall',
+      retainingWallLength: primary?.length ?? 0,
+    });
+  };
+
   const handleRetainingToggle = (enabled: boolean) => {
     if (enabled) {
-      const defaultType =
-        data.retainingWallType && data.retainingWallType !== 'None'
-          ? data.retainingWallType
-          : pricingData.masonry.retainingWalls[0]?.name || 'No Retaining Wall';
-      handleChange('retainingWallType', defaultType);
-      setRetainingOpen(true);
-    } else {
-      handleChange('retainingWallType', 'No Retaining Wall');
-      handleChange('retainingWallLength', 0);
-      setRetainingOpen(false);
+      if (retainingWalls.length === 0) {
+        const nextType =
+          data.retainingWallType &&
+          data.retainingWallType !== 'None' &&
+          data.retainingWallType !== 'No Retaining Wall'
+            ? data.retainingWallType
+            : defaultRetainingWallType;
+        setRetainingWalls([{ type: nextType, length: data.retainingWallLength ?? 0 }]);
+      }
+      return;
     }
+    setRetainingWalls([]);
+  };
+
+  const addRetainingWall = () => {
+    setRetainingWalls([...retainingWalls, { type: defaultRetainingWallType, length: 0 }]);
+  };
+
+  const removeRetainingWall = (index: number) => {
+    const next = retainingWalls.filter((_, i) => i !== index);
+    setRetainingWalls(next);
+  };
+
+  const updateRetainingWall = (index: number, field: 'type' | 'length', value: any) => {
+    const updated = [...retainingWalls];
+    updated[index] = { ...updated[index], [field]: value };
+    setRetainingWalls(updated);
   };
 
   const toggleDoubleCurtain = () => {
@@ -391,7 +440,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
 
             {columnsEditing && (
               <>
-                <div className="spec-grid-3">
+                <div className="spec-grid-5-tight">
                   <div className="spec-field">
                     <label className="spec-label">Number of Columns</label>
                     <CompactInput
@@ -437,9 +486,6 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                       step="0.5"
                     />
                   </div>
-                </div>
-
-                <div className="spec-grid-2">
                   <div className="spec-field">
                     <label className="spec-label">Height</label>
                     <CompactInput
@@ -498,48 +544,75 @@ function ExcavationSectionNew({ data, onChange }: Props) {
         <div className="pool-type-buttons stackable">
           <button
             type="button"
-            className={`pool-type-btn ${!retainingOpen ? 'active' : ''}`}
+            className={`pool-type-btn ${!retainingActive ? 'active' : ''}`}
             onClick={() => handleRetainingToggle(false)}
           >
             No Retaining Wall
           </button>
           <button
             type="button"
-            className={`pool-type-btn ${retainingOpen ? 'active' : ''}`}
+            className={`pool-type-btn ${retainingActive ? 'active' : ''}`}
             onClick={() => handleRetainingToggle(true)}
           >
             Select Retaining Wall
           </button>
         </div>
 
-        {retainingOpen ? (
-          <div className="spec-grid-2">
-            <div className="spec-field">
-              <label className="spec-label">Retaining Wall Type</label>
-              <select
-                className="compact-input"
-                value={data.retainingWallType || 'No Retaining Wall'}
-                onChange={(e) => handleChange('retainingWallType', e.target.value)}
-              >
-                {pricingData.masonry.retainingWalls.map((opt: any) => (
-                  <option key={opt.name} value={opt.name}>
-                    {opt.name} {opt.costPerSqft > 0 ? `- $${opt.costPerSqft}/SQFT` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {retainingActive ? (
+          <>
+            {retainingWalls.map((wall, index) => (
+              <div key={`retaining-wall-${index}`} className="spec-subcard">
+                <div className="spec-subcard-header">
+                  <div>
+                    <div className="spec-subcard-title">{`Retaining Wall #${index + 1}`}</div>
+                    <div className="spec-subcard-subtitle">
+                      {wall.type || defaultRetainingWallType}
+                      {wall.length ? ` | ${formatNumber(wall.length)} ft` : ''}
+                    </div>
+                  </div>
+                  <div className="spec-subcard-actions stacked-actions">
+                    <div className="stacked-primary-actions">
+                      <button type="button" className="link-btn danger" onClick={() => removeRetainingWall(index)}>
+                        Remove
+                      </button>
+                    </div>
+                    {index === retainingWalls.length - 1 && (
+                      <button type="button" className="link-btn small" onClick={addRetainingWall}>
+                        Add Another
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="spec-grid-2">
+                  <div className="spec-field">
+                    <label className="spec-label">Retaining Wall Type</label>
+                    <select
+                      className="compact-input"
+                      value={wall.type || defaultRetainingWallType}
+                      onChange={(e) => updateRetainingWall(index, 'type', e.target.value)}
+                    >
+                      {retainingWallOptions.map((opt: any) => (
+                        <option key={opt.name} value={opt.name}>
+                          {opt.name} {opt.costPerSqft > 0 ? `- $${opt.costPerSqft}/SQFT` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <div className="spec-field">
-              <label className="spec-label">Retaining Wall Length</label>
-              <CompactInput
-                value={data.retainingWallLength || 0}
-                onChange={(e) => handleChange('retainingWallLength', parseFloat(e.target.value) || 0)}
-                unit="ft"
-                min="0"
-                step="1"
-              />
-            </div>
-          </div>
+                  <div className="spec-field">
+                    <label className="spec-label">Retaining Wall Length</label>
+                    <CompactInput
+                      value={wall.length || 0}
+                      onChange={(e) => updateRetainingWall(index, 'length', parseFloat(e.target.value) || 0)}
+                      unit="ft"
+                      min="0"
+                      step="1"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </>
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
             No Retaining Wall

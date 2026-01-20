@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Equipment, PumpSelection, LightSelection } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { getSessionRole } from '../services/session';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import './SectionStyles.css';
@@ -52,35 +53,10 @@ const CompactInput = ({
   );
 };
 
-const ButtonGroup = <T extends string | number>({
-  value,
-  options,
-  onChange,
-  buttonClassName,
-}: {
-  value: T;
-  options: { label: string; value: T; badge?: string }[];
-  onChange: (val: T) => void;
-  buttonClassName?: string;
-}) => (
-  <div className={`pool-type-buttons stackable ${buttonClassName || ''}`.trim()}>
-    {options.map(opt => (
-      <button
-        key={String(opt.value)}
-        type="button"
-        className={`pool-type-btn ${value === opt.value ? 'active' : ''}`}
-        onClick={() => onChange(opt.value)}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-          <span>{opt.label}</span>
-          {opt.badge && <span className="info-pill">{opt.badge}</span>}
-        </div>
-      </button>
-    ))}
-  </div>
-);
-
 function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
+  const sessionRole = getSessionRole();
+  const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
+
   const defaults = useMemo(() => {
     const byCost = <T,>(list: T[]) =>
       list.find((item: any) => getEquipmentItemCost(item) === 0) || list[0];
@@ -106,6 +82,20 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const costOf = (item: any, applyPumpOverhead?: boolean) =>
     getEquipmentItemCost(item, applyPumpOverhead ? pumpOverhead : 1);
   const hasHeaterSelection = hasRealSelection(data?.heater?.name, 'no heater');
+  const getCostBadge = (amount: number) =>
+    canViewCostAmounts ? (amount > 0 ? `$${amount.toLocaleString()}` : 'Included') : undefined;
+  const noneOptionValue = 'none';
+  const formatOptionLabel = (label: string, amount?: number) => {
+    const badge = getCostBadge(amount ?? 0);
+    return badge ? `${label} (${badge})` : label;
+  };
+
+  const pumpOptions = pricingData.equipment.pumps.filter(pump => !pump.name.toLowerCase().includes('no pump'));
+  const filterOptions = pricingData.equipment.filters.filter(filter => !filter.name.toLowerCase().includes('no filter'));
+  const cleanerOptions = pricingData.equipment.cleaners.filter(cleaner => !cleaner.name.toLowerCase().includes('no cleaner'));
+  const heaterOptions = pricingData.equipment.heaters.filter(heater => !heater.name.toLowerCase().includes('no heater'));
+  const automationOptions = pricingData.equipment.automation.filter(auto => !auto.name.toLowerCase().includes('no automation'));
+  const saltOptions = pricingData.equipment.saltSystem.filter(system => !system.name.toLowerCase().includes('no salt'));
 
   const baseSafeData: Equipment = {
     pump: data?.pump || {
@@ -148,8 +138,8 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
     },
     heaterQuantity: hasHeaterSelection ? Math.max(data?.heaterQuantity ?? 1, 1) : 0,
     upgradeToVersaFlo: data?.upgradeToVersaFlo ?? false,
-    includePoolLights: data?.includePoolLights ?? true,
-    includeSpaLights: data?.includeSpaLights ?? hasSpa,
+    includePoolLights: data?.includePoolLights ?? false,
+    includeSpaLights: data?.includeSpaLights ?? false,
     poolLights: data?.poolLights,
     spaLights: data?.spaLights,
     numberOfLights: data?.numberOfLights ?? 0,
@@ -184,15 +174,17 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   }, []);
 
   const [includePump, setIncludePump] = useState<boolean>(() => hasRealSelection(data?.pump?.name, 'no pump'));
-  const [includeFilter, setIncludeFilter] = useState<boolean>(() => (data?.filterQuantity ?? 0) > 0);
-  const [includeCleaner, setIncludeCleaner] = useState<boolean>((safeData.cleanerQuantity ?? 0) > 0);
+  const [includeFilter, setIncludeFilter] = useState<boolean>(() => hasRealSelection(data?.filter?.name, 'no filter'));
+  const [includeCleaner, setIncludeCleaner] = useState<boolean>(() => hasRealSelection(data?.cleaner?.name, 'no cleaner'));
   const [includeHeater, setIncludeHeater] = useState<boolean>(() => hasHeaterSelection);
-  const [includePoolLights, setIncludePoolLights] = useState<boolean>(() => hasPool && safeData.includePoolLights !== false);
-  const [includeSpaLights, setIncludeSpaLights] = useState<boolean>(() => hasSpa && safeData.includeSpaLights !== false);
+  const [includePoolLights, setIncludePoolLights] = useState<boolean>(() => (safeData.poolLights?.length ?? 0) > 0);
+  const [includeSpaLights, setIncludeSpaLights] = useState<boolean>(() => (safeData.spaLights?.length ?? 0) > 0);
   const [includeAutomation, setIncludeAutomation] = useState<boolean>(() =>
-    (data?.automationQuantity ?? 0) > 0 || (data?.automation?.zones ?? 0) > 0
+    hasRealSelection(data?.automation?.name, 'no automation') ||
+    (data?.automationQuantity ?? 0) > 0 ||
+    (data?.automation?.zones ?? 0) > 0
   );
-  const [includeSalt, setIncludeSalt] = useState<boolean>(!!safeData.saltSystem?.name);
+  const [includeSalt, setIncludeSalt] = useState<boolean>(() => hasRealSelection(safeData.saltSystem?.name, 'no salt'));
   const auxiliaryPumps = safeData.auxiliaryPumps || [];
   const maxAuxiliaryPumps = 2;
   const cleanerQuantity = Math.max(safeData.cleanerQuantity ?? (includeCleaner ? 1 : 0), 0);
@@ -201,8 +193,6 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const automationQuantity = Math.max(safeData.automationQuantity ?? (includeAutomation ? 1 : 0), 0);
   const poolLights = safeData.poolLights || [];
   const spaLights = safeData.spaLights || [];
-  const poolLightsToggledRef = useRef(false);
-  const spaLightsToggledRef = useRef(false);
 
   const updateData = (updates: Partial<Equipment>) => {
     onChange({ ...safeData, ...updates, hasBeenEdited: true });
@@ -374,62 +364,56 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   };
 
   useEffect(() => {
-    if (!hasPool) {
-      if (includePoolLights && poolLights.length > 0) {
-        commitLighting([], spaLights, includePoolLights, includeSpaLights);
-      }
-      return;
-    }
-    if (!includePoolLights && !poolLightsToggledRef.current) {
-      setIncludePoolLights(true);
-    }
-    if (includePoolLights && poolLights.length === 0 && poolLightOptions.length > 0 && !poolLightsToggledRef.current) {
-      commitLighting([buildLightSelection(poolLightOptions[0], 'pool')], spaLights, true, includeSpaLights);
-    }
-  }, [hasPool, includePoolLights, poolLights.length, spaLights, includeSpaLights, poolLightOptions]);
-
-  useEffect(() => {
-    if (!hasSpa) {
-      if (includeSpaLights || spaLights.length > 0) {
-        commitLighting(poolLights, [], includePoolLights, false);
-        setIncludeSpaLights(false);
-      }
-      return;
-    }
-    if (!includeSpaLights && !spaLightsToggledRef.current) {
-      setIncludeSpaLights(true);
-    }
-    if (includeSpaLights && spaLights.length === 0 && spaLightOptions.length > 0 && !spaLightsToggledRef.current) {
-      commitLighting(poolLights, [buildLightSelection(spaLightOptions[0], 'spa')], includePoolLights, true);
-    }
-  }, [hasSpa, includeSpaLights, spaLights.length, poolLights, includePoolLights, spaLightOptions]);
-
-  const togglePoolLighting = (val: boolean) => {
-    poolLightsToggledRef.current = true;
-    setIncludePoolLights(val);
-    if (val) {
-      const defaultLight = poolLightOptions[0] ? buildLightSelection(poolLightOptions[0], 'pool') : undefined;
-      const nextPoolLights = poolLights.length > 0 ? poolLights : defaultLight ? [defaultLight] : [];
-      commitLighting(nextPoolLights, spaLights, true, includeSpaLights);
-    } else {
+    if (!hasPool && (includePoolLights || poolLights.length > 0)) {
+      setIncludePoolLights(false);
       commitLighting([], spaLights, false, includeSpaLights);
     }
-  };
+  }, [hasPool, includePoolLights, poolLights.length, spaLights, includeSpaLights]);
 
-  const toggleSpaLighting = (val: boolean) => {
-    spaLightsToggledRef.current = true;
-    if (!hasSpa) {
+  useEffect(() => {
+    if (!hasSpa && (includeSpaLights || spaLights.length > 0)) {
       setIncludeSpaLights(false);
-      return;
-    }
-    setIncludeSpaLights(val);
-    if (val) {
-      const defaultLight = spaLightOptions[0] ? buildLightSelection(spaLightOptions[0], 'spa') : undefined;
-      const nextSpaLights = spaLights.length > 0 ? spaLights : defaultLight ? [defaultLight] : [];
-      commitLighting(poolLights, nextSpaLights, includePoolLights, true);
-    } else {
       commitLighting(poolLights, [], includePoolLights, false);
     }
+  }, [hasSpa, includeSpaLights, spaLights.length, poolLights, includePoolLights]);
+
+  const handlePoolLightSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      setIncludePoolLights(false);
+      commitLighting([], spaLights, false, includeSpaLights);
+      return;
+    }
+    const option = findLightOption(name, 'pool');
+    if (!option) return;
+    const nextPoolLights = poolLights.length > 0 ? [...poolLights] : [];
+    const primary = buildLightSelection(option, 'pool');
+    if (nextPoolLights.length > 0) {
+      nextPoolLights[0] = primary;
+    } else {
+      nextPoolLights.push(primary);
+    }
+    setIncludePoolLights(true);
+    commitLighting(nextPoolLights, spaLights, true, includeSpaLights);
+  };
+
+  const handleSpaLightSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      setIncludeSpaLights(false);
+      commitLighting(poolLights, [], includePoolLights, false);
+      return;
+    }
+    if (!hasSpa) return;
+    const option = findLightOption(name, 'spa');
+    if (!option) return;
+    const nextSpaLights = spaLights.length > 0 ? [...spaLights] : [];
+    const primary = buildLightSelection(option, 'spa');
+    if (nextSpaLights.length > 0) {
+      nextSpaLights[0] = primary;
+    } else {
+      nextSpaLights.push(primary);
+    }
+    setIncludeSpaLights(true);
+    commitLighting(poolLights, nextSpaLights, includePoolLights, true);
   };
 
   const addPoolLight = () => {
@@ -442,10 +426,11 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const removePoolLight = (index: number) => {
     const next = poolLights.filter((_, i) => i !== index);
     if (next.length === 0) {
-      togglePoolLighting(false);
-    } else {
-      commitLighting(next, spaLights, true, includeSpaLights);
+      setIncludePoolLights(false);
+      commitLighting([], spaLights, false, includeSpaLights);
+      return;
     }
+    commitLighting(next, spaLights, true, includeSpaLights);
   };
 
   const handlePoolLightChange = (index: number, name: string) => {
@@ -466,10 +451,11 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const removeSpaLight = (index: number) => {
     const next = spaLights.filter((_, i) => i !== index);
     if (next.length === 0) {
-      toggleSpaLighting(false);
-    } else {
-      commitLighting(poolLights, next, includePoolLights, true);
+      setIncludeSpaLights(false);
+      commitLighting(poolLights, [], includePoolLights, false);
+      return;
     }
+    commitLighting(poolLights, next, includePoolLights, true);
   };
 
   const handleSpaLightChange = (index: number, name: string) => {
@@ -521,6 +507,60 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
     }
   };
 
+  const handlePumpSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      togglePump(false);
+      return;
+    }
+    setIncludePump(true);
+    handlePumpChange(name);
+  };
+
+  const handleFilterSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      toggleFilter(false);
+      return;
+    }
+    setIncludeFilter(true);
+    handleFilterChange(name);
+  };
+
+  const handleCleanerSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      toggleCleaner(false);
+      return;
+    }
+    setIncludeCleaner(true);
+    handleCleanerChange(name);
+  };
+
+  const handleHeaterSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      toggleHeater(false);
+      return;
+    }
+    setIncludeHeater(true);
+    handleHeaterChange(name);
+  };
+
+  const handleAutomationSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      toggleAutomation(false);
+      return;
+    }
+    setIncludeAutomation(true);
+    handleAutomationChange(name);
+  };
+
+  const handleSaltSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      toggleSalt(false);
+      return;
+    }
+    setIncludeSalt(true);
+    handleSaltSystemChange(name);
+  };
+
   const handlePumpChange = (name: string) => {
     const pump = pricingData.equipment.pumps.find(p => p.name === name);
     if (pump) {
@@ -530,7 +570,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
         basePrice: (pump as any).basePrice,
         addCost1: (pump as any).addCost1,
         addCost2: (pump as any).addCost2,
-          price: costOf(pump, true),
+        price: costOf(pump, true),
       });
     }
   };
@@ -668,54 +708,43 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Pump</h2>
-          <p className="spec-block-subtitle">Add a Pump and Auxillary Pumps</p>
-          <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-            <button
-              type="button"
-              className={`pool-type-btn ${includePump ? 'active' : ''}`}
-              onClick={() => togglePump(!includePump)}
-            >
-              {includePump ? 'Remove Pump' : 'Add Pump'}
-            </button>
-          </div>
+        </div>
+        <div className="spec-field">
+          <label className="spec-label">Pump</label>
+          <select
+            className="compact-input equipment-select"
+            value={includePump ? safeData.pump.name : noneOptionValue}
+            onChange={(e) => handlePumpSelect(e.target.value)}
+          >
+            <option value={noneOptionValue}>None</option>
+            {pumpOptions.map(pump => (
+              <option key={pump.name} value={pump.name}>
+                {formatOptionLabel(pump.name, costOf(pump, true))}
+              </option>
+            ))}
+          </select>
         </div>
         {includePump && (
-          <div className="spec-field">
-            <ButtonGroup
-              value={safeData.pump.name}
-              onChange={handlePumpChange}
-              buttonClassName="pump-row"
-              options={pricingData.equipment.pumps
-                .filter(pump => !pump.name.toLowerCase().includes('no pump'))
-                .map(pump => ({
-                  label: pump.name,
-                  value: pump.name,
-                  badge: costOf(pump, true) > 0 ? `$${costOf(pump, true).toLocaleString()}` : 'Included',
-                }))}
-            />
-
+          <>
             {auxiliaryPumps.map((pump, idx) => (
-              <div key={idx} className="spec-subcard" style={{ marginTop: '12px' }}>
-                <div className="spec-subcard-header">
-                  <div className="spec-subcard-title">Auxiliary Pump #{idx + 1}</div>
-                  <div className="spec-subcard-actions">
-                    <button type="button" className="link-btn danger" onClick={() => removeAuxiliaryPump(idx)}>
-                      Remove
-                    </button>
-                  </div>
+              <div key={idx} className="spec-field equipment-extra-field">
+                <label className="spec-label">{`Additional Pump ${idx + 1}`}</label>
+                <div className="equipment-inline-row">
+                  <select
+                    className="compact-input equipment-select"
+                    value={pump?.name || safeData.pump.name}
+                    onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
+                  >
+                    {pumpOptions.map(option => (
+                      <option key={option.name} value={option.name}>
+                        {formatOptionLabel(option.name, costOf(option, true))}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="link-btn danger" onClick={() => removeAuxiliaryPump(idx)}>
+                    Remove
+                  </button>
                 </div>
-                <ButtonGroup
-                  value={pump?.name || safeData.pump.name}
-                  onChange={(name) => handleAuxiliaryPumpChange(idx, name)}
-                  buttonClassName="pump-row"
-                  options={pricingData.equipment.pumps
-                    .filter(p => !p.name.toLowerCase().includes('no pump'))
-                    .map(p => ({
-                      label: p.name,
-                      value: p.name,
-                      badge: costOf(p, true) > 0 ? `$${costOf(p, true).toLocaleString()}` : 'Included',
-                    }))}
-                />
               </div>
             ))}
 
@@ -726,7 +755,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
                 </button>
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
 
@@ -734,32 +763,25 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Filter</h2>
-          <p className="spec-block-subtitle">Add a Filter</p>
-          <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-            <button
-              type="button"
-              className={`pool-type-btn ${includeFilter ? 'active' : ''}`}
-              onClick={() => toggleFilter(!includeFilter)}
-            >
-              {includeFilter ? 'Remove Filter' : 'Add Filter'}
-            </button>
-          </div>
         </div>
-        {includeFilter && (
+        <div className="spec-grid spec-grid-2">
           <div className="spec-field">
-            <ButtonGroup
-              value={safeData.filter.name}
-              onChange={handleFilterChange}
-              buttonClassName="filter-grid"
-            options={pricingData.equipment.filters
-              .filter(filter => !filter.name.toLowerCase().includes('no filter'))
-                .map(filter => ({
-                  label: `${filter.name} (${filter.sqft} sqft)`,
-                  value: filter.name,
-                  badge: costOf(filter) > 0 ? `$${costOf(filter).toLocaleString()}` : 'Included',
-              }))}
-          />
-            <div className="spec-field" style={{ maxWidth: '220px', marginTop: '12px' }}>
+            <label className="spec-label">Filter</label>
+            <select
+              className="compact-input equipment-select"
+              value={includeFilter ? safeData.filter.name : noneOptionValue}
+              onChange={(e) => handleFilterSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {filterOptions.map(filter => (
+                <option key={filter.name} value={filter.name}>
+                  {formatOptionLabel(`${filter.name} (${filter.sqft} sqft)`, costOf(filter))}
+                </option>
+              ))}
+            </select>
+          </div>
+          {includeFilter && (
+            <div className="spec-field" style={{ maxWidth: '220px' }}>
               <label className="spec-label">Filter Quantity</label>
               <CompactInput
                 value={filterQuantity}
@@ -770,40 +792,33 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
                 placeholder="1"
               />
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Cleaner */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Cleaner</h2>
-          <p className="spec-block-subtitle">Add a Cleaner</p>
-          <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-            <button
-              type="button"
-              className={`pool-type-btn ${includeCleaner ? 'active' : ''}`}
-              onClick={() => toggleCleaner(!includeCleaner)}
-            >
-              {includeCleaner ? 'Remove Cleaner' : 'Add Cleaner'}
-            </button>
-          </div>
         </div>
-        {includeCleaner && (
+        <div className="spec-grid spec-grid-2">
           <div className="spec-field">
-            <ButtonGroup
-              value={safeData.cleaner.name}
-              onChange={handleCleanerChange}
-              buttonClassName="cleaner-row"
-            options={pricingData.equipment.cleaners
-              .filter(cleaner => !cleaner.name.toLowerCase().includes('no cleaner'))
-                .map(cleaner => ({
-                  label: cleaner.name,
-                  value: cleaner.name,
-                  badge: costOf(cleaner) > 0 ? `$${costOf(cleaner).toLocaleString()}` : 'Included',
-              }))}
-          />
-            <div className="spec-field" style={{ maxWidth: '220px', marginTop: '12px' }}>
+            <label className="spec-label">Cleaner</label>
+            <select
+              className="compact-input equipment-select"
+              value={includeCleaner ? safeData.cleaner.name : noneOptionValue}
+              onChange={(e) => handleCleanerSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {cleanerOptions.map(cleaner => (
+                <option key={cleaner.name} value={cleaner.name}>
+                  {formatOptionLabel(cleaner.name, costOf(cleaner))}
+                </option>
+              ))}
+            </select>
+          </div>
+          {includeCleaner && (
+            <div className="spec-field" style={{ maxWidth: '220px' }}>
               <label className="spec-label">Cleaner Quantity</label>
               <CompactInput
                 value={cleanerQuantity}
@@ -814,77 +829,67 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
                 placeholder="1"
               />
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Heating */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Heater</h2>
-          <p className="spec-block-subtitle">Choose Heater Model</p>
-          <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-            <button
-              type="button"
-              className={`pool-type-btn ${includeHeater ? 'active' : ''}`}
-              onClick={() => toggleHeater(!includeHeater)}
-            >
-              {includeHeater ? 'Remove Heater' : 'Add Heater'}
-            </button>
-          </div>
         </div>
-        {includeHeater && (
-          <>
-            <div className="spec-grid spec-grid-2">
-              <div className="spec-field">
-                <ButtonGroup
-                  value={safeData.heater.name}
-                  onChange={handleHeaterChange}
-                options={pricingData.equipment.heaters
-                  .filter(heater => !heater.name.toLowerCase().includes('no heater'))
-                    .map(heater => ({
-                      label: heater.name,
-                      value: heater.name,
-                      badge: costOf(heater) > 0 ? `$${costOf(heater).toLocaleString()}` : 'Included',
-                  }))}
+        <div className="spec-grid spec-grid-2">
+          <div className="spec-field">
+            <label className="spec-label">Heater Model</label>
+            <select
+              className="compact-input equipment-select"
+              value={includeHeater ? safeData.heater.name : noneOptionValue}
+              onChange={(e) => handleHeaterSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {heaterOptions.map(heater => (
+                <option key={heater.name} value={heater.name}>
+                  {formatOptionLabel(heater.name, costOf(heater))}
+                </option>
+              ))}
+            </select>
+          </div>
+          {includeHeater && (
+            <div className="spec-field" style={{ maxWidth: '220px' }}>
+              <label className="spec-label">Heater Quantity</label>
+              <CompactInput
+                value={heaterQuantity}
+                onChange={(e) => updateData({ heaterQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
+                unit="ea"
+                min="0"
+                step="1"
+                placeholder="1"
               />
-              </div>
-              <div className="spec-field" style={{ maxWidth: '220px' }}>
-                <label className="spec-label">Heater Quantity</label>
-                <CompactInput
-                  value={heaterQuantity}
-                  onChange={(e) => updateData({ heaterQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
-                  unit="ea"
-                  min="0"
-                  step="1"
-                  placeholder="1"
-                />
-              </div>
             </div>
+          )}
+        </div>
 
-            {hasSpa && !safeData.heater.isVersaFlo && (
-              <div className="spec-field">
-                <label className="spec-label">VersaFlo Upgrade</label>
-                <div className="pool-type-buttons">
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${safeData.upgradeToVersaFlo ? 'active' : ''}`}
-                    onClick={() => handleChange('upgradeToVersaFlo', true)}
-                  >
-                    Upgrade for Spa
-                  </button>
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${!safeData.upgradeToVersaFlo ? 'active' : ''}`}
-                    onClick={() => handleChange('upgradeToVersaFlo', false)}
-                  >
-                    Skip Upgrade
-                  </button>
-                </div>
-                <small className="form-help">Required for spa heating when not VersaFlo.</small>
-              </div>
-            )}
-          </>
+        {includeHeater && hasSpa && !safeData.heater.isVersaFlo && (
+          <div className="spec-field">
+            <label className="spec-label">VersaFlo Upgrade</label>
+            <div className="pool-type-buttons">
+              <button
+                type="button"
+                className={`pool-type-btn ${safeData.upgradeToVersaFlo ? 'active' : ''}`}
+                onClick={() => handleChange('upgradeToVersaFlo', true)}
+              >
+                Upgrade for Spa
+              </button>
+              <button
+                type="button"
+                className={`pool-type-btn ${!safeData.upgradeToVersaFlo ? 'active' : ''}`}
+                onClick={() => handleChange('upgradeToVersaFlo', false)}
+              >
+                Skip Upgrade
+              </button>
+            </div>
+            <small className="form-help">Required for spa heating when not VersaFlo.</small>
+          </div>
         )}
       </div>
 
@@ -892,49 +897,52 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Pool Lights</h2>
-          <p className="spec-block-subtitle">Select pool lighting fixtures.</p>
-          <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-            <button
-              type="button"
-              className={`pool-type-btn ${includePoolLights ? 'active' : ''}`}
-              onClick={() => togglePoolLighting(!includePoolLights)}
-            >
-              {includePoolLights ? 'Remove Pool Lights' : 'Add Pool Lights'}
-            </button>
-          </div>
+        </div>
+        <div className="spec-field">
+          <label className="spec-label">Pool Light</label>
+          <select
+            className="compact-input equipment-select"
+            value={includePoolLights && poolLights.length > 0 ? poolLights[0]?.name || noneOptionValue : noneOptionValue}
+            onChange={(e) => handlePoolLightSelect(e.target.value)}
+          >
+            <option value={noneOptionValue}>None</option>
+            {poolLightOptions.map(option => (
+              <option key={option.name} value={option.name}>
+                {formatOptionLabel(option.name, costOf(option))}
+              </option>
+            ))}
+          </select>
         </div>
         {includePoolLights && (
-          <div className="spec-field">
-            {poolLights.map((light, idx) => (
-              <div key={`pool-light-${idx}`} className="spec-subcard" style={{ marginTop: idx === 0 ? '0' : '12px' }}>
-                <div className="spec-subcard-header">
-                  <div className="spec-subcard-title">Pool Light #{idx + 1}</div>
-                  {poolLights.length > 1 && (
-                    <div className="spec-subcard-actions">
-                      <button type="button" className="link-btn danger" onClick={() => removePoolLight(idx)}>
-                        Remove
-                      </button>
-                    </div>
-                  )}
+          <>
+            {poolLights.slice(1).map((light, idx) => (
+              <div key={`pool-light-${idx + 1}`} className="spec-field equipment-extra-field">
+                <label className="spec-label">{`Additional Pool Light ${idx + 1}`}</label>
+                <div className="equipment-inline-row">
+                  <select
+                    className="compact-input equipment-select"
+                    value={light?.name || poolLightOptions[0]?.name || ''}
+                    onChange={(e) => handlePoolLightChange(idx + 1, e.target.value)}
+                  >
+                    {poolLightOptions.map(option => (
+                      <option key={option.name} value={option.name}>
+                        {formatOptionLabel(option.name, costOf(option))}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="link-btn danger" onClick={() => removePoolLight(idx + 1)}>
+                    Remove
+                  </button>
                 </div>
-                <ButtonGroup
-                  value={light?.name || poolLightOptions[0]?.name}
-                  onChange={(name) => handlePoolLightChange(idx, name)}
-                  options={poolLightOptions.map(option => ({
-                    label: option.name,
-                    value: option.name,
-                    badge: costOf(option) > 0 ? `$${costOf(option).toLocaleString()}` : 'Included',
-                  }))}
-                />
               </div>
             ))}
 
-            <div className="action-row" style={{ marginTop: poolLights.length ? '12px' : '0' }}>
+            <div className="action-row" style={{ marginTop: '12px' }}>
               <button type="button" className="action-btn secondary" onClick={addPoolLight}>
                 Add another Pool Light
               </button>
             </div>
-          </div>
+          </>
         )}
       </div>
 
@@ -943,49 +951,52 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
         <div className="spec-block">
           <div className="spec-block-header">
             <h2 className="spec-block-title">Spa Lights</h2>
-            <p className="spec-block-subtitle">Select spa lighting fixtures.</p>
-            <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-              <button
-                type="button"
-                className={`pool-type-btn ${includeSpaLights ? 'active' : ''}`}
-                onClick={() => toggleSpaLighting(!includeSpaLights)}
-              >
-                {includeSpaLights ? 'Remove Spa Lights' : 'Add Spa Lights'}
-              </button>
-            </div>
+          </div>
+          <div className="spec-field">
+            <label className="spec-label">Spa Light</label>
+            <select
+              className="compact-input equipment-select"
+              value={includeSpaLights && spaLights.length > 0 ? spaLights[0]?.name || noneOptionValue : noneOptionValue}
+              onChange={(e) => handleSpaLightSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {spaLightOptions.map(option => (
+                <option key={option.name} value={option.name}>
+                  {formatOptionLabel(option.name, costOf(option))}
+                </option>
+              ))}
+            </select>
           </div>
           {includeSpaLights && (
-            <div className="spec-field">
-              {spaLights.map((light, idx) => (
-                <div key={`spa-light-${idx}`} className="spec-subcard" style={{ marginTop: idx === 0 ? '0' : '12px' }}>
-                  <div className="spec-subcard-header">
-                    <div className="spec-subcard-title">Spa Light #{idx + 1}</div>
-                    {spaLights.length > 1 && (
-                      <div className="spec-subcard-actions">
-                        <button type="button" className="link-btn danger" onClick={() => removeSpaLight(idx)}>
-                          Remove
-                        </button>
-                      </div>
-                    )}
+            <>
+              {spaLights.slice(1).map((light, idx) => (
+                <div key={`spa-light-${idx + 1}`} className="spec-field equipment-extra-field">
+                  <label className="spec-label">{`Additional Spa Light ${idx + 1}`}</label>
+                  <div className="equipment-inline-row">
+                    <select
+                      className="compact-input equipment-select"
+                      value={light?.name || spaLightOptions[0]?.name || ''}
+                      onChange={(e) => handleSpaLightChange(idx + 1, e.target.value)}
+                    >
+                      {spaLightOptions.map(option => (
+                        <option key={option.name} value={option.name}>
+                          {formatOptionLabel(option.name, costOf(option))}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" className="link-btn danger" onClick={() => removeSpaLight(idx + 1)}>
+                      Remove
+                    </button>
                   </div>
-                  <ButtonGroup
-                    value={light?.name || spaLightOptions[0]?.name}
-                    onChange={(name) => handleSpaLightChange(idx, name)}
-                    options={spaLightOptions.map(option => ({
-                      label: option.name,
-                      value: option.name,
-                      badge: costOf(option) > 0 ? `$${costOf(option).toLocaleString()}` : 'Included',
-                    }))}
-                  />
                 </div>
               ))}
 
-              <div className="action-row" style={{ marginTop: spaLights.length ? '12px' : '0' }}>
+              <div className="action-row" style={{ marginTop: '12px' }}>
                 <button type="button" className="action-btn secondary" onClick={addSpaLight}>
                   Add another Spa Light
                 </button>
               </div>
-            </div>
+            </>
           )}
         </div>
       )}
@@ -994,63 +1005,52 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Automation</h2>
-          <p className="spec-block-subtitle">Toggle automation and select system.</p>
-          <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-            <button
-              type="button"
-              className={`pool-type-btn ${includeAutomation ? 'active' : ''}`}
-              onClick={() => toggleAutomation(!includeAutomation)}
-            >
-              {includeAutomation ? 'Remove Automation' : 'Add Automation'}
-            </button>
-          </div>
         </div>
-        {includeAutomation && (
-          <>
-            <div className="spec-field">
-              <ButtonGroup
-                value={safeData.automation.name}
-                onChange={handleAutomationChange}
-                buttonClassName="automation-grid"
-              options={pricingData.equipment.automation
-                .filter(auto => !auto.name.toLowerCase().includes('no automation'))
-                  .map(auto => ({
-                    label: auto.name,
-                    value: auto.name,
-                    badge: costOf(auto) > 0 ? `$${costOf(auto).toLocaleString()}` : 'Included',
-                }))}
-            />
-            </div>
+        <div className="spec-field">
+          <label className="spec-label">Automation System</label>
+          <select
+            className="compact-input equipment-select"
+            value={includeAutomation ? safeData.automation.name : noneOptionValue}
+            onChange={(e) => handleAutomationSelect(e.target.value)}
+          >
+            <option value={noneOptionValue}>None</option>
+            {automationOptions.map(option => (
+              <option key={option.name} value={option.name}>
+                {formatOptionLabel(option.name, costOf(option))}
+              </option>
+            ))}
+          </select>
+        </div>
 
-            <div className="spec-grid spec-grid-2" style={{ marginTop: '12px' }}>
-              <div className="spec-field" style={{ maxWidth: '220px' }}>
-                <label className="spec-label">Automation Quantity</label>
-                <CompactInput
-                  value={automationQuantity}
-                  onChange={(e) =>
-                    updateData({ automationQuantity: Math.max(0, parseInt(e.target.value) || 0) })
-                  }
-                  unit="ea"
-                  min="0"
-                  step="1"
-                  placeholder="1"
-                />
-              </div>
-              <div className="spec-field" style={{ maxWidth: '240px' }}>
-                <label className="spec-label">Additional Zones</label>
-                <CompactInput
-                  value={safeData.automation.zones ?? 0}
-                  onChange={(e) =>
-                    handleChange('automation', { ...safeData.automation, zones: parseInt(e.target.value) || 0 })
-                  }
-                  unit="ea"
-                  min="0"
-                  step="1"
-                />
-                <small className="form-help">Beyond base zones (${pricingData.equipment.automationZoneAddon}/zone).</small>
-              </div>
+        {includeAutomation && (
+          <div className="spec-grid spec-grid-2" style={{ marginTop: '12px' }}>
+            <div className="spec-field" style={{ maxWidth: '220px' }}>
+              <label className="spec-label">Automation Quantity</label>
+              <CompactInput
+                value={automationQuantity}
+                onChange={(e) =>
+                  updateData({ automationQuantity: Math.max(0, parseInt(e.target.value) || 0) })
+                }
+                unit="ea"
+                min="0"
+                step="1"
+                placeholder="1"
+              />
             </div>
-          </>
+            <div className="spec-field" style={{ maxWidth: '240px' }}>
+              <label className="spec-label">Additional Zones</label>
+              <CompactInput
+                value={safeData.automation.zones ?? 0}
+                onChange={(e) =>
+                  handleChange('automation', { ...safeData.automation, zones: parseInt(e.target.value) || 0 })
+                }
+                unit="ea"
+                min="0"
+                step="1"
+              />
+              <small className="form-help">Beyond base zones (additional charges apply).</small>
+            </div>
+          </div>
         )}
       </div>
 
@@ -1058,32 +1058,22 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Sanitation System</h2>
-          <p className="spec-block-subtitle">Toggle sanitation system and select if needed.</p>
-          <div className="pool-type-buttons" style={{ marginTop: '8px' }}>
-            <button
-              type="button"
-              className={`pool-type-btn ${includeSalt ? 'active' : ''}`}
-              onClick={() => toggleSalt(!includeSalt)}
-            >
-              {includeSalt ? 'Remove Sanitation System' : 'Add Sanitation System'}
-            </button>
-          </div>
         </div>
-        {includeSalt && (
-          <div className="spec-field">
-              <ButtonGroup
-                value={safeData.saltSystem?.name || ''}
-                onChange={(val) => handleSaltSystemChange(val || undefined)}
-            options={pricingData.equipment.saltSystem
-              .filter(system => !system.name.toLowerCase().includes('no salt'))
-                  .map(system => ({
-                    label: system.name,
-                    value: system.name,
-                    badge: costOf(system) > 0 ? `$${costOf(system).toLocaleString()}` : 'Included',
-                  }))}
-            />
-            </div>
-        )}
+        <div className="spec-field">
+          <label className="spec-label">Sanitation System</label>
+          <select
+            className="compact-input equipment-select"
+            value={includeSalt ? safeData.saltSystem?.name || noneOptionValue : noneOptionValue}
+            onChange={(e) => handleSaltSelect(e.target.value)}
+          >
+            <option value={noneOptionValue}>None</option>
+            {saltOptions.map(system => (
+              <option key={system.name} value={system.name}>
+                {formatOptionLabel(system.name, costOf(system))}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
     </div>

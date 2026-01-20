@@ -1,5 +1,6 @@
 import { Electrical, ElectricalRuns, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { getSessionRole } from '../services/session';
 import './SectionStyles.css';
 
 interface Props {
@@ -52,6 +53,9 @@ const CompactInput = ({
 };
 
 function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns, hasSpa }: Props) {
+  const sessionRole = getSessionRole();
+  const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
+
   const handleRunChange = (field: keyof ElectricalRuns, value: number) => {
     onChange({
       ...data,
@@ -73,6 +77,9 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
   const gasOverrunCost = gasOverrun * GAS_OVERRUN_RATE;
 
   const electricalOverrun = Math.max(0, (data.runs.electricalRun || 0) - ELECTRICAL_THRESHOLD);
+  const electricalOverrunCost = electricalOverrun * ELECTRICAL_OVERRUN_RATE;
+  const getOverrunMessage = (amount: number) =>
+    canViewCostAmounts ? `Additional charges added - $${amount.toLocaleString()}` : 'Additional charges apply';
 
   return (
     <div className="section-form">
@@ -99,7 +106,7 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
 
         {gasOverrun > 0 && (
           <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
-            <strong>Gas Overrun:</strong> {gasOverrun} ft over {GAS_THRESHOLD} ft maximum. Additional charges added - ${gasOverrunCost.toLocaleString()}
+            <strong>Gas Overrun:</strong> {gasOverrun} ft over {GAS_THRESHOLD} ft maximum. {getOverrunMessage(gasOverrunCost)}
           </div>
         )}
       </div>
@@ -153,9 +160,7 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
 
         {electricalOverrun > 0 && (
           <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
-            <strong>Electrical Overrun:</strong> {electricalOverrun} ft over {ELECTRICAL_THRESHOLD}ft maximum. Additional charges added - ${(
-              electricalOverrun * ELECTRICAL_OVERRUN_RATE
-            ).toLocaleString()}
+            <strong>Electrical Overrun:</strong> {electricalOverrun} ft over {ELECTRICAL_THRESHOLD}ft maximum. {getOverrunMessage(electricalOverrunCost)}
           </div>
         )}
         {hasSpa && (

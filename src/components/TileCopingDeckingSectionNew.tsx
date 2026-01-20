@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { TileCopingDecking } from '../types/proposal-new';
+import { getSessionRole } from '../services/session';
 import './SectionStyles.css';
 
 interface Props {
@@ -50,45 +51,9 @@ const CompactInput = ({
   );
 };
 
-const ButtonGroup = <T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-  required,
-  helper,
-  buttonClassName,
-}: {
-  label: string;
-  value: T;
-  options: { label: string; value: T; badge?: string }[];
-  onChange: (val: T) => void;
-  required?: boolean;
-  helper?: string;
-  buttonClassName?: string;
-}) => (
-  <div className="spec-field">
-    <label className={`spec-label ${required ? 'required' : ''}`}>{label}</label>
-    <div className={`pool-type-buttons stackable ${buttonClassName || ''}`.trim()}>
-      {options.map(opt => (
-        <button
-          key={String(opt.value)}
-          type="button"
-          className={`pool-type-btn ${value === opt.value ? 'active' : ''}`}
-          onClick={() => onChange(opt.value)}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-            <span>{opt.label}</span>
-            {opt.badge && <span className="info-pill">{opt.badge}</span>}
-          </div>
-        </button>
-      ))}
-    </div>
-    {helper && <small className="form-help">{helper}</small>}
-  </div>
-);
-
 function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFiberglass, poolDeckingArea }: Props) {
+  const sessionRole = getSessionRole();
+  const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
   const showStoneRockwork = false;
   const handleChange = (field: keyof TileCopingDecking, value: any) => {
     onChange({ ...data, [field]: value });
@@ -109,24 +74,21 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
         <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Tile</h2>
-          <p className="spec-block-subtitle">Select tile level and add trim options</p>
         </div>
 
-          <div className="spec-grid">
-            <ButtonGroup
-              label="Tile Level"
-              required
-              value={data.tileLevel}
-              onChange={(val) => handleChange('tileLevel', val)}
-              options={[
-                { label: 'Level 1 (Included)', value: 1 },
-                { label: 'Level 2 (+$7/LNFT)', value: 2 },
-                { label: 'Level 3 (+$20/LNFT)', value: 3 },
-              ]}
-            />
-          </div>
-
-          <div className="spec-grid spec-grid-2">
+          <div className="spec-grid-3-fixed">
+            <div className="spec-field">
+              <label className="spec-label required">Tile Level</label>
+              <select
+                className="compact-input"
+                value={data.tileLevel}
+                onChange={(e) => handleChange('tileLevel', parseInt(e.target.value, 10))}
+              >
+                <option value={1}>{canViewCostAmounts ? 'Level 1 (Included)' : 'Level 1'}</option>
+                <option value={2}>{canViewCostAmounts ? 'Level 2 (+$7/LNFT)' : 'Level 2'}</option>
+                <option value={3}>{canViewCostAmounts ? 'Level 3 (+$20/LNFT)' : 'Level 3'}</option>
+              </select>
+            </div>
             <div className="spec-field">
               <label className="spec-label">Additional Tile Length</label>
               <CompactInput
@@ -136,27 +98,17 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
                 min="0"
                 step="1"
               />
-              <small className="form-help">Spillway or infinity edge (beyond perimeter)</small>
             </div>
-
             <div className="spec-field">
               <label className="spec-label">Trim Tile on Steps & Bench</label>
-              <div className="pool-type-buttons">
-                <button
-                  type="button"
-                  className={`pool-type-btn ${!data.hasTrimTileOnSteps ? 'active' : ''}`}
-                  onClick={() => handleChange('hasTrimTileOnSteps', false)}
-                >
-                  No Trim Tile
-                </button>
-                <button
-                  type="button"
-                  className={`pool-type-btn ${data.hasTrimTileOnSteps ? 'active' : ''}`}
-                  onClick={() => handleChange('hasTrimTileOnSteps', true)}
-                >
-                  Add Trim Tile
-                </button>
-              </div>
+              <select
+                className="compact-input"
+                value={data.hasTrimTileOnSteps ? 'yes' : 'no'}
+                onChange={(e) => handleChange('hasTrimTileOnSteps', e.target.value === 'yes')}
+              >
+                <option value="no">No Trim Tile</option>
+                <option value="yes">Add Trim Tile</option>
+              </select>
             </div>
           </div>
         </div>
@@ -166,26 +118,35 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Coping</h2>
-          <p className="spec-block-subtitle">Choose coping type and enter lengths</p>
         </div>
 
-        <ButtonGroup
-          label="Coping Type"
-          required
-          value={data.copingType}
-          onChange={(val) => handleChange('copingType', val)}
-          buttonClassName="coping-type-grid"
-          options={[
-            { label: 'Travertine - Level 1', value: 'travertine-level1' },
-            { label: 'Travertine - Level 2', value: 'travertine-level2' },
-            { label: 'Cantilever', value: 'cantilever' },
-            { label: 'Flagstone', value: 'flagstone' },
-            { label: 'Paver', value: 'paver' },
-            { label: 'Concrete', value: 'concrete' },
-          ]}
-        />
-
-        <div className="spec-grid spec-grid-3">
+        <div className="spec-grid-5-fixed">
+          <div className="spec-field">
+            <label className="spec-label required">Coping Type</label>
+            <select
+              className="compact-input"
+              value={data.copingType}
+              onChange={(e) => handleChange('copingType', e.target.value)}
+            >
+              <option value="travertine-level1">Travertine - Level 1</option>
+              <option value="travertine-level2">Travertine - Level 2</option>
+              <option value="cantilever">Cantilever</option>
+              <option value="flagstone">Flagstone</option>
+              <option value="paver">Paver</option>
+              <option value="concrete">Concrete</option>
+            </select>
+          </div>
+          <div className="spec-field">
+            <label className="spec-label">Coping Size</label>
+            <select
+              className="compact-input"
+              value={data.copingSize ?? '12x12'}
+              onChange={(e) => handleChange('copingSize', e.target.value)}
+            >
+              <option value="12x12">12x12</option>
+              <option value="16x16">16x16</option>
+            </select>
+          </div>
           <div className="spec-field">
             <label className="spec-label">Coping Length</label>
             <CompactInput
@@ -196,9 +157,7 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
               step="1"
               placeholder={`Auto: ${poolPerimeter}`}
             />
-            <small className="form-help">Defaults to pool perimeter ({poolPerimeter} LNFT)</small>
           </div>
-
           <div className="spec-field">
             <label className="spec-label">Bullnose</label>
             <CompactInput
@@ -208,7 +167,6 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
               min="0"
               step="1"
             />
-            <small className="form-help">Regular bullnose edges around spas, steps, etc.</small>
           </div>
 
           <div className="spec-field">
@@ -224,61 +182,30 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
         </div>
       </div>
 
-      {/* Double Bullnose - Dedicated block */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Double Bullnose Travertine</h2>
-        </div>
-
-        <div className="spec-grid spec-grid-2">
-          <div className="spec-field" style={{ maxWidth: '260px' }}>
-            <label className="spec-label">Double Bullnose Length</label>
-            <CompactInput
-              value={data.doubleBullnoseLnft ?? 0}
-              onChange={(e) => handleChange('doubleBullnoseLnft', parseFloat(e.target.value) || 0)}
-              unit="LNFT"
-              min="0"
-              step="1"
-            />
-          </div>
-        </div>
-      </div>
-
       {/* Decking */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Decking</h2>
-          <p className="spec-block-subtitle">Select deck surface and enter areas/lengths.</p>
         </div>
 
-        <ButtonGroup
-          label="Decking Type"
-          required
-          value={data.deckingType}
-          onChange={(val) => handleChange('deckingType', val)}
-          buttonClassName="decking-type-row"
-          options={[
-            { label: 'Travertine - Level 1', value: 'travertine-level1' },
-            { label: 'Travertine - Level 2', value: 'travertine-level2' },
-            { label: 'Paver', value: 'paver' },
-            { label: 'Concrete', value: 'concrete' },
-          ]}
-        />
-
-        <div className={data.deckingType === 'concrete' ? 'spec-grid spec-grid-2' : 'spec-grid'}>
+        <div className="spec-grid-5-fixed">
           <div className="spec-field">
-            <label className="spec-label required">Decking Area</label>
-            <CompactInput
-              value={data.deckingArea ?? 0}
-              onChange={(e) => handleChange('deckingArea', parseFloat(e.target.value) || 0)}
-              unit="SQFT"
-              min="0"
-              step="1"
-              placeholder={`Auto: ${poolPerimeter}`}
-            />
-            <small className="form-help">Defaults to decking perimeter ({poolPerimeter} LNFT)</small>
+            <label className="spec-label required">Decking Type</label>
+            <select
+              className="compact-input"
+              value={data.deckingType}
+              onChange={(e) => handleChange('deckingType', e.target.value)}
+            >
+              <option value="travertine-level1">Travertine - Level 1</option>
+              <option value="travertine-level2">Travertine - Level 2</option>
+              <option value="paver">Paver</option>
+              <option value="concrete">Concrete</option>
+            </select>
           </div>
-          {data.deckingType === 'concrete' && (
+        </div>
+
+        {data.deckingType === 'concrete' && (
+          <div className="spec-grid">
             <div className="spec-field">
               <label className="spec-label">Concrete Steps Length</label>
               <CompactInput
@@ -289,8 +216,8 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
                 step="1"
               />
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Stone / Rockwork - hidden for now */}
@@ -298,7 +225,6 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
         <div className="spec-block">
           <div className="spec-block-header">
             <h2 className="spec-block-title">Stone / Rockwork</h2>
-            <p className="spec-block-subtitle">Keep labor vs. material clear with inline labels.</p>
           </div>
 
           <div className="spec-grid spec-grid-2">
@@ -325,7 +251,6 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
                 min="0"
                 step="0.01"
               />
-              <small className="form-help">Use if material overage differs (~15% in Excel).</small>
             </div>
 
             <div className="spec-field">
@@ -368,7 +293,6 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
             Rough Grading
           </button>
         </div>
-        <small className="form-help" style={{ marginTop: '8px' }}>Keep ON unless deck is off contract</small>
       </div>
     </div>
   );

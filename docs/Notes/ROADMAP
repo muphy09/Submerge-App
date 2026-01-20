@@ -1,57 +1,45 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
 
-- Equip show price difference from included as cost, not full cost
-- Equip Lighting infinite water color
-- Fix Export formatting on page
-- Total main drain run - main
-- Double bullnose ask for in Spa selection - always spa perimeter
-- Water feature run add logic to appear after selecting
-- Admin proposal overview breakdown all versions in a dropdown
-- Surface area not needed int finish
-- Add additional retaining wall, not just one
+- Align all categories to be dropdown stytle instead of buttons
 - Add Custom Costs option per category
-***- Integrate Contract autofill and export
 - Add aux pump - double main drain run. every pump gets same drain run
-- Add a proposal name input instead of using customer name
-
-
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-- Oversized coping options**    
-    - 16x16 Coping implementation (Tile tab), over 16" add 33% cost
-        - Option for 12x12 and 16x16
-- 'No Tile' selection, custom travertine, coping, decking**
-- Custom plubming in Water Features**
-- Exposed pool wall**
+- $$ Performance Data for Admin overhaul (coming soon)
+- $$ Hotkey keyboard navigation
+- $$ Logo upload option for admin, makes available for franchise
+- $$ Include contracts other than NC Gunite
+    - Include contract type in summary screen
+- Login passwords and role promotion / pass reset
+- Homescreen UI update for designers
+- Admin panel UI update
+
+---------------------------------------------------------------------------------------------------------
+Long Term - 
+- Add logic and safeguards for no internet
+- Fiberglass Shells
+- Auto update without being public
+- Admin Pricing Menu Cleaup
+- Proposal complete logic
+---------------------------------------------------------------------------------------------------------
+Help Needed - 
+- Permitting and County associated costs tied to City field
+- Templates
+    - Remodel**
+    - Commercial Pool Pricing
+    - Sales Templates (when not in effect)
+- Logic for stipulations / what specs require or omit what items
+- Exposed pool wall
     - Has to allow for $8.50 of forming for every sqft of wall
     -plus facing
     - allow for increase of 33% concrete cost for sqft used
     - Facing option
-- Custom Tile Tab**
-- Fiberglass Shells
-- Performance Data for Admin overhaul
-- Proposal 'Complete' reconcile it, no input changes
-- Gas run - main gas, meter, tank, heater, aux gas run**
-- Hotkey keyboard navigation
-- Admin Pricing Menu Cleaup
-- Auto update without being public
-- Logo upload option for admin, makes available for franchise
-- Logic for stipulations / what specs require or omit what items
-
+- 'No Tile' selection, custom travertine, coping, decking
+- Custom plubming in Water Features
+- Custom Tile Tab
 ---------------------------------------------------------------------------------------------------------
-Long Term - 
-- Presentation view
-- Templates
-    - Remodel**
-    - Commercial Pool Pricing**
-    - Sales Templates (when not in effect)**
-- Permitting and County associated costs tied to City field
-- Add logic and safeguards for no internet
-
----------------------------------------------------------------------------------------------------------
-
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)
 - Spa Prep ($250) never included in COST-NEW (INTD25)?

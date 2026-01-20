@@ -192,13 +192,18 @@ export async function ensureAdminUser(
   }
 }
 
-export async function assertDesignerAllowed(franchiseId: string, name: string) {
+export async function assertUserAllowed(franchiseId: string, name: string): Promise<FranchiseUser['role']> {
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
-    return;
+    return 'designer';
   }
   const cleanName = normalizeName(name);
+  if (!cleanName) {
+    const err: any = new Error('Username not valid');
+    err.code = 'USERNAME_INVALID';
+    throw err;
+  }
   const { data, error } = await supabase
     .from('franchise_users')
     .select('id,is_active,role')
@@ -206,9 +211,13 @@ export async function assertDesignerAllowed(franchiseId: string, name: string) {
     .ilike('name', cleanName)
     .maybeSingle();
   if (error && error.code !== 'PGRST116') throw error;
-  if (!data || !data.is_active || data.role !== 'designer') {
+  const normalizedRole = String(data?.role || '').toLowerCase();
+  const isAllowedRole =
+    normalizedRole === 'owner' || normalizedRole === 'admin' || normalizedRole === 'designer';
+  if (!data || !data.is_active || !isAllowedRole) {
     const err: any = new Error('Username not valid');
     err.code = 'USERNAME_INVALID';
     throw err;
   }
+  return normalizedRole as FranchiseUser['role'];
 }
