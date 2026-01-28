@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Excavation, RBBLevel } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -697,6 +698,11 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           </div>
         )}
       </div>
+
+      <CustomOptionsSection
+        data={data.customOptions || []}
+        onChange={(customOptions) => handleChange('customOptions', customOptions)}
+      />
     </div>
   );
 }

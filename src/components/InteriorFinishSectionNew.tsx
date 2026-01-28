@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { InteriorFinish, InteriorFinishType } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { subscribeToPricingData } from '../services/pricingDataStore';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -123,6 +124,11 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
           </div>
         </div>
       </div>
+
+      <CustomOptionsSection
+        data={data.customOptions || []}
+        onChange={(customOptions) => onChange({ ...data, customOptions })}
+      />
     </div>
   );
 }

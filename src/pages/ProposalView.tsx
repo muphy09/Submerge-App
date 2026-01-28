@@ -42,6 +42,14 @@ type BreakdownSelection = {
   type: BreakdownType;
 };
 
+const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
+const isCustomOptionItem = (item: CostLineItem): boolean =>
+  item.details?.subcategory === CUSTOM_OPTIONS_SUBCATEGORY;
+const splitCustomOptions = (items: CostLineItem[]) => ({
+  baseItems: items.filter(item => !isCustomOptionItem(item)),
+  customOptions: items.filter(isCustomOptionItem),
+});
+
 function ProposalView() {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
@@ -640,16 +648,45 @@ function ProposalView() {
     const spaLength = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft') : 'No Spa';
     const spaWidth = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft') : 'No Spa';
 
-    const costLineItems: { name: string; items: CostLineItem[]; subcategories?: { name: string; items: CostLineItem[] }[] }[] = costBreakdownForDisplay
+    const tileLaborItems = costBreakdownForDisplay?.tileLabor || [];
+    const tileMaterialItems = costBreakdownForDisplay?.tileMaterial || [];
+    const { baseItems: tileLaborBase, customOptions: tileCustomFromLabor } = splitCustomOptions(tileLaborItems);
+    const { baseItems: tileMaterialBase, customOptions: tileCustomFromMaterial } = splitCustomOptions(tileMaterialItems);
+    const tileCustomOptions = [...tileCustomFromLabor, ...tileCustomFromMaterial];
+
+    const costLineItems: {
+      name: string;
+      items: CostLineItem[];
+      subcategories?: { name: string; items: CostLineItem[] }[];
+      hideBaseItems?: boolean;
+    }[] = costBreakdownForDisplay
       ? [
           { name: 'Plans & Engineering', items: costBreakdownForDisplay.plansAndEngineering },
           { name: 'Layout', items: costBreakdownForDisplay.layout },
           { name: 'Permit', items: costBreakdownForDisplay.permit },
-          { name: 'Excavation', items: costBreakdownForDisplay.excavation },
-          { name: 'Plumbing', items: costBreakdownForDisplay.plumbing },
+          {
+            name: 'Excavation',
+            items: costBreakdownForDisplay.excavation,
+            subcategories: costBreakdownForDisplay.excavation.filter(isCustomOptionItem).length
+              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.excavation.filter(isCustomOptionItem) }]
+              : undefined,
+          },
+          {
+            name: 'Plumbing',
+            items: costBreakdownForDisplay.plumbing,
+            subcategories: costBreakdownForDisplay.plumbing.filter(isCustomOptionItem).length
+              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.plumbing.filter(isCustomOptionItem) }]
+              : undefined,
+          },
           { name: 'Gas', items: costBreakdownForDisplay.gas },
           { name: 'Steel', items: costBreakdownForDisplay.steel },
-          { name: 'Electrical', items: costBreakdownForDisplay.electrical },
+          {
+            name: 'Electrical',
+            items: costBreakdownForDisplay.electrical,
+            subcategories: costBreakdownForDisplay.electrical.filter(isCustomOptionItem).length
+              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.electrical.filter(isCustomOptionItem) }]
+              : undefined,
+          },
           {
             name: 'Shotcrete',
             items: [...costBreakdownForDisplay.shotcreteLabor, ...costBreakdownForDisplay.shotcreteMaterial],
@@ -657,14 +694,17 @@ function ProposalView() {
               { name: 'Labor', items: costBreakdownForDisplay.shotcreteLabor },
               { name: 'Material', items: costBreakdownForDisplay.shotcreteMaterial },
             ].filter((sub) => sub.items.length > 0),
+            hideBaseItems: true,
           },
           {
             name: 'Tile',
-            items: [...costBreakdownForDisplay.tileLabor, ...costBreakdownForDisplay.tileMaterial],
+            items: [...tileLaborItems, ...tileMaterialItems],
             subcategories: [
-              { name: 'Labor', items: costBreakdownForDisplay.tileLabor },
-              { name: 'Material', items: costBreakdownForDisplay.tileMaterial },
+              { name: 'Labor', items: tileLaborBase },
+              { name: CUSTOM_OPTIONS_SUBCATEGORY, items: tileCustomOptions },
+              { name: 'Material', items: tileMaterialBase },
             ].filter((sub) => sub.items.length > 0),
+            hideBaseItems: true,
           },
           {
             name: 'Coping/Decking',
@@ -676,6 +716,7 @@ function ProposalView() {
               { name: 'Labor', items: costBreakdownForDisplay.copingDeckingLabor },
               { name: 'Material', items: costBreakdownForDisplay.copingDeckingMaterial },
             ].filter((sub) => sub.items.length > 0),
+            hideBaseItems: true,
           },
           {
             name: 'Stone/Rockwork',
@@ -687,12 +728,38 @@ function ProposalView() {
               { name: 'Labor', items: costBreakdownForDisplay.stoneRockworkLabor },
               { name: 'Material', items: costBreakdownForDisplay.stoneRockworkMaterial },
             ].filter((sub) => sub.items.length > 0),
+            hideBaseItems: true,
           },
-          { name: 'Drainage', items: costBreakdownForDisplay.drainage },
+          {
+            name: 'Drainage',
+            items: costBreakdownForDisplay.drainage,
+            subcategories: costBreakdownForDisplay.drainage.filter(isCustomOptionItem).length
+              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.drainage.filter(isCustomOptionItem) }]
+              : undefined,
+          },
+          {
+            name: 'Water Features',
+            items: costBreakdownForDisplay.waterFeatures,
+            subcategories: costBreakdownForDisplay.waterFeatures.filter(isCustomOptionItem).length
+              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.waterFeatures.filter(isCustomOptionItem) }]
+              : undefined,
+          },
           { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered },
-          { name: 'Equipment Set', items: costBreakdownForDisplay.equipmentSet },
+          {
+            name: 'Equipment Set',
+            items: costBreakdownForDisplay.equipmentSet,
+            subcategories: costBreakdownForDisplay.equipmentSet.filter(isCustomOptionItem).length
+              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.equipmentSet.filter(isCustomOptionItem) }]
+              : undefined,
+          },
           { name: 'Cleanup', items: costBreakdownForDisplay.cleanup },
-          { name: 'Interior Finish', items: costBreakdownForDisplay.interiorFinish },
+          {
+            name: 'Interior Finish',
+            items: costBreakdownForDisplay.interiorFinish,
+            subcategories: costBreakdownForDisplay.interiorFinish.filter(isCustomOptionItem).length
+              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.interiorFinish.filter(isCustomOptionItem) }]
+              : undefined,
+          },
           { name: 'Water Truck', items: costBreakdownForDisplay.waterTruck },
           { name: 'Fiberglass Shell', items: costBreakdownForDisplay.fiberglassShell },
           { name: 'Fiberglass Install', items: costBreakdownForDisplay.fiberglassInstall },
@@ -714,6 +781,7 @@ function ProposalView() {
         ...sub,
         items: sub.items.map(adjustItemForNoOverhead),
       })),
+      hideBaseItems: category.hideBaseItems,
     }));
 
     return {
@@ -881,6 +949,7 @@ function ProposalView() {
       'Tile': 'tile',
       'Coping/Decking': 'tile',
       'Drainage': 'drainage',
+      'Water Features': 'water-features',
       'Equipment Ordered': 'equipment',
       'Equipment Set': 'equipment',
       'Interior Finish': 'interior',
@@ -1879,6 +1948,43 @@ function ProposalView() {
 
                       {category.subcategories && category.subcategories.length > 0 ? (
                         <div className="cogs-subcategories">
+                          {(() => {
+                            const hasCustomOptionsSubcategory = category.subcategories?.some(
+                              (subcategory) => subcategory.name === CUSTOM_OPTIONS_SUBCATEGORY
+                            );
+                            const baseItems = hasCustomOptionsSubcategory
+                              ? category.items.filter(item => !isCustomOptionItem(item))
+                              : category.items;
+                            if (category.hideBaseItems || baseItems.length === 0) return null;
+                            return (
+                              <table className="cogs-category-table">
+                                <colgroup>
+                                  <col style={{ width: '40%' }} />
+                                  <col style={{ width: '10%' }} />
+                                  <col style={{ width: '25%' }} />
+                                  <col style={{ width: '25%' }} />
+                                </colgroup>
+                                <thead>
+                                  <tr>
+                                    <th>Description</th>
+                                    <th>Qty</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {baseItems.map((item, idx) => (
+                                    <tr key={`${category.name}-base-${idx}`}>
+                                      <td>{item.description}</td>
+                                      <td>{renderQuantity(item)}</td>
+                                      <td>{renderUnitPrice(item)}</td>
+                                      <td>{formatCurrency(item.total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            );
+                          })()}
                           {category.subcategories.map((subcategory) => (
                             <div key={subcategory.name} className="cogs-subcategory">
                               <div className="cogs-subcategory-header">
@@ -2006,6 +2112,43 @@ function ProposalView() {
 
                       {category.subcategories && category.subcategories.length > 0 ? (
                         <div className="cogs-subcategories">
+                          {(() => {
+                            const hasCustomOptionsSubcategory = category.subcategories?.some(
+                              (subcategory) => subcategory.name === CUSTOM_OPTIONS_SUBCATEGORY
+                            );
+                            const baseItems = hasCustomOptionsSubcategory
+                              ? category.items.filter(item => !isCustomOptionItem(item))
+                              : category.items;
+                            if (category.hideBaseItems || baseItems.length === 0) return null;
+                            return (
+                              <table className="cogs-category-table">
+                                <colgroup>
+                                  <col style={{ width: '40%' }} />
+                                  <col style={{ width: '10%' }} />
+                                  <col style={{ width: '25%' }} />
+                                  <col style={{ width: '25%' }} />
+                                </colgroup>
+                                <thead>
+                                  <tr>
+                                    <th>Description</th>
+                                    <th>Qty</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {baseItems.map((item, idx) => (
+                                    <tr key={`${category.name}-base-${idx}`}>
+                                      <td>{item.description}</td>
+                                      <td>{renderQuantity(item)}</td>
+                                      <td>{renderUnitPrice(item)}</td>
+                                      <td>{formatCurrency(item.total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            );
+                          })()}
                           {category.subcategories.map((subcategory) => (
                             <div key={subcategory.name} className="cogs-subcategory">
                               <div className="cogs-subcategory-header">

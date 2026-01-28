@@ -14,6 +14,15 @@ interface HighlightedItem {
   timestamp: number;
 }
 
+const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
+const isCustomOptionItem = (item: CostLineItem): boolean =>
+  item.details?.subcategory === CUSTOM_OPTIONS_SUBCATEGORY;
+
+const splitCustomOptions = (items: CostLineItem[]) => ({
+  baseItems: items.filter(item => !isCustomOptionItem(item)),
+  customOptions: items.filter(isCustomOptionItem),
+});
+
 function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [highlightedItems, setHighlightedItems] = useState<HighlightedItem[]>([]);
@@ -112,6 +121,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     checkCategory('Coping/Decking', prevCopingDeckCombined, copingDeckCombined);
     checkCategory('Stone/Rockwork', prevStone, stoneRockworkItems);
     checkCategory('Drainage', prev.drainage, costBreakdown.drainage);
+    checkCategory('Water Features', prev.waterFeatures, costBreakdown.waterFeatures);
     checkCategory('Equipment Ordered', prev.equipmentOrdered, costBreakdown.equipmentOrdered);
     checkCategory('Equipment Set', prev.equipmentSet, costBreakdown.equipmentSet);
     checkCategory('Cleanup', prev.cleanup, costBreakdown.cleanup);
@@ -178,10 +188,12 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     ...(costBreakdown.shotcreteLabor || []),
     ...(costBreakdown.shotcreteMaterial || []),
   ];
-  const tileCombined = [
-    ...(costBreakdown.tileLabor || []),
-    ...(costBreakdown.tileMaterial || []),
-  ];
+  const tileLabor = costBreakdown.tileLabor || [];
+  const tileMaterial = costBreakdown.tileMaterial || [];
+  const { baseItems: tileLaborBase, customOptions: tileCustomFromLabor } = splitCustomOptions(tileLabor);
+  const { baseItems: tileMaterialBase, customOptions: tileCustomFromMaterial } = splitCustomOptions(tileMaterial);
+  const tileCustomOptions = [...tileCustomFromLabor, ...tileCustomFromMaterial];
+  const tileCombined = [...tileLabor, ...tileMaterial];
   const copingDeckCombined = [
     ...(costBreakdown.copingDeckingLabor || []),
     ...(costBreakdown.copingDeckingMaterial || []),
@@ -198,8 +210,9 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
   ];
 
   const tileSubcategories = [
-    { name: 'Labor', items: costBreakdown.tileLabor || [] },
-    { name: 'Material', items: costBreakdown.tileMaterial || [] },
+    { name: 'Labor', items: tileLaborBase },
+    { name: CUSTOM_OPTIONS_SUBCATEGORY, items: tileCustomOptions },
+    { name: 'Material', items: tileMaterialBase },
   ];
 
   const copingDeckSubcategories = [
@@ -211,6 +224,11 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     { name: 'Labor', items: costBreakdown.stoneRockworkLabor || [] },
     { name: 'Material', items: costBreakdown.stoneRockworkMaterial || [] },
   ];
+
+  const buildCustomOptionsSubcategories = (items?: CostLineItem[]) => {
+    const customOptions = (items || []).filter(isCustomOptionItem);
+    return customOptions.length > 0 ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: customOptions }] : [];
+  };
 
   const allItemGroups: CostLineItem[][] = [
     costBreakdown.plansAndEngineering || [],
@@ -230,6 +248,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     costBreakdown.stoneRockworkLabor || [],
     costBreakdown.stoneRockworkMaterial || [],
     costBreakdown.drainage || [],
+    costBreakdown.waterFeatures || [],
     costBreakdown.equipmentOrdered || [],
     costBreakdown.equipmentSet || [],
     costBreakdown.cleanup || [],
@@ -255,10 +274,16 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
   const renderLineItems = (
     items: CostLineItem[] | undefined,
     categoryName: string,
-    subcategories?: { name: string; items: CostLineItem[] }[]
+    subcategories?: { name: string; items: CostLineItem[] }[],
+    options?: { hideBaseItems?: boolean }
   ) => {
     const safeItems = items || [];
-    const displayItems = safeItems.filter(
+    const hasCustomOptionsSubcategory =
+      subcategories?.some((sub) => sub.name === CUSTOM_OPTIONS_SUBCATEGORY) ?? false;
+    const baseItems = hasCustomOptionsSubcategory
+      ? safeItems.filter(item => !isCustomOptionItem(item))
+      : safeItems;
+    const displayItems = baseItems.filter(
       (item) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0
     );
     const isExpanded = expandedSections.has(categoryName);
@@ -270,6 +295,9 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
         items: (sub.items || []).filter((item) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0),
       })) || [];
     const hasSubcategories = subcategoryDisplays.some((s) => s.items.length > 0);
+    const hideBaseItems = options?.hideBaseItems ?? false;
+    const showBaseItems = displayItems.length > 0 && (!hasSubcategories || !hideBaseItems);
+    const baseOffset = showBaseItems ? displayItems.length : 0;
 
     return (
       <div className="live-cost-category">
@@ -287,7 +315,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
           </span>
         </div>
 
-        {isExpanded && !hasSubcategories && displayItems.length > 0 && (
+        {isExpanded && showBaseItems && (
           <div className="live-line-items">
             <table className="live-line-items-table">
               <thead>
@@ -334,7 +362,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
                     </thead>
                     <tbody>
                       {sub.items.map((item, index) => {
-                        const globalIndex = rowOffset + index;
+                        const globalIndex = baseOffset + rowOffset + index;
                         const isHighlighted = isItemHighlighted(categoryName, globalIndex);
                         return (
                           <tr key={index} className={isHighlighted ? 'highlighted' : ''}>
@@ -388,20 +416,21 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
         {renderLineItems(costBreakdown.plansAndEngineering, 'Plans & Engineering')}
         {renderLineItems(costBreakdown.layout, 'Layout')}
         {renderLineItems(costBreakdown.permit, 'Permit')}
-        {renderLineItems(costBreakdown.excavation, 'Excavation')}
-        {renderLineItems(costBreakdown.plumbing, 'Plumbing')}
+        {renderLineItems(costBreakdown.excavation, 'Excavation', buildCustomOptionsSubcategories(costBreakdown.excavation))}
+        {renderLineItems(costBreakdown.plumbing, 'Plumbing', buildCustomOptionsSubcategories(costBreakdown.plumbing))}
         {renderLineItems(costBreakdown.gas, 'Gas')}
         {renderLineItems(costBreakdown.steel, 'Steel')}
-        {renderLineItems(costBreakdown.electrical, 'Electrical')}
-        {renderLineItems(shotcreteCombined, 'Shotcrete', shotcreteSubcategories)}
-        {renderLineItems(tileCombined, 'Tile', tileSubcategories)}
-        {renderLineItems(copingDeckCombined, 'Coping/Decking', copingDeckSubcategories)}
-        {renderLineItems(stoneRockworkItems, 'Stone/Rockwork', stoneSubcategories)}
-        {renderLineItems(costBreakdown.drainage, 'Drainage')}
+        {renderLineItems(costBreakdown.electrical, 'Electrical', buildCustomOptionsSubcategories(costBreakdown.electrical))}
+        {renderLineItems(shotcreteCombined, 'Shotcrete', shotcreteSubcategories, { hideBaseItems: true })}
+        {renderLineItems(tileCombined, 'Tile', tileSubcategories, { hideBaseItems: true })}
+        {renderLineItems(copingDeckCombined, 'Coping/Decking', copingDeckSubcategories, { hideBaseItems: true })}
+        {renderLineItems(stoneRockworkItems, 'Stone/Rockwork', stoneSubcategories, { hideBaseItems: true })}
+        {renderLineItems(costBreakdown.drainage, 'Drainage', buildCustomOptionsSubcategories(costBreakdown.drainage))}
+        {renderLineItems(costBreakdown.waterFeatures, 'Water Features', buildCustomOptionsSubcategories(costBreakdown.waterFeatures))}
         {renderLineItems(costBreakdown.equipmentOrdered, 'Equipment Ordered')}
-        {renderLineItems(costBreakdown.equipmentSet, 'Equipment Set')}
+        {renderLineItems(costBreakdown.equipmentSet, 'Equipment Set', buildCustomOptionsSubcategories(costBreakdown.equipmentSet))}
         {renderLineItems(costBreakdown.cleanup, 'Cleanup')}
-        {renderLineItems(costBreakdown.interiorFinish, 'Interior Finish')}
+        {renderLineItems(costBreakdown.interiorFinish, 'Interior Finish', buildCustomOptionsSubcategories(costBreakdown.interiorFinish))}
         {renderLineItems(costBreakdown.waterTruck, 'Water Truck')}
         {renderLineItems(costBreakdown.fiberglassShell, 'Fiberglass Shell')}
         {renderLineItems(costBreakdown.fiberglassInstall, 'Fiberglass Install')}

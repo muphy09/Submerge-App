@@ -337,6 +337,16 @@ select.compact-input {
   margin-bottom: 25px;
 }
 
+.spec-block.custom-options-block {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
+
+.spec-block.custom-options-block .spec-block-title {
+  color: #111827;
+  border-bottom-color: #111827;
+}
+
 .spec-block-title {
   color: #082556;
   font-size: 1.3rem;

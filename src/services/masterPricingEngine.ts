@@ -2,7 +2,7 @@
 // MASTER PRICING ENGINE - Complete Integration
 // ============================================================================
 
-import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts } from '../types/proposal-new';
+import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts, CustomOption } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { CalculationModules } from './pricingEngineComplete';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
@@ -51,6 +51,35 @@ function rebuildEquipmentTax(equipmentItems: CostLineItem[]): CostLineItem[] {
   return withoutTax;
 }
 
+const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
+
+const hasCustomOptionContent = (option: CustomOption): boolean => {
+  const name = option.name?.trim() || '';
+  const description = option.description?.trim() || '';
+  const labor = Number(option.laborCost) || 0;
+  const material = Number(option.materialCost) || 0;
+  return Boolean(name || description || labor !== 0 || material !== 0);
+};
+
+const buildCustomOptionItems = (options: CustomOption[] | undefined, category: string): CostLineItem[] => {
+  if (!options || options.length === 0) return [];
+  return options.filter(hasCustomOptionContent).map((option, index) => {
+    const labor = Number(option.laborCost) || 0;
+    const material = Number(option.materialCost) || 0;
+    const total = labor + material;
+    const description = option.name?.trim() || `Custom Option #${index + 1}`;
+    return {
+      category,
+      description,
+      unitPrice: total,
+      quantity: 1,
+      total,
+      notes: option.description,
+      details: { subcategory: CUSTOM_OPTIONS_SUBCATEGORY },
+    };
+  });
+};
+
 export class MasterPricingEngine {
   /**
    * Main entry point - calculates complete proposal with full cost breakdown
@@ -80,7 +109,7 @@ export class MasterPricingEngine {
     const electrical = proposal.electrical!;
     const drainage = proposal.drainage!;
     const equipment = proposal.equipment!;
-    const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0 };
+    const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0, customOptions: [] };
     const customFeatures = proposal.customFeatures!;
     const interiorFinish = proposal.interiorFinish!;
     const county = proposal.customerInfo?.county;
@@ -103,20 +132,30 @@ export class MasterPricingEngine {
     const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
     let steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
     let electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment);
+    excavationItems = excavationItems.concat(buildCustomOptionItems(excavation.customOptions, 'Excavation'));
+    plumbingItems = plumbingItems.concat(buildCustomOptionItems(plumbing.customOptions, 'Plumbing'));
+    electricalItems = electricalItems.concat(buildCustomOptionItems(electrical.customOptions, 'Electrical'));
     const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation, county, tileCopingDecking);
     const tileCoping = CalculationModules.TileCopingDecking.calculateCosts(poolSpecs, tileCopingDecking);
-    const tileLaborOnly = tileCoping.labor.filter(i => i.category.toLowerCase().includes('tile'));
+    const tileCustomOptionsItems = buildCustomOptionItems(tileCopingDecking.customOptions, 'Tile');
+    const tileLaborOnly = tileCoping.labor.filter(i => i.category.toLowerCase().includes('tile')).concat(tileCustomOptionsItems);
     const tileMaterialOnly = tileCoping.material.filter(i => i.category.toLowerCase().includes('tile'));
-    const drainageItems = CalculationModules.Drainage.calculateDrainageCost(drainage);
+    const drainageItemsBase = CalculationModules.Drainage.calculateDrainageCost(drainage);
+    const drainageItems = drainageItemsBase.concat(buildCustomOptionItems(drainage.customOptions, 'Drainage'));
     let equipmentItems = CalculationModules.Equipment.calculateEquipmentCost(equipment, poolSpecs);
     const equipmentSetItems = CalculationModules.Equipment.calculateEquipmentSetCost(equipment, poolSpecs);
+    const equipmentSetItemsWithCustomOptions =
+      equipmentSetItems.concat(buildCustomOptionItems(equipment.customOptions, 'Equipment Set'));
     const waterFeaturesItems = CalculationModules.WaterFeatures.calculateWaterFeaturesCost(waterFeatures);
+    const waterFeaturesCustomOptions = buildCustomOptionItems(waterFeatures.customOptions, 'Water Features');
     const waterFeaturesAsEquipment = waterFeaturesItems.map((item) => ({
       ...item,
       category: 'Equipment',
     }));
     equipmentItems = rebuildEquipmentTax([...equipmentItems, ...waterFeaturesAsEquipment]);
     const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);
+    const interiorFinishItems = [...interior.labor, ...interior.material]
+      .concat(buildCustomOptionItems(interiorFinish.customOptions, 'Interior Finish'));
     const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, normalizedExcavation, tileCopingDecking);
     const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(poolSpecs);
     const fiberglassInstallItems = CalculationModules.Fiberglass.calculateFiberglassInstallCost(poolSpecs);
@@ -331,10 +370,10 @@ export class MasterPricingEngine {
       stoneRockworkMaterial: this.sumItems(rockworkMaterial),
       drainage: this.sumItems(drainageItems),
       equipmentOrdered: this.sumItems(equipmentItems),
-      equipmentSet: this.sumItems(equipmentSetItems),
-      waterFeatures: 0,
+      equipmentSet: this.sumItems(equipmentSetItemsWithCustomOptions),
+      waterFeatures: this.sumItems(waterFeaturesCustomOptions),
       cleanup: this.sumItems(cleanupItems),
-      interiorFinish: this.sumItems([...interior.labor, ...interior.material]),
+      interiorFinish: this.sumItems(interiorFinishItems),
       waterTruck: this.sumItems(interior.waterTruck),
       fiberglassShell: this.sumItems(fiberglassItems),
       fiberglassInstall: this.sumItems(fiberglassInstallItems),
@@ -365,10 +404,10 @@ export class MasterPricingEngine {
       stoneRockworkMaterial: rockworkMaterial,
       drainage: drainageItems,
       equipmentOrdered: equipmentItems,
-      equipmentSet: equipmentSetItems,
-      waterFeatures: [],
+      equipmentSet: equipmentSetItemsWithCustomOptions,
+      waterFeatures: waterFeaturesCustomOptions,
       cleanup: cleanupItems,
-      interiorFinish: [...interior.labor, ...interior.material],
+      interiorFinish: interiorFinishItems,
       waterTruck: interior.waterTruck,
       fiberglassShell: fiberglassItems,
       fiberglassInstall: fiberglassInstallItems,

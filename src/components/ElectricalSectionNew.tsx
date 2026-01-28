@@ -1,6 +1,7 @@
 import { Electrical, ElectricalRuns, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getSessionRole } from '../services/session';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -169,6 +170,11 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
           </div>
         )}
       </div>
+
+      <CustomOptionsSection
+        data={data.customOptions || []}
+        onChange={(customOptions) => onChange({ ...data, customOptions })}
+      />
     </div>
   );
 }

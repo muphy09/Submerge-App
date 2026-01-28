@@ -122,6 +122,9 @@ export interface Excavation {
   retainingWallType?: string;
   retainingWallLength?: number; // LNFT
 
+  // Custom options
+  customOptions?: CustomOption[];
+
   // Calculated costs
   cost: number;
 }
@@ -159,6 +162,7 @@ export interface PlumbingRuns {
 
 export interface Plumbing {
   runs: PlumbingRuns;
+  customOptions?: CustomOption[];
   cost: number; // Auto-calculated
 }
 
@@ -174,6 +178,7 @@ export interface ElectricalRuns {
 
 export interface Electrical {
   runs: ElectricalRuns;
+  customOptions?: CustomOption[];
   cost: number; // Auto-calculated
 }
 
@@ -214,6 +219,9 @@ export interface TileCopingDecking {
   // Options
   hasRoughGrading: boolean; // Keep unless deck is off contract
 
+  // Custom options
+  customOptions?: CustomOption[];
+
   // Calculated
   cost: number;
 }
@@ -227,6 +235,7 @@ export interface Drainage {
   deckDrainTotalLF: number;
   frenchDrainTotalLF: number;
   boxDrainTotalLF: number;
+  customOptions?: CustomOption[];
   cost: number; // Auto-calculated
 }
 
@@ -348,6 +357,9 @@ export interface Equipment {
   hasHandrail: boolean;
   hasStartupChemicals: boolean;
 
+  // Custom options
+  customOptions?: CustomOption[];
+
   // Calculated
   totalCost: number;
   hasBeenEdited?: boolean;
@@ -365,7 +377,22 @@ export interface WaterFeatureSelection {
 export interface WaterFeatures {
   selections: WaterFeatureSelection[];
 
+  // Custom options
+  customOptions?: CustomOption[];
+
   // Calculated
+  totalCost: number;
+}
+
+// ============================================================================
+// CUSTOM OPTIONS
+// ============================================================================
+
+export interface CustomOption {
+  name: string;
+  description: string;
+  laborCost: number;
+  materialCost: number;
   totalCost: number;
 }
 
@@ -416,6 +443,7 @@ export interface InteriorFinish {
   surfaceArea: number; // Auto-calculated from pool specs
   hasSpa: boolean;
   hasWaterproofing?: boolean; // Auto-managed; gunite pools always include waterproofing
+  customOptions?: CustomOption[];
   cost: number; // Auto-calculated
 }
 

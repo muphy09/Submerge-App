@@ -4,6 +4,7 @@ import pricingData from '../services/pricingData';
 import { getSessionRole } from '../services/session';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { normalizeEquipmentLighting } from '../utils/lighting';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -182,6 +183,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     hasAutoFill: data?.hasAutoFill ?? false,
     hasHandrail: data?.hasHandrail ?? false,
     hasStartupChemicals: data?.hasStartupChemicals ?? false,
+    customOptions: data?.customOptions ?? [],
     totalCost: data?.totalCost ?? 0,
     hasBeenEdited: data?.hasBeenEdited ?? false,
   };
@@ -1213,6 +1215,10 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
         </div>
       </div>
 
+      <CustomOptionsSection
+        data={safeData.customOptions || []}
+        onChange={(customOptions) => updateData({ customOptions })}
+      />
     </div>
   );
 }

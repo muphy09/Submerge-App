@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { WaterFeatures, WaterFeatureSelection, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -365,6 +366,11 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
         </div>
         {renderCategoryRows('LED Bubbler', bubblerOptions, bubblerSelections, bubblerRunKeys)}
       </div>
+
+      <CustomOptionsSection
+        data={data.customOptions || []}
+        onChange={(customOptions) => onChange({ ...data, customOptions })}
+      />
     </div>
   );
 }

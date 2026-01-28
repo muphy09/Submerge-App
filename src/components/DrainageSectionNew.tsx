@@ -1,4 +1,5 @@
 import { Drainage } from '../types/proposal-new';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -108,6 +109,11 @@ function DrainageSectionNew({ data, onChange }: Props) {
           </div>
         </div>
       </div>
+
+      <CustomOptionsSection
+        data={data.customOptions || []}
+        onChange={(customOptions) => onChange({ ...data, customOptions })}
+      />
     </div>
   );
 }

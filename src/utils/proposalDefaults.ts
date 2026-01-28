@@ -78,6 +78,7 @@ export function getDefaultExcavation(): Excavation {
     retainingWalls: [],
     retainingWallType: 'None',
     retainingWallLength: 0,
+    customOptions: [],
     cost: 0,
   };
 }
@@ -99,6 +100,7 @@ export function getDefaultPlumbing(): Plumbing {
       gasRun: 0,
       spaRun: 0,
     },
+    customOptions: [],
     cost: 0,
   };
 }
@@ -110,6 +112,7 @@ export function getDefaultElectrical(): Electrical {
       lightRun: 0,
       heatPumpElectricalRun: 0,
     },
+    customOptions: [],
     cost: 0,
   };
 }
@@ -133,6 +136,7 @@ export function getDefaultTileCopingDecking(): TileCopingDecking {
     rockworkStackedStoneSqft: 0,
     rockworkTileSqft: 0,
     hasRoughGrading: true,
+    customOptions: [],
     cost: 0,
   };
 }
@@ -143,6 +147,7 @@ export function getDefaultDrainage(): Drainage {
     deckDrainTotalLF: 0,
     frenchDrainTotalLF: 0,
     boxDrainTotalLF: 0,
+    customOptions: [],
     cost: 0,
   };
 }
@@ -222,6 +227,7 @@ export function getDefaultEquipment(): Equipment {
     hasAutoFill: false,
     hasHandrail: false,
     hasStartupChemicals: false,
+    customOptions: [],
     totalCost: 0,
     hasBeenEdited: false,
   };
@@ -230,6 +236,7 @@ export function getDefaultEquipment(): Equipment {
 export function getDefaultWaterFeatures(): WaterFeatures {
   return {
     selections: [],
+    customOptions: [],
     totalCost: 0,
   };
 }
@@ -258,6 +265,7 @@ export function getDefaultInteriorFinish(): InteriorFinish {
     surfaceArea: 0,
     hasSpa: false,
     hasWaterproofing: true,
+    customOptions: [],
     cost: 0,
   };
 }

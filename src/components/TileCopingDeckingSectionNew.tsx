@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { TileCopingDecking } from '../types/proposal-new';
 import { getSessionRole } from '../services/session';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -282,6 +283,11 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
           </button>
         </div>
       </div>
+
+      <CustomOptionsSection
+        data={data.customOptions || []}
+        onChange={(customOptions) => handleChange('customOptions', customOptions)}
+      />
     </div>
   );
 }

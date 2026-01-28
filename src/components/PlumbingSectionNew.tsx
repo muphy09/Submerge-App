@@ -1,6 +1,7 @@
 import { Plumbing, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getSessionRole } from '../services/session';
+import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
 interface Props {
@@ -142,6 +143,10 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         </div>
       </div>
 
+      <CustomOptionsSection
+        data={data.customOptions || []}
+        onChange={(customOptions) => onChange({ ...data, customOptions })}
+      />
     </div>
   );
 }

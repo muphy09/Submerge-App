@@ -16,9 +16,22 @@ interface CategoryData {
   papDiscountKey?: keyof PAPDiscounts;
   showPAPInput: boolean;
   subcategories?: { name: string; items: CostLineItem[] }[];
+  hideBaseItems?: boolean;
 }
 
 type BreakdownViewMode = 'cogs' | 'retail';
+
+const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
+const isCustomOptionItem = (item: CostLineItem): boolean =>
+  item.details?.subcategory === CUSTOM_OPTIONS_SUBCATEGORY;
+const splitCustomOptions = (items: CostLineItem[]) => ({
+  baseItems: items.filter(item => !isCustomOptionItem(item)),
+  customOptions: items.filter(isCustomOptionItem(item)),
+});
+const buildCustomOptionsSubcategories = (items?: CostLineItem[]) => {
+  const customOptions = (items || []).filter(isCustomOptionItem);
+  return customOptions.length > 0 ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: customOptions }] : undefined;
+};
 
 function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreakdownPageProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -106,6 +119,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   };
 
   const isMaterialItem = (item: CostLineItem): boolean => {
+    if (isCustomOptionItem(item)) return false;
     const desc = (item.description || '').toLowerCase();
     const cat = (item.category || '').toLowerCase();
     if (desc.includes('pap discount')) return false;
@@ -113,22 +127,47 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   };
 
   const isLaborItem = (item: CostLineItem): boolean => {
+    if (isCustomOptionItem(item)) return false;
     const desc = (item.description || '').toLowerCase();
     if (desc.includes('pap discount')) return false;
     const cat = (item.category || '').toLowerCase();
     return cat.includes('labor') || (!isMaterialItem(item) && !desc.includes('tax'));
   };
 
+  const tileLaborItems = costBreakdown.tileLabor || [];
+  const tileMaterialItems = costBreakdown.tileMaterial || [];
+  const { baseItems: tileLaborBase, customOptions: tileCustomFromLabor } = splitCustomOptions(tileLaborItems);
+  const { baseItems: tileMaterialBase, customOptions: tileCustomFromMaterial } = splitCustomOptions(tileMaterialItems);
+  const tileCustomOptions = [...tileCustomFromLabor, ...tileCustomFromMaterial];
+
   // Define all categories with their data
   const categories: CategoryData[] = [
     { name: 'Plans & Engineering', items: costBreakdown.plansAndEngineering, showPAPInput: false },
     { name: 'Layout', items: costBreakdown.layout, showPAPInput: false },
     { name: 'Permit', items: costBreakdown.permit, showPAPInput: false },
-    { name: 'Excavation', items: costBreakdown.excavation, papDiscountKey: 'excavation', showPAPInput: true },
-    { name: 'Plumbing', items: costBreakdown.plumbing, papDiscountKey: 'plumbing', showPAPInput: true },
+    {
+      name: 'Excavation',
+      items: costBreakdown.excavation,
+      papDiscountKey: 'excavation',
+      showPAPInput: true,
+      subcategories: buildCustomOptionsSubcategories(costBreakdown.excavation),
+    },
+    {
+      name: 'Plumbing',
+      items: costBreakdown.plumbing,
+      papDiscountKey: 'plumbing',
+      showPAPInput: true,
+      subcategories: buildCustomOptionsSubcategories(costBreakdown.plumbing),
+    },
     { name: 'Gas', items: costBreakdown.gas, showPAPInput: false },
     { name: 'Steel', items: costBreakdown.steel, papDiscountKey: 'steel', showPAPInput: true },
-    { name: 'Electrical', items: costBreakdown.electrical, papDiscountKey: 'electrical', showPAPInput: true },
+    {
+      name: 'Electrical',
+      items: costBreakdown.electrical,
+      papDiscountKey: 'electrical',
+      showPAPInput: true,
+      subcategories: buildCustomOptionsSubcategories(costBreakdown.electrical),
+    },
     {
       name: 'Shotcrete',
       items: [...costBreakdown.shotcreteLabor, ...costBreakdown.shotcreteMaterial],
@@ -138,16 +177,19 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
         { name: 'Labor', items: costBreakdown.shotcreteLabor },
         { name: 'Material', items: costBreakdown.shotcreteMaterial },
       ],
+      hideBaseItems: true,
     },
     {
       name: 'Tile',
-      items: [...costBreakdown.tileLabor, ...costBreakdown.tileMaterial],
+      items: [...tileLaborItems, ...tileMaterialItems],
       papDiscountKey: 'tileCopingLabor',
       showPAPInput: true,
       subcategories: [
-        { name: 'Labor', items: costBreakdown.tileLabor },
-        { name: 'Material', items: costBreakdown.tileMaterial },
+        { name: 'Labor', items: tileLaborBase },
+        { name: CUSTOM_OPTIONS_SUBCATEGORY, items: tileCustomOptions },
+        { name: 'Material', items: tileMaterialBase },
       ],
+      hideBaseItems: true,
     },
     {
       name: 'Coping/Decking',
@@ -157,6 +199,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
         { name: 'Labor', items: costBreakdown.copingDeckingLabor },
         { name: 'Material', items: costBreakdown.copingDeckingMaterial },
       ],
+      hideBaseItems: true,
     },
     {
       name: 'Stone/Rockwork',
@@ -166,12 +209,35 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
         { name: 'Labor', items: costBreakdown.stoneRockworkLabor },
         { name: 'Material', items: costBreakdown.stoneRockworkMaterial },
       ],
+      hideBaseItems: true,
     },
-    { name: 'Drainage', items: costBreakdown.drainage, showPAPInput: false },
+    {
+      name: 'Drainage',
+      items: costBreakdown.drainage,
+      showPAPInput: false,
+      subcategories: buildCustomOptionsSubcategories(costBreakdown.drainage),
+    },
+    {
+      name: 'Water Features',
+      items: costBreakdown.waterFeatures,
+      showPAPInput: false,
+      subcategories: buildCustomOptionsSubcategories(costBreakdown.waterFeatures),
+    },
     { name: 'Equipment Ordered', items: costBreakdown.equipmentOrdered, papDiscountKey: 'equipment', showPAPInput: true },
-    { name: 'Equipment Set', items: costBreakdown.equipmentSet, showPAPInput: false },
+    {
+      name: 'Equipment Set',
+      items: costBreakdown.equipmentSet,
+      showPAPInput: false,
+      subcategories: buildCustomOptionsSubcategories(costBreakdown.equipmentSet),
+    },
     { name: 'Cleanup', items: costBreakdown.cleanup, showPAPInput: false },
-    { name: 'Interior Finish', items: costBreakdown.interiorFinish, papDiscountKey: 'interiorFinish', showPAPInput: true },
+    {
+      name: 'Interior Finish',
+      items: costBreakdown.interiorFinish,
+      papDiscountKey: 'interiorFinish',
+      showPAPInput: true,
+      subcategories: buildCustomOptionsSubcategories(costBreakdown.interiorFinish),
+    },
     { name: 'Water Truck', items: costBreakdown.waterTruck, showPAPInput: false },
     { name: 'Fiberglass Shell', items: costBreakdown.fiberglassShell, showPAPInput: false },
     { name: 'Fiberglass Install', items: costBreakdown.fiberglassInstall, showPAPInput: false },
@@ -252,6 +318,13 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                 // Calculate labor and material subtotals if applicable
                 const adjustments = category.items.filter(isAdjustmentItem);
                 const visibleItems = category.items.filter((item) => !isAdjustmentItem(item));
+                const hasCustomOptionsSubcategory = Boolean(
+                  category.subcategories?.some((sub) => sub.name === CUSTOM_OPTIONS_SUBCATEGORY)
+                );
+                const baseItems = hasCustomOptionsSubcategory
+                  ? visibleItems.filter((item) => !isCustomOptionItem(item))
+                  : visibleItems;
+                const showBaseItems = baseItems.length > 0 && !category.hideBaseItems;
                 const hasLabor = visibleItems.some(isLaborItem);
                 const hasMaterial = visibleItems.some(isMaterialItem);
                 const laborSubtotal = hasLabor
@@ -299,6 +372,60 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                         {/* If category has subcategories, render them */}
                         {category.subcategories ? (
                           <>
+                            {showBaseItems && (
+                              <>
+                                <table className="cost-breakdown-items-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Description</th>
+                                      {isWaterTruck && <th>Quantity</th>}
+                                      {isWaterTruck && <th>Total Gallons to Fill</th>}
+                                      {isWaterTruck && <th>Truck Total</th>}
+                                      {!isWaterTruck && <th>Quantity</th>}
+                                      <th>Unit Price</th>
+                                      <th>Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {baseItems.map((item, idx) => {
+                                      const isTaxLine = item.description.toLowerCase().includes('tax');
+                                      const gallons = item.details?.totalGallons;
+                                      const truckGallons = item.details?.truckTotalGallons ??
+                                        (isWaterTruck ? item.quantity * 7000 : undefined);
+                                      const isPapDiscount = item.description.includes('PAP Discount');
+                                      const percentage =
+                                        category.papDiscountKey && isPapDiscount
+                                          ? (papDiscounts[category.papDiscountKey] || 0) * 100
+                                          : 0;
+                                      const quantityDisplay = isPapDiscount ? '1' : item.quantity.toFixed(2);
+                                      const unitPriceDisplay = isPapDiscount
+                                        ? `${percentage.toFixed(2)}%`
+                                        : formatCurrency(getDisplayUnitPrice(item));
+
+                                      return (
+                                        <tr key={idx}>
+                                          <td>{item.description}</td>
+                                          {isWaterTruck && (
+                                            <td>{isTaxLine ? '' : quantityDisplay}</td>
+                                          )}
+                                          {isWaterTruck && (
+                                            <td>{gallons !== undefined ? Number(gallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
+                                          )}
+                                          {isWaterTruck && (
+                                            <td>{truckGallons !== undefined ? Number(truckGallons).toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''}</td>
+                                          )}
+                                          {!isWaterTruck && (
+                                            <td>{isTaxLine ? '' : quantityDisplay}</td>
+                                          )}
+                                          <td>{isTaxLine ? '' : unitPriceDisplay}</td>
+                                          <td>{formatCurrency(getDisplayValue(item.total))}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </>
+                            )}
                             {category.subcategories.map((subcategory) => {
                               const visibleSubItems = subcategory.items.filter((item) => !isAdjustmentItem(item));
                               if (visibleSubItems.length === 0) return null;

@@ -70,16 +70,21 @@ import {
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 
 const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
+  const customOptions = Array.isArray((waterFeatures as any)?.customOptions)
+    ? (waterFeatures as any).customOptions
+    : [];
   if (waterFeatures && Array.isArray((waterFeatures as any).selections)) {
     return {
       selections: (waterFeatures as any).selections,
       totalCost: (waterFeatures as any).totalCost ?? 0,
+      customOptions,
     };
   }
 
   return {
     selections: [],
     totalCost: 0,
+    customOptions: [],
   };
 };
 
@@ -403,6 +408,13 @@ function ProposalForm() {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
     const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
     if (!equipment) return false;
+    const hasCustomOptions = (equipment.customOptions || []).some(
+      option =>
+        !!option?.name?.trim() ||
+        !!option?.description?.trim() ||
+        hasPositive(option?.laborCost) ||
+        hasPositive(option?.materialCost)
+    );
     const lightCounts = getLightCounts(equipment as any);
     const autoFillQty = Math.max(
       equipment.autoFillSystemQuantity ?? (equipment.autoFillSystem ? 1 : 0),
@@ -421,6 +433,7 @@ function ProposalForm() {
       hasPositive(equipment.saltSystemQuantity) ||
       (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0) ||
       !!equipment.auxiliaryPump ||
+      hasCustomOptions ||
       hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead)) ||
       hasPositive(getEquipmentItemCost(equipment.filter as any, 1)) ||
       hasPositive(getEquipmentItemCost(equipment.cleaner as any, 1)) ||
@@ -1039,6 +1052,13 @@ function ProposalForm() {
   const sectionCompletion = useMemo<Record<SectionKey, boolean>>(() => {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
     const hasAnyPositive = (...values: Array<number | undefined>) => values.some(v => hasPositive(v));
+    const hasCustomOptions = (options?: Array<{ name?: string; description?: string; laborCost?: number; materialCost?: number }>) =>
+      (options || []).some(
+        option =>
+          !!option?.name?.trim() ||
+          !!option?.description?.trim() ||
+          hasAnyPositive(option?.laborCost, option?.materialCost)
+      );
 
     const poolSpecs = proposal.poolSpecs;
     const hasPoolSpecsData =
@@ -1095,7 +1115,8 @@ function ProposalForm() {
           excavation.retainingWallType !== 'None' &&
           excavation.retainingWallType !== 'none') ||
         hasPositive(excavation.retainingWallLength) ||
-        hasPositive(excavation.cost));
+        hasPositive(excavation.cost) ||
+        hasCustomOptions(excavation.customOptions));
 
     const plumbingRuns = proposal.plumbing?.runs;
     const hasPlumbingData =
@@ -1110,7 +1131,8 @@ function ProposalForm() {
         plumbingRuns?.infloorValveToPool,
         plumbingRuns?.spaRun,
       ) ||
-        hasPositive(proposal.plumbing.cost));
+        hasPositive(proposal.plumbing.cost) ||
+        hasCustomOptions(proposal.plumbing.customOptions));
 
     const electricalRuns = proposal.electrical?.runs;
     const hasElectricalData =
@@ -1121,7 +1143,8 @@ function ProposalForm() {
         electricalRuns?.heatPumpElectricalRun,
         plumbingRuns?.gasRun,
       ) ||
-        hasPositive(proposal.electrical.cost));
+        hasPositive(proposal.electrical.cost) ||
+        hasCustomOptions(proposal.electrical.customOptions));
 
     const tile = proposal.tileCopingDecking;
     const hasTileData =
@@ -1144,7 +1167,8 @@ function ProposalForm() {
           tile.rockworkStackedStoneSqft,
           tile.rockworkTileSqft,
         ) ||
-        hasPositive(tile.cost));
+        hasPositive(tile.cost) ||
+        hasCustomOptions(tile.customOptions));
 
     const drainage = proposal.drainage;
     const hasDrainageData =
@@ -1155,7 +1179,8 @@ function ProposalForm() {
         drainage.frenchDrainTotalLF,
         drainage.boxDrainTotalLF,
       ) ||
-        hasPositive(drainage.cost));
+        hasPositive(drainage.cost) ||
+        hasCustomOptions(drainage.customOptions));
 
     const hasEquipmentData =
       !!proposal.equipment?.hasBeenEdited && computeHasEquipmentData(proposal.equipment as any);
@@ -1170,7 +1195,8 @@ function ProposalForm() {
           plumbingRuns?.waterFeature3Run,
           plumbingRuns?.waterFeature4Run,
         ) ||
-        hasPositive(waterFeatures.totalCost));
+        hasPositive(waterFeatures.totalCost) ||
+        hasCustomOptions(waterFeatures.customOptions));
 
     const interiorFinish = proposal.interiorFinish;
     const defaultFinishId = pricingData.interiorFinish.finishes?.[0]?.id || 'pebble-tec-l1';
@@ -1179,7 +1205,8 @@ function ProposalForm() {
       (interiorFinish.finishType !== defaultFinishId ||
         !!interiorFinish.color?.trim() ||
         interiorFinish.hasSpa ||
-        hasPositive(interiorFinish.cost));
+        hasPositive(interiorFinish.cost) ||
+        hasCustomOptions(interiorFinish.customOptions));
 
     const customFeatures = proposal.customFeatures;
     const hasCustomFeatures =
