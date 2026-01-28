@@ -177,6 +177,10 @@
   text-align: right;
 }
 
+.proposals-table th.th-center {
+  text-align: center;
+}
+
 .proposals-table th:hover {
   background-color: #2a4a6f;
 }
@@ -283,6 +287,15 @@
 .price-cell {
   font-weight: 600;
   text-align: right;
+}
+
+.version-cell {
+  text-align: center;
+  font-weight: 600;
+}
+
+.contract-type-cell {
+  font-weight: 600;
 }
 
 .percent-cell {

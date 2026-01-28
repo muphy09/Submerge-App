@@ -28,6 +28,7 @@ import {
   getDefaultManualAdjustments,
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
+import { listAllVersions } from '../utils/proposalVersions';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 const PERFORMANCE_SCALE_BASELINE = 200;
@@ -79,6 +80,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [newUserName, setNewUserName] = useState('');
   const [userError, setUserError] = useState<string | null>(null);
   const [promotingUserId, setPromotingUserId] = useState<string | null>(null);
+  const [designerFilter, setDesignerFilter] = useState('all');
   const userListRef = useRef<HTMLDivElement | null>(null);
   const userWheelLockRef = useRef<number>(0);
 
@@ -322,6 +324,37 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     [proposals]
   );
 
+  const designerOptions = useMemo(() => {
+    const names = new Set<string>();
+    proposals.forEach((proposal) => {
+      const name =
+        normalizeDesignerName(proposal.designerName) ||
+        normalizeDesignerName(session?.userName) ||
+        'Designer';
+      if (name) {
+        names.add(name);
+      }
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [proposals, session?.userName]);
+
+  useEffect(() => {
+    if (designerFilter !== 'all' && !designerOptions.includes(designerFilter)) {
+      setDesignerFilter('all');
+    }
+  }, [designerFilter, designerOptions]);
+
+  const filteredProposals = useMemo(() => {
+    if (designerFilter === 'all') return sortedProposals;
+    return sortedProposals.filter((proposal) => {
+      const name =
+        normalizeDesignerName(proposal.designerName) ||
+        normalizeDesignerName(session?.userName) ||
+        'Designer';
+      return name === designerFilter;
+    });
+  }, [designerFilter, session?.userName, sortedProposals]);
+
   const sortedPricingModels = useMemo(
     () =>
       [...pricingModels]
@@ -362,6 +395,9 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   };
 
   const totalProposalsSubmitted = proposals.length;
+  const proposalCountLabel = designerFilter === 'all'
+    ? `${totalProposalsSubmitted} total`
+    : `${filteredProposals.length} of ${totalProposalsSubmitted} total`;
 
   const getGrossProfitAmount = (proposal: Proposal) => proposal.pricing?.grossProfit || 0;
   const getGrossProfitPercent = (proposal: Proposal) => proposal.pricing?.grossProfitMargin || 0;
@@ -551,16 +587,49 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
             <h2 className="admin-card-title">Franchise Proposals</h2>
             <p className="admin-kicker">All Franchise Proposals</p>
           </div>
-          <div className="admin-table-meta">{totalProposalsSubmitted} total</div>
+          <div className="admin-table-actions">
+            <div className="admin-filter">
+              <label htmlFor="designer-filter">Designer</label>
+              <select
+                id="designer-filter"
+                value={designerFilter}
+                onChange={(e) => setDesignerFilter(e.target.value)}
+              >
+                <option value="all">All Designers</option>
+                {designerOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="admin-table-meta">{proposalCountLabel}</div>
+          </div>
         </div>
 
         {loadingProposals ? (
           <div className="admin-empty padded">Loading proposals...</div>
-        ) : sortedProposals.length === 0 ? (
-          <div className="admin-empty padded">No proposals for this franchise yet.</div>
+        ) : filteredProposals.length === 0 ? (
+          <div className="admin-empty padded">
+            {proposals.length === 0
+              ? 'No proposals for this franchise yet.'
+              : 'No proposals match the selected designer.'}
+          </div>
         ) : (
           <div className="admin-table-wrapper">
             <table className="admin-table">
+              <colgroup>
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th>Designer</th>
@@ -568,6 +637,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                   <th>Date Modified</th>
                   <th>Proposal Status</th>
                   <th>Pricing Model</th>
+                  <th className="th-center">Proposal Versions</th>
                   <th className="th-right">Retail Price</th>
                   <th className="th-right">Total COGS</th>
                   <th className="th-right">Gross Profit %</th>
@@ -575,12 +645,16 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                 </tr>
               </thead>
               <tbody>
-                {sortedProposals.map((proposal) => {
+                {filteredProposals.map((proposal) => {
                   const retailPrice = proposal.pricing?.retailPrice || proposal.totalCost || 0;
                   const totalCOGS = proposal.pricing?.totalCOGS || 0;
                   const grossProfitAmount = getGrossProfitAmount(proposal);
                   const grossProfitPercent = getGrossProfitPercent(proposal);
-                  const designerName = proposal.designerName || session?.userName || 'Designer';
+                  const designerName =
+                    normalizeDesignerName(proposal.designerName) ||
+                    normalizeDesignerName(session?.userName) ||
+                    'Designer';
+                  const proposalVersionCount = listAllVersions(proposal).length;
                   const modelId = proposal.pricingModelId || '';
                   const explicitRemoved = (proposal.pricingModelName || '').toLowerCase().includes('(removed)');
                   const isRemoved = Boolean(modelId) && (!availablePricingModelIds.has(modelId) || explicitRemoved);
@@ -620,17 +694,18 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                             (isRemoved && !explicitRemoved ? ' (Removed)' : '')}
                         </span>
                       </td>
+                      <td className="versions-cell">{proposalVersionCount}</td>
                       <td className="price-cell">
-                        ${retailPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${retailPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="price-cell">
-                        ${totalCOGS.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${totalCOGS.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </td>
                       <td className="percent-cell">
                         {grossProfitPercent.toFixed(2)}%
                       </td>
                       <td className="price-cell profit-cell">
-                        ${grossProfitAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${grossProfitAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </td>
                     </tr>
                   );

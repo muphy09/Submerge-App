@@ -164,42 +164,6 @@ function HomePage({ session }: HomePageProps) {
     return <img src={src} alt={label} title={label} className="proposal-sync-icon" />;
   };
 
-  // Calculate stats
-  const totalProposalsCreated = proposals.length;
-  const averageRetailCost = proposals.length > 0
-    ? proposals.reduce((sum, p) => sum + (p.totalCost || 0), 0) / proposals.length
-    : 0;
-
-  // Get proposals by month for the chart (last 5 months)
-  const getProposalsByMonth = () => {
-    const monthCounts: { [key: string]: number } = {};
-    const now = new Date();
-
-    // Initialize last 5 months
-    for (let i = 4; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthKey = date.toLocaleString('default', { month: 'short' });
-      monthCounts[monthKey] = 0;
-    }
-
-    // Count proposals by month
-    proposals.forEach(proposal => {
-      const date = new Date(proposal.createdDate);
-      const monthKey = date.toLocaleString('default', { month: 'short' });
-      if (monthKey in monthCounts) {
-        monthCounts[monthKey]++;
-      }
-    });
-
-    return monthCounts;
-  };
-
-  const proposalsByMonth = getProposalsByMonth();
-  const maxProposals = Math.max(...Object.values(proposalsByMonth), 1);
-  const yAxisSteps = 5;
-  const yAxisMax = Math.max(5, Math.ceil(maxProposals / 10) * 10 || 10);
-  const yAxisTicks = Array.from({ length: yAxisSteps + 1 }, (_, i) => Math.round((yAxisMax / yAxisSteps) * i));
-
   return (
     <div className="dashboard-page">
       <div className="hero-section">
@@ -315,56 +279,6 @@ function HomePage({ session }: HomePageProps) {
           </div>
         </div>
 
-        {/* Performance Overview Column */}
-        <div className="dashboard-column performance-card">
-          <h2 className="column-title">Performance Overview</h2>
-          <div className="performance-chart">
-            <div className="chart-title">Proposals Created</div>
-            <div className="chart-wrapper">
-              <div className="chart-body">
-                <div className="y-axis">
-                  {[...yAxisTicks].reverse().map((tick) => (
-                    <span key={tick} className="y-axis-tick">{tick}</span>
-                  ))}
-                </div>
-                <div className="bar-chart">
-                  {Object.entries(proposalsByMonth).map(([month, count]) => (
-                    <div key={month} className="bar-container">
-                      <div
-                        className="bar"
-                        style={{ height: `${(count / yAxisMax) * 100}%` }}
-                        aria-label={`${count} proposals in ${month}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="bar-label-row">
-                {Object.keys(proposalsByMonth).map((month) => (
-                  <div key={month} className="bar-label">{month}</div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="performance-stats-inline">
-            <div className="stat-block">
-              <div className="stat-label">Total Proposals Created:</div>
-              <div className="stat-value-row">
-                <div className="stat-value">{totalProposalsCreated}</div>
-                <svg className="stat-trend-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="18 15 12 9 6 15"/>
-                </svg>
-              </div>
-            </div>
-            <div className="stat-divider" aria-hidden="true" />
-            <div className="stat-block">
-              <div className="stat-label">Average Retail Cost:</div>
-              <div className="stat-value">
-                ${averageRetailCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {contextMenu && (

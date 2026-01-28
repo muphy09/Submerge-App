@@ -8,6 +8,7 @@ const SettingsPage: React.FC = () => {
   const [changelogContent, setChangelogContent] = useState('');
   const [changelogError, setChangelogError] = useState('');
   const [changelogLoading, setChangelogLoading] = useState(false);
+  const isChangelogDisabled = true;
 
   const renderChangelog = (content: string) => {
     const lines = content.split(/\r?\n/);
@@ -221,7 +222,7 @@ const SettingsPage: React.FC = () => {
             <button
               className="settings-button view-changelog-button"
               onClick={openChangelog}
-              disabled={changelogLoading}
+              disabled={isChangelogDisabled || changelogLoading}
             >
               {changelogLoading ? 'Loading...' : 'View Changelog'}
             </button>

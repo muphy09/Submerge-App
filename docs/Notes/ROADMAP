@@ -1,18 +1,15 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
-- Temp disable View Changelog button
-- Remove the cents from the admin panel proposal view and designer proposal view
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - $$ Logo upload option for admin, makes available for franchise
-Inside of the Settings panel if an Admin / Owner is signed in, a new setting allowing the upload/input of a Global Logo to be used by the Franchise the Admin is apart of. If an Admin inputs a logo into this new area, the default Submerge logo that is used throughout the App will be replaced by the logo that the Admin provides for their franchise. Be thorough and detailed when determining where this logo swap will occur, it should be everywhere inside of the App that would normally have the Submerge logo or need a logo. This new logo will reflect for all of the designers /adminds in that particular franchise as well. 
+
 - Login passwords and role promotion / pass reset
     I want you to review the file i have made at /docs/Notes/Login Overhaul and before making any changes ensure you understand what needs to be done or ask any questions you may have. If I have left out anything that you think should be added bring that up too. Then i will tell you to implement this change
-- Homescreen UI update for designers
-
 
 - Potential option for manual designer cost adjustment down
+We need to include a backdoor way for a designer to manually adjust the retial price DOWN of a proposal. This will be done by using the Custom Features category - if a custom feature is added with a negative amount, subtract this amount from the total retail price. Be sure to include this as a line item in the cost breakdown for custom features cost as well. 
 
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
@@ -27,6 +24,7 @@ Long Term -
 - Equipment logic for lights when selecting multiple can be cleaned up
 - Add aux pump - double main drain run. every pump gets same drain run
 - Keyboard Nav dropdown selection trouble
+- Homescreen background change
 
 - Potential column for "Included Items"
     - Base equipment, base options, etc

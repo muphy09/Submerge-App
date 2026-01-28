@@ -90,7 +90,7 @@ function ElectricalSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRu
           <p className="spec-block-subtitle">Base Gas includes the first 25ft.</p>
         </div>
 
-        <div className="spec-grid spec-grid-3">
+        <div className="spec-grid spec-grid-3-fixed">
           <div className="spec-field">
             <label className="spec-label">Gas Run</label>
             <CompactInput

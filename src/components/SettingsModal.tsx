@@ -12,6 +12,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [changelogContent, setChangelogContent] = useState('');
   const [changelogError, setChangelogError] = useState('');
   const [changelogLoading, setChangelogLoading] = useState(false);
+  const isChangelogDisabled = true;
 
   const renderChangelog = (content: string) => {
     const lines = content.split(/\r?\n/);
@@ -237,7 +238,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               <button
                 className="view-changelog-button"
                 onClick={openChangelog}
-                disabled={changelogLoading}
+                disabled={isChangelogDisabled || changelogLoading}
               >
                 {changelogLoading ? 'Loading...' : 'View Changelog'}
               </button>

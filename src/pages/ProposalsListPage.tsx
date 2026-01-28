@@ -10,13 +10,17 @@ import { deleteProposal as deleteProposalRemote, listProposals } from '../servic
 import { getSessionFranchiseId, getSessionUserName } from '../services/session';
 import syncGoodIcon from '../../docs/img/syncgood.png';
 import syncBadIcon from '../../docs/img/syncbad.png';
+import { listAllVersions } from '../utils/proposalVersions';
+import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 
 function ProposalsListPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortField, setSortField] = useState<'customerName' | 'lastModified' | 'status' | 'pricingModel' | 'retailPrice' | 'totalCOGS' | 'grossProfitPercent' | 'grossProfitAmount'>('lastModified');
+  const [sortField, setSortField] = useState<
+    'customerName' | 'lastModified' | 'status' | 'pricingModel' | 'proposalVersions' | 'contractType' | 'retailPrice'
+  >('lastModified');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedProposals, setSelectedProposals] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -100,16 +104,6 @@ function ProposalsListPage() {
     }
   };
 
-  const getGrossProfitAmount = (proposal: Proposal) => {
-    // Use the actual gross profit from pricing calculations (after commissions & fees)
-    return proposal.pricing?.grossProfit || 0;
-  };
-
-  const getGrossProfitPercent = (proposal: Proposal) => {
-    // Gross profit margin returned from pricing is already expressed as a percentage
-    return proposal.pricing?.grossProfitMargin || 0;
-  };
-
   const getSyncIcon = (proposal: Proposal) => {
     const synced = (proposal.syncStatus || 'synced') === 'synced';
     return {
@@ -117,6 +111,15 @@ function ProposalsListPage() {
       label: synced ? 'Cloud synced' : 'Pending cloud sync',
     };
   };
+
+  const getContractTypeLabel = (proposal: Proposal): string => {
+    const templateId = getContractTemplateIdForProposal(proposal);
+    const [state, poolType] = templateId.split('-');
+    const typeLabel = poolType === 'fiberglass' ? 'Fiberglass' : 'Gunite';
+    return `${state.toUpperCase()} ${typeLabel}`;
+  };
+
+  const getVersionCount = (proposal: Proposal) => listAllVersions(proposal).length;
 
   const sortedProposals = [...proposals].sort((a, b) => {
     let aValue: any;
@@ -139,21 +142,17 @@ function ProposalsListPage() {
         aValue = (a.pricingModelName || '').toLowerCase();
         bValue = (b.pricingModelName || '').toLowerCase();
         break;
+      case 'proposalVersions':
+        aValue = getVersionCount(a);
+        bValue = getVersionCount(b);
+        break;
+      case 'contractType':
+        aValue = getContractTypeLabel(a).toLowerCase();
+        bValue = getContractTypeLabel(b).toLowerCase();
+        break;
       case 'retailPrice':
         aValue = a.pricing?.retailPrice || a.totalCost || 0;
         bValue = b.pricing?.retailPrice || b.totalCost || 0;
-        break;
-      case 'totalCOGS':
-        aValue = a.pricing?.totalCOGS || 0;
-        bValue = b.pricing?.totalCOGS || 0;
-        break;
-      case 'grossProfitPercent':
-        aValue = getGrossProfitPercent(a);
-        bValue = getGrossProfitPercent(b);
-        break;
-      case 'grossProfitAmount':
-        aValue = getGrossProfitAmount(a);
-        bValue = getGrossProfitAmount(b);
         break;
       default:
         return 0;
@@ -266,13 +265,12 @@ function ProposalsListPage() {
           <table className="proposals-table">
             <colgroup>
               <col style={{ width: '40px' }} />
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
               <col style={{ width: '18%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '12%' }} />
               <col style={{ width: '10%' }} />
+              <col style={{ width: '12%' }} />
               <col style={{ width: '10%' }} />
             </colgroup>
             <thead>
@@ -297,26 +295,22 @@ function ProposalsListPage() {
                 <th onClick={() => handleSort('pricingModel')}>
                   Pricing Model <SortIcon field="pricingModel" />
                 </th>
+                <th className="th-center" onClick={() => handleSort('proposalVersions')}>
+                  Proposal Versions <SortIcon field="proposalVersions" />
+                </th>
+                <th onClick={() => handleSort('contractType')}>
+                  Contract Type <SortIcon field="contractType" />
+                </th>
                 <th className="th-right" onClick={() => handleSort('retailPrice')}>
                   Retail Price <SortIcon field="retailPrice" />
-                </th>
-                <th className="th-right" onClick={() => handleSort('totalCOGS')}>
-                  Total COGS <SortIcon field="totalCOGS" />
-                </th>
-                <th className="th-right" onClick={() => handleSort('grossProfitPercent')}>
-                  Gross Profit % <SortIcon field="grossProfitPercent" />
-                </th>
-                <th className="th-right" onClick={() => handleSort('grossProfitAmount')}>
-                  Gross Profit Amount <SortIcon field="grossProfitAmount" />
                 </th>
               </tr>
             </thead>
             <tbody>
               {sortedProposals.map((proposal) => {
                 const retailPrice = proposal.pricing?.retailPrice || proposal.totalCost || 0;
-                const totalCOGS = proposal.pricing?.totalCOGS || 0;
-                const grossProfitAmount = getGrossProfitAmount(proposal);
-                const grossProfitPercent = getGrossProfitPercent(proposal);
+                const proposalVersionCount = getVersionCount(proposal);
+                const contractTypeLabel = getContractTypeLabel(proposal);
 
                 return (
                   <tr
@@ -383,17 +377,14 @@ function ProposalsListPage() {
                         );
                       })()}
                     </td>
+                    <td className="version-cell">
+                      {proposalVersionCount}
+                    </td>
+                    <td className="contract-type-cell">
+                      {contractTypeLabel}
+                    </td>
                     <td className="price-cell">
                       ${retailPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="price-cell">
-                      ${totalCOGS.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="percent-cell">
-                      {grossProfitPercent.toFixed(2)}%
-                    </td>
-                    <td className="price-cell profit-cell">
-                      ${grossProfitAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );
