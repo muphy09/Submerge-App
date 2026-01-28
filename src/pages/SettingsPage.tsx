@@ -3,7 +3,16 @@ import submergeLogo from '../../Submerge Logo.png';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { useFranchiseLogo } from '../hooks/useFranchiseLogo';
 import { saveFranchiseAppName, saveFranchiseLogo } from '../services/franchiseBranding';
-import { getSessionFranchiseId, getSessionRole, getSessionUserName } from '../services/session';
+import { saveFranchiseCode } from '../services/franchisesAdapter';
+import { setSupabaseContext } from '../services/supabaseClient';
+import {
+  getSessionFranchiseCode,
+  getSessionFranchiseId,
+  getSessionRole,
+  getSessionUserName,
+  readSession,
+  SESSION_STORAGE_KEY,
+} from '../services/session';
 import './SettingsPage.css';
 
 const MAX_LOGO_BYTES = 1024 * 1024;
@@ -22,6 +31,13 @@ const SettingsPage: React.FC = () => {
   const franchiseId = getSessionFranchiseId();
   const { appName: savedAppName, displayName, isLoading: appNameLoading } = useFranchiseAppName(franchiseId);
   const { logoUrl: savedLogoUrl, isLoading: logoLoading } = useFranchiseLogo(franchiseId);
+  const initialFranchiseCode = getSessionFranchiseCode() || '';
+  const [currentFranchiseCode, setCurrentFranchiseCode] = useState(initialFranchiseCode);
+  const [pendingFranchiseCode, setPendingFranchiseCode] = useState(initialFranchiseCode);
+  const [franchiseCodeSaving, setFranchiseCodeSaving] = useState(false);
+  const [franchiseCodeStatus, setFranchiseCodeStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(
+    null
+  );
   const [pendingLogoUrl, setPendingLogoUrl] = useState<string | null>(null);
   const [pendingLogoName, setPendingLogoName] = useState('');
   const [logoSaving, setLogoSaving] = useState(false);
@@ -42,6 +58,12 @@ const SettingsPage: React.FC = () => {
   const hasCustomAppName = Boolean(normalizedSavedName);
   const hasPendingNameChange = normalizedPendingName !== normalizedSavedName;
   const canResetAppName = hasCustomAppName || normalizedPendingName.length > 0;
+  const normalizedPendingCode = pendingFranchiseCode.trim().toUpperCase();
+  const normalizedCurrentCode = (currentFranchiseCode || '').trim().toUpperCase();
+  const hasPendingCodeChange = normalizedPendingCode !== normalizedCurrentCode;
+  const hasPendingCodeValue = normalizedPendingCode.length > 0;
+  const pendingCodeHasAdminSuffix = normalizedPendingCode.endsWith('-A');
+  const canResetFranchiseCode = pendingFranchiseCode !== currentFranchiseCode;
 
   const renderChangelog = (content: string) => {
     const lines = content.split(/\r?\n/);
@@ -227,6 +249,20 @@ const SettingsPage: React.FC = () => {
     setPendingAppName(savedAppName || '');
   }, [savedAppName]);
 
+  const updateStoredSessionCode = (nextCode: string) => {
+    if (typeof localStorage === 'undefined') return;
+    const session = readSession();
+    if (!session) return;
+    const updatedSession = { ...session, franchiseCode: nextCode };
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedSession));
+    setSupabaseContext({
+      franchiseId: updatedSession.franchiseId,
+      franchiseCode: nextCode,
+      userName: updatedSession.userName,
+      role: updatedSession.role || 'designer',
+    });
+  };
+
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setLogoStatus(null);
     const file = event.target.files?.[0];
@@ -362,6 +398,51 @@ const SettingsPage: React.FC = () => {
       setAppNameStatus({ type: 'error', message: 'Unable to reset the app name.' });
     } finally {
       setAppNameSaving(false);
+    }
+  };
+
+  const handleFranchiseCodeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setFranchiseCodeStatus(null);
+    setPendingFranchiseCode(event.target.value.toUpperCase());
+  };
+
+  const handleResetFranchiseCode = () => {
+    setPendingFranchiseCode(currentFranchiseCode);
+    setFranchiseCodeStatus(null);
+  };
+
+  const handleSaveFranchiseCode = async () => {
+    if (!hasPendingCodeChange) return;
+    if (!hasPendingCodeValue) {
+      setFranchiseCodeStatus({ type: 'error', message: 'Franchise code is required.' });
+      return;
+    }
+    if (pendingCodeHasAdminSuffix) {
+      setFranchiseCodeStatus({ type: 'error', message: 'Franchise codes cannot end with "-A".' });
+      return;
+    }
+    setFranchiseCodeSaving(true);
+    setFranchiseCodeStatus(null);
+    const session = readSession();
+    try {
+      await saveFranchiseCode({
+        franchiseId,
+        franchiseCode: normalizedPendingCode,
+        previousCode: currentFranchiseCode,
+        franchiseName: session?.franchiseName,
+      });
+      setCurrentFranchiseCode(normalizedPendingCode);
+      setPendingFranchiseCode(normalizedPendingCode);
+      updateStoredSessionCode(normalizedPendingCode);
+      setFranchiseCodeStatus({ type: 'success', message: 'Franchise code updated.' });
+    } catch (error: any) {
+      console.error('Failed to update franchise code:', error);
+      setFranchiseCodeStatus({
+        type: 'error',
+        message: error?.message || 'Unable to update the franchise code.',
+      });
+    } finally {
+      setFranchiseCodeSaving(false);
     }
   };
 
@@ -506,6 +587,47 @@ const SettingsPage: React.FC = () => {
                 )}
                 {!appNameStatus && appNameLoading && (
                   <div className="logo-status info">Loading app name...</div>
+                )}
+              </div>
+              <div className="franchise-branding-divider" />
+              <div className="franchise-name-section franchise-code-section">
+                <div className="franchise-logo-label">Franchise Code</div>
+                <p className="franchise-logo-note">
+                  Used when logging in. Admin and owner logins append "-A" (for example: {normalizedCurrentCode || 'CODE'}-A).
+                  Codes cannot end with "-A".
+                </p>
+                <div className="franchise-name-current">
+                  Current: <span className="franchise-name-value">{normalizedCurrentCode || 'Not set'}</span>
+                </div>
+                <input
+                  type="text"
+                  className="franchise-name-input franchise-code-input"
+                  placeholder="Enter a new franchise code"
+                  value={pendingFranchiseCode}
+                  onChange={handleFranchiseCodeChange}
+                  disabled={franchiseCodeSaving}
+                />
+                <div className="franchise-logo-actions">
+                  <button
+                    className="settings-button branding-save-button"
+                    onClick={handleSaveFranchiseCode}
+                    disabled={!hasPendingCodeChange || !hasPendingCodeValue || pendingCodeHasAdminSuffix || franchiseCodeSaving}
+                  >
+                    {franchiseCodeSaving ? 'Saving...' : 'Save Code'}
+                  </button>
+                  <button
+                    className="settings-button branding-reset-button"
+                    onClick={handleResetFranchiseCode}
+                    disabled={!canResetFranchiseCode || franchiseCodeSaving}
+                  >
+                    Reset to Current Code
+                  </button>
+                </div>
+                {franchiseCodeStatus && (
+                  <div className={`logo-status ${franchiseCodeStatus.type}`}>{franchiseCodeStatus.message}</div>
+                )}
+                {!franchiseCodeStatus && franchiseCodeSaving && (
+                  <div className="logo-status info">Updating franchise code...</div>
                 )}
               </div>
             </div>
