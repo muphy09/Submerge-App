@@ -84,6 +84,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
                 value={data.tileLevel}
                 onChange={(e) => handleChange('tileLevel', parseInt(e.target.value, 10))}
               >
+                <option value={0}>No Tile</option>
                 <option value={1}>{canViewCostAmounts ? 'Level 1 (Included)' : 'Level 1'}</option>
                 <option value={2}>{canViewCostAmounts ? 'Level 2 (+$7/LNFT)' : 'Level 2'}</option>
                 <option value={3}>{canViewCostAmounts ? 'Level 3 (+$20/LNFT)' : 'Level 3'}</option>
@@ -128,6 +129,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
               value={data.copingType}
               onChange={(e) => handleChange('copingType', e.target.value)}
             >
+              <option value="none">No Coping</option>
               <option value="travertine-level1">Travertine - Level 1</option>
               <option value="travertine-level2">Travertine - Level 2</option>
               <option value="cantilever">Cantilever</option>
@@ -185,6 +187,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
               value={data.deckingType}
               onChange={(e) => handleChange('deckingType', e.target.value)}
             >
+              <option value="none">No Decking</option>
               <option value="travertine-level1">Travertine - Level 1</option>
               <option value="travertine-level2">Travertine - Level 2</option>
               <option value="paver">Paver</option>

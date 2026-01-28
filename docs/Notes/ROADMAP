@@ -2,8 +2,7 @@
 Short Term - 
 - Temp disable View Changelog button
 - Remove the cents from the admin panel proposal view and designer proposal view
-- Custom Tile, Coping, Decking with inputs for total cost - replaces pre selected option in costs
-Were going to include a new option in the dropdown menus of the Tle Level, Coping Type, and Decking Type dropdowns inside of the Tile / Coping / Decking category. Include an option for "No Tile" in the Tile Level, "No Coping" in the Coping Type, and "No Decking" in the Decking Type. Selecting one of these options will remove the costs associated with selecting a level of tile, coping, and decking. Essentially letting the pool designer skip that portion if it is not needed for this build. 
+
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - $$ Logo upload option for admin, makes available for franchise
@@ -11,7 +10,7 @@ Inside of the Settings panel if an Admin / Owner is signed in, a new setting all
 - Login passwords and role promotion / pass reset
     I want you to review the file i have made at /docs/Notes/Login Overhaul and before making any changes ensure you understand what needs to be done or ask any questions you may have. If I have left out anything that you think should be added bring that up too. Then i will tell you to implement this change
 - Homescreen UI update for designers
-We need to make some changes with the way a designer sees the Homescreen. Remove the Performance Overview entirly, and leave just the Recent Proposals and Quick Actions blocks. Next, in the Proposals tab, remove the Total Cogs, Gross Profit %, and Gross Profit Amount columns from view. Add a new column named "Proposal Versions" listing how many versions the proposal has. This column should be listed after the Pricing Model column. Then, add another new column named "Contract Type" and list the type of contract that the proposal applies to - NC Guntie, NC Fiberglass, SC Gunite, SC Fiberglass. The Retail Price should be the last column.
+
 
 - Potential option for manual designer cost adjustment down
 
@@ -27,6 +26,7 @@ Long Term -
 - Role transfer logic
 - Equipment logic for lights when selecting multiple can be cleaned up
 - Add aux pump - double main drain run. every pump gets same drain run
+- Keyboard Nav dropdown selection trouble
 
 - Potential column for "Included Items"
     - Base equipment, base options, etc

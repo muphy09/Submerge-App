@@ -444,10 +444,14 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return 'None';
   }
   if (/line type/.test(label)) return 'None';
-  if (/waterline tile/.test(label)) return 'Included';
-  if (/accent tile/.test(label)) return proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Trim Tile' : 'None';
+  if (/waterline tile/.test(label)) return (proposal.tileCopingDecking?.tileLevel ?? 1) > 0 ? 'Included' : 'None';
+  if (/accent tile/.test(label)) {
+    const hasTile = (proposal.tileCopingDecking?.tileLevel ?? 1) > 0;
+    return hasTile && proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Trim Tile' : 'None';
+  }
   if (/coping/.test(label)) {
     const lookup: Record<string, string> = {
+      none: 'None',
       'travertine-level1': 'Travertine Lvl 1',
       'travertine-level2': 'Travertine Lvl 2',
       cantilever: 'Cantilever',
@@ -460,6 +464,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/decking drainage/.test(label)) return proposal.drainage?.deckDrainTotalLF ? 'BY BUILDER' : overrideDefault;
   if (/decking\b/i.test(label)) {
     const lookup: Record<string, string> = {
+      none: 'None',
       'travertine-level1': 'Travertine Lvl 1',
       'travertine-level2': 'Travertine Lvl 2',
       paver: 'Paver',

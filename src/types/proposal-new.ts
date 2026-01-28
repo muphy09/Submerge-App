@@ -187,9 +187,16 @@ export interface Electrical {
 // TILE, COPING, DECKING
 // ============================================================================
 
-export type TileLevel = 1 | 2 | 3;
-export type CopingType = 'cantilever' | 'flagstone' | 'paver' | 'travertine-level1' | 'travertine-level2' | 'concrete';
-export type DeckingType = 'paver' | 'travertine-level1' | 'travertine-level2' | 'concrete';
+export type TileLevel = 0 | 1 | 2 | 3;
+export type CopingType =
+  | 'none'
+  | 'cantilever'
+  | 'flagstone'
+  | 'paver'
+  | 'travertine-level1'
+  | 'travertine-level2'
+  | 'concrete';
+export type DeckingType = 'none' | 'paver' | 'travertine-level1' | 'travertine-level2' | 'concrete';
 export type CopingSize = '12x12' | '16x16';
 
 export interface TileCopingDecking {

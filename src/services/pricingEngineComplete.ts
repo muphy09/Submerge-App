@@ -117,6 +117,7 @@ export class TileCopingDeckingCalculations {
       tileCopingDecking.copingLength ||
       Math.ceil(poolSpecs.perimeter * 1.1 + spaPerimeter * 2.15);
     const isConcreteDeck = tileCopingDecking.deckingType === 'concrete';
+    const hasTile = !isFiberglass && tileCopingDecking.tileLevel > 0;
     const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 * 1.1 : 0; // 4' band * 1.1 waste
     const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? ceilToStep(concreteBandAreaRaw, 10) : 0;
     // Excel (TILE COPING!J35/J42) lets the addl qty go negative when the 4' band exceeds the entered deck area.
@@ -129,7 +130,7 @@ export class TileCopingDeckingCalculations {
       : tileCopingDecking.deckingArea * 1.05; // 5% waste for non-concrete decking
 
     // TILE LABOR
-    if (!isFiberglass) {
+    if (hasTile) {
       const tileLevel = tileCopingDecking.tileLevel;
 
       laborItems.push({
@@ -164,7 +165,7 @@ export class TileCopingDeckingCalculations {
     }
 
     // Base tile material (Level 1)
-    if (!isFiberglass) {
+    if (hasTile) {
       materialItems.push({
         category: 'Tile Material',
         description: 'Level 1 Tile',
@@ -184,7 +185,7 @@ export class TileCopingDeckingCalculations {
     }
 
     // TILE MATERIAL
-    if (!isFiberglass && tileCopingDecking.tileLevel > 1) {
+    if (hasTile && tileCopingDecking.tileLevel > 1) {
       const upgrade =
         tileCopingDecking.tileLevel === 2
           ? prices.tile.material.level2Upgrade
@@ -446,7 +447,7 @@ export class TileCopingDeckingCalculations {
     }
 
     // Concrete band for fiberglass pools
-    if (PoolCalculations.isFiberglassPool(poolSpecs)) {
+    if (PoolCalculations.isFiberglassPool(poolSpecs) && tileCopingDecking.deckingType !== 'none') {
       materialItems.push({
         category: 'Decking Material',
         description: 'Concrete Band for Fiberglass',
