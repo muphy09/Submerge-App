@@ -114,6 +114,17 @@
   margin: 10px 0 0 20px;
 }
 
+.custom-features-warning {
+  margin-bottom: 1.25rem;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #f97316;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
 .add-item-section {
   background: #f9fafb;
   padding: 20px;

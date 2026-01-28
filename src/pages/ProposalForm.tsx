@@ -33,8 +33,8 @@ import CustomFeaturesSectionNew from '../components/CustomFeaturesSectionNew';
 import CostBreakdownView from '../components/CostBreakdownView';
 import LiveCostBreakdown from '../components/LiveCostBreakdown';
 import CostBreakdownPage from '../components/CostBreakdownPage';
+import FranchiseLogo from '../components/FranchiseLogo';
 import './ProposalForm.css';
-import submergeLogo from '../../Submerge Logo.png';
 import customerProposalIcon from '../../CustomerProposalIcon.png';
 import poolSpecsIconImg from '../../docs/img/poolspecifications.png';
 import excavationIconImg from '../../docs/img/excavation.png';
@@ -486,15 +486,16 @@ function ProposalForm() {
     const designerRole = getSessionRole();
     const designerCode = getSessionFranchiseCode();
     const modelMeta = getActivePricingModelMeta();
+    const shouldUseActiveDefault = Boolean(modelMeta.isDefault && modelMeta.pricingModelId);
     return {
       ...base,
       franchiseId,
       designerName,
       designerRole,
       designerCode,
-      pricingModelId: modelMeta.pricingModelId || undefined,
-      pricingModelName: modelMeta.pricingModelName || undefined,
-      pricingModelIsDefault: modelMeta.isDefault,
+      pricingModelId: shouldUseActiveDefault ? modelMeta.pricingModelId || undefined : undefined,
+      pricingModelName: shouldUseActiveDefault ? modelMeta.pricingModelName || undefined : undefined,
+      pricingModelIsDefault: shouldUseActiveDefault ? modelMeta.isDefault : undefined,
     };
   };
 
@@ -1017,6 +1018,7 @@ function ProposalForm() {
             <CustomFeaturesSectionNew
               data={proposal.customFeatures!}
               onChange={(data) => updateProposal('customFeatures', data)}
+              retailPrice={retailPrice}
             />
           );
         default:
@@ -1243,11 +1245,12 @@ function ProposalForm() {
 
   const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(mergeWithDefaults(proposal), papDiscounts);
   const canSubmit = Boolean(proposal.customerInfo?.customerName?.trim());
-  const submitTooltip = !canSubmit ? 'Must include Customer Name' : undefined;
-  const isCompactLayout = viewportWidth < 1300;
-  const isMobileLayout = viewportWidth < 1024;
-  const customerTitle = (proposal.customerInfo?.customerName || '').trim();
-  const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
+    const submitTooltip = !canSubmit ? 'Must include Customer Name' : undefined;
+    const isCompactLayout = viewportWidth < 1300;
+    const isMobileLayout = viewportWidth < 1024;
+    const customerTitle = (proposal.customerInfo?.customerName || '').trim();
+    const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
+    const franchiseLogoId = proposal.franchiseId || getSessionFranchiseId();
   const editingVersionKey = proposal.versionId || editingVersionId || 'original';
   const isVersionEdit = !(proposal.isOriginalVersion ?? editingVersionKey === 'original');
   const retailPrice = toFiniteNumber(
@@ -1267,12 +1270,12 @@ function ProposalForm() {
 
   return (
     <div className="proposal-form">
-      <header className="form-header">
-        <div className="form-header-title">
-          <img src={submergeLogo} alt="Submerge Logo" className="form-logo" />
-          <h1>{headerTitle}</h1>
-        </div>
-      </header>
+        <header className="form-header">
+          <div className="form-header-title">
+            <FranchiseLogo className="form-logo" alt="Franchise Logo" franchiseId={franchiseLogoId} />
+            <h1>{headerTitle}</h1>
+          </div>
+        </header>
 
       <div
         className={`form-layout ${isCompactLayout ? 'is-compact' : ''} ${isMobileLayout ? 'is-mobile' : ''} ${!showCostSidebar ? 'no-cost' : ''} ${!showLeftNav ? 'no-nav' : ''}`}

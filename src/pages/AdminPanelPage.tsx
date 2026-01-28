@@ -64,6 +64,10 @@ const formatDate = (value?: string) => {
 };
 
 const normalizeDesignerName = (value?: string) => (value ?? '').trim();
+const isSubmittedStatus = (status?: string) => {
+  const normalized = (status || '').toLowerCase();
+  return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
+};
 
 function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const navigate = useNavigate();
@@ -273,9 +277,14 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     }
   };
 
+  const submittedProposals = useMemo(
+    () => proposals.filter((proposal) => isSubmittedStatus(proposal.status)),
+    [proposals]
+  );
+
   const performanceData = useMemo(() => {
     const counts: Record<string, number> = {};
-    proposals.forEach((proposal) => {
+    submittedProposals.forEach((proposal) => {
       const name =
         normalizeDesignerName(proposal.designerName) ||
         normalizeDesignerName(session?.userName) ||
@@ -306,7 +315,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         }
         return a.name.localeCompare(b.name);
       });
-  }, [franchiseUsers, proposals, session?.userName]);
+  }, [franchiseUsers, submittedProposals, session?.userName]);
 
   const performanceScaleMax = useMemo(() => {
     const maxProposals = performanceData.reduce((max, item) => Math.max(max, item.proposals), 0);
@@ -316,17 +325,17 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
 
   const sortedProposals = useMemo(
     () =>
-      [...proposals].sort(
+      [...submittedProposals].sort(
         (a, b) =>
           new Date(b.lastModified || b.createdDate).getTime() -
           new Date(a.lastModified || a.createdDate).getTime()
       ),
-    [proposals]
+    [submittedProposals]
   );
 
   const designerOptions = useMemo(() => {
     const names = new Set<string>();
-    proposals.forEach((proposal) => {
+    submittedProposals.forEach((proposal) => {
       const name =
         normalizeDesignerName(proposal.designerName) ||
         normalizeDesignerName(session?.userName) ||
@@ -336,7 +345,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       }
     });
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [proposals, session?.userName]);
+  }, [submittedProposals, session?.userName]);
 
   useEffect(() => {
     if (designerFilter !== 'all' && !designerOptions.includes(designerFilter)) {
@@ -394,7 +403,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     container.scrollTop += e.deltaY > 0 ? step : -step;
   };
 
-  const totalProposalsSubmitted = proposals.length;
+  const totalProposalsSubmitted = submittedProposals.length;
   const proposalCountLabel = designerFilter === 'all'
     ? `${totalProposalsSubmitted} total`
     : `${filteredProposals.length} of ${totalProposalsSubmitted} total`;
@@ -611,8 +620,8 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           <div className="admin-empty padded">Loading proposals...</div>
         ) : filteredProposals.length === 0 ? (
           <div className="admin-empty padded">
-            {proposals.length === 0
-              ? 'No proposals for this franchise yet.'
+            {sortedProposals.length === 0
+              ? 'No submitted proposals for this franchise yet.'
               : 'No proposals match the selected designer.'}
           </div>
         ) : (

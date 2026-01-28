@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -13,6 +14,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [changelogError, setChangelogError] = useState('');
   const [changelogLoading, setChangelogLoading] = useState(false);
   const isChangelogDisabled = true;
+  const { displayName } = useFranchiseAppName();
 
   const renderChangelog = (content: string) => {
     const lines = content.split(/\r?\n/);
@@ -216,7 +218,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <div className="settings-section">
             <h3>Updates</h3>
             <p className="settings-description">
-              Check for the latest version of Submerge Proposal Builder
+              Check for the latest version of {displayName} Proposal Builder
             </p>
             <button
               className="check-updates-button"

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CostBreakdown, CostLineItem, PricingCalculations, Proposal } from '../types/proposal-new';
 import SubmergeAdvantageWarranty from './SubmergeAdvantageWarranty';
-import submergeLogo from '../../Submerge Logo.png';
+import FranchiseLogo from './FranchiseLogo';
 import './CostBreakdownView.css';
 
 interface Props {
@@ -42,6 +42,7 @@ function CostBreakdownView({
     proposal?.pricing?.totalCostsBeforeOverhead ??
     baseTotals.grandTotal ??
     0;
+  const franchiseId = proposal?.franchiseId;
 
   let retailPrice =
     pricing?.retailPrice ??
@@ -234,7 +235,7 @@ function CostBreakdownView({
               </p>
             </div>
           <div className="breakdown-logo">
-            <img src={submergeLogo} alt="Submerge Logo" />
+            <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseId} />
           </div>
           </div>
 

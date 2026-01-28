@@ -1,6 +1,7 @@
 import { Proposal } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
-import submergeLogo from '../../Submerge Logo.png';
+import FranchiseLogo from './FranchiseLogo';
+import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import './SubmergeAdvantageWarranty.css';
 import { getLightCounts } from '../utils/lighting';
 
@@ -233,10 +234,15 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
   return items;
 };
 
-const buildWarrantySections = (proposal?: Partial<Proposal>): WarrantySection[] => {
+const buildWarrantySections = (
+  proposal?: Partial<Proposal>,
+  brandName: string = 'Submerge'
+): WarrantySection[] => {
   const poolSpecs = proposal?.poolSpecs;
   const excavation = proposal?.excavation;
   const isFiberglass = poolSpecs?.poolType === 'fiberglass';
+  const replaceBrand = (value?: string) =>
+    value ? value.replace(/\bSubmerge\b/g, brandName) : value;
 
   const spa = buildSpaDetail(proposal);
   const interiorFinishDetail = buildInteriorFinishDetail(proposal);
@@ -379,16 +385,27 @@ const buildWarrantySections = (proposal?: Partial<Proposal>): WarrantySection[] 
     },
   ];
 
-  return sections;
-};
+    return sections.map((section) => ({
+      ...section,
+      title: replaceBrand(section.title) || section.title,
+      items: section.items.map((item) => ({
+        ...item,
+        label: replaceBrand(item.label) || item.label,
+        detail: replaceBrand(item.detail),
+        advantage: replaceBrand(item.advantage),
+      })),
+    }));
+  };
 
 interface Props {
   proposal?: Partial<Proposal>;
 }
 
 function SubmergeAdvantageWarranty({ proposal }: Props) {
-  const sections = buildWarrantySections(proposal);
   const customerName = (proposal?.customerInfo?.customerName || '').trim();
+  const franchiseId = proposal?.franchiseId;
+  const { displayName } = useFranchiseAppName(franchiseId);
+  const sections = buildWarrantySections(proposal, displayName);
 
   return (
     <div className="warranty-sheet">
@@ -399,11 +416,11 @@ function SubmergeAdvantageWarranty({ proposal }: Props) {
           <p className="warranty-subtitle">
             Prepared for: <span className="warranty-customer">{customerName || 'N/A'}</span>
           </p>
+          </div>
+          <div className="warranty-logo">
+            <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseId} />
+          </div>
         </div>
-        <div className="warranty-logo">
-          <img src={submergeLogo} alt="Submerge Logo" />
-        </div>
-      </div>
 
       <div className="warranty-section-stack">
         {sections.map((section) => {
@@ -462,7 +479,7 @@ function SubmergeAdvantageWarranty({ proposal }: Props) {
                         </div>
                       ))
                     ) : (
-                      <div className="warranty-advantage-card muted">No Submerge advantages listed.</div>
+                    <div className="warranty-advantage-card muted">No {displayName} advantages listed.</div>
                     )}
                   </div>
                 </div>

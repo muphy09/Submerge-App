@@ -1,5 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import submergeLogo from '../../Submerge Logo.png';
+import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
+import { useFranchiseLogo } from '../hooks/useFranchiseLogo';
+import { saveFranchiseAppName, saveFranchiseLogo } from '../services/franchiseBranding';
+import { getSessionFranchiseId, getSessionRole, getSessionUserName } from '../services/session';
 import './SettingsPage.css';
+
+const MAX_LOGO_BYTES = 1024 * 1024;
+const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
 
 const SettingsPage: React.FC = () => {
   const [checking, setChecking] = useState(false);
@@ -9,6 +17,31 @@ const SettingsPage: React.FC = () => {
   const [changelogError, setChangelogError] = useState('');
   const [changelogLoading, setChangelogLoading] = useState(false);
   const isChangelogDisabled = true;
+  const sessionRole = getSessionRole();
+  const isAdmin = sessionRole === 'admin' || sessionRole === 'owner';
+  const franchiseId = getSessionFranchiseId();
+  const { appName: savedAppName, displayName, isLoading: appNameLoading } = useFranchiseAppName(franchiseId);
+  const { logoUrl: savedLogoUrl, isLoading: logoLoading } = useFranchiseLogo(franchiseId);
+  const [pendingLogoUrl, setPendingLogoUrl] = useState<string | null>(null);
+  const [pendingLogoName, setPendingLogoName] = useState('');
+  const [logoSaving, setLogoSaving] = useState(false);
+  const [logoStatus, setLogoStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(
+    null
+  );
+  const [pendingAppName, setPendingAppName] = useState('');
+  const [appNameSaving, setAppNameSaving] = useState(false);
+  const [appNameStatus, setAppNameStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(
+    null
+  );
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewLogoUrl = pendingLogoUrl || savedLogoUrl || submergeLogo;
+  const hasCustomLogo = Boolean(savedLogoUrl);
+  const hasPendingLogo = Boolean(pendingLogoUrl);
+  const normalizedPendingName = pendingAppName.trim();
+  const normalizedSavedName = (savedAppName || '').trim();
+  const hasCustomAppName = Boolean(normalizedSavedName);
+  const hasPendingNameChange = normalizedPendingName !== normalizedSavedName;
+  const canResetAppName = hasCustomAppName || normalizedPendingName.length > 0;
 
   const renderChangelog = (content: string) => {
     const lines = content.split(/\r?\n/);
@@ -190,6 +223,148 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    setPendingAppName(savedAppName || '');
+  }, [savedAppName]);
+
+  const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setLogoStatus(null);
+    const file = event.target.files?.[0];
+    if (!file) {
+      setPendingLogoUrl(null);
+      setPendingLogoName('');
+      return;
+    }
+
+    if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
+      setLogoStatus({ type: 'error', message: 'Logo must be a PNG, JPG, SVG, or WebP file.' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoStatus({ type: 'error', message: 'Logo must be smaller than 1 MB.' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        setLogoStatus({ type: 'error', message: 'Unable to read logo file.' });
+        return;
+      }
+      setPendingLogoUrl(result);
+      setPendingLogoName(file.name);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.onerror = () => {
+      setLogoStatus({ type: 'error', message: 'Unable to read logo file.' });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDiscardLogo = () => {
+    setPendingLogoUrl(null);
+    setPendingLogoName('');
+    setLogoStatus(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleSaveLogo = async () => {
+    if (!pendingLogoUrl) return;
+    setLogoSaving(true);
+    setLogoStatus(null);
+    try {
+      await saveFranchiseLogo({
+        franchiseId,
+        logoUrl: pendingLogoUrl,
+        updatedBy: getSessionUserName(),
+      });
+      setPendingLogoUrl(null);
+      setPendingLogoName('');
+      setLogoStatus({ type: 'success', message: 'Franchise logo updated.' });
+    } catch (error) {
+      console.error('Failed to save franchise logo:', error);
+      setLogoStatus({ type: 'error', message: 'Unable to save the franchise logo.' });
+    } finally {
+      setLogoSaving(false);
+    }
+  };
+
+  const handleResetLogo = async () => {
+    if (!hasCustomLogo && !pendingLogoUrl) return;
+    setLogoSaving(true);
+    setLogoStatus(null);
+    try {
+      await saveFranchiseLogo({
+        franchiseId,
+        logoUrl: null,
+        updatedBy: getSessionUserName(),
+      });
+      setPendingLogoUrl(null);
+      setPendingLogoName('');
+      setLogoStatus({ type: 'success', message: 'Franchise logo reset to default.' });
+    } catch (error) {
+      console.error('Failed to reset franchise logo:', error);
+      setLogoStatus({ type: 'error', message: 'Unable to reset the franchise logo.' });
+    } finally {
+      setLogoSaving(false);
+    }
+  };
+
+  const handleAppNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setAppNameStatus(null);
+    setPendingAppName(event.target.value);
+  };
+
+  const handleSaveAppName = async () => {
+    if (!hasPendingNameChange) return;
+    setAppNameSaving(true);
+    setAppNameStatus(null);
+    const nextName = normalizedPendingName ? normalizedPendingName : null;
+    try {
+      await saveFranchiseAppName({
+        franchiseId,
+        appName: nextName,
+        updatedBy: getSessionUserName(),
+      });
+      setAppNameStatus({
+        type: 'success',
+        message: nextName ? 'App name updated.' : 'App name reset to default.',
+      });
+    } catch (error) {
+      console.error('Failed to save app name:', error);
+      setAppNameStatus({ type: 'error', message: 'Unable to save the app name.' });
+    } finally {
+      setAppNameSaving(false);
+    }
+  };
+
+  const handleResetAppName = async () => {
+    if (!hasCustomAppName) {
+      setPendingAppName('');
+      return;
+    }
+    setAppNameSaving(true);
+    setAppNameStatus(null);
+    try {
+      await saveFranchiseAppName({
+        franchiseId,
+        appName: null,
+        updatedBy: getSessionUserName(),
+      });
+      setPendingAppName('');
+      setAppNameStatus({ type: 'success', message: 'App name reset to default.' });
+    } catch (error) {
+      console.error('Failed to reset app name:', error);
+      setAppNameStatus({ type: 'error', message: 'Unable to reset the app name.' });
+    } finally {
+      setAppNameSaving(false);
+    }
+  };
+
   return (
     <div className="settings-page">
       <div className="settings-page-header">
@@ -200,7 +375,7 @@ const SettingsPage: React.FC = () => {
         <div className="settings-card">
           <h2>Updates</h2>
           <p className="settings-description">
-            Check for the latest version of Submerge Proposal Builder
+            Check for the latest version of {displayName} Proposal Builder
           </p>
           <button
             className="settings-button check-updates-button"
@@ -228,6 +403,113 @@ const SettingsPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+          {isAdmin && (
+            <div className="settings-card">
+              <h2>Global Logo</h2>
+              <p className="settings-description">
+                Upload a franchise-wide logo to replace the {displayName} logo throughout the app.
+              </p>
+              <p className="franchise-logo-meta">Applies to franchise {franchiseId}.</p>
+              <div className="franchise-logo-grid">
+                <div className="franchise-logo-preview">
+                <div className="franchise-logo-label">Current logo</div>
+                <div className="franchise-logo-frame">
+                  <img src={previewLogoUrl} alt="Franchise logo preview" />
+                </div>
+                <p className="franchise-logo-note">Recommended: transparent PNG or SVG, max 1 MB.</p>
+              </div>
+              <div className="franchise-logo-controls">
+                <label className="franchise-logo-label" htmlFor="franchise-logo-upload">
+                  Upload new logo
+                </label>
+                <input
+                  id="franchise-logo-upload"
+                  ref={fileInputRef}
+                  type="file"
+                  className="franchise-logo-input"
+                  accept={ALLOWED_LOGO_TYPES.join(',')}
+                  onChange={handleLogoFileChange}
+                  disabled={logoSaving}
+                />
+                {pendingLogoName && (
+                  <div className="franchise-logo-file">Selected: {pendingLogoName}</div>
+                )}
+                <div className="franchise-logo-actions">
+                  <button
+                    className="settings-button branding-save-button"
+                    onClick={handleSaveLogo}
+                    disabled={!hasPendingLogo || logoSaving}
+                  >
+                    {logoSaving && hasPendingLogo ? 'Saving...' : 'Save Logo'}
+                  </button>
+                  {hasPendingLogo && (
+                    <button
+                      className="settings-button branding-discard-button"
+                      onClick={handleDiscardLogo}
+                      disabled={logoSaving}
+                    >
+                      Discard
+                    </button>
+                  )}
+                    <button
+                      className="settings-button branding-reset-button"
+                      onClick={handleResetLogo}
+                      disabled={!hasCustomLogo || logoSaving}
+                    >
+                      Reset to Default Logo
+                    </button>
+                  </div>
+                  {logoStatus && (
+                    <div className={`logo-status ${logoStatus.type}`}>{logoStatus.message}</div>
+                  )}
+                  {!logoStatus && logoLoading && (
+                    <div className="logo-status info">Loading current logo...</div>
+                  )}
+                </div>
+              </div>
+              <div className="franchise-branding-divider" />
+              <div className="franchise-name-section">
+                <div className="franchise-logo-label">App Name</div>
+                <p className="franchise-logo-note">
+                  Replaces the app name throughout the app (except the About section).
+                </p>
+                <div className="franchise-name-current">
+                  Current: <span className="franchise-name-value">{displayName}</span>
+                </div>
+                <input
+                  type="text"
+                  className="franchise-name-input"
+                  placeholder="Enter a custom app name"
+                  value={pendingAppName}
+                  onChange={handleAppNameChange}
+                  disabled={appNameSaving}
+                />
+                <div className="franchise-logo-actions">
+                  <button
+                    className="settings-button branding-save-button"
+                    onClick={handleSaveAppName}
+                    disabled={!hasPendingNameChange || appNameSaving}
+                  >
+                    {appNameSaving ? 'Saving...' : 'Save Name'}
+                  </button>
+                  <button
+                    className="settings-button branding-reset-button"
+                    onClick={handleResetAppName}
+                    disabled={!canResetAppName || appNameSaving}
+                  >
+                    Reset to Default Name
+                  </button>
+                </div>
+                {appNameStatus && (
+                  <div className={`logo-status ${appNameStatus.type}`}>{appNameStatus.message}</div>
+                )}
+                {!appNameStatus && appNameLoading && (
+                  <div className="logo-status info">Loading app name...</div>
+                )}
+              </div>
+            </div>
+          )}
 
         <div className="settings-card">
           <h2>About</h2>

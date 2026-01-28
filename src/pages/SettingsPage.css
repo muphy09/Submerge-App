@@ -178,6 +178,167 @@
   font-size: clamp(0.9rem, 1.5vh, 1rem);
 }
 
+.franchise-logo-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.2fr);
+  gap: clamp(1rem, 2vh, 1.5rem);
+  align-items: start;
+}
+
+.franchise-logo-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.franchise-logo-label {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.franchise-logo-frame {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: clamp(0.75rem, 1.5vh, 1rem);
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.franchise-logo-frame img {
+  max-height: 90px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.franchise-logo-note {
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.franchise-logo-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.franchise-logo-input {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.franchise-logo-file {
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.franchise-logo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.franchise-branding-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: clamp(1rem, 2vh, 1.25rem) 0;
+}
+
+.franchise-name-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.franchise-name-current {
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.franchise-name-value {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.franchise-name-input {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 0.95rem;
+}
+
+.franchise-name-input:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+.franchise-logo-actions .settings-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.branding-save-button {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+}
+
+.branding-save-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
+}
+
+.branding-discard-button {
+  background: #f3f4f6;
+  color: #1f2937;
+  border: 1px solid #e5e7eb;
+}
+
+.branding-reset-button {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.logo-status {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.logo-status.success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.logo-status.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.logo-status.info {
+  background: #e0f2fe;
+  color: #0c4a6e;
+  border: 1px solid #bae6fd;
+}
+
+.franchise-logo-meta {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
 /* Changelog Modal Styles */
 .changelog-modal-backdrop {
   position: fixed;
@@ -360,5 +521,9 @@
   .section-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .franchise-logo-grid {
+    grid-template-columns: 1fr;
   }
 }

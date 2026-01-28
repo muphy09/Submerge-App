@@ -1,17 +1,20 @@
 import { NavLink } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import submergeLogo from '../../Submerge Logo.png';
+import FranchiseLogo from './FranchiseLogo';
+import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import './NavigationBar.css';
 
 interface NavigationBarProps {
   userName?: string;
   onLogout?: () => void;
   isAdmin?: boolean;
+  franchiseId?: string;
 }
 
-function NavigationBar({ userName = 'User', onLogout, isAdmin = false }: NavigationBarProps) {
+function NavigationBar({ userName = 'User', onLogout, isAdmin = false, franchiseId }: NavigationBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const { displayName } = useFranchiseAppName(franchiseId);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -28,9 +31,9 @@ function NavigationBar({ userName = 'User', onLogout, isAdmin = false }: Navigat
   return (
     <nav className="navigation-bar">
       <div className="nav-left">
-        <img src={submergeLogo} alt="Submerge Logo" className="nav-logo" />
+        <FranchiseLogo className="nav-logo" alt="Franchise Logo" franchiseId={franchiseId} />
         <div className="nav-title-container">
-          <div className="nav-brand">Submerge</div>
+          <div className="nav-brand">{displayName}</div>
           <div className="nav-title">Proposal Builder</div>
         </div>
       </div>

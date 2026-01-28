@@ -565,12 +565,18 @@
   color: #374151;
   word-break: break-word;
   white-space: normal;
+  vertical-align: middle;
 }
 
 .designer-cell,
 .customer-name {
   font-weight: 700;
   color: #1e3a5f;
+}
+
+.admin-table td.customer-name {
+  display: table-cell;
+  vertical-align: middle;
 }
 
 .price-cell {

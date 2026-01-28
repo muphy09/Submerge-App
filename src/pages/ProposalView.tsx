@@ -6,12 +6,12 @@ import { CostLineItem, Proposal } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import SubmergeAdvantageWarranty from '../components/SubmergeAdvantageWarranty';
 import ContractView, { ContractViewHandle } from '../components/ContractView';
+import FranchiseLogo from '../components/FranchiseLogo';
 import { useToast } from '../components/Toast';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
-import submergeLogo from '../../Submerge Logo.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { initPricingDataStore } from '../services/pricingDataStore';
@@ -82,6 +82,7 @@ function ProposalView() {
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
   const canViewFullSummary = sessionRole === 'admin' || sessionRole === 'owner';
+  const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const breakdownLabels: Record<BreakdownType, string> = {
     customer: 'Customer Breakdown',
@@ -1938,7 +1939,7 @@ function ProposalView() {
                   </div>
                 </div>
                 <div className="cogs-header-logo">
-                  <img src={submergeLogo} alt="Submerge Logo" />
+                  <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseLogoId} />
                 </div>
               </div>
             </div>
@@ -2102,7 +2103,7 @@ function ProposalView() {
                   </div>
                 </div>
                 <div className="cogs-header-logo">
-                  <img src={submergeLogo} alt="Submerge Logo" />
+                  <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseLogoId} />
                 </div>
               </div>
             </div>

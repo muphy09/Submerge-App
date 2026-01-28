@@ -341,14 +341,25 @@ export class MasterPricingEngine {
     }
 
     // Custom Features (convert to line items)
-    const customFeaturesItems: CostLineItem[] = customFeatures?.features.map(f => ({
-      category: 'Custom Features',
-      description: f.name,
-      unitPrice: f.totalCost,
-      quantity: 1,
-      total: f.totalCost,
-      notes: f.description
-    })) || [];
+    const customFeaturesItems: CostLineItem[] = (customFeatures?.features || []).map((feature, index) => {
+      const labor = Number(feature.laborCost) || 0;
+      const material = Number(feature.materialCost) || 0;
+      const hasExplicitCosts = labor !== 0 || material !== 0;
+      const total = hasExplicitCosts ? labor + material : (Number(feature.totalCost) || 0);
+      const description = feature.name?.trim() || `Custom Feature #${index + 1}`;
+      return {
+        category: 'Custom Features',
+        description,
+        unitPrice: total,
+        quantity: 1,
+        total,
+        notes: feature.description,
+      };
+    });
+    const customFeaturesAdjustmentTotal = customFeaturesItems.reduce(
+      (sum, item) => (item.total < 0 ? sum + item.total : sum),
+      0
+    );
 
     // Calculate totals
     const totals = {
@@ -438,12 +449,14 @@ export class MasterPricingEngine {
       (manualAdjustments.positive2 ?? 0) -
       (manualAdjustments.negative1 ?? 0) -
       (manualAdjustments.negative2 ?? 0);
+    const designerAdjustmentsTotal = manualAdjustmentsTotal + customFeaturesAdjustmentTotal;
 
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 1250;
 
     // Step 1: Total costs before overhead
-    const totalCostsBeforeOverhead = totals.grandTotal;
+    // Negative custom features are retail-only adjustments (do not reduce COGS).
+    const totalCostsBeforeOverhead = totals.grandTotal - customFeaturesAdjustmentTotal;
 
     // Step 2: Apply overhead multiplier
     const totalCOGS = totalCostsBeforeOverhead * overheadMultiplier;
@@ -452,7 +465,7 @@ export class MasterPricingEngine {
     const baseRetailPrice = Math.ceil((totalCOGS / targetMargin) / 10) * 10;
 
     // Step 4: Add G3 upgrade and discount
-    const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount + manualAdjustmentsTotal;
+    const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount + designerAdjustmentsTotal;
 
     // Step 5: Calculate commissions and fees
     const digCommission = retailPrice * digCommissionRate;
@@ -480,7 +493,7 @@ export class MasterPricingEngine {
       closeoutCommission,
       grossProfit,
       grossProfitMargin,
-      manualAdjustmentsTotal,
+      manualAdjustmentsTotal: designerAdjustmentsTotal,
     };
 
     return {

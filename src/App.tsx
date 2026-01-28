@@ -213,6 +213,7 @@ function AppContent() {
           userName={session?.userName || 'User'}
           onLogout={session ? handleLogout : undefined}
           isAdmin={['owner', 'admin'].includes((session?.role || '').toLowerCase())}
+          franchiseId={session?.franchiseId}
         />
       )}
       <Routes>

@@ -5,9 +5,10 @@ import './SectionStyles.css';
 interface Props {
   data: CustomFeatures;
   onChange: (data: CustomFeatures) => void;
+  retailPrice?: number;
 }
 
-function CustomFeaturesSectionNew({ data, onChange }: Props) {
+function CustomFeaturesSectionNew({ data, onChange, retailPrice }: Props) {
   const [activeFeatureIndex, setActiveFeatureIndex] = useState<number | null>(null);
   const maxFeatures = 7;
 
@@ -21,6 +22,13 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
     const totalCost = normalized.reduce((sum, f) => sum + f.totalCost, 0);
     onChange({ features: normalized, totalCost });
   };
+  const safeRetailPrice = Number.isFinite(retailPrice) ? (retailPrice as number) : 0;
+  const negativeAdjustmentTotal = data.features.reduce((sum, feature) => {
+    const total = featureTotal(feature);
+    return total < 0 ? sum + Math.abs(total) : sum;
+  }, 0);
+  const showAdjustmentWarning =
+    safeRetailPrice > 0 && negativeAdjustmentTotal > safeRetailPrice * 0.18;
 
   useEffect(() => {
     if (activeFeatureIndex !== null && activeFeatureIndex >= data.features.length) {
@@ -60,6 +68,9 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
       <div className="form-help" style={{ marginBottom: '1.5rem', fontStyle: 'italic' }}>
         Add any custom features or special work not covered in other sections (up to 7 features).
       </div>
+      {showAdjustmentWarning && (
+        <div className="custom-features-warning">Warning: over 18% threshold</div>
+      )}
 
       {data.features.map((feature, index) => {
         const isEditing = activeFeatureIndex === index;
@@ -139,8 +150,8 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
                       type="number"
                       className="form-input"
                       value={feature.laborCost || ''}
-                      onChange={(e) => updateFeature(index, 'laborCost', parseFloat(e.target.value) || 0)}
-                      min="0"
+                      onChange={(e) => updateFeature(index, 'laborCost', e.target.value)}
+                      onBlur={(e) => updateFeature(index, 'laborCost', toNumber(e.target.value))}
                       step="0.01"
                       placeholder="0"
                     />
@@ -152,8 +163,8 @@ function CustomFeaturesSectionNew({ data, onChange }: Props) {
                       type="number"
                       className="form-input"
                       value={feature.materialCost || ''}
-                      onChange={(e) => updateFeature(index, 'materialCost', parseFloat(e.target.value) || 0)}
-                      min="0"
+                      onChange={(e) => updateFeature(index, 'materialCost', e.target.value)}
+                      onBlur={(e) => updateFeature(index, 'materialCost', toNumber(e.target.value))}
                       step="0.01"
                       placeholder="0"
                     />
