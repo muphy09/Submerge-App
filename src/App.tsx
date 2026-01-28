@@ -16,6 +16,7 @@ import AdminPanelPage from './pages/AdminPanelPage';
 import { assertUserAllowed, ensureAdminUser } from './services/franchiseUsersAdapter';
 import { getSupabaseReachability, isSupabaseEnabled, setSupabaseContext } from './services/supabaseClient';
 import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
+import useKeyboardNavigation from './hooks/useKeyboardNavigation';
 import './App.css';
 
 type UserSession = {
@@ -32,6 +33,7 @@ const DEFAULT_FRANCHISE_ID = 'default';
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
+  useKeyboardNavigation();
   const [updateStatus, setUpdateStatus] = useState<'downloading' | 'ready' | 'error' | null>(null);
   const [updateError, setUpdateError] = useState<string>('');
   const [showPricingData, setShowPricingData] = useState(false);
