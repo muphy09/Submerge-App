@@ -31,11 +31,11 @@ Help Needed -
     - Commercial Pool Pricing
     - Sales Templates (when not in effect)
 - Logic for stipulations / what specs require or omit what items
-- Exposed Pool Wall
-    - Has to allow for $8.50 of forming for every sqft of wall
-    -plus facing
-    - allow for increase of 33% concrete cost for sqft used
-    - Facing option
+- Exposed Pool Wall (Out of ground Forming)
+    - Add backside facing
+        - Stukko and Split face -- St. $9. sqft, Split ledge = panel ledge
+- Auto Cover change to Auto Cover Forming: Prompt for total cost after selecting
+    - Potential sqft price come from manufacturer to remove custom input
 
 ---------------------------------------------------------------------------------------------------------
 Plan of Action - 
@@ -47,9 +47,14 @@ Plan of Action -
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)
 - Spa Prep ($250) never included in COST-NEW (INTD25)?
-- 'Columns' only bill when a facing is selected; otherwise ignored (stone/rockwork)
-    - Custom facing option?
 - Waterproofing cost never included in some excel props
 - Remodel workflow
 
 ----------------------------------------------------------------------------------------------------------
+
+
+- Potential pictures for interior finish styles (out and in pool), equipment selected.
+
+- NPT White Mini: 4.80 - 1150 spa finish - White Mini
+
+Add passwords option for login
