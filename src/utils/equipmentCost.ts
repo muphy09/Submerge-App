@@ -19,6 +19,14 @@ const findAutomationCatalogMatch = (item?: EquipmentCostLike | null) => {
   );
 };
 
+const findAutoFillCatalogMatch = (item?: EquipmentCostLike | null) => {
+  if (!item?.name) return null;
+  const list = pricingData?.equipment?.autoFillSystem || [];
+  return list.find(
+    (entry: any) => entry?.name?.toLowerCase?.() === item.name?.toLowerCase?.()
+  );
+};
+
 /**
   * Sum base/add costs; fall back to legacy price; optionally apply an overhead multiplier (e.g., 1.1).
   */
@@ -28,6 +36,7 @@ export function getEquipmentItemCost(
 ): number {
   if (!item) return 0;
   const automationMatch = findAutomationCatalogMatch(item);
+  const autoFillMatch = automationMatch ? null : findAutoFillCatalogMatch(item);
   // Hydrate missing automation fields from the catalog so percent adjustments still apply when only the name is stored.
   const target: EquipmentCostLike = automationMatch
     ? {
@@ -37,6 +46,13 @@ export function getEquipmentItemCost(
         percentIncrease:
           item.percentIncrease ?? (automationMatch as any).percentIncrease,
       }
+    : autoFillMatch
+      ? {
+          ...autoFillMatch,
+          ...item,
+          percentIncrease:
+            item.percentIncrease ?? (autoFillMatch as any).percentIncrease,
+        }
     : item;
   const hasParts =
     target.basePrice !== undefined || target.addCost1 !== undefined || target.addCost2 !== undefined;

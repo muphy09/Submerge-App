@@ -6,7 +6,6 @@ import './SectionStyles.css';
 interface Props {
   data: TileCopingDecking;
   onChange: (data: TileCopingDecking) => void;
-  poolPerimeter: number;
   isFiberglass: boolean;
   poolDeckingArea: number;
 }
@@ -51,7 +50,7 @@ const CompactInput = ({
   );
 };
 
-function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFiberglass, poolDeckingArea }: Props) {
+function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDeckingArea }: Props) {
   const sessionRole = getSessionRole();
   const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
   const showStoneRockwork = false;
@@ -120,7 +119,7 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
           <h2 className="spec-block-title">Coping</h2>
         </div>
 
-        <div className="spec-grid-5-fixed">
+        <div className="spec-grid-4-fixed">
           <div className="spec-field">
             <label className="spec-label required">Coping Type</label>
             <select
@@ -146,17 +145,6 @@ function TileCopingDeckingSectionNew({ data, onChange, poolPerimeter, isFibergla
               <option value="12x12">12x12</option>
               <option value="16x16">16x16</option>
             </select>
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">Coping Length</label>
-            <CompactInput
-              value={data.copingLength ?? poolPerimeter}
-              onChange={(e) => handleChange('copingLength', parseFloat(e.target.value) || poolPerimeter)}
-              unit="LNFT"
-              min="0"
-              step="1"
-              placeholder={`Auto: ${poolPerimeter}`}
-            />
           </div>
           <div className="spec-field">
             <label className="spec-label">Bullnose</label>

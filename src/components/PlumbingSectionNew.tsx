@@ -109,8 +109,6 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <div className="spec-grid spec-grid-3">
           {renderRunInput('Total Skimmer Run', 'skimmerRun', 'All skimmers to equipment pad')}
           {renderRunInput('Main Drain Run', 'mainDrainRun', 'Main drain to equipment')}
-          {renderRunInput('Cleaner Run', 'cleanerRun', 'Pool center to equipment')}
-          {renderRunInput('Auto-Fill Run', 'autoFillRun', 'Hose bibb to auto water leveler')}
           {hasSpa
             ? renderRunInput('Spa Run', 'spaRun', 'Spa to equipment')
             : renderRunInput('Spa Run', 'spaRun', 'Enable a spa in Pool Specs to activate', { readOnly: true, placeholder: '0' })}

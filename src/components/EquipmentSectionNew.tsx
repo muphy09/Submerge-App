@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Equipment, PumpSelection, LightSelection } from '../types/proposal-new';
+import { Equipment, PumpSelection, LightSelection, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getSessionRole } from '../services/session';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
@@ -9,6 +9,8 @@ import './SectionStyles.css';
 interface Props {
   data: Equipment;
   onChange: (data: Equipment) => void;
+  plumbingRuns: PlumbingRuns;
+  onChangePlumbingRuns: (runs: PlumbingRuns) => void;
   hasSpa: boolean;
   hasPool: boolean;
 }
@@ -53,7 +55,7 @@ const CompactInput = ({
   );
 };
 
-function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
+function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns, hasSpa, hasPool }: Props) {
   const sessionRole = getSessionRole();
   const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
 
@@ -65,7 +67,8 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
     const cleaner = byCost(pricingData.equipment.cleaners);
     const heater = byCost(pricingData.equipment.heaters);
     const automation = byCost(pricingData.equipment.automation);
-    return { pump, filter, cleaner, heater, automation };
+    const autoFillSystem = byCost(pricingData.equipment.autoFillSystem);
+    return { pump, filter, cleaner, heater, automation, autoFillSystem };
   }, []);
 
   const selectableDefaults = useMemo(() => ({
@@ -73,6 +76,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
     filter: pricingData.equipment.filters.find(f => !f.name.toLowerCase().includes('no filter')) || pricingData.equipment.filters[0],
     heater: pricingData.equipment.heaters.find(h => !h.name.toLowerCase().includes('no heater')) || pricingData.equipment.heaters[0],
     automation: pricingData.equipment.automation.find(a => !a.name.toLowerCase().includes('no automation')) || pricingData.equipment.automation[0],
+    autoFillSystem: pricingData.equipment.autoFillSystem.find(s => !s.name.toLowerCase().includes('no auto')) || pricingData.equipment.autoFillSystem[0],
   }), []);
 
   const hasRealSelection = (name: string | undefined, placeholder: string) =>
@@ -96,6 +100,17 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const heaterOptions = pricingData.equipment.heaters.filter(heater => !heater.name.toLowerCase().includes('no heater'));
   const automationOptions = pricingData.equipment.automation.filter(auto => !auto.name.toLowerCase().includes('no automation'));
   const saltOptions = pricingData.equipment.saltSystem.filter(system => !system.name.toLowerCase().includes('no salt'));
+  const autoFillOptions = pricingData.equipment.autoFillSystem.filter(system => !system.name.toLowerCase().includes('no auto'));
+
+  const buildAutoFillSelection = (system: any) => ({
+    name: system?.name || '',
+    model: (system as any)?.model,
+    basePrice: (system as any)?.basePrice,
+    addCost1: (system as any)?.addCost1,
+    addCost2: (system as any)?.addCost2,
+    price: costOf(system),
+    percentIncrease: (system as any)?.percentIncrease,
+  });
 
   const baseSafeData: Equipment = {
     pump: data?.pump || {
@@ -155,6 +170,13 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
     },
     automationQuantity: data?.automationQuantity ?? 0,
     saltSystem: data?.saltSystem,
+    saltSystemQuantity: data?.saltSystemQuantity ?? (data?.saltSystem ? 1 : 0),
+    autoFillSystem:
+      data?.autoFillSystem ??
+      (data?.hasAutoFill
+        ? buildAutoFillSelection(selectableDefaults.autoFillSystem || defaults.autoFillSystem)
+        : undefined),
+    autoFillSystemQuantity: data?.autoFillSystemQuantity ?? (data?.hasAutoFill ? 1 : 0),
     hasBlanketReel: data?.hasBlanketReel ?? false,
     hasSolarBlanket: data?.hasSolarBlanket ?? false,
     hasAutoFill: data?.hasAutoFill ?? false,
@@ -185,12 +207,20 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
     (data?.automation?.zones ?? 0) > 0
   );
   const [includeSalt, setIncludeSalt] = useState<boolean>(() => hasRealSelection(safeData.saltSystem?.name, 'no salt'));
+  const [includeAutoFill, setIncludeAutoFill] = useState<boolean>(() =>
+    hasRealSelection(safeData.autoFillSystem?.name, 'no auto')
+  );
   const auxiliaryPumps = safeData.auxiliaryPumps || [];
   const maxAuxiliaryPumps = 2;
   const cleanerQuantity = Math.max(safeData.cleanerQuantity ?? (includeCleaner ? 1 : 0), 0);
   const filterQuantity = Math.max(safeData.filterQuantity ?? (includeFilter ? 1 : 0), 0);
   const heaterQuantity = Math.max(safeData.heaterQuantity ?? (includeHeater ? 1 : 0), 0);
   const automationQuantity = Math.max(safeData.automationQuantity ?? (includeAutomation ? 1 : 0), 0);
+  const saltSystemQuantity = Math.max(safeData.saltSystemQuantity ?? (includeSalt ? 1 : 0), 0);
+  const autoFillSystemQuantity = Math.max(
+    safeData.autoFillSystemQuantity ?? (includeAutoFill ? 1 : 0),
+    0
+  );
   const poolLights = safeData.poolLights || [];
   const spaLights = safeData.spaLights || [];
 
@@ -200,6 +230,10 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
 
   const handleChange = (field: keyof Equipment, value: any) => {
     updateData({ [field]: value } as Partial<Equipment>);
+  };
+
+  const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
+    onChangePlumbingRuns({ ...plumbingRuns, [field]: value });
   };
 
   const setAuxiliaryPumps = (pumps: PumpSelection[]) => {
@@ -327,6 +361,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
         },
         cleanerQuantity: 0,
       });
+      handleRunChange('cleanerRun', 0);
     }
   };
 
@@ -503,7 +538,15 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
   const toggleSalt = (val: boolean) => {
     setIncludeSalt(val);
     if (!val) {
-      handleChange('saltSystem', undefined);
+      updateData({ saltSystem: undefined, saltSystemQuantity: 0 });
+    }
+  };
+
+  const toggleAutoFill = (val: boolean) => {
+    setIncludeAutoFill(val);
+    if (!val) {
+      updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
+      handleRunChange('autoFillRun', 0);
     }
   };
 
@@ -559,6 +602,15 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
     }
     setIncludeSalt(true);
     handleSaltSystemChange(name);
+  };
+
+  const handleAutoFillSelect = (name: string) => {
+    if (name === noneOptionValue) {
+      toggleAutoFill(false);
+      return;
+    }
+    setIncludeAutoFill(true);
+    handleAutoFillSystemChange(name);
   };
 
   const handlePumpChange = (name: string) => {
@@ -683,23 +735,44 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
 
   const handleSaltSystemChange = (name?: string) => {
     if (!name) {
-      handleChange('saltSystem', undefined);
+      updateData({ saltSystem: undefined, saltSystemQuantity: 0 });
       return;
     }
     const system = pricingData.equipment.saltSystem.find(s => s.name === name);
-    handleChange(
-      'saltSystem',
-      system
-        ? {
-            name: system.name,
-            model: system.model,
-            basePrice: (system as any).basePrice,
-            addCost1: (system as any).addCost1,
-            addCost2: (system as any).addCost2,
-            price: costOf(system),
-          }
-        : undefined
-    );
+    if (!system) {
+      updateData({ saltSystem: undefined, saltSystemQuantity: 0 });
+      return;
+    }
+    const nextQuantity = Math.max(safeData.saltSystemQuantity ?? 1, 1);
+    updateData({
+      saltSystem: {
+        name: system.name,
+        model: system.model,
+        basePrice: (system as any).basePrice,
+        addCost1: (system as any).addCost1,
+        addCost2: (system as any).addCost2,
+        price: costOf(system),
+      },
+      saltSystemQuantity: nextQuantity,
+    });
+  };
+
+  const handleAutoFillSystemChange = (name?: string) => {
+    if (!name) {
+      updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
+      return;
+    }
+    const system = pricingData.equipment.autoFillSystem.find(s => s.name === name);
+    if (!system) {
+      updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
+      return;
+    }
+    const nextQuantity = Math.max(safeData.autoFillSystemQuantity ?? 1, 1);
+    updateData({
+      autoFillSystem: buildAutoFillSelection(system),
+      autoFillSystemQuantity: nextQuantity,
+      hasAutoFill: false,
+    });
   };
 
   return (
@@ -801,7 +874,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
         <div className="spec-block-header">
           <h2 className="spec-block-title">Cleaner</h2>
         </div>
-        <div className="spec-grid spec-grid-2">
+        <div className="spec-grid-3-split">
           <div className="spec-field">
             <label className="spec-label">Cleaner</label>
             <select
@@ -818,7 +891,7 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
             </select>
           </div>
           {includeCleaner && (
-            <div className="spec-field" style={{ maxWidth: '220px' }}>
+            <div className="spec-field">
               <label className="spec-label">Cleaner Quantity</label>
               <CompactInput
                 value={cleanerQuantity}
@@ -827,6 +900,19 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
                 min="0"
                 step="1"
                 placeholder="1"
+              />
+            </div>
+          )}
+          {includeCleaner && (
+            <div className="spec-field">
+              <label className="spec-label">Cleaner Run</label>
+              <CompactInput
+                value={plumbingRuns.cleanerRun ?? 0}
+                onChange={(e) => handleRunChange('cleanerRun', parseFloat(e.target.value) || 0)}
+                unit="LNFT"
+                min="0"
+                step="1"
+                placeholder="0"
               />
             </div>
           )}
@@ -1006,26 +1092,25 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
         <div className="spec-block-header">
           <h2 className="spec-block-title">Automation</h2>
         </div>
-        <div className="spec-field">
-          <label className="spec-label">Automation System</label>
-          <select
-            className="compact-input equipment-select"
-            value={includeAutomation ? safeData.automation.name : noneOptionValue}
-            onChange={(e) => handleAutomationSelect(e.target.value)}
-          >
-            <option value={noneOptionValue}>None</option>
-            {automationOptions.map(option => (
-              <option key={option.name} value={option.name}>
-                {formatOptionLabel(option.name, costOf(option))}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {includeAutomation && (
-          <div className="spec-grid spec-grid-2" style={{ marginTop: '12px' }}>
+        <div className="spec-grid spec-grid-2">
+          <div className="spec-field">
+            <label className="spec-label">Automation System</label>
+            <select
+              className="compact-input equipment-select"
+              value={includeAutomation ? safeData.automation.name : noneOptionValue}
+              onChange={(e) => handleAutomationSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {automationOptions.map(option => (
+                <option key={option.name} value={option.name}>
+                  {formatOptionLabel(option.name, costOf(option))}
+                </option>
+              ))}
+            </select>
+          </div>
+          {includeAutomation && (
             <div className="spec-field" style={{ maxWidth: '220px' }}>
-              <label className="spec-label">Automation Quantity</label>
+              <label className="spec-label">Automation System Quantity</label>
               <CompactInput
                 value={automationQuantity}
                 onChange={(e) =>
@@ -1037,21 +1122,8 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
                 placeholder="1"
               />
             </div>
-            <div className="spec-field" style={{ maxWidth: '240px' }}>
-              <label className="spec-label">Additional Zones</label>
-              <CompactInput
-                value={safeData.automation.zones ?? 0}
-                onChange={(e) =>
-                  handleChange('automation', { ...safeData.automation, zones: parseInt(e.target.value) || 0 })
-                }
-                unit="ea"
-                min="0"
-                step="1"
-              />
-              <small className="form-help">Beyond base zones (additional charges apply).</small>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Sanitation System (formerly Salt) */}
@@ -1059,20 +1131,85 @@ function EquipmentSectionNew({ data, onChange, hasSpa, hasPool }: Props) {
         <div className="spec-block-header">
           <h2 className="spec-block-title">Sanitation System</h2>
         </div>
-        <div className="spec-field">
-          <label className="spec-label">Sanitation System</label>
-          <select
-            className="compact-input equipment-select"
-            value={includeSalt ? safeData.saltSystem?.name || noneOptionValue : noneOptionValue}
-            onChange={(e) => handleSaltSelect(e.target.value)}
-          >
-            <option value={noneOptionValue}>None</option>
-            {saltOptions.map(system => (
-              <option key={system.name} value={system.name}>
-                {formatOptionLabel(system.name, costOf(system))}
-              </option>
-            ))}
-          </select>
+        <div className="spec-grid spec-grid-2">
+          <div className="spec-field">
+            <label className="spec-label">Sanitation System</label>
+            <select
+              className="compact-input equipment-select"
+              value={includeSalt ? safeData.saltSystem?.name || noneOptionValue : noneOptionValue}
+              onChange={(e) => handleSaltSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {saltOptions.map(system => (
+                <option key={system.name} value={system.name}>
+                  {formatOptionLabel(system.name, costOf(system))}
+                </option>
+              ))}
+            </select>
+          </div>
+          {includeSalt && (
+            <div className="spec-field" style={{ maxWidth: '220px' }}>
+              <label className="spec-label">Sanitation System Quantity</label>
+              <CompactInput
+                value={saltSystemQuantity}
+                onChange={(e) => updateData({ saltSystemQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
+                unit="ea"
+                min="0"
+                step="1"
+                placeholder="1"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Auto-fill */}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Auto-fill</h2>
+        </div>
+        <div className="spec-grid-3-split">
+          <div className="spec-field">
+            <label className="spec-label">Auto-Fill System</label>
+            <select
+              className="compact-input equipment-select"
+              value={includeAutoFill ? safeData.autoFillSystem?.name || noneOptionValue : noneOptionValue}
+              onChange={(e) => handleAutoFillSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {autoFillOptions.map(system => (
+                <option key={system.name} value={system.name}>
+                  {formatOptionLabel(system.name, costOf(system))}
+                </option>
+              ))}
+            </select>
+          </div>
+          {includeAutoFill && (
+            <div className="spec-field">
+              <label className="spec-label">Auto-Fill System Quantity</label>
+              <CompactInput
+                value={autoFillSystemQuantity}
+                onChange={(e) => updateData({ autoFillSystemQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
+                unit="ea"
+                min="0"
+                step="1"
+                placeholder="1"
+              />
+            </div>
+          )}
+          {includeAutoFill && (
+            <div className="spec-field">
+              <label className="spec-label">Auto-Fill Run</label>
+              <CompactInput
+                value={plumbingRuns.autoFillRun ?? 0}
+                onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
+                unit="LNFT"
+                min="0"
+                step="1"
+                placeholder="0"
+              />
+            </div>
+          )}
         </div>
       </div>
 

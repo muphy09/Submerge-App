@@ -1,0 +1,158 @@
+# Codex Implementation Plan: User Password Login + Admin Reset
+
+Use this plan as the exact implementation sequence for the Submerge app.
+
+---
+
+## 0) Baseline (Do not change yet)
+- Current login uses **name + franchise code** only; no password field exists.
+- Client calls `window.electron.enterFranchiseCode` and uses `-A` suffix to infer admin/owner.
+- Session is stored in localStorage with no expiration.
+- Supabase adapter uses `name` (not password) to allow access.
+- SQLite schema includes `password_hash` and `email`, but app doesn’t use them.
+
+---
+
+## 1) Decide canonical login identity
+**Goal:** Define the exact login key.
+
+- Choose **username**  + `franchise_id` as the unique login key.
+- Persist:
+  - `username`
+  - `password_hash`
+  - `password_reset_required` (boolean)
+  - `last_login_at`
+  - `password_updated_at`
+
+---
+
+## 2) Align schema (SQLite + Supabase)
+**Goal:** Make schema match the new login model.
+
+1. Update `franchise_users` to include:
+   - `username` (or repurpose `email`)
+   - `password_hash`
+   - `password_reset_required`
+   - `last_login_at`
+   - `password_updated_at`
+2. Add a unique constraint on `(franchise_id, username)`.
+3. Since we are using Supabase, ship matching migrations and ensure RLS uses authenticated claims.
+
+---
+
+## 3) Add secure password hashing (server-side only)
+**Goal:** Never hash or verify passwords in the client.
+
+- Add bcrypt/argon2 hashing/verification in the Electron main process (or server API).
+- Use a cost factor appropriate for desktop performance.
+
+---
+
+## 4) Replace `enter-franchise-code` with `authenticate-user`
+**Goal:** Authenticate with username + password + franchise code.
+
+### In Electron main process:
+1. Add `ipcMain.handle('authenticate-user', async (_, payload) => { ... })`
+2. Payload: `{ username, password, franchiseCode }`
+3. Steps:
+   - Look up franchise by code
+   - Look up user by `(franchise_id, username)`
+   - Verify password hash
+   - Return `{ userName, franchiseId, franchiseName, franchiseCode, role, passwordResetRequired }`
+
+### In preload:
+- Expose `authenticateUser` in `preload-script.js` and type it in `src/types/electron.d.ts`.
+
+### In App:
+- Replace `enterFranchiseCode` usage with `authenticateUser`.
+- Remove all role inference from franchise code suffix.
+
+---
+
+## 5) Update login UI
+**Goal:** Collect username + password + franchise code.
+
+- Add password field in `LoginModal`.
+- Validate all three fields are non-empty.
+- Submit `{ userName, password, franchiseCode }`.
+
+---
+
+## 6) Remove admin suffix logic
+**Goal:** Role should be from user record, not code.
+
+- Delete `-A` and `1111-A` role inference from:
+  - Client (App login)
+  - Server (IPC handler)
+
+---
+
+## 7) Update franchise user adapter
+**Goal:** Support username/password creation and resets.
+
+- Replace name-based user logic with `username` (or `email`).
+- Add methods:
+  - `createFranchiseUser({ username, role, password })`
+  - `resetFranchiseUserPassword(userId, newPassword)`
+  - `setPasswordResetRequired(userId, boolean)`
+
+---
+
+## 8) Admin reset workflow
+**Goal:** Admin can reset a user’s password.
+
+- Add “Reset Password” action for each user in Admin Panel.
+- Reset logic should:
+  - Generate a temporary password OR
+  - Mark `password_reset_required = true` and require new password on next login.
+- Show a confirmation toast with success/failure.
+
+---
+
+## 9) Enforce password reset flow
+**Goal:** Force user to set a new password if required.
+
+- If `password_reset_required` is true, return a flag from auth.
+- Show a “Set New Password” screen before allowing app usage.
+- Add IPC/API method to update password and clear the flag.
+
+---
+
+## 10) Session handling
+**Goal:** Make sessions secure and role-authoritative.
+
+- Persist session only after successful authentication.
+- Store a token or short-lived session, not raw credentials.
+- Do not allow client to set role manually.
+
+---
+
+## 11) Supabase integration
+**Goal:** RLS should trust server-authenticated identities.
+
+- Use Supabase Auth or custom JWT tokens.
+- Remove reliance on client-supplied headers for authorization.
+- Update policies to enforce franchise_id + role claims.
+
+---
+
+## 12) Migration strategy
+**Goal:** Convert existing users safely.
+
+1. Create a migration script:
+   - Convert legacy `name` to `username`.
+   - Set `password_reset_required = true` for all.
+
+2. Ensure legacy users can create a new password directly in the app on first login attempt
+
+---
+
+---
+
+## Deliverables Summary
+- New IPC auth flow.
+- Login UI with password.
+- User schema aligned with passwords.
+- Admin password reset UI.
+- Server-validated roles.
+- Migration + test coverage.

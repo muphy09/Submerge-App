@@ -588,21 +588,29 @@ export class EquipmentCalculations {
         ? [equipment.auxiliaryPump]
         : []
     ).map(p => getEquipmentItemCost(p as any, pumpOverhead));
-    const filterQty = Math.max(equipment.filterQuantity ?? 0, 0);
-    const heaterQty = this.getValidHeaterQuantity(equipment);
-    const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
-    const cleanerQty = Math.max(equipment.cleanerQuantity ?? 0, 0);
-    const lightCounts = getLightCounts(equipment);
+      const filterQty = Math.max(equipment.filterQuantity ?? 0, 0);
+      const heaterQty = this.getValidHeaterQuantity(equipment);
+      const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
+      const cleanerQty = Math.max(equipment.cleanerQuantity ?? 0, 0);
+      const saltQty = Math.max(equipment.saltSystemQuantity ?? (equipment.saltSystem ? 1 : 0), 0);
+      const autoFillQty = Math.max(
+        equipment.autoFillSystemQuantity ?? (equipment.autoFillSystem ? 1 : 0),
+        0
+      );
+      const autoFillName = equipment.autoFillSystem?.name?.toLowerCase() || '';
+      const hasAutoFillSystem = autoFillQty > 0 && autoFillName && !autoFillName.includes('no auto');
+      const lightCounts = getLightCounts(equipment);
 
     const pricedSelections = [
       getEquipmentItemCost(equipment.pump as any, pumpOverhead),
       ...auxiliaryPrices,
-      filterQty > 0 ? getEquipmentItemCost(equipment.filter as any, 1) : 0,
-      cleanerQty > 0 ? getEquipmentItemCost(equipment.cleaner as any, 1) : 0,
-      heaterQty > 0 ? getEquipmentItemCost(equipment.heater as any, 1) : 0,
-      automationQty > 0 ? getEquipmentItemCost(equipment.automation as any, 1) : 0,
-      getEquipmentItemCost(equipment.saltSystem as any, 1),
-    ];
+        filterQty > 0 ? getEquipmentItemCost(equipment.filter as any, 1) : 0,
+        cleanerQty > 0 ? getEquipmentItemCost(equipment.cleaner as any, 1) : 0,
+        heaterQty > 0 ? getEquipmentItemCost(equipment.heater as any, 1) : 0,
+        automationQty > 0 ? getEquipmentItemCost(equipment.automation as any, 1) : 0,
+        saltQty > 0 ? getEquipmentItemCost(equipment.saltSystem as any, 1) : 0,
+        hasAutoFillSystem ? getEquipmentItemCost(equipment.autoFillSystem as any, 1) : 0,
+      ];
 
     const accessoriesSelected =
       equipment.hasBlanketReel ||
@@ -612,14 +620,16 @@ export class EquipmentCalculations {
       equipment.hasStartupChemicals;
 
     return pricedSelections.some(price => (price ?? 0) > 0) ||
-      filterQty > 0 ||
-      heaterQty > 0 ||
-      automationQty > 0 ||
-      cleanerQty > 0 ||
-      (equipment.automation?.zones ?? 0) > 0 ||
-      lightCounts.total > 0 ||
-      accessoriesSelected ||
-      !!equipment.upgradeToVersaFlo;
+        filterQty > 0 ||
+        heaterQty > 0 ||
+        automationQty > 0 ||
+        cleanerQty > 0 ||
+        saltQty > 0 ||
+        hasAutoFillSystem ||
+        (equipment.automation?.zones ?? 0) > 0 ||
+        lightCounts.total > 0 ||
+        accessoriesSelected ||
+        !!equipment.upgradeToVersaFlo;
   }
 
   static calculateEquipmentCost(equipment: Equipment, poolSpecs: PoolSpecs): CostLineItem[] {
@@ -635,15 +645,27 @@ export class EquipmentCalculations {
         : normalizedEquipment.auxiliaryPump
           ? [normalizedEquipment.auxiliaryPump]
           : [];
-    const filterQty = Math.max(normalizedEquipment.filterQuantity ?? 0, 0);
-    const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
-    const automationQty = Math.max(normalizedEquipment.automationQuantity ?? 0, 0);
-    const pumpCost = getEquipmentItemCost(normalizedEquipment.pump as any, pumpOverhead);
-    const filterCost = getEquipmentItemCost(normalizedEquipment.filter as any, 1);
-    const cleanerCost = getEquipmentItemCost(normalizedEquipment.cleaner as any, 1);
+      const filterQty = Math.max(normalizedEquipment.filterQuantity ?? 0, 0);
+      const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
+      const automationQty = Math.max(normalizedEquipment.automationQuantity ?? 0, 0);
+      const saltQty = Math.max(
+        normalizedEquipment.saltSystemQuantity ?? (normalizedEquipment.saltSystem ? 1 : 0),
+        0
+      );
+      const autoFillQty = Math.max(
+        normalizedEquipment.autoFillSystemQuantity ?? (normalizedEquipment.autoFillSystem ? 1 : 0),
+        0
+      );
+      const pumpCost = getEquipmentItemCost(normalizedEquipment.pump as any, pumpOverhead);
+      const filterCost = getEquipmentItemCost(normalizedEquipment.filter as any, 1);
+      const cleanerCost = getEquipmentItemCost(normalizedEquipment.cleaner as any, 1);
     const heaterCost = heaterQty > 0 ? getEquipmentItemCost(normalizedEquipment.heater as any, 1) : 0;
     const automationCost = getEquipmentItemCost(normalizedEquipment.automation as any, 1);
     const saltCost = getEquipmentItemCost(normalizedEquipment.saltSystem as any, 1);
+    const autoFillCost = getEquipmentItemCost(normalizedEquipment.autoFillSystem as any, 1);
+    const autoFillName = normalizedEquipment.autoFillSystem?.name || '';
+    const hasAutoFillSystem =
+      autoFillQty > 0 && autoFillName && !autoFillName.toLowerCase().includes('no auto');
     const poolLights = normalizedEquipment.poolLights || [];
     const spaLights = normalizedEquipment.spaLights || [];
 
@@ -782,13 +804,24 @@ export class EquipmentCalculations {
     }
 
     // Salt system
-    if (saltCost > 0 && normalizedEquipment.saltSystem?.name) {
+      if (saltCost > 0 && normalizedEquipment.saltSystem?.name && saltQty > 0) {
+        items.push({
+          category: 'Equipment',
+          description: normalizedEquipment.saltSystem.name,
+          unitPrice: saltCost,
+          quantity: saltQty,
+          total: saltCost * saltQty,
+        });
+      }
+
+    // Auto-fill system
+    if (hasAutoFillSystem) {
       items.push({
         category: 'Equipment',
-        description: normalizedEquipment.saltSystem.name,
-        unitPrice: saltCost,
-        quantity: 1,
-        total: saltCost,
+        description: normalizedEquipment.autoFillSystem?.name || 'Auto-Fill System',
+        unitPrice: autoFillCost,
+        quantity: autoFillQty,
+        total: autoFillCost * autoFillQty,
       });
     }
 
@@ -813,7 +846,7 @@ export class EquipmentCalculations {
       });
     }
 
-    if (normalizedEquipment.hasAutoFill) {
+    if (!hasAutoFillSystem && normalizedEquipment.hasAutoFill) {
       items.push({
         category: 'Equipment',
         description: 'Auto Fill',

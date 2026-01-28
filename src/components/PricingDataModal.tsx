@@ -1070,7 +1070,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             scalars: [
               { label: 'Blanket reel', path: ['equipment', 'blanketReel'], type: 'number' },
               { label: 'Solar blanket', path: ['equipment', 'solarBlanket'], type: 'number' },
-              { label: 'Auto-fill', path: ['equipment', 'autoFill'], type: 'number' },
               { label: 'Handrail', path: ['equipment', 'handrail'], type: 'number' },
               { label: 'Startup chemicals', path: ['equipment', 'startupChemicals'], type: 'number' },
             ],
@@ -1084,6 +1083,23 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                ],
+              },
+            ],
+          },
+          {
+            title: 'Auto-fill systems',
+            lists: [
+              {
+                title: 'Auto-fill systems',
+                path: ['equipment', 'autoFillSystem'],
+                addLabel: 'Add auto-fill system',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Auto-fill system name' },
+                  { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'percentIncrease', label: '% cost increase', type: 'number', placeholder: '0' },
                 ],
               },
             ],

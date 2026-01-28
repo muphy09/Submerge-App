@@ -331,6 +331,10 @@ const pricingData = {
       { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', basePrice: 1000, addCost1: 0, addCost2: 0 },
       { name: 'No Salt System', model: 'None', basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
+    autoFillSystem: [
+      { name: 'No Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: 'Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0 },
+    ],
     blanketReel: 0,
     solarBlanket: 0,
     autoFill: 0,

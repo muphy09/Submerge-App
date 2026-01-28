@@ -298,6 +298,16 @@ export interface SaltSystemSelection {
   addCost2?: number;
 }
 
+export interface AutoFillSystemSelection {
+  name: string;
+  model?: string;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
+  percentIncrease?: number;
+}
+
 export interface Equipment {
   // Main equipment
   pump: PumpSelection;
@@ -325,6 +335,11 @@ export interface Equipment {
 
   // Salt system
   saltSystem?: SaltSystemSelection;
+  saltSystemQuantity?: number;
+
+  // Auto-fill system
+  autoFillSystem?: AutoFillSystemSelection;
+  autoFillSystemQuantity?: number;
 
   // Accessories
   hasBlanketReel: boolean;

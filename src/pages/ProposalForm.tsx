@@ -404,6 +404,12 @@ function ProposalForm() {
     const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
     if (!equipment) return false;
     const lightCounts = getLightCounts(equipment as any);
+    const autoFillQty = Math.max(
+      equipment.autoFillSystemQuantity ?? (equipment.autoFillSystem ? 1 : 0),
+      0
+    );
+    const autoFillName = equipment.autoFillSystem?.name?.toLowerCase() || '';
+    const hasAutoFillSystem = autoFillQty > 0 && autoFillName && !autoFillName.includes('no auto');
     return (
       hasPositive(equipment.totalCost) ||
       lightCounts.total > 0 ||
@@ -412,6 +418,7 @@ function ProposalForm() {
       hasPositive(equipment.filterQuantity) ||
       hasPositive(equipment.heaterQuantity) ||
       hasPositive(equipment.automationQuantity) ||
+      hasPositive(equipment.saltSystemQuantity) ||
       (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0) ||
       !!equipment.auxiliaryPump ||
       hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead)) ||
@@ -420,6 +427,7 @@ function ProposalForm() {
       hasPositive(getEquipmentItemCost(equipment.heater as any, 1)) ||
       hasPositive(getEquipmentItemCost(equipment.automation as any, 1)) ||
       hasPositive(getEquipmentItemCost(equipment.saltSystem as any, 1)) ||
+      hasAutoFillSystem ||
       equipment.hasBlanketReel ||
       equipment.hasSolarBlanket ||
       equipment.hasAutoFill ||
@@ -948,7 +956,6 @@ function ProposalForm() {
             <TileCopingDeckingSectionNew
               data={proposal.tileCopingDecking!}
               onChange={(data) => updateProposal('tileCopingDecking', data)}
-              poolPerimeter={proposal.poolSpecs.perimeter || 0}
               isFiberglass={isFiberglass}
               poolDeckingArea={proposal.poolSpecs.deckingArea || 0}
             />
@@ -965,6 +972,10 @@ function ProposalForm() {
             <EquipmentSectionNew
               data={proposal.equipment!}
               onChange={(data) => updateProposal('equipment', data)}
+              plumbingRuns={proposal.plumbing!.runs}
+              onChangePlumbingRuns={(runs) =>
+                updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
+              }
               hasSpa={hasSpa}
               hasPool={hasPool}
             />

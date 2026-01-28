@@ -549,14 +549,14 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           >
             No Retaining Wall
           </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${retainingActive ? 'active' : ''}`}
-            onClick={() => handleRetainingToggle(true)}
-          >
-            Select Retaining Wall
-          </button>
-        </div>
+            <button
+              type="button"
+              className={`pool-type-btn ${retainingActive ? 'active' : ''}`}
+              onClick={() => handleRetainingToggle(true)}
+            >
+              Add Retaining Wall
+            </button>
+          </div>
 
         {retainingActive ? (
           <>

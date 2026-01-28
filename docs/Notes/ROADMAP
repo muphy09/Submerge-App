@@ -1,20 +1,20 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
-
-- Align all categories to be dropdown stytle instead of buttons
 - Add Custom Costs option per category
 - Add aux pump - double main drain run. every pump gets same drain run
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-- $$ Performance Data for Admin overhaul (coming soon)
+- Custom Tile, Coping, Decking with inputs for total cost - replaces pre selected option in costs
 - $$ Hotkey keyboard navigation
 - $$ Logo upload option for admin, makes available for franchise
 - $$ Include contracts other than NC Gunite
     - Include contract type in summary screen
 - Login passwords and role promotion / pass reset
 - Homescreen UI update for designers
+    - Simplify
 - Admin panel UI update
+- Potential option for manual designer cost adjustment down
 
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
@@ -23,6 +23,13 @@ Long Term -
 - Auto update without being public
 - Admin Pricing Menu Cleaup
 - Proposal complete logic
+- Performance Data for Admin overhaul (coming soon)
+- Role transfer logic
+- Equipment logic for lights when selecting multiple can be cleaned up
+
+- Potential column for "Included Items"
+    - Base equipment, base options, etc
+
 ---------------------------------------------------------------------------------------------------------
 Help Needed - 
 - Permitting and County associated costs tied to City field
@@ -31,14 +38,17 @@ Help Needed -
     - Commercial Pool Pricing
     - Sales Templates (when not in effect)
 - Logic for stipulations / what specs require or omit what items
-- Exposed pool wall
+- Exposed Pool Wall
     - Has to allow for $8.50 of forming for every sqft of wall
     -plus facing
     - allow for increase of 33% concrete cost for sqft used
     - Facing option
-- 'No Tile' selection, custom travertine, coping, decking
-- Custom plubming in Water Features
-- Custom Tile Tab
+
+---------------------------------------------------------------------------------------------------------
+Plan of Action - 
+- Beta test internally with a few designers for feedback & fixes
+- Roadmap with wanted features with prioritization by importance
+
 ---------------------------------------------------------------------------------------------------------
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)
