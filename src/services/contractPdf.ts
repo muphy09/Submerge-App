@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, rgb, StandardFonts, TextAlignment } from 'pdf-lib';
 import { ContractFieldRender } from './contractGenerator';
+import { ContractTemplateId, getContractTemplate } from './contractTemplates';
 
 export type ContractPdfFieldLayout = {
   name: string;
@@ -21,9 +22,9 @@ export type ContractPdfResult = {
 type ContractPdfBuildOptions = {
   flatten?: boolean;
   includeFormFields?: boolean;
+  templateId?: ContractTemplateId;
 };
 
-const TEMPLATE_URL = new URL('../../docs/Contracts/PPAS Contract Template.pdf', import.meta.url).href;
 const DEFAULT_FONT_SIZE = 10;
 const MIN_FONT_SIZE = 6;
 const HEIGHT_MARGIN = 2; // leave more headroom so text sits cleanly inside shallow fields
@@ -32,18 +33,18 @@ const WIDTH_PADDING = 2;
 const BLUE_FILL = rgb(232 / 255, 240 / 255, 255 / 255);
 const YELLOW_FILL = rgb(255 / 255, 247 / 255, 209 / 255);
 
-async function loadTemplateBytes(): Promise<Uint8Array> {
+async function loadTemplateBytes(templateId?: ContractTemplateId): Promise<Uint8Array> {
+  const template = getContractTemplate(templateId);
   // Browser
   if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-    const res = await fetch(TEMPLATE_URL);
+    const res = await fetch(template.pdfUrl);
     const buffer = await res.arrayBuffer();
     return new Uint8Array(buffer);
   }
 
   // Node / Electron
   const fs = await import('fs');
-  const path = new URL('../../docs/Contracts/PPAS Contract Template.pdf', import.meta.url).pathname;
-  return fs.readFileSync(path);
+  return fs.readFileSync(template.pdfPath);
 }
 
 function fitFontSizeForField(field: ContractFieldRender, font: PDFFont): number {
@@ -67,8 +68,8 @@ export async function buildContractPdf(
   fields: ContractFieldRender[],
   options: ContractPdfBuildOptions = {}
 ): Promise<ContractPdfResult> {
-  const { flatten = false, includeFormFields = true } = options;
-  const templateBytes = await loadTemplateBytes();
+  const { flatten = false, includeFormFields = true, templateId } = options;
+  const templateBytes = await loadTemplateBytes(templateId);
   const pdf = await PDFDocument.load(templateBytes);
   const form = pdf.getForm();
   const font = await pdf.embedFont(StandardFonts.Helvetica);

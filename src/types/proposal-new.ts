@@ -6,6 +6,7 @@
 export interface CustomerInfo {
   customerName: string;
   city: string;
+  state?: 'NC' | 'SC';
   address?: string;
   phone?: string;
   email?: string;

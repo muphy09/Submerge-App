@@ -371,6 +371,7 @@ export function getDefaultProposal(): Partial<Proposal> {
     customerInfo: {
       customerName: '',
       city: '',
+      state: 'NC',
     },
     poolSpecs: getDefaultPoolSpecs(),
     excavation: getDefaultExcavation(),

@@ -18,6 +18,7 @@ import {
   validateContractInputs,
 } from '../services/contractGenerator';
 import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
+import { ContractTemplateId, getContractTemplateIdForProposal } from '../services/contractTemplates';
 import { useToast } from './Toast';
 import './ContractView.css';
 
@@ -166,6 +167,7 @@ type ContractViewProps = {
   proposal: Proposal;
   overrides?: ContractOverrides;
   readOnly?: boolean;
+  contractTemplateId?: ContractTemplateId;
   onOverridesChange?: (overrides: ContractOverrides) => void;
   onSave?: (overrides: ContractOverrides) => Promise<void> | void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -207,6 +209,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     proposal,
     overrides: incomingOverrides,
     readOnly = false,
+    contractTemplateId,
     onOverridesChange,
     onSave,
     onDirtyChange,
@@ -216,6 +219,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   ref
 ) {
   const { showToast } = useToast();
+  const resolvedTemplateId = contractTemplateId || getContractTemplateIdForProposal(proposal);
   const [overrides, setOverrides] = useState<ContractOverrides>(incomingOverrides || {});
   const [baselineOverrides, setBaselineOverrides] = useState<ContractOverrides>(incomingOverrides || {});
   const [exporting, setExporting] = useState(false);
@@ -235,7 +239,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     let canceled = false;
     (async () => {
       try {
-        const hydrated = await getEditableContractFields(proposal, overrides);
+        const hydrated = await getEditableContractFields(proposal, overrides, resolvedTemplateId);
         if (!canceled) setFields(hydrated);
       } catch (error) {
         console.error('Unable to build contract view', error);
@@ -247,7 +251,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     return () => {
       canceled = true;
     };
-  }, [proposal, overrides, showToast]);
+  }, [proposal, overrides, resolvedTemplateId, showToast]);
 
   useEffect(() => {
     if (!fields.length) return;
@@ -257,6 +261,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
         const result = await buildContractPdf(fields, {
           includeFormFields: false,
           flatten: false,
+          templateId: resolvedTemplateId,
         });
         if (!canceled) {
           setPdfBytes(result.pdfBytes);
@@ -273,7 +278,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     return () => {
       canceled = true;
     };
-  }, [fields, showToast]);
+  }, [fields, resolvedTemplateId, showToast]);
 
   useEffect(() => {
     if (!pdfBytes || !pageSizes.length) return;
@@ -432,6 +437,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       const result = await buildContractPdf(fields, {
         flatten: true,
         includeFormFields: true,
+        templateId: resolvedTemplateId,
       });
 
       const customerName = proposal.customerInfo.customerName || 'Proposal';
@@ -454,7 +460,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     } finally {
       setExporting(false);
     }
-  }, [exporting, fields, proposal.customerInfo.customerName, showToast, warnings]);
+  }, [exporting, fields, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
 
   const printContract = useCallback(() => {
     if (warnings.length) {

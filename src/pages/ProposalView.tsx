@@ -16,6 +16,7 @@ import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { initPricingDataStore } from '../services/pricingDataStore';
 import { getSessionRole } from '../services/session';
+import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 import {
   getDefaultProposal,
   getDefaultPoolSpecs,
@@ -545,6 +546,13 @@ function ProposalView() {
     }
 
     return name || 'Version';
+  };
+
+  const getContractTypeLabel = (input: Proposal): string => {
+    const templateId = getContractTemplateIdForProposal(input);
+    const [state, poolType] = templateId.split('-');
+    const typeLabel = poolType === 'fiberglass' ? 'Fiberglass' : 'Gunite';
+    return `${state.toUpperCase()} ${typeLabel}`;
   };
 
   const buildViewModel = (input: Proposal) => {
@@ -1234,6 +1242,7 @@ function ProposalView() {
       );
     };
     const tileSelectionClass = (type: BreakdownType) => (isBreakdownSelected(versionId, type) ? 'selected' : '');
+    const contractTypeLabel = getContractTypeLabel(vm.proposal);
     return (
       <div className="tiles-grid">
         {canViewFullSummary && (
@@ -1384,6 +1393,11 @@ function ProposalView() {
               <div className="metric-row">
                 <p className="metric-label">Pool Type:</p>
                 <p className="metric-value">{vm.poolTypeLabel}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Contract Type:</p>
+                <p className="metric-value">{contractTypeLabel}</p>
               </div>
             </div>
           </div>

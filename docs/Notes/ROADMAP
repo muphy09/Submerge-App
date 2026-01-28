@@ -1,19 +1,15 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
-- Add Custom Costs option per category
 - Add aux pump - double main drain run. every pump gets same drain run
-
+- Custom Tile, Coping, Decking with inputs for total cost - replaces pre selected option in costs
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-- Custom Tile, Coping, Decking with inputs for total cost - replaces pre selected option in costs
 - $$ Hotkey keyboard navigation
+
 - $$ Logo upload option for admin, makes available for franchise
-- $$ Include contracts other than NC Gunite
-    - Include contract type in summary screen
 - Login passwords and role promotion / pass reset
 - Homescreen UI update for designers
     - Simplify
-- Admin panel UI update
 - Potential option for manual designer cost adjustment down
 
 ---------------------------------------------------------------------------------------------------------
@@ -21,8 +17,7 @@ Long Term -
 - Add logic and safeguards for no internet
 - Fiberglass Shells
 - Auto update without being public
-- Admin Pricing Menu Cleaup
-- Proposal complete logic
+- Admin Pricing Menu Cleanup
 - Performance Data for Admin overhaul (coming soon)
 - Role transfer logic
 - Equipment logic for lights when selecting multiple can be cleaned up
@@ -32,7 +27,7 @@ Long Term -
 
 ---------------------------------------------------------------------------------------------------------
 Help Needed - 
-- Permitting and County associated costs tied to City field
+- Permitting and County associated costs tied to City / State field
 - Templates
     - Remodel**
     - Commercial Pool Pricing
@@ -50,6 +45,7 @@ Plan of Action -
 - Roadmap with wanted features with prioritization by importance
 
 ---------------------------------------------------------------------------------------------------------
+
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)
 - Spa Prep ($250) never included in COST-NEW (INTD25)?
@@ -69,9 +65,6 @@ Question -
 - Costs / Equipment that is 'included' by default?
 
 ----------------------------------------------------------------------------------------------------------
-Currently, there is a Contract Preview option in the Proposal Summary screen that opens the NC Gunite Contract and prefills existing data from the proposal into the appropriate boxes on the Contract. I have 3 more contracts that I would like to include as an option to select for the proposal data to be filled into that particular contract, instead of the contract that is currently there. They are laid out very similar to the original contract, but will include different wording. These new contracts are located in /docs/Contracts as '2024 Contract NC Fiberglass.pdf' '2024 Contract SC Gunite.pdf' and '2024 Contract SC Fiberglass.pdf', the original contract used to be named '2024 Contract NC Gunite' but has been renamed to 'PPAS Contract Template', just so we're on the same page. What I would like you to do is implement these 3 contracts the same way the original contract was implemented - Values from the proposal should populate in the same areas they do in the original. Input field background colors need to be the same as the original contract template, with green for the autofilled information, blue for and input that can be entered/changed, and yellow for the inital / signature fields. Exporting the contract should provide a clean output with the new values, just like the original does. After all 3 of the contracts are properly mapped into the app just like the original - we are going to add some logic for the way a contract is selected to ensure the proper one is always displayed. We need to include a new input box in the Pool Specifications category in the Customer Information subcategory. There will be the input box for customer name, customer city, and now Customer State - which will be a dropdown with the options NC and SC (NC will be default). If the selected state is NC, and in the Pool Dimensions the 'Gunite (Custom)' option is selected - then only the 2024 NC Gunite contract should be displayed when clicking on the Contract block in the summary. If the selected state is NC, and in the pool dimensions the 'Fiberglass' option is selected - only display the 2024 NC Fiberglass contract when the block is clicked. Same for when SC and Gunite are selected - show 2024 SC Gunite contract, and if SC and Fiberglass are selected show the 2024 SC Fiberglass contract. Take your time and ensure a proper implementation for this to work as intended. 
-
-
 
 Contract - 
 - Payment Schedule doesnt not autofil

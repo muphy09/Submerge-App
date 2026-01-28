@@ -30,6 +30,8 @@ import {
 import { normalizeEquipmentLighting } from '../utils/lighting';
 
 const DEFAULT_FRANCHISE_ID = 'default';
+const PERFORMANCE_SCALE_BASELINE = 200;
+const PERFORMANCE_SCALE_STEP = 25;
 
 type SessionInfo = {
   userName?: string;
@@ -59,6 +61,8 @@ const formatDate = (value?: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
 };
+
+const normalizeDesignerName = (value?: string) => (value ?? '').trim();
 
 function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const navigate = useNavigate();
@@ -268,20 +272,45 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   };
 
   const performanceData = useMemo(() => {
-    if (!proposals.length) {
-      return [{ name: session?.userName || 'Designer', proposals: 0 }];
-    }
     const counts: Record<string, number> = {};
     proposals.forEach((proposal) => {
-      const name = proposal.designerName || session?.userName || 'Designer';
+      const name =
+        normalizeDesignerName(proposal.designerName) ||
+        normalizeDesignerName(session?.userName) ||
+        'Designer';
       counts[name] = (counts[name] || 0) + 1;
     });
-    return Object.entries(counts)
-      .map(([name, count]) => ({ name, proposals: count }))
-      .sort((a, b) => b.proposals - a.proposals);
-  }, [proposals, session?.userName]);
+    const designerNames = franchiseUsers
+      .filter((user) => user.role === 'designer')
+      .map((user) => normalizeDesignerName(user.name))
+      .filter((name) => name.length > 0);
+    const allNames = new Set<string>(designerNames);
 
-  const maxPerformance = Math.max(...performanceData.map((item) => item.proposals), 1);
+    Object.keys(counts).forEach((name) => {
+      if (name) {
+        allNames.add(name);
+      }
+    });
+
+    if (allNames.size === 0) {
+      allNames.add(normalizeDesignerName(session?.userName) || 'Designer');
+    }
+
+    return Array.from(allNames)
+      .map((name) => ({ name, proposals: counts[name] || 0 }))
+      .sort((a, b) => {
+        if (b.proposals !== a.proposals) {
+          return b.proposals - a.proposals;
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }, [franchiseUsers, proposals, session?.userName]);
+
+  const performanceScaleMax = useMemo(() => {
+    const maxProposals = performanceData.reduce((max, item) => Math.max(max, item.proposals), 0);
+    const scaleTarget = Math.max(maxProposals, PERFORMANCE_SCALE_BASELINE);
+    return Math.ceil(scaleTarget / PERFORMANCE_SCALE_STEP) * PERFORMANCE_SCALE_STEP;
+  }, [performanceData]);
 
   const sortedProposals = useMemo(
     () =>
@@ -333,12 +362,6 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   };
 
   const totalProposalsSubmitted = proposals.length;
-  const averageRetailCost = proposals.length
-    ? proposals.reduce((sum, proposal) => {
-        const retail = proposal.pricing?.retailPrice || proposal.totalCost || 0;
-        return sum + retail;
-      }, 0) / proposals.length
-    : 0;
 
   const getGrossProfitAmount = (proposal: Proposal) => proposal.pricing?.grossProfit || 0;
   const getGrossProfitPercent = (proposal: Proposal) => proposal.pricing?.grossProfitMargin || 0;
@@ -360,6 +383,90 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   return (
     <div className="admin-page">
       <div className="admin-top-grid">
+        <div className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <h2 className="admin-card-title">Franchise Pricing</h2>
+              <p className="admin-kicker">Manage Pricing Models</p>
+            </div>
+            <button
+              className="admin-primary-btn"
+              type="button"
+              onClick={onOpenPricingData}
+              disabled={!onOpenPricingData}
+            >
+              Open Admin Pricing
+            </button>
+          </div>
+          <div className="admin-divider" />
+          <div className="admin-models-list" role="list">
+            {loadingModels ? (
+              <div className="admin-empty">Loading pricing models...</div>
+            ) : sortedPricingModels.length === 0 ? (
+              <div className="admin-empty">No pricing models found for this franchise.</div>
+            ) : (
+              sortedPricingModels.map((model) => (
+                <div className="admin-model-row" key={model.id} role="listitem">
+                  <div className="admin-model-name">
+                    {model.name}
+                  </div>
+                  <div className="admin-model-actions">
+                    {model.isDefault ? (
+                      <span className="admin-model-pill">Active</span>
+                    ) : (
+                      <button
+                        className="admin-primary-btn ghost"
+                        type="button"
+                        onClick={() => handleSetActiveModel(model.id)}
+                        disabled={activatingModelId === model.id}
+                      >
+                        {activatingModelId === model.id ? 'Setting...' : 'Set as Active'}
+                      </button>
+                    )}
+                    <div className="admin-model-date">{formatDate(model.updatedAt || model.createdAt)}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <h2 className="admin-card-title">Franchise Performance</h2>
+              <p className="admin-kicker">Proposals submitted by designer</p>
+            </div>
+          </div>
+          <div className="admin-divider" />
+          <div className="admin-performance">
+            <div className="admin-performance-chart">
+              <div className="performance-list">
+                {performanceData.map((item) => {
+                  const width = performanceScaleMax
+                    ? Math.min((item.proposals / performanceScaleMax) * 100, 100)
+                    : 0;
+                  const isEmpty = item.proposals === 0;
+                  return (
+                    <div className={`performance-row${isEmpty ? ' is-empty' : ''}`} key={item.name}>
+                      <div className="performance-name">
+                        <span>{item.name}</span>
+                        {isEmpty && <span className="performance-empty-label">No proposals</span>}
+                      </div>
+                      <div className="performance-bar-track">
+                        <div className="performance-bar-fill" style={{ width: `${width}%` }} />
+                        <div className={`performance-value${isEmpty ? ' empty' : ''}`}>
+                          {item.proposals.toLocaleString('en-US')}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="admin-card">
           <div className="admin-card-header">
             <div>
@@ -432,92 +539,6 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                 ))}
               </div>
             )}
-          </div>
-        </div>
-
-        <div className="admin-card">
-          <div className="admin-card-header">
-            <div>
-              <h2 className="admin-card-title">Franchise Pricing</h2>
-              <p className="admin-kicker">Manage Pricing Models</p>
-            </div>
-            <button
-              className="admin-primary-btn"
-              type="button"
-              onClick={onOpenPricingData}
-              disabled={!onOpenPricingData}
-            >
-              Open Admin Pricing
-            </button>
-          </div>
-          <div className="admin-divider" />
-          <div className="admin-models-list" role="list">
-            {loadingModels ? (
-              <div className="admin-empty">Loading pricing models...</div>
-            ) : sortedPricingModels.length === 0 ? (
-              <div className="admin-empty">No pricing models found for this franchise.</div>
-            ) : (
-              sortedPricingModels.map((model) => (
-                <div className="admin-model-row" key={model.id} role="listitem">
-                  <div className="admin-model-name">
-                    {model.name}
-                  </div>
-                  <div className="admin-model-actions">
-                    {model.isDefault ? (
-                      <span className="admin-model-pill">Active</span>
-                    ) : (
-                      <button
-                        className="admin-primary-btn ghost"
-                        type="button"
-                        onClick={() => handleSetActiveModel(model.id)}
-                        disabled={activatingModelId === model.id}
-                      >
-                        {activatingModelId === model.id ? 'Setting...' : 'Set as Active'}
-                      </button>
-                    )}
-                    <div className="admin-model-date">{formatDate(model.updatedAt || model.createdAt)}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="admin-card">
-          <div className="admin-card-header">
-            <div>
-              <h2 className="admin-card-title">Franchise Performance</h2>
-              <p className="admin-kicker">Proposals submitted by designer</p>
-            </div>
-          </div>
-          <div className="admin-divider" />
-          <div className="admin-performance">
-            <div className="admin-performance-chart">
-              {performanceData.map((item) => (
-                <div className="performance-row" key={item.name}>
-                  <div className="performance-name">{item.name}</div>
-                  <div className="performance-bar-track">
-                    <div
-                      className="performance-bar-fill"
-                      style={{ width: `${(item.proposals / maxPerformance) * 100}%` }}
-                    />
-                    <div className="performance-value">{item.proposals}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="admin-performance-stats">
-              <div className="admin-stat">
-                <div className="admin-stat-label">Total Proposals Submitted</div>
-                <div className="admin-stat-value">{totalProposalsSubmitted}</div>
-              </div>
-              <div className="admin-stat">
-                <div className="admin-stat-label">Average Retail Cost</div>
-                <div className="admin-stat-value">
-                  ${averageRetailCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

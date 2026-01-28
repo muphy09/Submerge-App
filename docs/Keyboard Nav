@@ -1,0 +1,50 @@
+# Keyboard Navigation Implementation Plan (CTRL/CMD-driven)
+
+This document is intended to be a detailed implementation plan for adding keyboard navigation to the Submerge app. It specifies exact behaviors, recommended architecture, and a step-by-step integration outline that aligns with the app’s current React layout. It focuses on **CTRL/CMD**-held navigation, **R/F** for left-nav traversal, **W/A/S/D** for main grid traversal, **Space** to select, **yellow bold focus highlight**, and **spatial nearest-neighbor navigation**.
+
+---
+
+## Desired Behavior (Requirements)
+
+### 1) Activation key
+Keyboard navigation mode is **only active while CTRL (Windows/Linux) or CMD (Mac)** is held.
+If neither CTRL nor CMD is pressed, the app should behave normally (no special key handling).
+
+### 2) Left Navigation (Sidebar) traversal
+When CTRL/CMD is held:
+- **F** → move **forward** through navigation buttons (down/next section).
+- **R** → move **backward** through navigation buttons (up/previous section).
+
+On navigation change:
+- The left nav item becomes the “active selected box.”
+- The selected box is **highlighted with yellow, bold outline** (see Styling section).
+
+### 3) Main Column navigation (inputs/controls)
+When CTRL/CMD is held:
+- **W** → move **up** to the closest input above (by screen position).
+- **S** → move **down** to the closest input below.
+- **A** → move **left** to the closest input left.
+- **D** → move **right** to the closest input right.
+- **Space** → “select” the current input field.
+
+**Select behavior:**
+- If the element is a text input/textarea: focus the field.
+- If the element is a button/checkbox/toggle: trigger click (or focus + click).
+- If the element is a `<select>` or custom dropdown: **open dropdown** with Space.
+
+### 4) Nearest-neighbor rules
+Navigation should move to the **closest input box in the intended direction**:
+- For W (up): candidate elements with centerY < current centerY, choose smallest vertical delta.
+- For S (down): candidate elements with centerY > current centerY, choose smallest vertical delta.
+- For A (left): candidate elements with centerX < current centerX, choose smallest horizontal delta.
+- For D (right): candidate elements with centerX > current centerX, choose smallest horizontal delta.
+
+If multiple candidates are close, prefer:
+1) Same column/row alignment (smaller perpendicular distance).
+2) Smallest Euclidean distance overall.
+
+### 5) Highlight indicator
+The currently selected box should render with:
+- **Yellow border/outline**
+- **Bold weight**
+- Remains visible while CTRL/CMD is held.

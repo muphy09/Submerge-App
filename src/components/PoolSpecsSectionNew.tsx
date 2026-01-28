@@ -203,7 +203,7 @@ function PoolSpecsSectionNew({
       {/* ==================== CUSTOMER INFORMATION ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Customer Information</h2>
-        <div className="spec-grid-2">
+        <div className="spec-grid-3">
           <div className="spec-field">
             <label className="spec-label required">Customer Name</label>
             <input
@@ -223,6 +223,19 @@ function PoolSpecsSectionNew({
               onChange={(e) => onChangeCustomerInfo({ ...customerInfo, city: e.target.value })}
               placeholder="Enter city"
             />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label required">Customer State</label>
+            <select
+              className="compact-input"
+              value={customerInfo.state || 'NC'}
+              onChange={(e) =>
+                onChangeCustomerInfo({ ...customerInfo, state: e.target.value === 'SC' ? 'SC' : 'NC' })
+              }
+            >
+              <option value="NC">NC</option>
+              <option value="SC">SC</option>
+            </select>
           </div>
         </div>
       </div>

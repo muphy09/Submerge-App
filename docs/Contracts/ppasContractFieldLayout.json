@@ -1982,6 +1982,66 @@
   {
     "page": 5,
     "rect": [
+      316.25,
+      163.40120361328127,
+      333.5664825439453,
+      171.1616101074219
+    ],
+    "label": "Payment - Non-Refundable Deposit Amount",
+    "color": "blue",
+    "id": "p1_pay_deposit"
+  },
+  {
+    "page": 5,
+    "rect": [
+      316.25,
+      172.04120361328125,
+      333.5664825439453,
+      179.80161010742188
+    ],
+    "label": "Payment - Prior to Excavation Amount",
+    "color": "blue",
+    "id": "p1_pay_excavation"
+  },
+  {
+    "page": 5,
+    "rect": [
+      316.25,
+      180.68120361328124,
+      333.5664825439453,
+      188.44161010742187
+    ],
+    "label": "Payment - Prior to Shotcete Amount",
+    "color": "blue",
+    "id": "p1_pay_shotcete"
+  },
+  {
+    "page": 5,
+    "rect": [
+      316.25,
+      189.32120361328123,
+      333.5664825439453,
+      197.08161010742185
+    ],
+    "label": "Payment - Prior to Decking Amount",
+    "color": "blue",
+    "id": "p1_pay_decking"
+  },
+  {
+    "page": 5,
+    "rect": [
+      316.25,
+      197.9612036132812,
+      333.5664825439453,
+      205.72161010742184
+    ],
+    "label": "Payment - Prior to Interior Finish Amount",
+    "color": "blue",
+    "id": "p1_pay_interior_finish"
+  },
+  {
+    "page": 5,
+    "rect": [
       51.84000015258789,
       211.0999755859375,
       97.55999755859375,

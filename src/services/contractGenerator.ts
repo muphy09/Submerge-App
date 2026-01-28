@@ -2,17 +2,9 @@ import { Proposal, WaterFeatureSelection } from '../types/proposal-new';
 import MasterPricingEngine from './masterPricingEngine';
 import pricingData from './pricingData';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
-import contractTemplate from '../../docs/Contracts/ppasContractFieldLayout.json';
+import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
 
 export type ContractOverrides = Record<string, string | number | null>;
-
-type TemplateField = {
-  id: string;
-  page: number;
-  rect: [number, number, number, number];
-  label: string;
-  color: 'blue' | 'yellow';
-};
 
 export type ContractFieldRender = {
   id: string;
@@ -33,7 +25,6 @@ type ProposalWithPricing = Proposal & {
   pricing?: Proposal['pricing'] & { retailPrice?: number };
 };
 
-const templateFields: TemplateField[] = contractTemplate as TemplateField[];
 const ADDITIONAL_SPEC_FIELD_IDS = new Set([
   'p2_additional_spec_73',
   'p2_additional_spec_74',
@@ -523,9 +514,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
 
 export async function getEditableContractFields(
   proposal: Proposal,
-  overrides?: ContractOverrides
+  overrides?: ContractOverrides,
+  templateId?: ContractTemplateId
 ): Promise<ContractFieldRender[]> {
   const normalized = normalizeProposal(proposal);
+  const resolvedTemplateId = templateId || getContractTemplateIdForProposal(proposal);
+  const templateFields = getContractTemplate(resolvedTemplateId).fields;
   const fields: ContractFieldRender[] = templateFields
     .filter((field) => (field.label || '').trim().length > 0)
     .map((field) => {
