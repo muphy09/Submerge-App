@@ -1,18 +1,26 @@
 ---------------------------------------------------------------------------------------------------------
 Short Term - 
+- Exposed Pool Wall (Out of ground Forming)
+    - Add backside facing
+        - Stukko and Split face -- St. $9. sqft, Split ledge = panel ledge
+- Coping Size 12x24 = double price of 12x12
+    - 16x24 option if math can be done
+- Rework Job Cost summary to include customizable discount
+    - Prevent discount that would put profit % below 18%
+- Include Customer Prop as button for designer view
+    - Remove cost breakdown in prop builder for admin
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Login passwords and role promotion / pass reset
     I want you to review the file i have made at /docs/Notes/Login Overhaul and before making any changes ensure you understand what needs to be done or ask any questions you may have. If I have left out anything that you think should be added bring that up too. Then i will tell you to implement this change
-
+- Admin Pricing Menu
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
 - Admin proposal large screen
 - Add logic and safeguards for no internet
 - Fiberglass Shells
 - Auto update without being public
-- Admin Pricing Menu Cleanup
 - Performance Data for Admin overhaul
 - Role transfer logic
 - Equipment logic for lights when selecting multiple can be cleaned up
@@ -31,11 +39,7 @@ Help Needed -
     - Commercial Pool Pricing
     - Sales Templates (when not in effect)
 - Logic for stipulations / what specs require or omit what items
-- Exposed Pool Wall (Out of ground Forming)
-    - Add backside facing
-        - Stukko and Split face -- St. $9. sqft, Split ledge = panel ledge
-- Auto Cover change to Auto Cover Forming: Prompt for total cost after selecting
-    - Potential sqft price come from manufacturer to remove custom input
+
 
 ---------------------------------------------------------------------------------------------------------
 Plan of Action - 
@@ -54,7 +58,3 @@ Confusion -
 
 
 - Potential pictures for interior finish styles (out and in pool), equipment selected.
-
-- NPT White Mini: 4.80 - 1150 spa finish - White Mini
-
-Add passwords option for login

@@ -188,6 +188,7 @@ const pricingData = {
       perYard: 228,
       cleanOut: 125,
       envFuelPerYard: 25,
+      autoCover: 0,
       misc: 125, // Fixed: Excel shows $125, not $150
       travelPerMile: 7,
       taxRate: 0.0725, // Default 7.25% (can be overridden by county-based calculation)

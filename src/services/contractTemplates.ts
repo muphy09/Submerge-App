@@ -175,14 +175,14 @@ const buildTemplate = (
 });
 
 const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {
-  'nc-gunite': buildTemplate('nc-gunite', '2024 Contract NC Gunite', NC_GUNITE_URL, PAYMENT_SCHEDULE_OVERRIDES['nc-gunite']),
+  'nc-gunite': buildTemplate('nc-gunite', '2024 Contract NC Shotcrete', NC_GUNITE_URL, PAYMENT_SCHEDULE_OVERRIDES['nc-gunite']),
   'nc-fiberglass': buildTemplate(
     'nc-fiberglass',
     '2024 Contract NC Fiberglass',
     NC_FIBERGLASS_URL,
     PAYMENT_SCHEDULE_OVERRIDES['nc-fiberglass']
   ),
-  'sc-gunite': buildTemplate('sc-gunite', '2024 Contract SC Gunite', SC_GUNITE_URL, PAYMENT_SCHEDULE_OVERRIDES['sc-gunite']),
+  'sc-gunite': buildTemplate('sc-gunite', '2024 Contract SC Shotcrete', SC_GUNITE_URL, PAYMENT_SCHEDULE_OVERRIDES['sc-gunite']),
   'sc-fiberglass': buildTemplate(
     'sc-fiberglass',
     '2024 Contract SC Fiberglass',

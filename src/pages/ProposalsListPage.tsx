@@ -115,7 +115,7 @@ function ProposalsListPage() {
   const getContractTypeLabel = (proposal: Proposal): string => {
     const templateId = getContractTemplateIdForProposal(proposal);
     const [state, poolType] = templateId.split('-');
-    const typeLabel = poolType === 'fiberglass' ? 'Fiberglass' : 'Gunite';
+    const typeLabel = poolType === 'fiberglass' ? 'Fiberglass' : 'Shotcrete';
     return `${state.toUpperCase()} ${typeLabel}`;
   };
 

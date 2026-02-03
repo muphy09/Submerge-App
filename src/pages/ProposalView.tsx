@@ -552,7 +552,7 @@ function ProposalView() {
   const getContractTypeLabel = (input: Proposal): string => {
     const templateId = getContractTemplateIdForProposal(input);
     const [state, poolType] = templateId.split('-');
-    const typeLabel = poolType === 'fiberglass' ? 'Fiberglass' : 'Gunite';
+    const typeLabel = poolType === 'fiberglass' ? 'Fiberglass' : 'Shotcrete';
     return `${state.toUpperCase()} ${typeLabel}`;
   };
 
@@ -640,7 +640,7 @@ function ProposalView() {
 
     const poolTypeLabel =
       mergedProposal.poolSpecs.poolType === 'gunite'
-        ? 'Gunite (Custom)'
+        ? 'Shotcrete (Custom)'
         : mergedProposal.poolSpecs.fiberglassModelName
         ? `Fiberglass - ${mergedProposal.poolSpecs.fiberglassModelName}`
         : 'Fiberglass';

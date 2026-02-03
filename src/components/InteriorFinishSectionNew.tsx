@@ -42,13 +42,15 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
   );
   const selectedColorValue = colorMatchesOption ? data.color : '';
 
+  const includeMicroglass = data.hasWaterproofing ?? true;
+
   // Auto-set defaults from pool specs and enforce a valid finish
   useEffect(() => {
     const updates: Partial<InteriorFinish> = {};
     if (data.hasSpa !== hasSpa) {
       updates.hasSpa = hasSpa;
     }
-    if (data.hasWaterproofing !== true) {
+    if (data.hasWaterproofing === undefined) {
       updates.hasWaterproofing = true;
     }
     const allowedValues = finishTypes.map((f) => f.value);
@@ -88,7 +90,7 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
           <p className="spec-block-subtitle">Select interior finish and color / style.</p>
         </div>
 
-        <div className="spec-grid spec-grid-2">
+        <div className="spec-grid spec-grid-3">
           <div className="spec-field">
             <label className="spec-label required">Finish</label>
             <select
@@ -121,6 +123,18 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
               ))}
               {colorOptions.length === 0 && <option value="">No colors configured</option>}
             </select>
+          </div>
+
+          <div className="spec-field">
+            <label className="spec-label">Microglass</label>
+            <button
+              type="button"
+              className={`pool-type-btn ${includeMicroglass ? 'active' : ''}`}
+              onClick={() => handleChange('hasWaterproofing', !includeMicroglass)}
+              style={{ width: '100%', padding: '10px 14px' }}
+            >
+              Include Waterproofing (Microglass)
+            </button>
           </div>
         </div>
       </div>

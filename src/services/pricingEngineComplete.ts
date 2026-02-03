@@ -1103,15 +1103,17 @@ export class InteriorFinishCalculations {
       });
     }
 
-    // Waterproofing (always applied for gunite pools)
-    if (poolSpecs.poolType === 'gunite') {
+    const includeMicroglass = interiorFinish.hasWaterproofing !== false;
+
+    // Microglass / Waterproofing (applied for gunite pools unless excluded)
+    if (poolSpecs.poolType === 'gunite' && includeMicroglass) {
       const waterproofRate = prices.extras.waterproofingPerSqft ?? 0;
       const spaPerimeter = isGuniteSpa ? (poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs)) : 0;
       const spaWaterproofSqft = spaPerimeter * 3.45; // matches INT sheet values (28 lnft -> 96.6 sqft)
       const waterproofQty = interiorArea + spaWaterproofSqft;
       laborItems.push({
         category: 'Interior Finish',
-        description: 'Waterproofing',
+        description: 'Waterproofing (Microglass)',
         unitPrice: waterproofRate,
         quantity: waterproofQty,
         total: waterproofRate * waterproofQty,
@@ -1120,7 +1122,7 @@ export class InteriorFinishCalculations {
         const raisedSpaWaterproof = prices.extras.waterproofingRaisedSpa ?? 0;
         laborItems.push({
           category: 'Interior Finish',
-          description: 'Waterproofing - Raised Spa',
+          description: 'Waterproofing (Microglass) - Raised Spa',
           unitPrice: raisedSpaWaterproof,
           quantity: 1,
           total: raisedSpaWaterproof,

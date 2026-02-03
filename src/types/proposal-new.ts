@@ -35,7 +35,7 @@ export interface PoolSpecs {
   fiberglassPerimeter?: number;
   fiberglassCraneOption?: FiberglassCraneOption;
 
-  // Gunite pool dimensions
+  // Shotcrete pool dimensions
   perimeter: number; // LNFT
   surfaceArea: number; // SQFT
   shallowDepth: number; // FT
@@ -69,6 +69,7 @@ export interface PoolSpecs {
   // Options
   hasSiltFence: boolean;
   hasAutomaticCover: boolean;
+  automaticCoverManufacturerCost?: number;
   waterfallCount?: number;
 
   // Calculated
@@ -203,7 +204,7 @@ export interface TileCopingDecking {
   // Tile
   tileLevel: TileLevel;
   additionalTileLength: number; // LNFT for spillway or infinity edge
-  hasTrimTileOnSteps: boolean; // Gunite pools only
+  hasTrimTileOnSteps: boolean; // Shotcrete pools only
 
   // Coping
   copingType: CopingType;
@@ -450,7 +451,7 @@ export interface InteriorFinish {
   color: string;
   surfaceArea: number; // Auto-calculated from pool specs
   hasSpa: boolean;
-  hasWaterproofing?: boolean; // Auto-managed; gunite pools always include waterproofing
+  hasWaterproofing?: boolean; // Microglass/waterproofing toggle (defaults to included)
   customOptions?: CustomOption[];
   cost: number; // Auto-calculated
 }

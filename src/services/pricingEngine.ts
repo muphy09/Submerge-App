@@ -927,6 +927,8 @@ export class ShotcreteCalculations {
     const spaPerimeter = poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs);
     const doubleBullnoseLnft = tileCopingDecking?.doubleBullnoseLnft ?? 0;
     const doubleCurtainLnft = excavation?.doubleCurtainLength ?? 0;
+    const maxWidth = Math.max(0, Number(poolSpecs.maxWidth) || 0);
+    const autoCoverUnits = poolSpecs.hasAutomaticCover ? roundUp(((maxWidth + 2) * 7) / 22) : 0;
 
     const baseYardage =
       ((perimeter + (interiorArea * 0.67) + rbbSqft) / 24) +
@@ -977,8 +979,8 @@ export class ShotcreteCalculations {
         category: 'Shotcrete Labor',
         description: 'Auto Cover',
         unitPrice: prices.labor.autoCover,
-        quantity: 1,
-        total: prices.labor.autoCover,
+        quantity: autoCoverUnits,
+        total: prices.labor.autoCover * autoCoverUnits,
       });
     }
 
@@ -1019,6 +1021,17 @@ export class ShotcreteCalculations {
       quantity: yardage,
       total: baseMaterial,
     });
+
+    if (poolSpecs.hasAutomaticCover) {
+      const autoCoverMaterialCost = prices.material.autoCover * autoCoverUnits;
+      materialItems.push({
+        category: 'Shotcrete Material',
+        description: 'Auto Cover',
+        unitPrice: prices.material.autoCover,
+        quantity: autoCoverUnits,
+        total: autoCoverMaterialCost,
+      });
+    }
 
     materialItems.push({
       category: 'Shotcrete Material',

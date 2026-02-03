@@ -20,7 +20,7 @@ export function validateProposal(proposal: Partial<Proposal>): ValidationError[]
 
   if (proposal.poolSpecs?.poolType === 'gunite') {
     if (!proposal.poolSpecs.surfaceArea || proposal.poolSpecs.surfaceArea <= 0) {
-      errors.push({ field: 'surfaceArea', message: 'Surface area is required for gunite pools' });
+      errors.push({ field: 'surfaceArea', message: 'Surface area is required for shotcrete pools' });
     }
   }
 

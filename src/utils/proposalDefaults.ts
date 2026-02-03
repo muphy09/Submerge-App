@@ -53,6 +53,7 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     poolToStreetDistance: 0,
     hasSiltFence: true,
     hasAutomaticCover: false,
+    automaticCoverManufacturerCost: 0,
     waterfallCount: 0,
     approximateGallons: 0,
   };

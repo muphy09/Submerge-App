@@ -56,43 +56,100 @@ function CostBreakdownView({
 
   const retailFactor = costBasis > 0 ? retailPrice / costBasis : 1;
 
+  const getRetailOverride = (item?: CostLineItem): number | null => {
+    if (!item) return null;
+    const override = (item.details as any)?.retailOverride;
+    return Number.isFinite(override) ? Number(override) : null;
+  };
+
+  const allItems: CostLineItem[] = [
+    ...(costBreakdown.plansAndEngineering || []),
+    ...(costBreakdown.layout || []),
+    ...(costBreakdown.permit || []),
+    ...(costBreakdown.excavation || []),
+    ...(costBreakdown.plumbing || []),
+    ...(costBreakdown.gas || []),
+    ...(costBreakdown.steel || []),
+    ...(costBreakdown.electrical || []),
+    ...(costBreakdown.shotcreteLabor || []),
+    ...(costBreakdown.shotcreteMaterial || []),
+    ...(costBreakdown.tileLabor || []),
+    ...(costBreakdown.tileMaterial || []),
+    ...(costBreakdown.copingDeckingLabor || []),
+    ...(costBreakdown.copingDeckingMaterial || []),
+    ...(costBreakdown.stoneRockworkLabor || []),
+    ...(costBreakdown.stoneRockworkMaterial || []),
+    ...(costBreakdown.drainage || []),
+    ...(costBreakdown.waterFeatures || []),
+    ...(costBreakdown.equipmentOrdered || []),
+    ...(costBreakdown.equipmentSet || []),
+    ...(costBreakdown.cleanup || []),
+    ...(costBreakdown.interiorFinish || []),
+    ...(costBreakdown.waterTruck || []),
+    ...(costBreakdown.fiberglassShell || []),
+    ...(costBreakdown.fiberglassInstall || []),
+    ...(costBreakdown.startupOrientation || []),
+    ...(costBreakdown.customFeatures || []),
+  ];
+
+  const overrideItems = allItems.filter((item) => getRetailOverride(item) !== null);
+  const overrideCostBasis = overrideItems.reduce((sum, item) => sum + (item.total ?? 0), 0);
+  const overrideRetailTotal = overrideItems.reduce((sum, item) => sum + (getRetailOverride(item) || 0), 0);
+  const remainingCostBasis = costBasis - overrideCostBasis;
+  const adjustedRetailFactor =
+    remainingCostBasis > 0 ? (retailPrice - overrideRetailTotal) / remainingCostBasis : retailFactor;
+  const safeAdjustedRetailFactor = Number.isFinite(adjustedRetailFactor) ? adjustedRetailFactor : retailFactor;
+
   // Map cost totals into retail-valued rows that sum to the retail price.
   const categoryRows = [
-    { label: 'Plans & Engineering', cost: baseTotals.plansAndEngineering ?? 0 },
-    { label: 'Layout', cost: baseTotals.layout ?? 0 },
-    { label: 'Permit', cost: baseTotals.permit ?? 0 },
-    { label: 'Excavation', cost: baseTotals.excavation ?? 0 },
-    { label: 'Plumbing', cost: baseTotals.plumbing ?? 0 },
-    { label: 'Gas', cost: baseTotals.gas ?? 0 },
-    { label: 'Steel', cost: baseTotals.steel ?? 0 },
-    { label: 'Electrical', cost: baseTotals.electrical ?? 0 },
-    { label: 'Shotcrete Labor', cost: baseTotals.shotcreteLabor ?? 0 },
-    { label: 'Shotcrete Material', cost: baseTotals.shotcreteMaterial ?? 0 },
-    { label: 'Tile Labor', cost: baseTotals.tileLabor ?? 0 },
-    { label: 'Tile Material', cost: baseTotals.tileMaterial ?? 0 },
-    { label: 'Coping/Decking Labor', cost: baseTotals.copingDeckingLabor ?? 0 },
-    { label: 'Coping/Decking Material', cost: baseTotals.copingDeckingMaterial ?? 0 },
+    { label: 'Plans & Engineering', cost: baseTotals.plansAndEngineering ?? 0, items: costBreakdown.plansAndEngineering || [] },
+    { label: 'Layout', cost: baseTotals.layout ?? 0, items: costBreakdown.layout || [] },
+    { label: 'Permit', cost: baseTotals.permit ?? 0, items: costBreakdown.permit || [] },
+    { label: 'Excavation', cost: baseTotals.excavation ?? 0, items: costBreakdown.excavation || [] },
+    { label: 'Plumbing', cost: baseTotals.plumbing ?? 0, items: costBreakdown.plumbing || [] },
+    { label: 'Gas', cost: baseTotals.gas ?? 0, items: costBreakdown.gas || [] },
+    { label: 'Steel', cost: baseTotals.steel ?? 0, items: costBreakdown.steel || [] },
+    { label: 'Electrical', cost: baseTotals.electrical ?? 0, items: costBreakdown.electrical || [] },
+    { label: 'Shotcrete Labor', cost: baseTotals.shotcreteLabor ?? 0, items: costBreakdown.shotcreteLabor || [] },
+    { label: 'Shotcrete Material', cost: baseTotals.shotcreteMaterial ?? 0, items: costBreakdown.shotcreteMaterial || [] },
+    { label: 'Tile Labor', cost: baseTotals.tileLabor ?? 0, items: costBreakdown.tileLabor || [] },
+    { label: 'Tile Material', cost: baseTotals.tileMaterial ?? 0, items: costBreakdown.tileMaterial || [] },
+    { label: 'Coping/Decking Labor', cost: baseTotals.copingDeckingLabor ?? 0, items: costBreakdown.copingDeckingLabor || [] },
+    { label: 'Coping/Decking Material', cost: baseTotals.copingDeckingMaterial ?? 0, items: costBreakdown.copingDeckingMaterial || [] },
     {
       label: 'Stone/Rockwork',
       cost: (baseTotals.stoneRockworkLabor ?? 0) + (baseTotals.stoneRockworkMaterial ?? 0),
+      items: [
+        ...(costBreakdown.stoneRockworkLabor || []),
+        ...(costBreakdown.stoneRockworkMaterial || []),
+      ],
     },
-    { label: 'Drainage', cost: baseTotals.drainage ?? 0 },
-    { label: 'Equipment Ordered', cost: baseTotals.equipmentOrdered ?? 0 },
-    { label: 'Equipment Set', cost: baseTotals.equipmentSet ?? 0 },
-    { label: 'Water Features', cost: baseTotals.waterFeatures ?? 0 },
-    { label: 'Cleanup', cost: baseTotals.cleanup ?? 0 },
-    { label: 'Interior Finish', cost: baseTotals.interiorFinish ?? 0 },
-    { label: 'Water Truck', cost: baseTotals.waterTruck ?? 0 },
-    { label: 'Fiberglass Shell', cost: baseTotals.fiberglassShell ?? 0 },
-    { label: 'Fiberglass Install', cost: baseTotals.fiberglassInstall ?? 0 },
-    { label: 'Startup/Orientation', cost: baseTotals.startupOrientation ?? 0 },
-    { label: 'Custom Features', cost: baseTotals.customFeatures ?? 0 },
+    { label: 'Drainage', cost: baseTotals.drainage ?? 0, items: costBreakdown.drainage || [] },
+    { label: 'Equipment Ordered', cost: baseTotals.equipmentOrdered ?? 0, items: costBreakdown.equipmentOrdered || [] },
+    { label: 'Equipment Set', cost: baseTotals.equipmentSet ?? 0, items: costBreakdown.equipmentSet || [] },
+    { label: 'Water Features', cost: baseTotals.waterFeatures ?? 0, items: costBreakdown.waterFeatures || [] },
+    { label: 'Cleanup', cost: baseTotals.cleanup ?? 0, items: costBreakdown.cleanup || [] },
+    { label: 'Interior Finish', cost: baseTotals.interiorFinish ?? 0, items: costBreakdown.interiorFinish || [] },
+    { label: 'Water Truck', cost: baseTotals.waterTruck ?? 0, items: costBreakdown.waterTruck || [] },
+    { label: 'Fiberglass Shell', cost: baseTotals.fiberglassShell ?? 0, items: costBreakdown.fiberglassShell || [] },
+    { label: 'Fiberglass Install', cost: baseTotals.fiberglassInstall ?? 0, items: costBreakdown.fiberglassInstall || [] },
+    { label: 'Startup/Orientation', cost: baseTotals.startupOrientation ?? 0, items: costBreakdown.startupOrientation || [] },
+    { label: 'Custom Features', cost: baseTotals.customFeatures ?? 0, items: costBreakdown.customFeatures || [] },
   ];
 
   let runningRetailTotal = 0;
   const retailRows = categoryRows.map((row, idx) => {
     const isLastRow = idx === categoryRows.length - 1;
-    let retailValue = roundToTwo(row.cost * retailFactor);
+    const overrideRetailTotalForRow = (row.items || []).reduce(
+      (sum, item) => sum + (getRetailOverride(item) || 0),
+      0
+    );
+    const overrideCostForRow = (row.items || []).reduce(
+      (sum, item) => sum + (getRetailOverride(item) !== null ? (item.total ?? 0) : 0),
+      0
+    );
+    const remainingCostForRow = row.cost - overrideCostForRow;
+    let retailValue = roundToTwo(overrideRetailTotalForRow + (remainingCostForRow * safeAdjustedRetailFactor));
 
     if (isLastRow) {
       // Nudge the final row to absorb any rounding difference.

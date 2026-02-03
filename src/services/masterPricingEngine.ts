@@ -356,6 +356,25 @@ export class MasterPricingEngine {
         notes: feature.description,
       };
     });
+    const automaticCoverCost = poolSpecs.hasAutomaticCover
+      ? Number(poolSpecs.automaticCoverManufacturerCost) || 0
+      : 0;
+    const automaticCoverRetail = automaticCoverCost > 0
+      ? Math.round(automaticCoverCost * 1.7 * 100) / 100
+      : 0;
+    if (automaticCoverCost > 0) {
+      customFeaturesItems.push({
+        category: 'Custom Features',
+        description: 'Automatic Cover',
+        unitPrice: automaticCoverCost,
+        quantity: 1,
+        total: automaticCoverCost,
+        details: {
+          manufacturerCost: automaticCoverCost,
+          retailOverride: automaticCoverRetail,
+        },
+      });
+    }
     const customFeaturesAdjustmentTotal = customFeaturesItems.reduce(
       (sum, item) => (item.total < 0 ? sum + item.total : sum),
       0
@@ -449,7 +468,14 @@ export class MasterPricingEngine {
       (manualAdjustments.positive2 ?? 0) -
       (manualAdjustments.negative1 ?? 0) -
       (manualAdjustments.negative2 ?? 0);
-    const designerAdjustmentsTotal = manualAdjustmentsTotal + customFeaturesAdjustmentTotal;
+    const autoCoverRetailAdjustment =
+      automaticCoverCost > 0 && targetMargin > 0
+        ? Math.round((automaticCoverRetail - (automaticCoverCost / targetMargin)) * 100) / 100
+        : 0;
+    const designerAdjustmentsTotal =
+      manualAdjustmentsTotal +
+      customFeaturesAdjustmentTotal +
+      autoCoverRetailAdjustment;
 
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 1250;

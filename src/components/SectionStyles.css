@@ -658,6 +658,10 @@ select.compact-input {
   margin-bottom: 20px;
 }
 
+.pool-type-buttons.auto-cover-toggle {
+  margin-bottom: 8px;
+}
+
 .pool-type-buttons.stackable {
   flex-wrap: wrap;
 }
@@ -694,6 +698,14 @@ select.compact-input {
 .pool-type-buttons.decking-type-row .pool-type-btn {
   flex: 1 1 calc(25% - 10px);
   min-width: 160px;
+}
+
+.auto-cover-input {
+  width: 100%;
+}
+
+.auto-cover-input .compact-input-wrapper {
+  width: 100%;
 }
 
 .pool-type-btn {

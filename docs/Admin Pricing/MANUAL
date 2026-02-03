@@ -241,7 +241,7 @@ Inputs and how they apply (fields that affect calculations)
 - Base labor per yard (`pricingData.shotcrete.labor.poolBase`) and minimum yards (`minimumYards`): Always charges `minimumYards` at `poolBase` (`src/services/pricingEngine.ts:927-935`).
 - Additional labor: If computed yardage exceeds `minimumYards`, additional yards are charged at the same `poolBase` rate (`src/services/pricingEngine.ts:937-946`).
 - Spa (`pricingData.shotcrete.labor.spa`): Added when a gunite spa exists; quantity 1 (`src/services/pricingEngine.ts:949-956`).
-- Auto cover (`pricingData.shotcrete.labor.autoCover`): Added when `poolSpecs.hasAutomaticCover` is true; quantity 1 (`src/services/pricingEngine.ts:959-966`).
+- Auto cover (`pricingData.shotcrete.labor.autoCover`): Added when `poolSpecs.hasAutomaticCover` is true; quantity is `roundUp(((maxWidth + 2) * 7) / 22)` where `maxWidth` is `poolSpecs.maxWidth` (`src/services/pricingEngine.ts:959-969`).
 - Distance surcharges (`pricingData.shotcrete.labor.distance250to300`, `distance300to350`): Added when `poolSpecs.poolToStreetDistance` is 1 (251-300 ft) or 2 (301-350 ft); quantity 1 (`src/services/pricingEngine.ts:969-984`).
 - Travel (`pricingData.shotcrete.labor.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity = travel distance (`src/services/pricingEngine.ts:987-994`).
 
@@ -260,6 +260,7 @@ Inputs and how they apply (fields that affect calculations)
 - Per-yard material (`pricingData.shotcrete.material.perYard`): Charged on computed yardage (`src/services/pricingEngine.ts:997-1005`).
 - Clean out (`pricingData.shotcrete.material.cleanOut`): Always added once (`src/services/pricingEngine.ts:1007-1013`).
 - Env/Fuel per yard (`pricingData.shotcrete.material.envFuelPerYard`): Charged on computed yardage (`src/services/pricingEngine.ts:1015-1021`).
+- Auto cover (`pricingData.shotcrete.material.autoCover`): Added when `poolSpecs.hasAutomaticCover` is true; quantity is `roundUp(((maxWidth + 2) * 7) / 22)` where `maxWidth` is `poolSpecs.maxWidth` (`src/services/pricingEngine.ts:1019-1030`).
 - Miscellaneous (`pricingData.shotcrete.material.misc`): Always added once (`src/services/pricingEngine.ts:1023-1029`).
 - Travel (`pricingData.shotcrete.material.travelPerMile`): Added when `poolSpecs.travelDistance > 0`; quantity = travel distance (`src/services/pricingEngine.ts:1031-1038`).
 - Tax: Calculated on the material subtotal. MECK county splits state (4.75%) and county (2.5%); NC (other counties) uses state 4.75%; default uses `pricingData.shotcrete.material.taxRate` (7.25%) (`src/services/pricingEngine.ts:1041-1084`).

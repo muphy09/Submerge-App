@@ -251,7 +251,7 @@ function PoolSpecsSectionNew({
             className={`pool-type-btn ${data.poolType === 'gunite' ? 'active' : ''}`}
             onClick={() => handleChange('poolType', 'gunite')}
           >
-            Gunite (Custom)
+            Shotcrete (Custom)
           </button>
           <button
             type="button"
@@ -340,7 +340,7 @@ function PoolSpecsSectionNew({
           </>
         )}
 
-        {/* Gunite Pool Dimensions */}
+        {/* Shotcrete Pool Dimensions */}
         {!isFiberglass && (
           <>
             <div className="spec-grid-4">
@@ -466,7 +466,7 @@ function PoolSpecsSectionNew({
             className={`pool-type-btn ${data.spaType === 'gunite' ? 'active' : ''}`}
             onClick={() => handleChange('spaType', 'gunite')}
           >
-            Gunite (Custom)
+            Shotcrete (Custom)
           </button>
           <button
             type="button"
@@ -543,7 +543,7 @@ function PoolSpecsSectionNew({
           </>
         )}
 
-        {/* Gunite Spa Details */}
+        {/* Shotcrete Spa Details */}
         {isGuniteSpa && (
           <>
             <div className="spec-grid-4">
@@ -691,7 +691,7 @@ function PoolSpecsSectionNew({
             { key: 'hasTanningShelf', label: 'Tanning Shelf' },
           ].map(option => (
             <div className="spec-field" key={option.key}>
-              <div className="pool-type-buttons">
+              <div className={`pool-type-buttons ${option.key === 'hasAutomaticCover' ? 'auto-cover-toggle' : ''}`}>
                 <button
                   type="button"
                   className={`pool-type-btn ${(data as any)[option.key] ? 'active' : ''}`}
@@ -700,6 +700,20 @@ function PoolSpecsSectionNew({
                   {option.label}
                 </button>
               </div>
+              {option.key === 'hasAutomaticCover' && data.hasAutomaticCover && (
+                <div className="auto-cover-input">
+                  <label className="spec-label">Automatic Cover Manufacturer Cost (Forming is included)</label>
+                  <CompactInput
+                    value={data.automaticCoverManufacturerCost ?? 0}
+                    onChange={(e) =>
+                      handleChange('automaticCoverManufacturerCost', parseFloat(e.target.value) || 0)
+                    }
+                    unit="$"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
