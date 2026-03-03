@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef, MouseEvent as ReactMouseEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-import { CostLineItem, Proposal } from '../types/proposal-new';
+import jsPDF from 'jspdf';
+import { useNavigate, useParams } from 'react-router-dom';
+import { CostLineItem, Proposal, RetailAdjustment } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
-import SubmergeAdvantageWarranty from '../components/SubmergeAdvantageWarranty';
+import { BreakdownCostExportPage, BreakdownWarrantyExportPage } from '../components/BreakdownExportPages';
 import ContractView, { ContractViewHandle } from '../components/ContractView';
 import FranchiseLogo from '../components/FranchiseLogo';
 import { useToast } from '../components/Toast';
+import RetiredEquipmentIndicator from '../components/RetiredEquipmentIndicator';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
@@ -15,7 +16,7 @@ import summaryIconImg from '../../docs/img/summary.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { initPricingDataStore } from '../services/pricingDataStore';
-import { getSessionRole } from '../services/session';
+import { getSessionRole, isMasterImpersonating } from '../services/session';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 import {
   getDefaultProposal,
@@ -30,18 +31,13 @@ import {
   getDefaultCustomFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
+  mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
+import { hasRetiredEquipment } from '../utils/retiredEquipment';
 import { validateProposal } from '../utils/validation';
 import { ContractOverrides } from '../services/contractGenerator';
-
-type BreakdownType = 'customer' | 'cogs' | 'pre' | 'warranty';
-
-type BreakdownSelection = {
-  versionId: string;
-  type: BreakdownType;
-};
 
 const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
 const isCustomOptionItem = (item: CostLineItem): boolean =>
@@ -50,6 +46,89 @@ const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
   customOptions: items.filter(isCustomOptionItem),
 });
+
+const normalizeSummaryName = (value?: string | null): string => (value ?? '').trim();
+
+const hasNamedSelection = (value: string | undefined, placeholderToken: string): boolean => {
+  const normalized = normalizeSummaryName(value).toLowerCase();
+  return Boolean(normalized) && normalized !== 'none' && !normalized.includes(placeholderToken);
+};
+
+const summarizeNamedSelections = (names: string[]): string => {
+  const normalizedNames = names.map((name) => normalizeSummaryName(name)).filter(Boolean);
+  if (!normalizedNames.length) return 'None';
+  if (normalizedNames.length === 1) return normalizedNames[0];
+
+  const primary = normalizedNames[0];
+  const allMatchPrimary = normalizedNames.every((name) => name.toLowerCase() === primary.toLowerCase());
+  return allMatchPrimary ? `${primary} x${normalizedNames.length}` : `${primary} +${normalizedNames.length - 1}`;
+};
+
+const summarizeSelectionWithQuantity = (
+  name: string | undefined,
+  quantity: number | undefined,
+  placeholderToken: string
+): string => {
+  const safeName = normalizeSummaryName(name);
+  const safeQuantity = Number.isFinite(quantity) ? Math.max(quantity ?? 0, 0) : 0;
+  if (!hasNamedSelection(name, placeholderToken) || safeQuantity <= 0) return 'None';
+  return safeQuantity > 1 ? `${safeName} x${safeQuantity}` : safeName;
+};
+
+const summarizePumpSelection = (equipment: Proposal['equipment']): string => {
+  const primaryPump = hasNamedSelection(equipment.pump?.name, 'no pump') ? [equipment.pump.name] : [];
+  const auxiliarySelections = equipment.auxiliaryPumps?.length
+    ? equipment.auxiliaryPumps
+    : equipment.auxiliaryPump
+    ? [equipment.auxiliaryPump]
+    : [];
+  const auxiliaryPumps = auxiliarySelections
+    .map((pump) => pump?.name)
+    .filter((name): name is string => hasNamedSelection(name, 'no pump'));
+  return summarizeNamedSelections([...primaryPump, ...auxiliaryPumps]);
+};
+
+const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefined): string => {
+  const names = (lights ?? [])
+    .map((light) => light?.name)
+    .filter((name): name is string => {
+      const normalized = normalizeSummaryName(name).toLowerCase();
+      return Boolean(normalized) && normalized !== 'none';
+    });
+  return summarizeNamedSelections(names);
+};
+
+const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
+  const filterQuantity = equipment.filterQuantity ?? (hasNamedSelection(equipment.filter?.name, 'no filter') ? 1 : 0);
+  const cleanerQuantity =
+    equipment.cleanerQuantity ?? (hasNamedSelection(equipment.cleaner?.name, 'no cleaner') ? 1 : 0);
+  const heaterQuantity = equipment.heaterQuantity ?? (hasNamedSelection(equipment.heater?.name, 'no heater') ? 1 : 0);
+  const automationQuantity =
+    equipment.automationQuantity ?? (hasNamedSelection(equipment.automation?.name, 'no automation') ? 1 : 0);
+  const saltQuantity = Math.max(
+    equipment.saltSystemQuantity ?? (hasNamedSelection(equipment.saltSystem?.name, 'no salt') ? 1 : 0),
+    0
+  );
+  const autoFillQuantity = Math.max(
+    equipment.autoFillSystemQuantity ?? (hasNamedSelection(equipment.autoFillSystem?.name, 'no auto') ? 1 : 0),
+    0
+  );
+
+  return {
+    pumpSummary: summarizePumpSelection(equipment),
+    filterSummary: summarizeSelectionWithQuantity(equipment.filter?.name, filterQuantity, 'no filter'),
+    heaterSummary: summarizeSelectionWithQuantity(equipment.heater?.name, heaterQuantity, 'no heater'),
+    cleanerSummary: summarizeSelectionWithQuantity(equipment.cleaner?.name, cleanerQuantity, 'no cleaner'),
+    automationSummary: summarizeSelectionWithQuantity(
+      equipment.automation?.name,
+      automationQuantity,
+      'no automation'
+    ),
+    sanitationSummary: summarizeSelectionWithQuantity(equipment.saltSystem?.name, saltQuantity, 'no salt'),
+    autoFillSummary: summarizeSelectionWithQuantity(equipment.autoFillSystem?.name, autoFillQuantity, 'no auto'),
+    poolLightSummary: summarizePoolLightSelection(equipment.poolLights),
+  };
+};
 
 function ProposalView() {
   const navigate = useNavigate();
@@ -61,36 +140,39 @@ function ProposalView() {
   const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
   const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
-  const [warrantyBreakdownVersionId, setWarrantyBreakdownVersionId] = useState<string | null>(null);
   const [contractVersionId, setContractVersionId] = useState<string | null>(null);
+  const [breakdownExportOpen, setBreakdownExportOpen] = useState(false);
+  const [breakdownExporting, setBreakdownExporting] = useState(false);
+  const [breakdownExportActive, setBreakdownExportActive] = useState(false);
+  const [breakdownSaveDialogOpen, setBreakdownSaveDialogOpen] = useState(false);
+  const [breakdownSaveName, setBreakdownSaveName] = useState('');
+  const [breakdownSaveError, setBreakdownSaveError] = useState<string | null>(null);
   const [contractExportOpen, setContractExportOpen] = useState(false);
   const [contractDirty, setContractDirty] = useState(false);
   const [contractExporting, setContractExporting] = useState(false);
   const [contractSaving, setContractSaving] = useState(false);
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
-  const [selectedBreakdowns, setSelectedBreakdowns] = useState<BreakdownSelection[]>([]);
-  const [exportSelections, setExportSelections] = useState<BreakdownSelection[]>([]);
-  const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
-  const [exportMode, setExportMode] = useState<'print' | 'pdf' | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
   const proposalRef = useRef<HTMLDivElement>(null);
-  const exportContainerRef = useRef<HTMLDivElement>(null);
-  const exportControlRef = useRef<HTMLDivElement>(null);
+  const breakdownExportControlRef = useRef<HTMLDivElement>(null);
+  const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
+  const breakdownCostPageWrapperRef = useRef<HTMLDivElement>(null);
+  const breakdownWarrantyPageWrapperRef = useRef<HTMLDivElement>(null);
+  const breakdownCostPageRef = useRef<HTMLDivElement>(null);
+  const breakdownWarrantyPageRef = useRef<HTMLDivElement>(null);
   const contractExportControlRef = useRef<HTMLDivElement>(null);
   const contractViewRef = useRef<ContractViewHandle | null>(null);
+  const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
   const canViewFullSummary = sessionRole === 'admin' || sessionRole === 'owner';
+  const isMasterActingAsOwner = isMasterImpersonating();
+  const canEditProposal = !isMasterActingAsOwner;
+  const editDisabledReason = isMasterActingAsOwner
+    ? 'Master accounts cannot edit proposals while acting as owner.'
+    : undefined;
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
-  const breakdownLabels: Record<BreakdownType, string> = {
-    customer: 'Customer Breakdown',
-    cogs: 'COGS Cost Breakdown',
-    pre: 'Pre 1% COGS Breakdown',
-    warranty: 'Warranty Breakdown',
-  };
-
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
     const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
@@ -114,6 +196,7 @@ function ProposalView() {
       customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
       interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
       manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
+      retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
       papDiscounts: input.papDiscounts || (base as any).papDiscounts,
       contractOverrides: (input as Proposal).contractOverrides || (base as Proposal).contractOverrides || {},
     };
@@ -156,15 +239,26 @@ function ProposalView() {
   }, [proposalNumber]);
 
   useEffect(() => {
-    if (!exportOptionsOpen) return;
+    if (!breakdownExportOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (exportControlRef.current && !exportControlRef.current.contains(event.target as Node)) {
-        setExportOptionsOpen(false);
+      if (breakdownExportControlRef.current && !breakdownExportControlRef.current.contains(event.target as Node)) {
+        setBreakdownExportOpen(false);
       }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [exportOptionsOpen]);
+  }, [breakdownExportOpen]);
+
+  useEffect(() => {
+    if (!customerBreakdownVersionId) {
+      setBreakdownExportOpen(false);
+      setBreakdownExporting(false);
+      setBreakdownExportActive(false);
+      setBreakdownSaveDialogOpen(false);
+      setBreakdownSaveName('');
+      setBreakdownSaveError(null);
+    }
+  }, [customerBreakdownVersionId]);
 
   useEffect(() => {
     if (!contractExportOpen) return;
@@ -178,25 +272,6 @@ function ProposalView() {
   }, [contractExportOpen]);
 
   useEffect(() => {
-    const handleAfterPrint = () => {
-      document.body.classList.remove('breakdown-print-mode');
-      setIsExporting(false);
-      setExportMode(null);
-      setExportSelections([]);
-    };
-    window.addEventListener('afterprint', handleAfterPrint);
-    return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, []);
-
-  useEffect(() => {
-    if (!selectedBreakdowns.length) {
-      setExportSelections([]);
-      setExportMode(null);
-      setExportOptionsOpen(false);
-    }
-  }, [selectedBreakdowns.length]);
-
-  useEffect(() => {
     if (!contractVersionId) {
       setContractExportOpen(false);
       setContractDirty(false);
@@ -205,7 +280,16 @@ function ProposalView() {
     }
   }, [contractVersionId]);
 
+  useEffect(() => {
+    return () => {
+      if (retailAdjustmentsSaveRef.current) {
+        clearTimeout(retailAdjustmentsSaveRef.current);
+      }
+    };
+  }, []);
+
   const handleEdit = (version?: Proposal) => {
+    if (!canEditProposal) return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
   };
@@ -386,6 +470,224 @@ function ProposalView() {
     }
   };
 
+  const scheduleRetailAdjustmentsSave = (updatedVersions: Proposal[]) => {
+    if (retailAdjustmentsSaveRef.current) {
+      clearTimeout(retailAdjustmentsSaveRef.current);
+    }
+    retailAdjustmentsSaveRef.current = setTimeout(() => {
+      void persistRetailAdjustments(updatedVersions);
+    }, 600);
+  };
+
+  const persistRetailAdjustments = async (updatedVersions: Proposal[]) => {
+    if (!proposal) return;
+    try {
+      const normalizedVersions = updatedVersions.map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versions: [],
+      }));
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const active =
+        normalizedVersions.find((v) => (v.versionId || 'original') === desiredActiveId) ||
+        normalizedVersions[0];
+      if (!active) return;
+      const others = normalizedVersions.filter(
+        (v) => (v.versionId || 'original') !== (active.versionId || 'original')
+      );
+      const container: Proposal = {
+        ...(active as Proposal),
+        activeVersionId: desiredActiveId,
+        versions: others,
+      };
+      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      const saved = await saveProposalRemote(container);
+      const updated = listAllVersions(saved as Proposal).map((v) => ({
+        ...(mergeProposalWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = applyActiveVersion(saved as Proposal);
+      setVersions(updated);
+      setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
+      setProposal(activeApplied as Proposal);
+    } catch (error) {
+      console.error('Failed to save retail adjustments', error);
+      showToast({ type: 'error', message: 'Could not save retail adjustments.' });
+    }
+  };
+
+  const handleRetailAdjustmentsChange = (versionId: string, nextAdjustments: RetailAdjustment[]) => {
+    if (!proposal) return;
+    const normalizedAdjustments = mergeRetailAdjustments(nextAdjustments);
+    const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+    const updatedVersions = all.map((v) => {
+      const id = v.versionId || 'original';
+      if (id !== versionId) return v;
+      return {
+        ...(v as Proposal),
+        retailAdjustments: normalizedAdjustments,
+        lastModified: new Date().toISOString(),
+      };
+    });
+
+    setVersions(updatedVersions);
+    setProposal((prev) => {
+      if (!prev) return prev;
+      const id = prev.versionId || 'original';
+      if (id !== versionId) return prev;
+      return {
+        ...prev,
+        retailAdjustments: normalizedAdjustments,
+        lastModified: new Date().toISOString(),
+      };
+    });
+
+    scheduleRetailAdjustmentsSave(updatedVersions);
+  };
+
+  const handleBreakdownExportToggle = () => {
+    setBreakdownExportOpen((prev) => !prev);
+  };
+
+  const getBreakdownExportFilename = () => {
+    const rawName =
+      customerModalView?.proposal?.customerInfo?.customerName ||
+      proposal?.customerInfo?.customerName ||
+      'customer';
+    const normalized = rawName.trim() || 'customer';
+    const safeName = normalized
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase();
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    return `${safeName || 'customer'}-customer-cost-warranty-breakdown-${dateStamp}.pdf`;
+  };
+
+  const normalizeBreakdownFilename = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`;
+  };
+
+  const prepareBreakdownExport = async () => {
+    setBreakdownExportActive(true);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+  };
+
+  const handleBreakdownPrint = async () => {
+    if (breakdownExporting) return;
+    setBreakdownExportOpen(false);
+    setBreakdownExporting(true);
+    try {
+      await prepareBreakdownExport();
+    } catch (error) {
+      console.error('Failed to prepare breakdown export', error);
+      showToast({ type: 'error', message: 'Could not prepare breakdown export.' });
+      setBreakdownExporting(false);
+      setBreakdownExportActive(false);
+      return;
+    }
+
+    let didCleanup = false;
+    const cleanup = () => {
+      if (didCleanup) return;
+      didCleanup = true;
+      document.body.classList.remove('breakdown-print-mode');
+      setBreakdownExportActive(false);
+      setBreakdownExporting(false);
+      window.removeEventListener('afterprint', cleanup);
+    };
+
+    document.body.classList.add('breakdown-print-mode');
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    setTimeout(cleanup, 1200);
+  };
+
+  const openBreakdownSaveDialog = () => {
+    if (breakdownExporting) return;
+    setBreakdownExportOpen(false);
+    setBreakdownSaveName(getBreakdownExportFilename());
+    setBreakdownSaveError(null);
+    setBreakdownSaveDialogOpen(true);
+  };
+
+  const exportBreakdownPdfFallback = async (finalName: string) => {
+    const exportArea = breakdownExportAreaRef.current;
+    const pages = exportArea
+      ? Array.from(exportArea.querySelectorAll('.export-breakdown-page'))
+      : [];
+    if (!pages.length) {
+      throw new Error('No breakdown pages available for export.');
+    }
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    for (let i = 0; i < pages.length; i += 1) {
+      const canvas = await html2canvas(pages[i] as HTMLElement, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        ignoreElements: (element) => element.tagName === 'IMG',
+      });
+      const imgData = canvas.toDataURL('image/png');
+      if (i > 0) {
+        pdf.addPage();
+      }
+      pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
+    }
+
+    pdf.save(finalName);
+  };
+
+  const exportBreakdownPdf = async (finalName: string) => {
+    setBreakdownExporting(true);
+    try {
+      await prepareBreakdownExport();
+      document.body.classList.add('breakdown-print-mode');
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+      if (window.electron?.exportBreakdownPdf) {
+        const result = await window.electron.exportBreakdownPdf({ filename: finalName });
+        if (result?.canceled) {
+          return;
+        }
+      } else {
+        await exportBreakdownPdfFallback(finalName);
+      }
+
+      showToast({ type: 'success', message: 'Breakdown PDF generated.' });
+    } catch (error) {
+      if ((error as Error)?.name !== 'AbortError') {
+        console.error('Failed to export breakdown PDF', error);
+        showToast({ type: 'error', message: 'Could not export breakdown PDF.' });
+      }
+    } finally {
+      document.body.classList.remove('breakdown-print-mode');
+      setBreakdownExporting(false);
+      setBreakdownExportActive(false);
+    }
+  };
+
+  const handleBreakdownSaveConfirm = async () => {
+    if (breakdownExporting) return;
+    const normalized = normalizeBreakdownFilename(breakdownSaveName);
+    if (!normalized) {
+      setBreakdownSaveError('Please enter a file name.');
+      return;
+    }
+    setBreakdownSaveDialogOpen(false);
+    await exportBreakdownPdf(normalized);
+  };
+
   const handleContractSaveClick = () => {
     if (contractSaving) return;
     contractViewRef.current?.saveOverrides();
@@ -487,24 +789,6 @@ function ProposalView() {
       return;
     }
     await persistStatusChange('submitted');
-  };
-
-  const isBreakdownSelected = (versionId: string, type: BreakdownType): boolean =>
-    selectedBreakdowns.some((item) => item.versionId === versionId && item.type === type);
-
-  const toggleBreakdownSelection = (event: ReactMouseEvent, versionId: string, type: BreakdownType) => {
-    event.stopPropagation();
-    event.preventDefault();
-    setSelectedBreakdowns((prev) => {
-      const exists = prev.some((item) => item.versionId === versionId && item.type === type);
-      const next = exists
-        ? prev.filter((item) => !(item.versionId === versionId && item.type === type))
-        : [...prev, { versionId, type }];
-      if (!next.length) {
-        setExportOptionsOpen(false);
-      }
-      return next;
-    });
   };
 
   const formatCurrency = (value: number): string =>
@@ -633,10 +917,11 @@ function ProposalView() {
     const designerName = 'Design Team';
 
     // Get the pricing model used for this proposal
-    const priceModel = mergedProposal.pricingModelName || 'No Pricing Model';
-    const isPriceModelActive = mergedProposal.pricingModelIsDefault ?? false;
-    const isPriceModelRemoved = (mergedProposal.pricingModelName || '').toLowerCase().includes('removed');
-    const priceModelStatus = isPriceModelRemoved ? 'removed' : isPriceModelActive ? 'active' : 'inactive';
+      const priceModel = mergedProposal.pricingModelName || 'No Pricing Model';
+      const isPriceModelActive = mergedProposal.pricingModelIsDefault ?? false;
+      const isPriceModelRemoved = (mergedProposal.pricingModelName || '').toLowerCase().includes('removed');
+      const priceModelStatus = isPriceModelRemoved ? 'removed' : isPriceModelActive ? 'active' : 'inactive';
+      const hasRetiredEquipmentSelections = hasRetiredEquipment(mergedProposal.equipment);
 
     const poolTypeLabel =
       mergedProposal.poolSpecs.poolType === 'gunite'
@@ -656,6 +941,7 @@ function ProposalView() {
     const endDepth = formatNumber(mergedProposal.poolSpecs.endDepth, 'ft');
     const spaLength = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft') : 'No Spa';
     const spaWidth = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft') : 'No Spa';
+    const equipmentSummary = buildEquipmentSummary(mergedProposal.equipment);
 
     const tileLaborItems = costBreakdownForDisplay?.tileLabor || [];
     const tileMaterialItems = costBreakdownForDisplay?.tileMaterial || [];
@@ -828,11 +1114,12 @@ function ProposalView() {
       proposalStatus,
       dateModified,
       designerName,
-      priceModel,
-      isPriceModelActive,
-      isPriceModelRemoved,
-      priceModelStatus,
-      poolTypeLabel,
+        priceModel,
+        isPriceModelActive,
+        isPriceModelRemoved,
+        priceModelStatus,
+        hasRetiredEquipment: hasRetiredEquipmentSelections,
+        poolTypeLabel,
       approximateGallons,
       maxWidth,
       maxLength,
@@ -840,6 +1127,7 @@ function ProposalView() {
       endDepth,
       spaLength,
       spaWidth,
+      ...equipmentSummary,
       costLineItems,
       preOverheadCostLineItems,
     };
@@ -896,39 +1184,8 @@ function ProposalView() {
   const preCogsModalView = preCogsBreakdownVersionId
     ? versionMap.get(preCogsBreakdownVersionId) || primaryView
     : null;
-  const warrantyModalView = warrantyBreakdownVersionId
-    ? versionMap.get(warrantyBreakdownVersionId) || primaryView
-    : null;
   const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
   const hasMultipleVersions = viewModels.length > 1;
-  type ExportTarget = {
-    selection: BreakdownSelection;
-    versionId: string;
-    breakdownLabel: string;
-    versionLabel: string;
-    view: ReturnType<typeof buildViewModel>;
-  };
-
-  const buildExportTargets = (selections: BreakdownSelection[]): ExportTarget[] => {
-    const uniqueKeys = new Set<string>();
-    return selections.reduce<ExportTarget[]>((acc, selection) => {
-      const key = `${selection.versionId}-${selection.type}`;
-      if (uniqueKeys.has(key)) return acc;
-      uniqueKeys.add(key);
-      const view = versionMap.get(selection.versionId) || primaryView;
-      if (!view) return acc;
-      acc.push({
-        selection,
-        versionId: selection.versionId,
-        breakdownLabel: breakdownLabels[selection.type],
-        versionLabel: getDisplayVersionLabel(view.proposal),
-        view,
-      });
-      return acc;
-    }, []);
-  };
-
-  const exportTargets = buildExportTargets(exportSelections);
 
   const categoryTotal = (items: CostLineItem[] = []): number =>
     items.reduce((sum, item) => sum + (item.total ?? 0), 0);
@@ -1119,247 +1376,42 @@ function ProposalView() {
     );
   };
 
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const prepareSelectionsForExport = (): BreakdownSelection[] | null => {
-    if (!selectedBreakdowns.length) {
-      showToast({ type: 'info', message: 'Select a Breakdown (or multiple) to Export first' });
-      return null;
-    }
-    return [...selectedBreakdowns];
-  };
-
-  const performPdfExport = async (selectionsForExport: BreakdownSelection[]) => {
-    try {
-      const targetsToRender = buildExportTargets(selectionsForExport);
-      if (!targetsToRender.length) {
-        showToast({ type: 'error', message: 'No breakdown data available to export.' });
-        return;
-      }
-      if (!exportContainerRef.current) {
-        showToast({ type: 'error', message: 'Unable to prepare export content.' });
-        return;
-      }
-
-      await wait(150);
-
-      const pages = Array.from(
-        exportContainerRef.current.querySelectorAll('.export-breakdown-page')
-      ) as HTMLElement[];
-
-      if (!pages.length) {
-        showToast({ type: 'error', message: 'Unable to prepare export content.' });
-        return;
-      }
-
-      const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'letter' });
-      for (let i = 0; i < pages.length; i += 1) {
-        const canvas = await html2canvas(pages[i], {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-        });
-        const imgData = canvas.toDataURL('image/png');
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-        const imgWidth = canvas.width * ratio;
-        const imgHeight = canvas.height * ratio;
-        const marginX = (pageWidth - imgWidth) / 2;
-        const marginY = (pageHeight - imgHeight) / 2;
-        if (i > 0) {
-          pdf.addPage();
-        }
-        pdf.addImage(imgData, 'PNG', marginX, marginY, imgWidth, imgHeight);
-      }
-
-      const customerName = (proposal?.customerInfo.customerName || 'Proposal')
-        .replace(/[^a-z0-9\\-_ ]/gi, '')
-        .trim() || 'Proposal';
-      const today = new Date();
-      const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-        today.getDate()
-      ).padStart(2, '0')}`;
-      const fileName = `${customerName} ${formattedDate}.pdf`;
-      pdf.save(fileName);
-      showToast({ type: 'success', message: 'PDF ready to save.' });
-    } catch (error) {
-      console.error('Failed to export PDF', error);
-      showToast({ type: 'error', message: 'Could not generate PDF export.' });
-    } finally {
-      setIsExporting(false);
-      setExportMode(null);
-      setExportSelections([]);
-    }
-  };
-
-  const handleExportClick = () => {
-    if (!selectedBreakdowns.length) {
-      showToast({ type: 'info', message: 'Select a Breakdown (or multiple) to Export first' });
-      setExportSelections([]);
-      setExportMode(null);
-      return;
-    }
-    setExportOptionsOpen((prev) => !prev);
-  };
-
-  const handlePrintSelected = async () => {
-    const selectionsForExport = prepareSelectionsForExport();
-    if (!selectionsForExport) return;
-    setExportSelections(selectionsForExport);
-    setExportMode('print');
-    setIsExporting(true);
-    setExportOptionsOpen(false);
-    document.body.classList.add('breakdown-print-mode');
-    await wait(150);
-    window.print();
-  };
-
-  const handlePdfSelected = async () => {
-    const selectionsForExport = prepareSelectionsForExport();
-    if (!selectionsForExport) return;
-    setExportSelections(selectionsForExport);
-    setExportMode('pdf');
-    setIsExporting(true);
-    setExportOptionsOpen(false);
-    await wait(150);
-    await performPdfExport(selectionsForExport);
-  };
-
   const renderTiles = (vm: ReturnType<typeof buildViewModel>) => {
     const versionId = vm.proposal.versionId || 'original';
-    const renderSelectionToggle = (type: BreakdownType) => {
-      const selected = isBreakdownSelected(versionId, type);
-      return (
-        <span
-          className={`tile-select-toggle ${selected ? 'selected' : ''}`}
-          role="checkbox"
-          aria-checked={selected}
-          aria-label={`Select ${breakdownLabels[type]} for export`}
-          onClick={(e) => toggleBreakdownSelection(e, versionId, type)}
-        >
-          <span className="tile-select-dot" />
-        </span>
-      );
-    };
-    const tileSelectionClass = (type: BreakdownType) => (isBreakdownSelected(versionId, type) ? 'selected' : '');
     const contractTypeLabel = getContractTypeLabel(vm.proposal);
     return (
       <div className="tiles-grid">
-        {canViewFullSummary && (
-          <>
-            <button className={`summary-tile customer-tile ${tileSelectionClass('customer')}`} type="button" onClick={() => setCustomerBreakdownVersionId(versionId)}>
-              {renderSelectionToggle('customer')}
-              <div className="tile-header">
-                <div className="tile-icon customer-icon">
-                  <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
-                </div>
-                <div className="tile-header-text">
-                  <p className="tile-title">Customer<br/>Breakdown</p>
-                </div>
-              </div>
-              <div className="tile-content-box">
-                <div className="tile-metrics">
-                  <div className="metric-row">
-                    <p className="metric-label">Retail Price:</p>
-                    <p className="metric-value">{formatCurrency(vm.retailPriceBeforeDiscounts)}</p>
-                  </div>
-                  <div className="metric-divider"></div>
-                  <div className="metric-row">
-                    <p className="metric-label">Retail Sale Price:</p>
-                    <p className="metric-value">{formatCurrency(vm.retailSalePrice)}</p>
-                  </div>
-                  <div className="metric-divider"></div>
-                  <div className="metric-row">
-                    <p className="metric-label">Total Savings:</p>
-                    <p className="metric-value">{formatCurrency(vm.totalSavings)}</p>
-                  </div>
-                  <div className="metric-divider"></div>
-                  <div className="metric-row">
-                    <p className="metric-label">Total Savings %:</p>
-                    <p className="metric-value">
-                      {Number.isFinite(vm.totalSavingsPercent) ? `${vm.totalSavingsPercent.toFixed(1)}%` : 'N/A'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <span className="tile-link">
-                View Detailed Breakdown
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </span>
-            </button>
-
-            <button className={`summary-tile cogs-tile ${tileSelectionClass('cogs')}`} type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
-              {renderSelectionToggle('cogs')}
-              <div className="tile-header">
-                <div className="tile-icon cogs-icon">
-                  <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
-                </div>
-                <div className="tile-header-text">
-                  <p className="tile-title">COGS Cost<br/>Breakdown</p>
-                </div>
-              </div>
-              <div className="tile-content-box">
-                <div className="tile-metrics">
-                  <div className="metric-row">
-                    <p className="metric-label">Dig Commission:</p>
-                    <p className="metric-value">{formatCurrency(vm.pricing?.digCommission ?? 0)}</p>
-                  </div>
-                  <div className="metric-divider"></div>
-                  <div className="metric-row">
-                    <p className="metric-label">Admin Fee:</p>
-                    <p className="metric-value">{formatCurrency(vm.pricing?.adminFee ?? 0)}</p>
-                  </div>
-                  <div className="metric-divider"></div>
-                  <div className="metric-row">
-                    <p className="metric-label">Closeout Commission:</p>
-                    <p className="metric-value">{formatCurrency(vm.pricing?.closeoutCommission ?? 0)}</p>
-                  </div>
-                  <div className="metric-divider"></div>
-                  <div className="metric-row">
-                    <p className="metric-label">Gross Profit:</p>
-                    <p className="metric-value">
-                      {formatCurrency(vm.pricing?.grossProfit ?? 0)} ({Number.isFinite(vm.grossMargin) ? `${vm.grossMargin.toFixed(1)}%` : 'N/A'})
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <span className="tile-link">
-                View Detailed Breakdown
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </span>
-            </button>
-
-          </>
-        )}
-
-        <button className={`summary-tile warranty-tile ${tileSelectionClass('warranty')}`} type="button" onClick={() => setWarrantyBreakdownVersionId(versionId)}>
-          {renderSelectionToggle('warranty')}
+        <button className="summary-tile customer-tile" type="button" onClick={() => setCustomerBreakdownVersionId(versionId)}>
           <div className="tile-header">
-            <div className="tile-icon warranty-icon">
-              <svg width="32" height="32" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10 2L3 5v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V5l-7-3z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M7 10l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+            <div className="tile-icon customer-icon">
+              <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
             </div>
             <div className="tile-header-text">
-              <p className="tile-title">Warranty<br/>Breakdown</p>
+              <p className="tile-title">Customer Cost &amp;<br/>Warranty Breakdown</p>
             </div>
           </div>
           <div className="tile-content-box">
             <div className="tile-metrics">
               <div className="metric-row">
-                <p className="metric-label">Coverage:</p>
-                <p className="metric-value">Premier Advantage</p>
+                <p className="metric-label">Retail Price:</p>
+                <p className="metric-value">{formatCurrency(vm.retailPriceBeforeDiscounts)}</p>
               </div>
               <div className="metric-divider"></div>
               <div className="metric-row">
-                <p className="metric-label">Status:</p>
-                <p className="metric-value">Active</p>
+                <p className="metric-label">Retail Sale Price:</p>
+                <p className="metric-value">{formatCurrency(vm.retailSalePrice)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Total Savings:</p>
+                <p className="metric-value">{formatCurrency(vm.totalSavings)}</p>
+              </div>
+              <div className="metric-divider"></div>
+              <div className="metric-row">
+                <p className="metric-label">Total Savings %:</p>
+                <p className="metric-value">
+                  {Number.isFinite(vm.totalSavingsPercent) ? `${vm.totalSavingsPercent.toFixed(1)}%` : 'N/A'}
+                </p>
               </div>
             </div>
           </div>
@@ -1370,6 +1422,50 @@ function ProposalView() {
             </svg>
           </span>
         </button>
+
+        {canViewFullSummary && (
+          <button className="summary-tile cogs-tile" type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
+            <div className="tile-header">
+              <div className="tile-icon cogs-icon">
+                <img src={cogsBreakIconImg} alt="COGS breakdown icon" className="cogs-break-icon" />
+              </div>
+              <div className="tile-header-text">
+                <p className="tile-title">COGS Cost<br/>Breakdown</p>
+              </div>
+            </div>
+            <div className="tile-content-box">
+              <div className="tile-metrics">
+                <div className="metric-row">
+                  <p className="metric-label">Dig Commission:</p>
+                  <p className="metric-value">{formatCurrency(vm.pricing?.digCommission ?? 0)}</p>
+                </div>
+                <div className="metric-divider"></div>
+                <div className="metric-row">
+                  <p className="metric-label">Admin Fee:</p>
+                  <p className="metric-value">{formatCurrency(vm.pricing?.adminFee ?? 0)}</p>
+                </div>
+                <div className="metric-divider"></div>
+                <div className="metric-row">
+                  <p className="metric-label">Closeout Commission:</p>
+                  <p className="metric-value">{formatCurrency(vm.pricing?.closeoutCommission ?? 0)}</p>
+                </div>
+                <div className="metric-divider"></div>
+                <div className="metric-row">
+                  <p className="metric-label">Gross Profit:</p>
+                  <p className="metric-value">
+                    {formatCurrency(vm.pricing?.grossProfit ?? 0)} ({Number.isFinite(vm.grossMargin) ? `${vm.grossMargin.toFixed(1)}%` : 'N/A'})
+                  </p>
+                </div>
+              </div>
+            </div>
+            <span className="tile-link">
+              View Detailed Breakdown
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
+          </button>
+        )}
 
         <button className="summary-tile contract-tile" type="button" onClick={() => setContractVersionId(versionId)}>
           <div className="tile-header">
@@ -1413,151 +1509,6 @@ function ProposalView() {
     );
   };
 
-  const renderExportBreakdownPage = (target: ExportTarget, index: number) => {
-    const { view, selection, breakdownLabel, versionLabel } = target;
-    const customerName = view.proposal.customerInfo.customerName || 'Proposal';
-    const cogsCategories =
-      selection.type === 'pre'
-        ? view.preOverheadCostLineItems
-        : selection.type === 'cogs'
-        ? view.costLineItems
-        : [];
-    const cogsFooter =
-      selection.type === 'pre'
-        ? `TOTAL COGS (No 1% Overhead): ${formatCurrency(view.totalCOGSWithoutOverhead)}`
-        : `Total COGS: ${formatCurrency(view.totalCOGS)}`;
-    const breakdownId = `${selection.type}-${versionLabel}-${index}`;
-
-    const renderCogsCard = (
-      category: { name: string; items: CostLineItem[]; subcategories?: { name: string; items: CostLineItem[] }[] }
-    ) => (
-      <div className={`cogs-category-card ${getCategoryClassName(category.name)}`} key={`${breakdownId}-${category.name}`}>
-        <div className="cogs-category-card-header">
-          <div className="cogs-category-icon">
-            {getCategoryIcon(category.name)}
-          </div>
-          <div className="cogs-category-title-wrapper">
-            <h3 className="cogs-category-title">{category.name}</h3>
-            <div className="cogs-category-total">{formatCurrency(categoryTotal(category.items))}</div>
-          </div>
-        </div>
-
-        {category.subcategories && category.subcategories.length > 0 ? (
-          <div className="cogs-subcategories">
-            {category.subcategories.map((subcategory) => (
-              <div key={`${category.name}-${subcategory.name}`} className="cogs-subcategory">
-                <div className="cogs-subcategory-header">
-                  <span className="cogs-subcategory-name">{subcategory.name}</span>
-                  <span className="cogs-subcategory-total">
-                    {formatCurrency(categoryTotal(subcategory.items))}
-                  </span>
-                </div>
-                <table className="cogs-category-table">
-                  <colgroup>
-                    <col style={{ width: '40%' }} />
-                    <col style={{ width: '10%' }} />
-                    <col style={{ width: '25%' }} />
-                    <col style={{ width: '25%' }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Description</th>
-                      <th>Qty</th>
-                      <th>Unit Price</th>
-                      <th>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {subcategory.items.map((item, idx) => (
-                      <tr key={`${category.name}-${subcategory.name}-${idx}`}>
-                        <td>{item.description}</td>
-                        <td>{renderQuantity(item)}</td>
-                        <td>{renderUnitPrice(item)}</td>
-                        <td>{formatCurrency(item.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <table className="cogs-category-table">
-            <colgroup>
-              <col style={{ width: '40%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '25%' }} />
-              <col style={{ width: '25%' }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th>Qty</th>
-                <th>Unit Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {category.items.map((item, idx) => (
-                <tr key={`${category.name}-${idx}`}>
-                  <td>{item.description}</td>
-                  <td>{renderQuantity(item)}</td>
-                  <td>{renderUnitPrice(item)}</td>
-                  <td>{formatCurrency(item.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    );
-
-    return (
-      <section
-        key={breakdownId}
-        className="export-breakdown-page"
-        data-breakdown-type={selection.type}
-        aria-label={`${breakdownLabel} for ${customerName}`}
-      >
-        {selection.type === 'customer' && (
-          <div className="export-body">
-            <CostBreakdownView
-              costBreakdown={view.costBreakdownForDisplay}
-              customerName={customerName}
-              proposal={view.proposal}
-              pricing={view.pricing}
-              showWarranty={false}
-              showZoomControl={false}
-            />
-          </div>
-        )}
-
-        {selection.type === 'warranty' && (
-          <div className="export-body">
-            <SubmergeAdvantageWarranty proposal={view.proposal} />
-          </div>
-        )}
-
-        {(selection.type === 'cogs' || selection.type === 'pre') && (
-          <div className="export-body">
-            {cogsCategories.length === 0 ? (
-              <div className="empty-state export-empty">No cost breakdown available for this proposal.</div>
-            ) : (
-              <div className="cogs-categories-grid">
-                {cogsCategories.map((category) => renderCogsCard(category))}
-              </div>
-            )}
-            {cogsCategories.length > 0 && (
-              <div className="cogs-footer export-footer">
-                <div className="cogs-footer-text">{cogsFooter}</div>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-    );
-  };
-
   const renderVersionSection = (vm: ReturnType<typeof buildViewModel>, index: number) => {
     const versionId = vm.proposal.versionId || `version-${index}`;
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
@@ -1585,6 +1536,7 @@ function ProposalView() {
                 <span className={`version-pill ${isActive ? 'active' : 'inactive'}`}>
                   {versionLabel}
                 </span>
+                {vm.hasRetiredEquipment && <RetiredEquipmentIndicator />}
               </h2>
             </div>
             <div
@@ -1607,11 +1559,21 @@ function ProposalView() {
               {vm.priceModel}{vm.priceModelStatus === 'active' ? ' (Active)' : ''}
             </div>
             <div className="hero-actions">
-              <button className="action-button" onClick={() => handleEdit(vm.proposal)}>
+              <button
+                className="action-button"
+                onClick={() => handleEdit(vm.proposal)}
+                disabled={!canEditProposal}
+                title={editDisabledReason}
+              >
                 Edit Proposal
               </button>
               {!isOriginal && (
-                <button className="action-button danger" onClick={() => handleDeleteVersion(versionId)}>
+                <button
+                  className="action-button danger"
+                  onClick={() => handleDeleteVersion(versionId)}
+                  disabled={!canEditProposal}
+                  title={editDisabledReason}
+                >
                   Delete Version
                 </button>
               )}
@@ -1619,37 +1581,79 @@ function ProposalView() {
           </div>
 
           <div className="hero-grid">
-            <div className="hero-line">
-              <span className="hero-label">Pool Type:</span>
-              <span>{vm.poolTypeLabel}</span>
+            <p className="hero-section-title hero-section-title-specs">Pool Specifications</p>
+            <p className="hero-section-title hero-section-title-equipment">Pool Equipment</p>
+            <div className="hero-column">
+              <div className="hero-line">
+                <span className="hero-label">Pool Type:</span>
+                <span>{vm.poolTypeLabel}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Max Width:</span>
+                <span>{vm.maxWidth}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Shallow Depth:</span>
+                <span>{vm.shallowDepth}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Spa Length:</span>
+                <span>{vm.spaLength}</span>
+              </div>
             </div>
-            <div className="hero-line">
-              <span className="hero-label">Approximate Gallons:</span>
-              <span>{vm.approximateGallons}</span>
+            <div className="hero-column">
+              <div className="hero-line">
+                <span className="hero-label">Approx. Gallons:</span>
+                <span>{vm.approximateGallons}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Max Length:</span>
+                <span>{vm.maxLength}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">End Depth:</span>
+                <span>{vm.endDepth}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Spa Width:</span>
+                <span>{vm.spaWidth}</span>
+              </div>
             </div>
-            <div className="hero-line">
-              <span className="hero-label">Max Width:</span>
-              <span>{vm.maxWidth}</span>
+            <div className="hero-column">
+              <div className="hero-line">
+                <span className="hero-label">Pump:</span>
+                <span>{vm.pumpSummary}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Filter:</span>
+                <span>{vm.filterSummary}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Heater:</span>
+                <span>{vm.heaterSummary}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Cleaner:</span>
+                <span>{vm.cleanerSummary}</span>
+              </div>
             </div>
-            <div className="hero-line">
-              <span className="hero-label">Max Length:</span>
-              <span>{vm.maxLength}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Shallow Depth:</span>
-              <span>{vm.shallowDepth}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">End Depth:</span>
-              <span>{vm.endDepth}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Spa Length:</span>
-              <span>{vm.spaLength}</span>
-            </div>
-            <div className="hero-line">
-              <span className="hero-label">Spa Width:</span>
-              <span>{vm.spaWidth}</span>
+            <div className="hero-column">
+              <div className="hero-line">
+                <span className="hero-label">Automation:</span>
+                <span>{vm.automationSummary}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Sanitation:</span>
+                <span>{vm.sanitationSummary}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Autofil:</span>
+                <span>{vm.autoFillSummary}</span>
+              </div>
+              <div className="hero-line">
+                <span className="hero-label">Pool Light:</span>
+                <span>{vm.poolLightSummary}</span>
+              </div>
             </div>
           </div>
 
@@ -1684,6 +1688,8 @@ function ProposalView() {
                   id="active-version"
                   value={activeVersionId}
                   onChange={(e) => handleSetActiveVersion(e.target.value)}
+                  disabled={!canEditProposal}
+                  title={editDisabledReason}
                 >
                   {viewModels.map((vm) => (
                     <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
@@ -1695,51 +1701,23 @@ function ProposalView() {
             )}
           </div>
           <div className="action-bar-right">
-            <button className="action-button" onClick={handleBuildAnotherVersion}>
+            <button
+              className="action-button"
+              onClick={handleBuildAnotherVersion}
+              disabled={!canEditProposal}
+              title={editDisabledReason}
+            >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
               Build Another Version
             </button>
-            <div className="export-control" ref={exportControlRef}>
-              <button
-                className={`action-button export-button ${selectedBreakdowns.length ? 'has-selection' : ''} ${exportOptionsOpen ? 'open' : ''}`}
-                onClick={handleExportClick}
-                disabled={isExporting}
-                type="button"
-                aria-expanded={exportOptionsOpen}
-                aria-haspopup="listbox"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                  <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-                Export
-              </button>
-              {exportOptionsOpen && (
-                <div className="export-dropdown" role="listbox">
-                  <button
-                    type="button"
-                    className="export-option"
-                    role="option"
-                    onClick={handlePrintSelected}
-                    disabled={isExporting}
-                  >
-                    Print
-                  </button>
-                  <button
-                    type="button"
-                    className="export-option"
-                    role="option"
-                    onClick={handlePdfSelected}
-                    disabled={isExporting}
-                  >
-                    PDF
-                  </button>
-                </div>
-              )}
-            </div>
-            <button className="action-button" onClick={handleSaveAsDraft} disabled={loading}>
+            <button
+              className="action-button"
+              onClick={handleSaveAsDraft}
+              disabled={!canEditProposal || loading}
+              title={!canEditProposal ? editDisabledReason : undefined}
+            >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
                 <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -1749,8 +1727,14 @@ function ProposalView() {
             <button
               className="action-button primary"
               onClick={handleSubmitProposal}
-              disabled={loading || !canSubmitProposal}
-              title={!canSubmitProposal ? 'Must include Customer Name' : undefined}
+              disabled={!canEditProposal || loading || !canSubmitProposal}
+              title={
+                !canEditProposal
+                  ? editDisabledReason
+                  : !canSubmitProposal
+                  ? 'Must include Customer Name'
+                  : undefined
+              }
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1766,15 +1750,6 @@ function ProposalView() {
         <h1 className="page-title">Proposal Summary</h1>
         {viewModels.map((vm, index) => renderVersionSection(vm, index))}
       </div>
-      {exportTargets.length > 0 && (
-        <div
-          ref={exportContainerRef}
-          className={`export-print-area ${exportMode ? 'print-mode' : ''}`}
-          aria-hidden="true"
-        >
-          {exportTargets.map((target, idx) => renderExportBreakdownPage(target, idx))}
-        </div>
-      )}
       {showVersionNameModal && (
         <div className="modal-overlay" onClick={() => setShowVersionNameModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1803,6 +1778,43 @@ function ProposalView() {
               <div className="version-name-actions">
                 <button className="action-button" onClick={() => setShowVersionNameModal(false)}>Cancel</button>
                 <button className="action-button primary" onClick={handleConfirmCreateVersion}>Create</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {breakdownSaveDialogOpen && (
+        <div className="modal-overlay modal-overlay-top" onClick={() => setBreakdownSaveDialogOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <p className="modal-eyebrow">Export Breakdown</p>
+                <h2>Save breakdown PDF</h2>
+              </div>
+              <button className="modal-close" onClick={() => setBreakdownSaveDialogOpen(false)} aria-label="Close export dialog">
+                x
+              </button>
+            </div>
+            <div className="modal-body-scroll">
+              <label className="version-name-label">
+                File name
+                <input
+                  type="text"
+                  value={breakdownSaveName}
+                  onChange={(e) => {
+                    setBreakdownSaveName(e.target.value);
+                    setBreakdownSaveError(null);
+                  }}
+                  className="version-name-input"
+                  autoFocus
+                />
+              </label>
+              {breakdownSaveError && <div className="version-name-error">{breakdownSaveError}</div>}
+              <div className="version-name-actions">
+                <button className="action-button" onClick={() => setBreakdownSaveDialogOpen(false)}>Cancel</button>
+                <button className="action-button primary" onClick={handleBreakdownSaveConfirm} disabled={breakdownExporting}>
+                  {breakdownExporting ? 'Saving...' : 'Save PDF'}
+                </button>
               </div>
             </div>
           </div>
@@ -1861,7 +1873,8 @@ function ProposalView() {
                   className="action-button primary"
                   type="button"
                   onClick={handleContractSaveClick}
-                  disabled={!contractDirty || contractSaving}
+                  disabled={!canEditProposal || !contractDirty || contractSaving}
+                  title={!canEditProposal ? editDisabledReason : undefined}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 2h8l2 2v10H3V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
@@ -1881,6 +1894,7 @@ function ProposalView() {
                 proposal={contractModalView.proposal}
                 overrides={contractModalView.proposal.contractOverrides || {}}
                 onSave={(next) => handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)}
+                readOnly={!canEditProposal}
                 onDirtyChange={setContractDirty}
                 onExportingChange={setContractExporting}
                 onSavingChange={setContractSaving}
@@ -1890,29 +1904,107 @@ function ProposalView() {
         </div>
       )}
       {customerBreakdownVersionId && customerModalView && (
-        <div className="modal-overlay" onClick={() => setCustomerBreakdownVersionId(null)}>
-          <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <p className="modal-eyebrow">Customer Breakdown</p>
-                <h2>Job Cost Summary</h2>
+        <>
+          <div className="modal-overlay" onClick={() => setCustomerBreakdownVersionId(null)}>
+            <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div>
+                  <p className="modal-eyebrow">Customer Cost and Warranty Breakdown</p>
+                  <h2>Job Cost Summary &amp; Warranty</h2>
+                </div>
+                <div className="breakdown-header-actions">
+                  <div className="export-control" ref={breakdownExportControlRef}>
+                    <button
+                      className={`action-button export-button ${breakdownExportOpen ? 'open' : ''}`}
+                      type="button"
+                      onClick={handleBreakdownExportToggle}
+                      disabled={breakdownExporting}
+                      aria-expanded={breakdownExportOpen}
+                      aria-haspopup="listbox"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                        <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                      Export
+                    </button>
+                    {breakdownExportOpen && (
+                      <div className="export-dropdown" role="listbox">
+                        <button
+                          type="button"
+                          className="export-option"
+                          role="option"
+                          onClick={openBreakdownSaveDialog}
+                          disabled={breakdownExporting}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="export-option"
+                          role="option"
+                          onClick={handleBreakdownPrint}
+                          disabled={breakdownExporting}
+                        >
+                          Print
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <button className="modal-close" onClick={() => setCustomerBreakdownVersionId(null)} aria-label="Close customer cost and warranty breakdown">
+                    x
+                  </button>
+                </div>
               </div>
-              <button className="modal-close" onClick={() => setCustomerBreakdownVersionId(null)} aria-label="Close customer breakdown">
-                x
-              </button>
-            </div>
-            <div className="modal-body-scroll">
-              <CostBreakdownView
-                costBreakdown={customerModalView.costBreakdownForDisplay}
-                customerName={customerModalView.proposal.customerInfo.customerName}
-                proposal={customerModalView.proposal}
-                pricing={customerModalView.pricing}
-                showWarranty={false}
-                showZoomControl={false}
-              />
+              <div className="modal-body-scroll">
+                <CostBreakdownView
+                  costBreakdown={customerModalView.costBreakdownForDisplay}
+                  customerName={customerModalView.proposal.customerInfo.customerName}
+                  proposal={customerModalView.proposal}
+                  pricing={customerModalView.pricing}
+                  allowRetailAdjustments={canEditProposal}
+                  onRetailAdjustmentsChange={
+                    canEditProposal
+                      ? (adjustments) =>
+                          handleRetailAdjustmentsChange(
+                            customerModalView.proposal.versionId || 'original',
+                            adjustments
+                          )
+                      : undefined
+                  }
+                  showWarranty
+                  showZoomControl={false}
+                />
+              </div>
             </div>
           </div>
-        </div>
+          <div
+            className={`export-print-area ${breakdownExportActive ? 'print-mode' : ''}`}
+            ref={breakdownExportAreaRef}
+          >
+            <div
+              className="export-breakdown-page export-breakdown-page--cost"
+              ref={breakdownCostPageWrapperRef}
+            >
+              <div ref={breakdownCostPageRef}>
+                <BreakdownCostExportPage
+                  costBreakdown={customerModalView.costBreakdownForDisplay}
+                  customerName={customerModalView.proposal.customerInfo.customerName}
+                  proposal={customerModalView.proposal}
+                  pricing={customerModalView.pricing}
+                />
+              </div>
+            </div>
+            <div
+              className="export-breakdown-page export-breakdown-page--warranty"
+              ref={breakdownWarrantyPageWrapperRef}
+            >
+              <div ref={breakdownWarrantyPageRef}>
+                <BreakdownWarrantyExportPage proposal={customerModalView.proposal} />
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {cogsBreakdownVersionId && cogsModalView && (
@@ -2243,24 +2335,6 @@ function ProposalView() {
         </div>
       )}
 
-      {warrantyBreakdownVersionId && warrantyModalView && (
-        <div className="modal-overlay" onClick={() => setWarrantyBreakdownVersionId(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <p className="modal-eyebrow">Warranty Breakdown</p>
-                <h2>Warranty & Inclusions</h2>
-              </div>
-              <button className="modal-close" onClick={() => setWarrantyBreakdownVersionId(null)} aria-label="Close warranty breakdown">
-                x
-              </button>
-            </div>
-            <div className="modal-body-scroll">
-              <SubmergeAdvantageWarranty proposal={warrantyModalView.proposal} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

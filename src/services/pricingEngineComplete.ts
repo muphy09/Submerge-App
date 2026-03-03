@@ -356,7 +356,12 @@ export class TileCopingDeckingCalculations {
     }
 
     const copingSize = tileCopingDecking.copingSize ?? '12x12';
-    if (copingSize === '16x16') {
+    const copingSizeAdjustments: Record<string, { label: string; rate: number }> = {
+      '16x16': { label: '16x16 coping', rate: 0.33 },
+      '12x24': { label: '12x24', rate: 1 },
+    };
+    const copingSizeAdjustment = copingSizeAdjustments[copingSize];
+    if (copingSizeAdjustment) {
       const roundCurrency = (value: number) => Math.round(value * 100) / 100;
       const laborSubtotal = laborItems
         .filter(item => item.category === 'Coping Labor')
@@ -364,12 +369,12 @@ export class TileCopingDeckingCalculations {
       const materialSubtotal = materialItems
         .filter(item => item.category === 'Coping Material')
         .reduce((sum, item) => sum + item.total, 0);
-      const laborIncrease = roundCurrency(laborSubtotal * 0.33);
-      const materialIncrease = roundCurrency(materialSubtotal * 0.33);
+      const laborIncrease = roundCurrency(laborSubtotal * copingSizeAdjustment.rate);
+      const materialIncrease = roundCurrency(materialSubtotal * copingSizeAdjustment.rate);
       if (laborIncrease > 0) {
         laborItems.push({
           category: 'Coping Labor',
-          description: '16x16 coping',
+          description: copingSizeAdjustment.label,
           unitPrice: laborIncrease,
           quantity: 1,
           total: laborIncrease,
@@ -378,7 +383,7 @@ export class TileCopingDeckingCalculations {
       if (materialIncrease > 0) {
         materialItems.push({
           category: 'Coping Material',
-          description: '16x16 coping',
+          description: copingSizeAdjustment.label,
           unitPrice: materialIncrease,
           quantity: 1,
           total: materialIncrease,

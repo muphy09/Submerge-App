@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('electron', {
   getFinishRates: () => ipcRenderer.invoke('get-finish-rates'),
   getDrainageRates: () => ipcRenderer.invoke('get-drainage-rates'),
 
+  // Export
+  exportBreakdownPdf: (payload) => ipcRenderer.invoke('export-breakdown-pdf', payload),
+
   // Franchise + pricing
   listFranchises: () => ipcRenderer.invoke('list-franchises'),
   upsertFranchise: (franchise) => ipcRenderer.invoke('upsert-franchise', franchise),

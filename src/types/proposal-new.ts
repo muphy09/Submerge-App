@@ -198,7 +198,7 @@ export type CopingType =
   | 'travertine-level2'
   | 'concrete';
 export type DeckingType = 'none' | 'paver' | 'travertine-level1' | 'travertine-level2' | 'concrete';
-export type CopingSize = '12x12' | '16x16';
+export type CopingSize = '12x12' | '12x24' | '16x16';
 
 export interface TileCopingDecking {
   // Tile
@@ -557,6 +557,11 @@ export interface ManualAdjustments {
   negative2: number;
 }
 
+export interface RetailAdjustment {
+  name: string;
+  amount: number;
+}
+
 // ============================================================================
 // PRICING & PROFIT CALCULATIONS
 // ============================================================================
@@ -588,6 +593,7 @@ export interface PricingCalculations {
 
   // Designer adjustments applied to retail price
   manualAdjustmentsTotal?: number;
+  retailAdjustmentsTotal?: number;
 }
 
 // ============================================================================
@@ -640,6 +646,7 @@ export interface Proposal {
 
   // Designer retail adjustments
   manualAdjustments?: ManualAdjustments;
+  retailAdjustments?: RetailAdjustment[];
 
   // Pricing & Profit Calculations (NEW - matching Excel)
   pricing: PricingCalculations;

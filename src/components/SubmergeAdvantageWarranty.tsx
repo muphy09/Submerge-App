@@ -5,13 +5,13 @@ import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import './SubmergeAdvantageWarranty.css';
 import { getLightCounts } from '../utils/lighting';
 
-interface WarrantyItem {
+export interface WarrantyItem {
   label: string;
   detail?: string;
   advantage?: string;
 }
 
-interface WarrantySection {
+export interface WarrantySection {
   title: string;
   icon: SectionIconKey;
   items: WarrantyItem[];
@@ -234,7 +234,7 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
   return items;
 };
 
-const buildWarrantySections = (
+export const buildWarrantySections = (
   proposal?: Partial<Proposal>,
   brandName: string = 'Submerge'
 ): WarrantySection[] => {

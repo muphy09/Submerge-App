@@ -11,7 +11,16 @@ export type UserSession = {
   passwordResetRequired?: boolean;
 };
 
+export type MasterImpersonation = {
+  franchiseId: string;
+  franchiseName?: string;
+  franchiseCode?: string;
+  actingRole?: UserRole;
+  startedAt?: string;
+};
+
 export const SESSION_STORAGE_KEY = 'submerge-user-session';
+export const MASTER_IMPERSONATION_KEY = 'submerge-master-impersonation';
 export const DEFAULT_FRANCHISE_ID = 'default';
 
 export function readSession(): UserSession | null {
@@ -35,6 +44,40 @@ export function clearSession() {
   localStorage.removeItem(SESSION_STORAGE_KEY);
 }
 
+export function readMasterImpersonation(): MasterImpersonation | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(MASTER_IMPERSONATION_KEY);
+    const parsed = raw ? (JSON.parse(raw) as MasterImpersonation) : null;
+    if (!parsed?.franchiseId) return null;
+    return parsed;
+  } catch (error) {
+    console.warn('Unable to read master impersonation:', error);
+    return null;
+  }
+}
+
+export function saveMasterImpersonation(impersonation: MasterImpersonation) {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(MASTER_IMPERSONATION_KEY, JSON.stringify(impersonation));
+}
+
+export function clearMasterImpersonation() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(MASTER_IMPERSONATION_KEY);
+}
+
+export function getActiveMasterImpersonation(): MasterImpersonation | null {
+  const session = readSession();
+  const role = (session?.role || '').toLowerCase();
+  if (role !== 'master') return null;
+  return readMasterImpersonation();
+}
+
+export function isMasterImpersonating(): boolean {
+  return Boolean(getActiveMasterImpersonation());
+}
+
 export function updateSession(partial: Partial<UserSession>): UserSession | null {
   const current = readSession() || {};
   const next = { ...current, ...partial };
@@ -43,7 +86,12 @@ export function updateSession(partial: Partial<UserSession>): UserSession | null
 }
 
 export function getSessionFranchiseId(defaultValue: string = DEFAULT_FRANCHISE_ID) {
-  return readSession()?.franchiseId || defaultValue;
+  const session = readSession();
+  if ((session?.role || '').toLowerCase() === 'master') {
+    const impersonation = readMasterImpersonation();
+    if (impersonation?.franchiseId) return impersonation.franchiseId;
+  }
+  return session?.franchiseId || defaultValue;
 }
 
 export function getSessionUserName(defaultName = 'Designer') {
@@ -54,8 +102,15 @@ export function getSessionUserName(defaultName = 'Designer') {
 export function getSessionRole(
   defaultRole: UserRole = 'designer'
 ): UserRole {
-  const role = readSession()?.role;
-  if (role === 'master') return 'master';
+  const session = readSession();
+  const role = session?.role;
+  if (role === 'master') {
+    const impersonation = readMasterImpersonation();
+    if (impersonation?.franchiseId) {
+      return (impersonation.actingRole || 'owner') as UserRole;
+    }
+    return 'master';
+  }
   if (role === 'owner') return 'owner';
   if (role === 'admin') return 'admin';
   if (role === 'designer') return 'designer';
@@ -63,7 +118,12 @@ export function getSessionRole(
 }
 
 export function getSessionFranchiseCode() {
-  return readSession()?.franchiseCode;
+  const session = readSession();
+  if ((session?.role || '').toLowerCase() === 'master') {
+    const impersonation = readMasterImpersonation();
+    if (impersonation?.franchiseCode) return impersonation.franchiseCode;
+  }
+  return session?.franchiseCode;
 }
 
 export function getSessionUserEmail(defaultEmail = '') {

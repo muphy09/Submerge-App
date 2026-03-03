@@ -286,6 +286,109 @@
   font-weight: 600;
 }
 
+.export-layout-summary {
+  padding: 0.9rem 1rem;
+}
+
+.export-summary-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.export-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.export-summary-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.3rem 0;
+  vertical-align: top;
+}
+
+.export-summary-label {
+  color: #475569;
+  font-weight: 500;
+  padding-right: 0.55rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.export-summary-value {
+  color: #1e293b;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.summary-adjustment {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-row.adjustment-row {
+  align-items: center;
+  gap: 1rem;
+}
+
+.adjustment-name {
+  flex: 1;
+}
+
+.adjustment-name span {
+  color: #475569;
+  font-weight: 500;
+}
+
+.adjustment-cost {
+  min-width: 180px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.adjustment-cost span {
+  color: #1e293b;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+
+.adjustment-input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.9rem;
+  color: #1e293b;
+  background: #ffffff;
+}
+
+.adjustment-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.adjustment-cost-input {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+.adjustment-input.is-warning {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+}
+
+.adjustment-warning-text {
+  color: #dc2626;
+  font-size: 0.8rem;
+  text-align: right;
+  margin-top: 0.2rem;
+}
+
 .grand-total {
   display: flex;
   justify-content: space-between;

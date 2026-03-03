@@ -146,6 +146,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
               onChange={(e) => handleChange('copingSize', e.target.value)}
             >
               <option value="12x12">12x12</option>
+              <option value="12x24">12x24</option>
               <option value="16x16">16x16</option>
             </select>
           </div>

@@ -193,12 +193,15 @@ function initializeDatabase() {
 }
 
 function ensureFranchiseExists(franchiseId, name = franchiseId, franchiseCode = DEFAULT_FRANCHISE_CODE) {
-  if (!db) return;
+  if (!db || !franchiseId) return;
   const now = new Date().toISOString();
+  const resolvedCode = !franchiseCode || (franchiseCode === DEFAULT_FRANCHISE_CODE && franchiseId !== DEFAULT_FRANCHISE_ID)
+    ? (franchiseId === DEFAULT_FRANCHISE_ID ? DEFAULT_FRANCHISE_CODE : `${franchiseId}-CODE`)
+    : franchiseCode;
   db.prepare(
     `INSERT OR IGNORE INTO franchises (id, name, franchise_code, is_active, created_at, updated_at)
      VALUES (@id, @name, @code, 0, @now, @now)`
-  ).run({ id: franchiseId, name, code: franchiseCode, now });
+  ).run({ id: franchiseId, name, code: resolvedCode, now });
 }
 
 function backfillFranchiseCodes() {
@@ -324,7 +327,11 @@ function getActiveFranchise() {
 
 function setActiveFranchise(franchiseId) {
   if (!db) throw new Error('Database not initialized');
-  const exists = db.prepare('SELECT COUNT(*) AS count FROM franchises WHERE id = ?').get(franchiseId);
+  let exists = db.prepare('SELECT COUNT(*) AS count FROM franchises WHERE id = ?').get(franchiseId);
+  if (!exists || exists.count === 0) {
+    ensureFranchiseExists(franchiseId);
+    exists = db.prepare('SELECT COUNT(*) AS count FROM franchises WHERE id = ?').get(franchiseId);
+  }
   if (!exists || exists.count === 0) {
     throw new Error(`Franchise not found: ${franchiseId}`);
   }
@@ -772,6 +779,44 @@ ipcMain.handle('read-changelog', () => {
   }
 
   throw new Error('CHANGELOG.md not found');
+});
+
+ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
+  if (!mainWindow || !mainWindow.webContents) {
+    throw new Error('Main window is not available.');
+  }
+  const filename =
+    (payload && typeof payload.filename === 'string' && payload.filename.trim()) ||
+    'customer-cost-warranty-breakdown.pdf';
+  const defaultPath = path.join(app.getPath('downloads'), filename);
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Breakdown PDF',
+    defaultPath,
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+
+  await mainWindow.webContents.executeJavaScript(
+    "document.fonts ? document.fonts.ready.then(() => true) : Promise.resolve(true)"
+  );
+
+  const pdfData = await mainWindow.webContents.printToPDF({
+    pageSize: 'Letter',
+    printBackground: true,
+    marginsType: 0,
+    margins: {
+      top: 0.4,
+      bottom: 0.4,
+      left: 0.4,
+      right: 0.4,
+    },
+    preferCSSPageSize: false,
+    landscape: false,
+  });
+  fs.writeFileSync(result.filePath, pdfData);
+  return { canceled: false, filePath: result.filePath };
 });
 
 // Reference data handlers

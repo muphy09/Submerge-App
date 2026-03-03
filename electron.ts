@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
@@ -176,6 +176,43 @@ ipcMain.handle('read-changelog', async () => {
   }
 
   throw new Error('CHANGELOG.md not found');
+});
+
+ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
+  if (!mainWindow || !mainWindow.webContents) {
+    throw new Error('Main window is not available.');
+  }
+  const filename =
+    (payload && typeof payload.filename === 'string' && payload.filename.trim()) ||
+    'customer-cost-warranty-breakdown.pdf';
+  const defaultPath = path.join(app.getPath('downloads'), filename);
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Breakdown PDF',
+    defaultPath,
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (result.canceled || !result.filePath) {
+    return { canceled: true };
+  }
+
+  await mainWindow.webContents.executeJavaScript(
+    "document.fonts ? document.fonts.ready.then(() => true) : Promise.resolve(true)"
+  );
+
+  const pdfData = await mainWindow.webContents.printToPDF({
+    pageSize: 'Letter',
+    printBackground: true,
+    margins: {
+      top: 0.4,
+      bottom: 0.4,
+      left: 0.4,
+      right: 0.4,
+    },
+    preferCSSPageSize: false,
+    landscape: false,
+  });
+  fs.writeFileSync(result.filePath, pdfData);
+  return { canceled: false, filePath: result.filePath };
 });
 
 // Update handlers

@@ -7,7 +7,7 @@ import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import './ProposalsListPage.css';
 import { deleteProposal as deleteProposalRemote, listProposals } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, getSessionUserName } from '../services/session';
+import { getSessionFranchiseId, getSessionUserName, isMasterImpersonating } from '../services/session';
 import syncGoodIcon from '../../docs/img/syncgood.png';
 import syncBadIcon from '../../docs/img/syncbad.png';
 import { listAllVersions } from '../utils/proposalVersions';
@@ -26,6 +26,11 @@ function ProposalsListPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
   const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
+  const isMasterActingAsOwner = isMasterImpersonating();
+  const canCreateProposal = !isMasterActingAsOwner;
+  const createDisabledReason = isMasterActingAsOwner
+    ? 'Master accounts cannot create proposals while acting as owner.'
+    : undefined;
 
   useEffect(() => {
     loadProposals();
@@ -42,7 +47,7 @@ function ProposalsListPage() {
     try {
       const data = await listProposals(getSessionFranchiseId());
       const userName = getSessionUserName();
-      const filtered = userName
+      const filtered = userName && !isMasterActingAsOwner
         ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === userName.toLowerCase())
         : data || [];
       const enriched = filtered.map((proposal) => {
@@ -254,9 +259,17 @@ function ProposalsListPage() {
       {loading ? (
         <div className="proposals-loading">Loading proposals...</div>
       ) : proposals.length === 0 ? (
-        <div className="proposals-empty">
+          <div className="proposals-empty">
           <p>No proposals yet. Create your first proposal to get started!</p>
-          <button className="btn-create" onClick={() => navigate('/proposal/new')}>
+          <button
+            className="btn-create"
+            onClick={() => {
+              if (!canCreateProposal) return;
+              navigate('/proposal/new');
+            }}
+            disabled={!canCreateProposal}
+            title={createDisabledReason}
+          >
             Create New Proposal
           </button>
         </div>

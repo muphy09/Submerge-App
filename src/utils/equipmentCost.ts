@@ -7,8 +7,17 @@ export type EquipmentCostLike = {
   addCost2?: number;
   price?: number;
   percentIncrease?: number;
+  overheadMultiplier?: number;
   // Automation-only flags used for category detection
   zones?: number;
+};
+
+const findPumpCatalogMatch = (item?: EquipmentCostLike | null) => {
+  if (!item?.name) return null;
+  const list = pricingData?.equipment?.pumps || [];
+  return list.find(
+    (entry: any) => entry?.name?.toLowerCase?.() === item.name?.toLowerCase?.()
+  );
 };
 
 const findAutomationCatalogMatch = (item?: EquipmentCostLike | null) => {
@@ -35,6 +44,13 @@ export function getEquipmentItemCost(
   overheadMultiplier: number = 1
 ): number {
   if (!item) return 0;
+  const pumpMatch = findPumpCatalogMatch(item);
+  const explicitOverhead = Number.isFinite(item.overheadMultiplier) && Number(item.overheadMultiplier) > 0
+    ? Number(item.overheadMultiplier)
+    : undefined;
+  const catalogOverhead = Number.isFinite((pumpMatch as any)?.overheadMultiplier) && Number((pumpMatch as any)?.overheadMultiplier) > 0
+    ? Number((pumpMatch as any)?.overheadMultiplier)
+    : undefined;
   const automationMatch = findAutomationCatalogMatch(item);
   const autoFillMatch = automationMatch ? null : findAutoFillCatalogMatch(item);
   // Hydrate missing automation fields from the catalog so percent adjustments still apply when only the name is stored.
@@ -65,5 +81,8 @@ export function getEquipmentItemCost(
     totalParts = divisor !== 0 ? totalParts / divisor : totalParts;
   }
   const base = hasParts ? totalParts : target.price ?? 0;
-  return base * overheadMultiplier;
+  const pumpFallback = pumpMatch ? pricingData?.equipment?.pumpOverheadMultiplier ?? overheadMultiplier : overheadMultiplier;
+  const resolvedOverhead = explicitOverhead ?? catalogOverhead ?? pumpFallback;
+  const safeOverhead = Number.isFinite(resolvedOverhead) && resolvedOverhead > 0 ? resolvedOverhead : 1;
+  return base * safeOverhead;
 }

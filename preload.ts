@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electron', {
   getWaterFeaturesCatalog: () => ipcRenderer.invoke('get-water-features-catalog'),
   getFinishRates: () => ipcRenderer.invoke('get-finish-rates'),
   getDrainageRates: () => ipcRenderer.invoke('get-drainage-rates'),
+  exportBreakdownPdf: (payload: { filename: string }) => ipcRenderer.invoke('export-breakdown-pdf', payload),
 
   // Update operations
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
@@ -54,6 +55,7 @@ declare global {
       getWaterFeaturesCatalog: () => Promise<any[]>;
       getFinishRates: () => Promise<any[]>;
       getDrainageRates: () => Promise<any[]>;
+      exportBreakdownPdf: (payload: { filename: string }) => Promise<{ canceled?: boolean; filePath?: string }>;
       checkForUpdates: () => Promise<any>;
       installUpdate: () => Promise<void>;
       onUpdateAvailable: (callback: (info: any) => void) => void;

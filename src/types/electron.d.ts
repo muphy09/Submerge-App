@@ -26,6 +26,7 @@ declare global {
       getWaterFeaturesCatalog: () => Promise<any[]>;
       getFinishRates: () => Promise<any[]>;
       getDrainageRates: () => Promise<any[]>;
+      exportBreakdownPdf: (payload: { filename: string }) => Promise<{ canceled?: boolean; filePath?: string }>;
 
       // Franchise + pricing
       listFranchises: () => Promise<

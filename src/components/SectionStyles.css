@@ -621,6 +621,13 @@ select.compact-input {
   margin: 0;
 }
 
+.spec-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .spec-label.required::after {
   content: ' *';
   color: #ef4444;

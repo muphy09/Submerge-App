@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { CostBreakdown, CostLineItem, PricingCalculations, Proposal } from '../types/proposal-new';
+import { useEffect, useMemo, useState } from 'react';
+import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjustment } from '../types/proposal-new';
 import SubmergeAdvantageWarranty from './SubmergeAdvantageWarranty';
 import FranchiseLogo from './FranchiseLogo';
 import './CostBreakdownView.css';
@@ -11,10 +11,32 @@ interface Props {
   pricing?: PricingCalculations;
   showWarranty?: boolean;
   showZoomControl?: boolean;
+  exportLayout?: boolean;
+  allowRetailAdjustments?: boolean;
+  onRetailAdjustmentsChange?: (adjustments: RetailAdjustment[]) => void;
 }
 
 const isPapDiscount = (item: CostLineItem): boolean =>
   item.description?.toLowerCase().includes('pap discount') ?? false;
+
+const DEFAULT_RETAIL_ADJUSTMENTS: RetailAdjustment[] = [
+  { name: '', amount: 0 },
+  { name: '', amount: 0 },
+];
+
+const normalizeRetailAdjustments = (input?: RetailAdjustment[]): RetailAdjustment[] =>
+  DEFAULT_RETAIL_ADJUSTMENTS.map((base, index) => {
+    const source = Array.isArray(input) ? input[index] : undefined;
+    return {
+      name: typeof source?.name === 'string' ? source.name : base.name,
+      amount: Number.isFinite(Number((source as any)?.amount)) ? Number((source as any).amount) : base.amount,
+    };
+  });
+
+const isAdjustmentInputPending = (value: string): boolean => {
+  const trimmed = value.trim();
+  return trimmed === '' || trimmed === '-' || trimmed === '.' || trimmed === '-.';
+};
 
 function CostBreakdownView({
   costBreakdown,
@@ -23,9 +45,31 @@ function CostBreakdownView({
   pricing,
   showWarranty = true,
   showZoomControl = true,
+  exportLayout = false,
+  allowRetailAdjustments = false,
+  onRetailAdjustmentsChange,
 }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [zoomLevel, setZoomLevel] = useState(showZoomControl ? 0.5 : 1); // Start at 50% (0.5 scale) when slider is shown
+  const retailAdjustments = useMemo(
+    () => normalizeRetailAdjustments(proposal?.retailAdjustments),
+    [proposal?.retailAdjustments]
+  );
+  const [adjustmentInputs, setAdjustmentInputs] = useState<string[]>(
+    () => retailAdjustments.map((adj) => (adj.amount === 0 ? '' : String(adj.amount)))
+  );
+  const [focusedAdjustmentIndex, setFocusedAdjustmentIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setAdjustmentInputs((prev) =>
+      retailAdjustments.map((adj, index) => {
+        if (focusedAdjustmentIndex === index) {
+          return prev[index] ?? (adj.amount === 0 ? '' : String(adj.amount));
+        }
+        return adj.amount === 0 ? '' : String(adj.amount);
+      })
+    );
+  }, [retailAdjustments, focusedAdjustmentIndex]);
 
   const formatCurrency = (value: number): string =>
     `$${(Number.isFinite(value) ? value : 0).toLocaleString(undefined, {
@@ -43,6 +87,7 @@ function CostBreakdownView({
     baseTotals.grandTotal ??
     0;
   const franchiseId = proposal?.franchiseId;
+  const retailAdjustmentsTotal = retailAdjustments.reduce((sum, adj) => sum + (adj.amount || 0), 0);
 
   let retailPrice =
     pricing?.retailPrice ??
@@ -53,8 +98,9 @@ function CostBreakdownView({
   if (!retailPrice && costBasis) {
     retailPrice = costBasis;
   }
-
-  const retailFactor = costBasis > 0 ? retailPrice / costBasis : 1;
+  const retailTargetForCategories = retailPrice - retailAdjustmentsTotal;
+  const safeRetailTarget = Number.isFinite(retailTargetForCategories) ? retailTargetForCategories : retailPrice;
+  const retailFactor = costBasis > 0 ? safeRetailTarget / costBasis : 1;
 
   const getRetailOverride = (item?: CostLineItem): number | null => {
     if (!item) return null;
@@ -97,7 +143,7 @@ function CostBreakdownView({
   const overrideRetailTotal = overrideItems.reduce((sum, item) => sum + (getRetailOverride(item) || 0), 0);
   const remainingCostBasis = costBasis - overrideCostBasis;
   const adjustedRetailFactor =
-    remainingCostBasis > 0 ? (retailPrice - overrideRetailTotal) / remainingCostBasis : retailFactor;
+    remainingCostBasis > 0 ? (safeRetailTarget - overrideRetailTotal) / remainingCostBasis : retailFactor;
   const safeAdjustedRetailFactor = Number.isFinite(adjustedRetailFactor) ? adjustedRetailFactor : retailFactor;
 
   // Map cost totals into retail-valued rows that sum to the retail price.
@@ -153,7 +199,7 @@ function CostBreakdownView({
 
     if (isLastRow) {
       // Nudge the final row to absorb any rounding difference.
-      const targetTotal = retailPrice || runningRetailTotal + retailValue;
+      const targetTotal = safeRetailTarget || runningRetailTotal + retailValue;
       const adjustment = roundToTwo(targetTotal - (runningRetailTotal + retailValue));
       retailValue = roundToTwo(retailValue + adjustment);
     }
@@ -162,7 +208,7 @@ function CostBreakdownView({
     return { ...row, retail: retailValue };
   });
 
-  const displayRetailPrice = roundToTwo(retailPrice || runningRetailTotal);
+  const displayRetailPrice = roundToTwo(retailPrice || (runningRetailTotal + retailAdjustmentsTotal));
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -172,6 +218,64 @@ function CostBreakdownView({
       newExpanded.add(section);
     }
     setExpandedSections(newExpanded);
+  };
+
+  const canEditAdjustments = allowRetailAdjustments && typeof onRetailAdjustmentsChange === 'function';
+  const grossProfitMargin = pricing?.grossProfitMargin ?? proposal?.pricing?.grossProfitMargin ?? 0;
+  const exceedsFranchiseLimit =
+    retailAdjustments.some((adj) => adj.amount < 0) &&
+    Number.isFinite(grossProfitMargin) &&
+    grossProfitMargin < 18;
+
+  const handleAdjustmentNameChange = (index: number, value: string) => {
+    if (!canEditAdjustments) return;
+    const next = retailAdjustments.map((adj, idx) =>
+      idx === index ? { ...adj, name: value } : adj
+    );
+    onRetailAdjustmentsChange?.(next);
+  };
+
+  const handleAdjustmentAmountChange = (index: number, value: string) => {
+    setAdjustmentInputs((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+
+    if (!canEditAdjustments) return;
+    if (isAdjustmentInputPending(value)) {
+      if (value.trim() === '') {
+        const next = retailAdjustments.map((adj, idx) =>
+          idx === index ? { ...adj, amount: 0 } : adj
+        );
+        onRetailAdjustmentsChange?.(next);
+      }
+      return;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return;
+    const next = retailAdjustments.map((adj, idx) =>
+      idx === index ? { ...adj, amount: parsed } : adj
+    );
+    onRetailAdjustmentsChange?.(next);
+  };
+
+  const handleAdjustmentAmountBlur = (index: number) => {
+    setFocusedAdjustmentIndex(null);
+    if (!canEditAdjustments) return;
+    const raw = adjustmentInputs[index] ?? '';
+    const normalized = isAdjustmentInputPending(raw) ? 0 : Number(raw);
+    const safeValue = Number.isFinite(normalized) ? normalized : 0;
+    const next = retailAdjustments.map((adj, idx) =>
+      idx === index ? { ...adj, amount: safeValue } : adj
+    );
+    onRetailAdjustmentsChange?.(next);
+    setAdjustmentInputs((prev) => {
+      const copy = [...prev];
+      copy[index] = safeValue === 0 ? '' : String(safeValue);
+      return copy;
+    });
   };
 
   const renderLineItems = (items: CostLineItem[] | undefined, categoryName: string) => {
@@ -278,11 +382,27 @@ function CostBreakdownView({
     transform: `scale(${scaleValue})`,
     transformOrigin: 'top center',
   };
+  const exportSummaryRows = [
+    ...retailRows.map((row) => ({ label: `${row.label}:`, value: formatCurrency(row.retail) })),
+    ...retailAdjustments.map((adjustment, index) => {
+      const labelFallback = `Line Item ${index + 1}`;
+      const displayName = adjustment.name?.trim() || labelFallback;
+      return {
+        label: `${displayName}:`,
+        value: formatCurrency(adjustment.amount),
+      };
+    }),
+  ];
+  const exportSummarySplit = Math.ceil(exportSummaryRows.length / 2);
+  const exportSummaryColumns = [
+    exportSummaryRows.slice(0, exportSummarySplit),
+    exportSummaryRows.slice(exportSummarySplit),
+  ];
 
   return (
     <div className="cost-breakdown-wrapper">
       <div className="stacked-sheets" style={scaleStyle}>
-        <div className="cost-breakdown-container">
+        <div className={`cost-breakdown-container${exportLayout ? ' export-layout' : ''}`}>
           <div className="breakdown-header">
             <div>
               <p className="breakdown-eyebrow">Job Cost Summary</p>
@@ -296,15 +416,77 @@ function CostBreakdownView({
           </div>
           </div>
 
-        <div className="breakdown-summary">
-          <div className="summary-grid">
-            {retailRows.map((row) => (
-              <div className="summary-row" key={row.label}>
-                <span>{row.label}:</span>
-                <span>{formatCurrency(row.retail)}</span>
-              </div>
-            ))}
-          </div>
+        <div className={`breakdown-summary${exportLayout ? ' export-layout-summary' : ''}`}>
+          {exportLayout ? (
+            <div className="export-summary-columns">
+              {exportSummaryColumns.map((column, columnIndex) => (
+                <table className="export-summary-table" key={`export-summary-col-${columnIndex}`}>
+                  <tbody>
+                    {column.map((row) => (
+                      <tr key={`${columnIndex}-${row.label}`}>
+                        <td className="export-summary-label">{row.label}</td>
+                        <td className="export-summary-value">{row.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ))}
+            </div>
+          ) : (
+            <div className="summary-grid">
+              {retailRows.map((row) => (
+                <div className="summary-row" key={row.label}>
+                  <span>{row.label}:</span>
+                  <span>{formatCurrency(row.retail)}</span>
+                </div>
+              ))}
+              {retailAdjustments.map((adjustment, index) => {
+                const showWarning = canEditAdjustments && exceedsFranchiseLimit && adjustment.amount < 0;
+                const labelFallback = `Line Item ${index + 1}`;
+                const displayName = adjustment.name?.trim() || labelFallback;
+                const amountValue = adjustmentInputs[index] ?? '';
+                return (
+                  <div className="summary-adjustment" key={`retail-adjustment-${index}`}>
+                    <div className="summary-row adjustment-row">
+                      <div className="adjustment-name">
+                        {canEditAdjustments ? (
+                          <input
+                            type="text"
+                            value={adjustment.name}
+                            onChange={(e) => handleAdjustmentNameChange(index, e.target.value)}
+                            placeholder={labelFallback}
+                            className="adjustment-input adjustment-name-input"
+                          />
+                        ) : (
+                          <span>{displayName}</span>
+                        )}
+                      </div>
+                      <div className="adjustment-cost">
+                        {canEditAdjustments ? (
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.01"
+                            value={amountValue}
+                            onFocus={() => setFocusedAdjustmentIndex(index)}
+                            onBlur={() => handleAdjustmentAmountBlur(index)}
+                            onChange={(e) => handleAdjustmentAmountChange(index, e.target.value)}
+                            placeholder="0.00"
+                            className={`adjustment-input adjustment-cost-input ${showWarning ? 'is-warning' : ''}`}
+                          />
+                        ) : (
+                          <span>{formatCurrency(adjustment.amount)}</span>
+                        )}
+                      </div>
+                    </div>
+                    {showWarning && (
+                      <div className="adjustment-warning-text">Exceeds Franchise Limit</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Cost Summary Section */}
           <div className="cost-summary-section">

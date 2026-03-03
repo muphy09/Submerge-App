@@ -463,6 +463,11 @@ export class MasterPricingEngine {
       negative1: 0,
       negative2: 0,
     };
+    const retailAdjustments = proposal.retailAdjustments || [];
+    const retailAdjustmentsTotal = retailAdjustments.reduce(
+      (sum, adjustment) => sum + (Number(adjustment?.amount) || 0),
+      0
+    );
     const manualAdjustmentsTotal =
       (manualAdjustments.positive1 ?? 0) +
       (manualAdjustments.positive2 ?? 0) -
@@ -475,7 +480,8 @@ export class MasterPricingEngine {
     const designerAdjustmentsTotal =
       manualAdjustmentsTotal +
       customFeaturesAdjustmentTotal +
-      autoCoverRetailAdjustment;
+      autoCoverRetailAdjustment +
+      retailAdjustmentsTotal;
 
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 1250;
@@ -520,6 +526,7 @@ export class MasterPricingEngine {
       grossProfit,
       grossProfitMargin,
       manualAdjustmentsTotal: designerAdjustmentsTotal,
+      retailAdjustmentsTotal,
     };
 
     return {

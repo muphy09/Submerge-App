@@ -179,10 +179,17 @@ setTimeout(() => {
   waitOn(opts)
     .then(() => {
       console.log('Vite is ready! Starting Electron...');
+      // Some environments (e.g. shells used by VS Code tasks) can leak
+      // ELECTRON_RUN_AS_NODE=1, which makes Electron boot as plain Node.
+      const electronEnv = { ...process.env };
+      delete electronEnv.ELECTRON_RUN_AS_NODE;
+      electronEnv.NODE_ENV = 'development';
+
       electron = spawn('npm', ['run', 'dev:electron'], {
         shell: true,
         stdio: 'inherit',
         cwd: __dirname,
+        env: electronEnv,
         detached: false
       });
 

@@ -269,14 +269,14 @@ const pricingData = {
     },
   },
   equipment: {
-    pumpOverheadMultiplier: 1.1, // Pumps only: (base + add1 + add2) * 1.1 before COGS
+    pumpOverheadMultiplier: 1.1, // Legacy fallback when a pump entry has no overhead multiplier
     pumps: [
-      { name: 'No Pump (Select pump)', basePrice: 0, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy 1.65HP Variable Pump', basePrice: 2310, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy 1.85HP Variable Pump', basePrice: 2540, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy 2.7HP Variable Pump', basePrice: 2174.15, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy 1.0HP Single Speed Pump', basePrice: 1900, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy 2.0HP Single Speed Pump', basePrice: 2060, addCost1: 0, addCost2: 0 },
+      { name: 'No Pump (Select pump)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
+      { name: 'Jandy 1.65HP Variable Pump', basePrice: 2310, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
+      { name: 'Jandy 1.85HP Variable Pump', basePrice: 2540, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
+      { name: 'Jandy 2.7HP Variable Pump', basePrice: 2174.15, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
+      { name: 'Jandy 1.0HP Single Speed Pump', basePrice: 1900, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
+      { name: 'Jandy 2.0HP Single Speed Pump', basePrice: 2060, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
     ],
     filters: [
       { name: 'No Filter (Select filter)', sqft: 0, basePrice: 0, addCost1: 0, addCost2: 0 },

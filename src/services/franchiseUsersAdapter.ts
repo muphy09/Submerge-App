@@ -80,8 +80,9 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+  const activeRows = rows.filter((row) => row.isActive);
   const weight = { owner: 2, admin: 1, designer: 0 } as Record<string, number>;
-  return rows.sort(
+  return activeRows.sort(
     (a, b) =>
       weight[b.role] - weight[a.role] ||
       normalizeName(a.name).localeCompare(normalizeName(b.name)) ||

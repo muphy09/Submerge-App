@@ -2,6 +2,7 @@ import { getSupabaseClient, hasSupabaseConnection, isSupabaseEnabled } from './s
 import {
   DEFAULT_FRANCHISE_ID,
   clearSession,
+  clearMasterImpersonation,
   saveSession,
   type UserRole,
   type UserSession,
@@ -161,6 +162,7 @@ export async function signInWithEmail(payload: {
 
   let franchise: FranchiseRow | null = null;
   if (normalizedRole !== 'master') {
+    clearMasterImpersonation();
     const inputCode = normalizeCode(payload.franchiseCode);
     if (!inputCode) {
       await supabase.auth.signOut();
@@ -212,6 +214,9 @@ export async function loadSessionFromSupabase(): Promise<{ session: UserSession;
   if (!allowedRoles.includes(normalizedRole) || profile.is_active === false) {
     return null;
   }
+  if (normalizedRole !== 'master') {
+    clearMasterImpersonation();
+  }
   let franchise: FranchiseRow | null = null;
   if (normalizedRole !== 'master') {
     if (!profile.franchise_id) {
@@ -260,5 +265,6 @@ export async function signOut() {
   if (supabase) {
     await supabase.auth.signOut();
   }
+  clearMasterImpersonation();
   clearSession();
 }

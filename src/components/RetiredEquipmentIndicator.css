@@ -1,0 +1,11 @@
+.retired-equipment-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  cursor: help;
+}
+
+.retired-equipment-indicator svg {
+  display: block;
+}

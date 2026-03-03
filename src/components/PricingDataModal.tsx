@@ -968,11 +968,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 title: 'Pump models',
                 path: ['equipment', 'pumps'],
                 addLabel: 'Add pump',
+                defaultItem: { overheadMultiplier: 1.1 },
                 fields: [
                   { key: 'name', label: 'Name', type: 'text', placeholder: 'Pump name' },
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'overheadMultiplier', label: 'Overhead Multiplier', type: 'number', placeholder: '1.1' },
                 ],
               },
             ],
@@ -1340,6 +1342,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   let fieldValue = entry ? entry[field.key] : '';
                   if (field.key === 'colors' && Array.isArray(fieldValue)) {
                     fieldValue = fieldValue.join(', ');
+                  }
+                  if (field.key === 'overheadMultiplier' && (fieldValue === undefined || fieldValue === null)) {
+                    fieldValue = 1.1;
                   }
                   if (field.type === 'boolean') {
                     return (

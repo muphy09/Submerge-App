@@ -3,29 +3,19 @@ Short Term -
 - Exposed Pool Wall (Out of ground Forming)
     - Add backside facing
         - Stukko and Split face -- St. $9. sqft, Split ledge = panel ledge
-- Coping Size 12x24 = double price of 12x12
-    - 16x24 option if math can be done
-- Rework Job Cost summary to include customizable discount
-    - Prevent discount that would put profit % below 18%
-- Include Customer Prop as button for designer view
-    - Remove cost breakdown in prop builder for admin
-
-- Name area in top section cleanup.
-- Admin designer list cleanup
-    - Include admin users in the Proposal list designer dropdown
-- Ensure internet remains required, remove any offline functionality
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
+- Improve export flow for Breadowns (naming)
+- Add workflow for transferring proposals to another user in the franchise (prompt before deleting user too)
+- Logic for contracts and different franchises
+
 
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
 - Admin proposal large screen
-- Add logic and safeguards for no internet
 - Fiberglass Shells
-- Auto update without being public
 - Performance Data for Admin overhaul
-- Role transfer logic
 - Equipment logic for lights when selecting multiple can be cleaned up
 - Add aux pump - double main drain run. every pump gets same drain run
 - Keyboard Nav dropdown selection trouble
@@ -54,7 +44,6 @@ Plan of Action -
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)
 - Spa Prep ($250) never included in COST-NEW (INTD25)?
-- Waterproofing cost never included in some excel props
 - Remodel workflow
 
 ----------------------------------------------------------------------------------------------------------

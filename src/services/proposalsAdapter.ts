@@ -13,20 +13,12 @@ import { isEnvFlagTrue } from './env';
 import { applyActiveVersion } from '../utils/proposalVersions';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
+const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
+const OFFLINE_SAVE_MESSAGE = 'No internet connection. Connect to save this proposal.';
 
 type SaveResult = Proposal & { lastModified: string };
 type SyncStatus = 'synced' | 'pending' | 'error';
 type Tombstone = { proposalNumber: string; removedAt: string };
-type SaveOptions = {
-  /**
-   * Force a local-only save (used when the user explicitly agrees to offline mode).
-   */
-  forceLocal?: boolean;
-  /**
-   * Allow falling back to local when Supabase is unreachable.
-   */
-  allowLocalFallback?: boolean;
-};
 
 const PENDING_MESSAGE = 'Awaiting cloud sync';
 const ONLINE_SYNC_MESSAGE = 'Synced with cloud';
@@ -181,17 +173,6 @@ function withSyncStatus(proposal: Proposal, status: SyncStatus, message?: string
     syncStatus: status,
     syncMessage: message,
   };
-}
-
-function isConnectivityError(error: any) {
-  if (!error) return false;
-  const message = (error.message || '').toString().toLowerCase();
-  return (
-    message.includes('fetch') ||
-    message.includes('network') ||
-    message.includes('timeout') ||
-    message.includes('abort')
-  );
 }
 
 async function persistLocalProposal(proposal: Proposal) {
@@ -462,9 +443,15 @@ function registerOnlineSyncListener() {
 registerOnlineSyncListener();
 
 export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
+  if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
+    throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  }
   const session = readSession();
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
-  const supabaseOnline = await hasSupabaseConnection();
+  const supabaseOnline = await hasSupabaseConnection(true);
+  if (!supabaseOnline) {
+    throw new Error(OFFLINE_ERROR_MESSAGE);
+  }
   if (supabaseOnline) {
     await syncPendingDeletes();
   }
@@ -531,10 +518,16 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
 }
 
 export async function getProposal(proposalNumber: string): Promise<Proposal | null> {
+  if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
+    throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  }
   if (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber)) return null;
 
   const session = readSession();
-  const supabaseOnline = await hasSupabaseConnection();
+  const supabaseOnline = await hasSupabaseConnection(true);
+  if (!supabaseOnline) {
+    throw new Error(OFFLINE_ERROR_MESSAGE);
+  }
   if (supabaseOnline) {
     await syncPendingDeletes();
     if (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber)) return null;
@@ -580,7 +573,7 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
   return withSyncStatus(best, 'synced', ONLINE_SYNC_MESSAGE);
 }
 
-export async function saveProposal(proposal: Proposal, options: SaveOptions = {}): Promise<SaveResult> {
+export async function saveProposal(proposal: Proposal): Promise<SaveResult> {
   const now = nowIso();
   const session = readSession();
   clearDeletedTombstone(proposal.proposalNumber);
@@ -600,122 +593,63 @@ export async function saveProposal(proposal: Proposal, options: SaveOptions = {}
     versions: (normalized.versions || []).map((v) => ensureProposalMetadata(v, session)),
   };
   const franchiseId = normalizedWithVersions.franchiseId || DEFAULT_FRANCHISE_ID;
-  const supabaseOnline = options.forceLocal ? false : await hasSupabaseConnection();
 
-  if (SUPABASE_REQUIRED && !supabaseOnline && !isSupabaseEnabled()) {
+  if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
 
-  if (supabaseOnline && !options.forceLocal) {
-    try {
-      const synced = await upsertToSupabase(normalizedWithVersions);
-      await persistLocalProposal(synced);
-      return { ...synced, lastModified: synced.lastModified || now };
-    } catch (error) {
-      if (!isConnectivityError(error)) {
-        throw error;
-      }
-      console.warn('Supabase save failed due to connectivity; will fall back to local.', error);
-    }
+  const supabaseOnline = await hasSupabaseConnection(true);
+  if (!supabaseOnline) {
+    throw new Error(OFFLINE_SAVE_MESSAGE);
   }
 
-  if (options.allowLocalFallback === false) {
-    throw new Error('Supabase unavailable and local fallback disabled.');
-  }
-
-  if (!window.electron?.saveProposal) {
-    throw new Error('No save handler available (electron bridge missing).');
-  }
-
-  const pending = withSyncStatus(
-    {
-      ...normalizedWithVersions,
-      franchiseId,
-      lastModified: normalizedWithVersions.lastModified || now,
-    },
-    'pending',
-    PENDING_MESSAGE
-  );
-  await window.electron.saveProposal(pending);
-  return { ...pending, lastModified: pending.lastModified || now };
+  const synced = await upsertToSupabase(normalizedWithVersions);
+  await persistLocalProposal({ ...synced, franchiseId });
+  return { ...synced, lastModified: synced.lastModified || now };
 }
 
 export async function deleteProposal(proposalNumber: string, franchiseId?: string) {
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
-  const supabaseOnline = await hasSupabaseConnection();
-  const supabaseEnabled = isSupabaseEnabled();
-  let connectivityFailure = false;
-  let supabaseDeleted = false;
-  let tombstoneAdded = false;
-
-  if (supabaseOnline) {
-    try {
-      const supabase = getSupabaseClient();
-      if (!supabase) throw new Error('Supabase not configured');
-      const { error, data } = await supabase
-        .from('franchise_proposals')
-        .delete()
-        .eq('proposal_number', proposalNumber)
-        .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
-        .select('proposal_number');
-      if (error) throw error;
-
-      const deletedCount = (data || []).length;
-      if (!deletedCount) {
-        const fallback = await supabase
-          .from('franchise_proposals')
-          .delete()
-          .eq('proposal_number', proposalNumber)
-          .select('proposal_number');
-        if (fallback.error) throw fallback.error;
-        if ((fallback.data || []).length) {
-          supabaseDeleted = true;
-          clearPendingDelete(proposalNumber);
-        }
-      } else {
-        supabaseDeleted = true;
-        clearPendingDelete(proposalNumber);
-      }
-      addDeletedTombstone(proposalNumber);
-      tombstoneAdded = true;
-    } catch (error) {
-      connectivityFailure = isConnectivityError(error);
-      if (!connectivityFailure) {
-        clearDeletedTombstone(proposalNumber);
-        throw error;
-      }
-      console.warn('Supabase delete failed due to connectivity; will remove local copy only.', error);
-    }
+  if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
+    throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
 
-  if (!supabaseOnline || connectivityFailure || !supabaseEnabled || !supabaseDeleted) {
-    if (supabaseEnabled) {
-      addPendingDelete(proposalNumber, targetFranchiseId);
-    }
-    if (!window.electron?.deleteProposal) {
-      if (!tombstoneAdded) clearDeletedTombstone(proposalNumber);
-      throw new Error('No delete handler available (electron bridge missing).');
-    }
-    await window.electron.deleteProposal(proposalNumber);
-    if (!tombstoneAdded) {
-      addDeletedTombstone(proposalNumber);
-      tombstoneAdded = true;
-    }
-    return;
+  const supabaseOnline = await hasSupabaseConnection(true);
+  if (!supabaseOnline) {
+    throw new Error(OFFLINE_ERROR_MESSAGE);
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error('Supabase not configured');
+  }
+
+  const { error, data } = await supabase
+    .from('franchise_proposals')
+    .delete()
+    .eq('proposal_number', proposalNumber)
+    .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
+    .select('proposal_number');
+  if (error) throw error;
+
+  const deletedCount = (data || []).length;
+  if (!deletedCount) {
+    const fallback = await supabase
+      .from('franchise_proposals')
+      .delete()
+      .eq('proposal_number', proposalNumber)
+      .select('proposal_number');
+    if (fallback.error) throw fallback.error;
   }
 
   clearPendingDelete(proposalNumber);
+  addDeletedTombstone(proposalNumber);
+
   if (window.electron?.deleteProposal) {
     try {
       await window.electron.deleteProposal(proposalNumber);
     } catch (error) {
-      addPendingDelete(proposalNumber, targetFranchiseId);
-      if (!tombstoneAdded) clearDeletedTombstone(proposalNumber);
       throw new Error('Failed to delete proposal from local database after Supabase delete.');
     }
-  }
-
-  if (!tombstoneAdded) {
-    addDeletedTombstone(proposalNumber);
   }
 }

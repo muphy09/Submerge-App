@@ -18,6 +18,7 @@ import {
   CostBreakdown,
   PAPDiscounts,
   ManualAdjustments,
+  RetailAdjustment,
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from './equipmentCost';
@@ -358,6 +359,25 @@ export function getDefaultManualAdjustments(): ManualAdjustments {
   };
 }
 
+export function getDefaultRetailAdjustments(): RetailAdjustment[] {
+  return [
+    { name: '', amount: 0 },
+    { name: '', amount: 0 },
+  ];
+}
+
+export function mergeRetailAdjustments(input?: RetailAdjustment[]): RetailAdjustment[] {
+  const defaults = getDefaultRetailAdjustments();
+  if (!Array.isArray(input)) return defaults;
+  return defaults.map((base, index) => {
+    const source = input[index];
+    return {
+      name: typeof source?.name === 'string' ? source.name : base.name,
+      amount: Number.isFinite(Number((source as any)?.amount)) ? Number((source as any).amount) : base.amount,
+    };
+  });
+}
+
 export function getDefaultProposal(): Partial<Proposal> {
   return {
     proposalNumber: `PROP-${Date.now()}`,
@@ -386,6 +406,7 @@ export function getDefaultProposal(): Partial<Proposal> {
     masonry: getDefaultMasonry(),
     interiorFinish: getDefaultInteriorFinish(),
     manualAdjustments: getDefaultManualAdjustments(),
+    retailAdjustments: getDefaultRetailAdjustments(),
     papDiscounts: { ...(pricingData.papDiscountRates || getDefaultPAPDiscounts()) },
     costBreakdown: getDefaultCostBreakdown(),
     subtotal: 0,

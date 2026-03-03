@@ -4,7 +4,9 @@ import pricingData from '../services/pricingData';
 import { getSessionRole } from '../services/session';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { normalizeEquipmentLighting } from '../utils/lighting';
+import { getRetiredEquipmentFlags } from '../utils/retiredEquipment';
 import CustomOptionsSection from './CustomOptionsSection';
+import RetiredEquipmentIndicator from './RetiredEquipmentIndicator';
 import './SectionStyles.css';
 
 interface Props {
@@ -55,6 +57,13 @@ const CompactInput = ({
     </div>
   );
 };
+
+const LabelWithRetired = ({ text, showRetired }: { text: string; showRetired?: boolean }) => (
+  <div className="spec-label-row">
+    <label className="spec-label">{text}</label>
+    {showRetired && <RetiredEquipmentIndicator />}
+  </div>
+);
 
 function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns, hasSpa, hasPool }: Props) {
   const sessionRole = getSessionRole();
@@ -189,6 +198,14 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   };
 
   const safeData = normalizeEquipmentLighting(baseSafeData, { hasPool, hasSpa });
+  const retiredFlags = getRetiredEquipmentFlags(safeData);
+
+  const renderRetiredOption = (name?: string) =>
+    name ? (
+      <option key={`retired-${name}`} value={name} disabled>
+        {name}
+      </option>
+    ) : null;
 
   useEffect(() => {
     if (!data?.pump || !data?.filter || !data?.heater || !data?.automation || !data?.cleaner) {
@@ -779,41 +796,43 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
 
   return (
     <div className="section-form">
-      {/* Pump */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Pump</h2>
-        </div>
-        <div className="spec-field">
-          <label className="spec-label">Pump</label>
-          <select
-            className="compact-input equipment-select"
-            value={includePump ? safeData.pump.name : noneOptionValue}
-            onChange={(e) => handlePumpSelect(e.target.value)}
-          >
-            <option value={noneOptionValue}>None</option>
-            {pumpOptions.map(pump => (
-              <option key={pump.name} value={pump.name}>
-                {formatOptionLabel(pump.name, costOf(pump, true))}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Pump */}
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Pump</h2>
+          </div>
+          <div className="spec-field">
+            <LabelWithRetired text="Pump" showRetired={retiredFlags.pump} />
+            <select
+              className="compact-input equipment-select"
+              value={includePump ? safeData.pump.name : noneOptionValue}
+              onChange={(e) => handlePumpSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {retiredFlags.pump && renderRetiredOption(safeData.pump.name)}
+              {pumpOptions.map(pump => (
+                <option key={pump.name} value={pump.name}>
+                  {formatOptionLabel(pump.name, costOf(pump, true))}
+                </option>
+              ))}
+            </select>
+          </div>
         {includePump && (
           <>
-            {auxiliaryPumps.map((pump, idx) => (
-              <div key={idx} className="spec-field equipment-extra-field">
-                <label className="spec-label">{`Additional Pump ${idx + 1}`}</label>
-                <div className="equipment-inline-row">
-                  <select
-                    className="compact-input equipment-select"
-                    value={pump?.name || safeData.pump.name}
-                    onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
-                  >
-                    {pumpOptions.map(option => (
-                      <option key={option.name} value={option.name}>
-                        {formatOptionLabel(option.name, costOf(option, true))}
-                      </option>
+              {auxiliaryPumps.map((pump, idx) => (
+                <div key={idx} className="spec-field equipment-extra-field">
+                  <LabelWithRetired text={`Additional Pump ${idx + 1}`} showRetired={retiredFlags.auxiliaryPumps[idx]} />
+                  <div className="equipment-inline-row">
+                    <select
+                      className="compact-input equipment-select"
+                      value={pump?.name || safeData.pump.name}
+                      onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
+                    >
+                      {retiredFlags.auxiliaryPumps[idx] && renderRetiredOption(pump?.name || safeData.pump.name)}
+                      {pumpOptions.map(option => (
+                        <option key={option.name} value={option.name}>
+                          {formatOptionLabel(option.name, costOf(option, true))}
+                        </option>
                     ))}
                   </select>
                   <button type="button" className="link-btn danger" onClick={() => removeAuxiliaryPump(idx)}>
@@ -835,24 +854,25 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       </div>
 
       {/* Filter */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Filter</h2>
-        </div>
-        <div className="spec-grid spec-grid-2">
-          <div className="spec-field">
-            <label className="spec-label">Filter</label>
-            <select
-              className="compact-input equipment-select"
-              value={includeFilter ? safeData.filter.name : noneOptionValue}
-              onChange={(e) => handleFilterSelect(e.target.value)}
-            >
-              <option value={noneOptionValue}>None</option>
-              {filterOptions.map(filter => (
-                <option key={filter.name} value={filter.name}>
-                  {formatOptionLabel(`${filter.name} (${filter.sqft} sqft)`, costOf(filter))}
-                </option>
-              ))}
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Filter</h2>
+          </div>
+          <div className="spec-grid spec-grid-2">
+            <div className="spec-field">
+              <LabelWithRetired text="Filter" showRetired={retiredFlags.filter} />
+              <select
+                className="compact-input equipment-select"
+                value={includeFilter ? safeData.filter.name : noneOptionValue}
+                onChange={(e) => handleFilterSelect(e.target.value)}
+              >
+                <option value={noneOptionValue}>None</option>
+                {retiredFlags.filter && renderRetiredOption(safeData.filter.name)}
+                {filterOptions.map(filter => (
+                  <option key={filter.name} value={filter.name}>
+                    {formatOptionLabel(`${filter.name} (${filter.sqft} sqft)`, costOf(filter))}
+                  </option>
+                ))}
             </select>
           </div>
           {includeFilter && (
@@ -872,24 +892,25 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       </div>
 
       {/* Cleaner */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Cleaner</h2>
-        </div>
-        <div className="spec-grid-3-split">
-          <div className="spec-field">
-            <label className="spec-label">Cleaner</label>
-            <select
-              className="compact-input equipment-select"
-              value={includeCleaner ? safeData.cleaner.name : noneOptionValue}
-              onChange={(e) => handleCleanerSelect(e.target.value)}
-            >
-              <option value={noneOptionValue}>None</option>
-              {cleanerOptions.map(cleaner => (
-                <option key={cleaner.name} value={cleaner.name}>
-                  {formatOptionLabel(cleaner.name, costOf(cleaner))}
-                </option>
-              ))}
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Cleaner</h2>
+          </div>
+          <div className="spec-grid-3-split">
+            <div className="spec-field">
+              <LabelWithRetired text="Cleaner" showRetired={retiredFlags.cleaner} />
+              <select
+                className="compact-input equipment-select"
+                value={includeCleaner ? safeData.cleaner.name : noneOptionValue}
+                onChange={(e) => handleCleanerSelect(e.target.value)}
+              >
+                <option value={noneOptionValue}>None</option>
+                {retiredFlags.cleaner && renderRetiredOption(safeData.cleaner.name)}
+                {cleanerOptions.map(cleaner => (
+                  <option key={cleaner.name} value={cleaner.name}>
+                    {formatOptionLabel(cleaner.name, costOf(cleaner))}
+                  </option>
+                ))}
             </select>
           </div>
           {includeCleaner && (
@@ -922,24 +943,25 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       </div>
 
       {/* Heating */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Heater</h2>
-        </div>
-        <div className="spec-grid spec-grid-2">
-          <div className="spec-field">
-            <label className="spec-label">Heater Model</label>
-            <select
-              className="compact-input equipment-select"
-              value={includeHeater ? safeData.heater.name : noneOptionValue}
-              onChange={(e) => handleHeaterSelect(e.target.value)}
-            >
-              <option value={noneOptionValue}>None</option>
-              {heaterOptions.map(heater => (
-                <option key={heater.name} value={heater.name}>
-                  {formatOptionLabel(heater.name, costOf(heater))}
-                </option>
-              ))}
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Heater</h2>
+          </div>
+          <div className="spec-grid spec-grid-2">
+            <div className="spec-field">
+              <LabelWithRetired text="Heater Model" showRetired={retiredFlags.heater} />
+              <select
+                className="compact-input equipment-select"
+                value={includeHeater ? safeData.heater.name : noneOptionValue}
+                onChange={(e) => handleHeaterSelect(e.target.value)}
+              >
+                <option value={noneOptionValue}>None</option>
+                {retiredFlags.heater && renderRetiredOption(safeData.heater.name)}
+                {heaterOptions.map(heater => (
+                  <option key={heater.name} value={heater.name}>
+                    {formatOptionLabel(heater.name, costOf(heater))}
+                  </option>
+                ))}
             </select>
           </div>
           {includeHeater && (
@@ -982,41 +1004,46 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       </div>
 
       {/* Pool Lights */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Pool Lights</h2>
-        </div>
-        <div className="spec-field">
-          <label className="spec-label">Pool Light</label>
-          <select
-            className="compact-input equipment-select"
-            value={includePoolLights && poolLights.length > 0 ? poolLights[0]?.name || noneOptionValue : noneOptionValue}
-            onChange={(e) => handlePoolLightSelect(e.target.value)}
-          >
-            <option value={noneOptionValue}>None</option>
-            {poolLightOptions.map(option => (
-              <option key={option.name} value={option.name}>
-                {formatOptionLabel(option.name, costOf(option))}
-              </option>
-            ))}
-          </select>
-        </div>
-        {includePoolLights && (
-          <>
-            {poolLights.slice(1).map((light, idx) => (
-              <div key={`pool-light-${idx + 1}`} className="spec-field equipment-extra-field">
-                <label className="spec-label">{`Additional Pool Light ${idx + 1}`}</label>
-                <div className="equipment-inline-row">
-                  <select
-                    className="compact-input equipment-select"
-                    value={light?.name || poolLightOptions[0]?.name || ''}
-                    onChange={(e) => handlePoolLightChange(idx + 1, e.target.value)}
-                  >
-                    {poolLightOptions.map(option => (
-                      <option key={option.name} value={option.name}>
-                        {formatOptionLabel(option.name, costOf(option))}
-                      </option>
-                    ))}
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Pool Lights</h2>
+          </div>
+          <div className="spec-field">
+            <LabelWithRetired text="Pool Light" showRetired={retiredFlags.poolLights[0]} />
+            <select
+              className="compact-input equipment-select"
+              value={includePoolLights && poolLights.length > 0 ? poolLights[0]?.name || noneOptionValue : noneOptionValue}
+              onChange={(e) => handlePoolLightSelect(e.target.value)}
+            >
+              <option value={noneOptionValue}>None</option>
+              {retiredFlags.poolLights[0] && renderRetiredOption(poolLights[0]?.name)}
+              {poolLightOptions.map(option => (
+                <option key={option.name} value={option.name}>
+                  {formatOptionLabel(option.name, costOf(option))}
+                </option>
+              ))}
+            </select>
+          </div>
+          {includePoolLights && (
+            <>
+              {poolLights.slice(1).map((light, idx) => (
+                <div key={`pool-light-${idx + 1}`} className="spec-field equipment-extra-field">
+                  <LabelWithRetired
+                    text={`Additional Pool Light ${idx + 1}`}
+                    showRetired={retiredFlags.poolLights[idx + 1]}
+                  />
+                  <div className="equipment-inline-row">
+                    <select
+                      className="compact-input equipment-select"
+                      value={light?.name || poolLightOptions[0]?.name || ''}
+                      onChange={(e) => handlePoolLightChange(idx + 1, e.target.value)}
+                    >
+                      {retiredFlags.poolLights[idx + 1] && renderRetiredOption(light?.name)}
+                      {poolLightOptions.map(option => (
+                        <option key={option.name} value={option.name}>
+                          {formatOptionLabel(option.name, costOf(option))}
+                        </option>
+                      ))}
                   </select>
                   <button type="button" className="link-btn danger" onClick={() => removePoolLight(idx + 1)}>
                     Remove
@@ -1035,42 +1062,47 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       </div>
 
       {/* Spa Lights */}
-      {hasSpa && (
-        <div className="spec-block">
-          <div className="spec-block-header">
-            <h2 className="spec-block-title">Spa Lights</h2>
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">Spa Light</label>
-            <select
-              className="compact-input equipment-select"
-              value={includeSpaLights && spaLights.length > 0 ? spaLights[0]?.name || noneOptionValue : noneOptionValue}
-              onChange={(e) => handleSpaLightSelect(e.target.value)}
-            >
-              <option value={noneOptionValue}>None</option>
-              {spaLightOptions.map(option => (
-                <option key={option.name} value={option.name}>
-                  {formatOptionLabel(option.name, costOf(option))}
-                </option>
-              ))}
-            </select>
-          </div>
-          {includeSpaLights && (
-            <>
-              {spaLights.slice(1).map((light, idx) => (
-                <div key={`spa-light-${idx + 1}`} className="spec-field equipment-extra-field">
-                  <label className="spec-label">{`Additional Spa Light ${idx + 1}`}</label>
-                  <div className="equipment-inline-row">
-                    <select
-                      className="compact-input equipment-select"
-                      value={light?.name || spaLightOptions[0]?.name || ''}
-                      onChange={(e) => handleSpaLightChange(idx + 1, e.target.value)}
-                    >
-                      {spaLightOptions.map(option => (
-                        <option key={option.name} value={option.name}>
-                          {formatOptionLabel(option.name, costOf(option))}
-                        </option>
-                      ))}
+        {hasSpa && (
+          <div className="spec-block">
+            <div className="spec-block-header">
+              <h2 className="spec-block-title">Spa Lights</h2>
+            </div>
+            <div className="spec-field">
+              <LabelWithRetired text="Spa Light" showRetired={retiredFlags.spaLights[0]} />
+              <select
+                className="compact-input equipment-select"
+                value={includeSpaLights && spaLights.length > 0 ? spaLights[0]?.name || noneOptionValue : noneOptionValue}
+                onChange={(e) => handleSpaLightSelect(e.target.value)}
+              >
+                <option value={noneOptionValue}>None</option>
+                {retiredFlags.spaLights[0] && renderRetiredOption(spaLights[0]?.name)}
+                {spaLightOptions.map(option => (
+                  <option key={option.name} value={option.name}>
+                    {formatOptionLabel(option.name, costOf(option))}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {includeSpaLights && (
+              <>
+                {spaLights.slice(1).map((light, idx) => (
+                  <div key={`spa-light-${idx + 1}`} className="spec-field equipment-extra-field">
+                    <LabelWithRetired
+                      text={`Additional Spa Light ${idx + 1}`}
+                      showRetired={retiredFlags.spaLights[idx + 1]}
+                    />
+                    <div className="equipment-inline-row">
+                      <select
+                        className="compact-input equipment-select"
+                        value={light?.name || spaLightOptions[0]?.name || ''}
+                        onChange={(e) => handleSpaLightChange(idx + 1, e.target.value)}
+                      >
+                        {retiredFlags.spaLights[idx + 1] && renderRetiredOption(light?.name)}
+                        {spaLightOptions.map(option => (
+                          <option key={option.name} value={option.name}>
+                            {formatOptionLabel(option.name, costOf(option))}
+                          </option>
+                        ))}
                     </select>
                     <button type="button" className="link-btn danger" onClick={() => removeSpaLight(idx + 1)}>
                       Remove
@@ -1090,24 +1122,25 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       )}
 
       {/* Automation */}
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Automation</h2>
-        </div>
-        <div className="spec-grid spec-grid-2">
-          <div className="spec-field">
-            <label className="spec-label">Automation System</label>
-            <select
-              className="compact-input equipment-select"
-              value={includeAutomation ? safeData.automation.name : noneOptionValue}
-              onChange={(e) => handleAutomationSelect(e.target.value)}
-            >
-              <option value={noneOptionValue}>None</option>
-              {automationOptions.map(option => (
-                <option key={option.name} value={option.name}>
-                  {formatOptionLabel(option.name, costOf(option))}
-                </option>
-              ))}
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Automation</h2>
+          </div>
+          <div className="spec-grid spec-grid-2">
+            <div className="spec-field">
+              <LabelWithRetired text="Automation System" showRetired={retiredFlags.automation} />
+              <select
+                className="compact-input equipment-select"
+                value={includeAutomation ? safeData.automation.name : noneOptionValue}
+                onChange={(e) => handleAutomationSelect(e.target.value)}
+              >
+                <option value={noneOptionValue}>None</option>
+                {retiredFlags.automation && renderRetiredOption(safeData.automation.name)}
+                {automationOptions.map(option => (
+                  <option key={option.name} value={option.name}>
+                    {formatOptionLabel(option.name, costOf(option))}
+                  </option>
+                ))}
             </select>
           </div>
           {includeAutomation && (
@@ -1135,13 +1168,14 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
         </div>
         <div className="spec-grid spec-grid-2">
           <div className="spec-field">
-            <label className="spec-label">Sanitation System</label>
+            <LabelWithRetired text="Sanitation System" showRetired={retiredFlags.saltSystem} />
             <select
               className="compact-input equipment-select"
               value={includeSalt ? safeData.saltSystem?.name || noneOptionValue : noneOptionValue}
               onChange={(e) => handleSaltSelect(e.target.value)}
             >
               <option value={noneOptionValue}>None</option>
+              {retiredFlags.saltSystem && renderRetiredOption(safeData.saltSystem?.name)}
               {saltOptions.map(system => (
                 <option key={system.name} value={system.name}>
                   {formatOptionLabel(system.name, costOf(system))}
@@ -1172,13 +1206,14 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
         </div>
         <div className="spec-grid-3-split">
           <div className="spec-field">
-            <label className="spec-label">Auto-Fill System</label>
+            <LabelWithRetired text="Auto-Fill System" showRetired={retiredFlags.autoFillSystem} />
             <select
               className="compact-input equipment-select"
               value={includeAutoFill ? safeData.autoFillSystem?.name || noneOptionValue : noneOptionValue}
               onChange={(e) => handleAutoFillSelect(e.target.value)}
             >
               <option value={noneOptionValue}>None</option>
+              {retiredFlags.autoFillSystem && renderRetiredOption(safeData.autoFillSystem?.name)}
               {autoFillOptions.map(system => (
                 <option key={system.name} value={system.name}>
                   {formatOptionLabel(system.name, costOf(system))}

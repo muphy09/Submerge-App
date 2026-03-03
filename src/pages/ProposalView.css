@@ -59,6 +59,15 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  background: #f1f5f9;
+  border-color: #d1dce8;
+}
+
 .action-button.dropdown {
   padding-right: 12px;
 }
@@ -313,6 +322,13 @@
   margin-top: 12px;
 }
 
+.version-name-error {
+  margin-top: 6px;
+  color: #b91c1c;
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .hero-price-model {
   font-weight: 600;
   font-size: 14px;
@@ -373,11 +389,18 @@
 }
 
 .hero-grid {
+  --hero-line-font-size: 14px;
+  --hero-line-height: 1.6;
+  --hero-line-max-rows: 2;
+  --hero-column-gap: 20px;
+  --hero-line-slot-height: calc(
+    var(--hero-line-font-size) * var(--hero-line-height) * var(--hero-line-max-rows)
+  );
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 48px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px var(--hero-column-gap);
   margin-bottom: 18px;
-  max-width: 920px;
+  max-width: 1220px;
   margin-left: auto;
   margin-right: auto;
   background: rgba(74, 124, 190, 0.08);
@@ -385,18 +408,65 @@
   border-radius: 10px;
 }
 
+.hero-section-title {
+  margin: 0;
+  display: inline-block;
+  justify-self: start;
+  width: fit-content;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(79, 100, 122, 0.45);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4f647a;
+}
+
+.hero-section-title-specs {
+  grid-column: 1 / span 2;
+}
+
+.hero-section-title-equipment {
+  grid-column: 3 / span 2;
+}
+
+.hero-column {
+  display: grid;
+  grid-template-rows: repeat(4, var(--hero-line-slot-height));
+  gap: 12px;
+  min-width: 0;
+}
+
 .hero-line {
   color: #3c4858;
   display: flex;
+  align-items: flex-start;
   gap: 8px;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--hero-line-font-size);
+  line-height: var(--hero-line-height);
+  min-height: var(--hero-line-slot-height);
+  max-height: var(--hero-line-slot-height);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.hero-line span:last-child {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .hero-label {
   font-weight: 600;
   color: #2c3e50;
-  min-width: 150px;
+  min-width: 108px;
+  flex-shrink: 0;
 }
 
 .hero-total {
@@ -929,6 +999,10 @@
   overflow-y: auto;
 }
 
+.modal-overlay.modal-overlay-top {
+  z-index: 1100;
+}
+
 .modal-content {
   background: #ffffff;
   border-radius: 16px;
@@ -977,6 +1051,14 @@
 
 .contract-header-actions .action-button.export-button {
   min-width: 102px;
+}
+
+.breakdown-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .modal-eyebrow {
@@ -1431,10 +1513,13 @@
   position: absolute;
   left: -9999px;
   top: 0;
-  width: 1024px;
-  padding: 16px;
+  width: 100%;
+  padding: 0;
   background: #ffffff;
   z-index: -1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .export-print-area.print-mode {
@@ -1445,15 +1530,181 @@
 
 .export-breakdown-page {
   background: #ffffff;
-  border: 1px solid #e5ebf1;
-  border-radius: 12px;
-  padding: 18px 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0 auto;
+  box-shadow: none;
+  width: 7.7in;
+  max-width: 7.7in;
+  box-sizing: border-box;
+  display: block;
+}
+
+.export-breakdown-page--cost {
+  break-after: page;
+  page-break-after: always;
+}
+
+.export-breakdown-page--warranty {
+  height: auto;
+  overflow: visible;
 }
 
 .export-breakdown-page:not(:last-child) {
   page-break-after: always;
+}
+
+.export-breakdown-scale {
+  transform-origin: top left;
+  display: block;
+  width: 100%;
+}
+
+.export-breakdown-scale > div {
+  width: 100%;
+}
+
+.export-breakdown-page .cost-breakdown-container,
+.export-breakdown-page .warranty-sheet {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.export-breakdown-page .cost-breakdown-wrapper,
+.export-breakdown-page .stacked-sheets {
+  width: 100%;
+}
+
+.export-breakdown-page .stacked-sheets {
+  transform: none !important;
+}
+
+.export-breakdown-page .warranty-sheet {
+  page-break-before: auto;
+  margin-top: 0;
+}
+
+.export-breakdown-page--warranty .warranty-section-card {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.export-breakdown-page--warranty .warranty-sheet {
+  margin-top: 0.08in;
+  padding: 1.35rem;
+}
+
+.export-breakdown-page--warranty .warranty-header {
+  padding-bottom: 0.8rem;
+}
+
+.export-breakdown-page--warranty .warranty-section-stack {
+  margin-top: 1rem;
+  gap: 0.85rem;
+}
+
+.export-breakdown-page--warranty .warranty-title-wrap,
+.export-breakdown-page--warranty .submerge-chip,
+.export-breakdown-page--warranty .feature-label,
+.export-breakdown-page--warranty .warranty-advantage-card {
+  font-weight: 700;
+}
+
+.export-breakdown-page--warranty .warranty-title-wrap {
+  font-size: 0.96rem;
+  padding: 0.75rem 1rem;
+}
+
+.export-breakdown-page--warranty .submerge-chip {
+  padding: 0.75rem 1rem;
+}
+
+.export-breakdown-page--warranty .warranty-feature-list,
+.export-breakdown-page--warranty .warranty-advantage-column {
+  padding: 0.85rem 1rem;
+}
+
+.export-breakdown-page--warranty .warranty-feature-list {
+  gap: 0.45rem;
+}
+
+.export-breakdown-page--warranty .feature-label {
+  font-size: 0.94rem;
+  line-height: 1.3;
+}
+
+.export-breakdown-page--warranty .feature-detail {
+  font-size: 0.86rem;
+  line-height: 1.3;
+}
+
+.export-breakdown-page--warranty .warranty-advantage-card {
+  font-size: 0.9rem;
+  line-height: 1.25;
+  padding: 0.75rem 0.95rem;
+}
+
+.export-breakdown-page--cost .cost-breakdown-container {
+  padding: 1.1rem 1.15rem;
+  border-width: 1px;
+}
+
+.export-breakdown-page--cost .breakdown-header {
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.65rem;
+}
+
+.export-breakdown-page--cost .breakdown-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.07em;
+}
+
+.export-breakdown-page--cost .breakdown-title {
+  font-size: 1.45rem;
+}
+
+.export-breakdown-page--cost .breakdown-subtitle {
+  font-size: 0.9rem;
+}
+
+.export-breakdown-page--cost .breakdown-logo img {
+  height: 56px;
+}
+
+.export-breakdown-page--cost .breakdown-summary {
+  padding: 1rem;
+  break-inside: avoid;
+}
+
+.export-breakdown-page--cost .summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 1.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.export-breakdown-page--cost .summary-row {
+  padding: 0.26rem 0;
+  font-size: 0.86rem;
+  line-height: 1.25;
+  break-inside: avoid;
+}
+
+.export-breakdown-page--cost .summary-row span:first-child {
+  padding-right: 0.5rem;
+  white-space: nowrap;
+}
+
+.export-breakdown-page--cost .summary-row span:last-child {
+  white-space: nowrap;
+}
+
+.export-breakdown-page--cost .cost-summary-section {
+  margin-top: 1rem;
+  padding-top: 0.6rem;
 }
 
 .export-page-header {
@@ -1649,6 +1900,22 @@
   }
 }
 
+@media (max-width: 1280px) {
+  .hero-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 920px;
+  }
+
+  .hero-section-title-specs,
+  .hero-section-title-equipment {
+    grid-column: 1 / -1;
+  }
+
+  .hero-section-title-equipment {
+    padding-left: 0;
+  }
+}
+
 @media (max-width: 1024px) {
   .tiles-grid {
     grid-template-columns: 1fr;
@@ -1688,6 +1955,25 @@
     grid-template-columns: 1fr;
   }
 
+  .hero-column {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hero-line {
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .hero-line span:last-child {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
   .action-button {
     width: 100%;
     justify-content: center;
@@ -1699,6 +1985,11 @@
 }
 
 @media print {
+  @page {
+    size: letter;
+    margin: 0;
+  }
+
   .no-print,
   .modal-overlay:not(.contract-printable),
   .contract-header-actions {
@@ -1719,7 +2010,7 @@
     left: 0;
     top: 0;
     width: 100%;
-    padding: 0 24px;
+    padding: 0;
     z-index: 1000;
   }
 

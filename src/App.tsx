@@ -19,8 +19,17 @@ import useKeyboardNavigation from './hooks/useKeyboardNavigation';
 import PasswordResetModal from './components/PasswordResetModal';
 import { completePasswordReset, loadSessionFromSupabase, signInWithEmail, signOut } from './services/auth';
 import { assertLoginAllowed, clearLoginAttempts, recordLoginFailure } from './services/loginRateLimiter';
-import { DEFAULT_FRANCHISE_ID, type UserSession, updateSession } from './services/session';
+import {
+  DEFAULT_FRANCHISE_ID,
+  type MasterImpersonation,
+  type UserSession,
+  clearMasterImpersonation,
+  readMasterImpersonation,
+  saveMasterImpersonation,
+  updateSession,
+} from './services/session';
 import MasterPage from './pages/MasterPage';
+import type { MasterFranchise } from './services/masterAdminAdapter';
 import './App.css';
 
 function AppContent() {
@@ -34,6 +43,7 @@ function AppContent() {
   const [showLogin, setShowLogin] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [cloudIssue, setCloudIssue] = useState<CloudConnectionIssue>(null);
+  const [masterImpersonation, setMasterImpersonation] = useState<MasterImpersonation | null>(() => readMasterImpersonation());
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
     try {
@@ -55,15 +65,23 @@ function AppContent() {
           setSession(restored.session);
           setShowLogin(false);
           setShowPasswordReset(restored.passwordResetRequired);
-          const targetId = restored.session.franchiseId || DEFAULT_FRANCHISE_ID;
+          const isMaster = (restored.session.role || '').toLowerCase() === 'master';
+          const activeImpersonation = isMaster ? readMasterImpersonation() : null;
+          setMasterImpersonation(activeImpersonation);
+          const targetId =
+            activeImpersonation?.franchiseId ||
+            restored.session.franchiseId ||
+            DEFAULT_FRANCHISE_ID;
           void loadPricingForFranchise(targetId);
         } else {
           setSession(null);
+          setMasterImpersonation(null);
           void signOut();
           setShowLogin(true);
         }
       } catch (error) {
         console.warn('Unable to restore saved session:', error);
+        setMasterImpersonation(null);
         setShowLogin(true);
       }
     };
@@ -101,11 +119,24 @@ function AppContent() {
     };
   }, [navigate]);
 
+  const isMaster = (session?.role || '').toLowerCase() === 'master';
+  const effectiveSession = (() => {
+    if (!session) return null;
+    if (!isMaster || !masterImpersonation) return session;
+    return {
+      ...session,
+      franchiseId: masterImpersonation.franchiseId,
+      franchiseName: masterImpersonation.franchiseName || session.franchiseName,
+      franchiseCode: masterImpersonation.franchiseCode || session.franchiseCode,
+      role: (masterImpersonation.actingRole || 'owner') as UserSession['role'],
+    };
+  })();
+
   useEffect(() => {
-    if (session?.franchiseId) {
-      void loadPricingForFranchise(session.franchiseId);
+    if (effectiveSession?.franchiseId) {
+      void loadPricingForFranchise(effectiveSession.franchiseId);
     }
-  }, [session?.franchiseId, loadPricingForFranchise]);
+  }, [effectiveSession?.franchiseId, loadPricingForFranchise]);
 
   const handleInstallUpdate = () => {
     if (window.electron) {
@@ -129,8 +160,18 @@ function AppContent() {
       setSession(result.session);
       setShowLogin(false);
       setShowPasswordReset(result.passwordResetRequired);
+      const normalizedRole = (result.session.role || '').toLowerCase();
+      if (normalizedRole === 'master') {
+        setMasterImpersonation(readMasterImpersonation());
+      } else {
+        clearMasterImpersonation();
+        setMasterImpersonation(null);
+      }
       navigate('/', { replace: true });
-      const targetId = result.session.franchiseId || DEFAULT_FRANCHISE_ID;
+      const targetId =
+        (normalizedRole === 'master' ? readMasterImpersonation()?.franchiseId : null) ||
+        result.session.franchiseId ||
+        DEFAULT_FRANCHISE_ID;
       await loadPricingForFranchise(targetId);
     } catch (error) {
       recordLoginFailure(email, franchiseCode);
@@ -143,12 +184,40 @@ function AppContent() {
     setSession(null);
     setShowLogin(true);
     setShowPasswordReset(false);
+    clearMasterImpersonation();
+    setMasterImpersonation(null);
     try {
       await loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
     } catch (error) {
       console.warn('Unable to reset pricing to default on logout:', error);
     }
   };
+
+  const handleActAsFranchise = useCallback(
+    async (franchise: MasterFranchise) => {
+      if (!franchise?.id) return;
+      const next: MasterImpersonation = {
+        franchiseId: franchise.id,
+        franchiseName: franchise.name || undefined,
+        franchiseCode: franchise.franchiseCode || undefined,
+        actingRole: 'owner',
+        startedAt: new Date().toISOString(),
+      };
+      saveMasterImpersonation(next);
+      setMasterImpersonation(next);
+      await loadPricingForFranchise(next.franchiseId);
+      navigate('/', { replace: true });
+    },
+    [loadPricingForFranchise, navigate]
+  );
+
+  const handleStopActing = useCallback(async () => {
+    clearMasterImpersonation();
+    setMasterImpersonation(null);
+    const targetId = session?.franchiseId || DEFAULT_FRANCHISE_ID;
+    await loadPricingForFranchise(targetId);
+    navigate('/master', { replace: true });
+  }, [loadPricingForFranchise, navigate, session?.franchiseId]);
 
   const handlePasswordReset = async (newPassword: string) => {
     await completePasswordReset(newPassword);
@@ -192,8 +261,23 @@ function AppContent() {
     };
   }, []);
 
+  const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
+  const allowOfflineEditing =
+    Boolean(session) &&
+    (location.pathname.startsWith('/proposal/new') || location.pathname.startsWith('/proposal/edit/'));
+  const showOfflineGate = isOffline && !allowOfflineEditing;
+
   // Show navigation bar on main pages, hide it on proposal form/view pages
   const showNavigation = !location.pathname.startsWith('/proposal/');
+  const effectiveRole = (effectiveSession?.role || '').toLowerCase();
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'owner';
+  const actingLabel = isMaster && masterImpersonation
+    ? masterImpersonation.franchiseName && masterImpersonation.franchiseCode
+      ? `${masterImpersonation.franchiseName} (${masterImpersonation.franchiseCode})`
+      : masterImpersonation.franchiseName ||
+        masterImpersonation.franchiseCode ||
+        masterImpersonation.franchiseId
+    : null;
 
   return (
     <div className="app">
@@ -201,31 +285,45 @@ function AppContent() {
         <NavigationBar
           userName={session?.userName || session?.userEmail || 'User'}
           onLogout={session ? handleLogout : undefined}
-          isAdmin={['owner', 'admin'].includes((session?.role || '').toLowerCase())}
-          isMaster={(session?.role || '').toLowerCase() === 'master'}
-          franchiseId={session?.franchiseId}
+          isAdmin={isAdmin}
+          isMaster={isMaster}
+          franchiseId={effectiveSession?.franchiseId}
+          actingAsLabel={actingLabel || undefined}
+          onStopActing={actingLabel ? handleStopActing : undefined}
         />
       )}
       <Routes>
         <Route
           path="/"
-          element={<HomePage session={session} />}
+          element={<HomePage session={effectiveSession} />}
         />
         <Route
           path="/admin"
           element={
             <AdminPanelPage
               onOpenPricingData={() => setShowPricingData(true)}
-              session={session}
+              session={effectiveSession}
             />
           }
         />
         <Route path="/proposals" element={<ProposalsListPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/master" element={<MasterPage session={session} />} />
-        <Route path="/proposal/new" element={<ProposalForm key="new" />} />
-        <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm key={location.pathname} />} />
+        <Route
+          path="/master"
+          element={
+            <MasterPage
+              session={session}
+              onActAsFranchise={handleActAsFranchise}
+              actingFranchiseId={masterImpersonation?.franchiseId}
+            />
+          }
+        />
+        <Route path="/proposal/new" element={<ProposalForm key="new" cloudIssue={cloudIssue} />} />
+        <Route
+          path="/proposal/edit/:proposalNumber"
+          element={<ProposalForm key={location.pathname} cloudIssue={cloudIssue} />}
+        />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
       </Routes>
       {location.pathname === '/' && (
@@ -237,20 +335,34 @@ function AppContent() {
         errorMessage={updateError}
       />
       <CloudConnectionNotice reason={cloudIssue} />
-      {session && location.pathname === '/' && (
+      {showOfflineGate && (
+        <div className="offline-gate" role="alert" aria-live="assertive">
+          <div className="offline-gate-card">
+            <div className="offline-gate-title">
+              {cloudIssue === 'server-issue' ? 'Cloud Unavailable' : 'No Internet Connection'}
+            </div>
+            <div className="offline-gate-subtitle">
+              {cloudIssue === 'server-issue'
+                ? 'Cloud connection cannot be reached. Reconnect to continue.'
+                : 'Reconnect to continue using Submerge.'}
+            </div>
+          </div>
+        </div>
+      )}
+      {effectiveSession && location.pathname === '/' && (
         <div className="app-session-meta">
           <div className="app-session-line">
-            Role: {session.role ? session.role.charAt(0).toUpperCase() + session.role.slice(1) : 'Designer'}
+            Role: {effectiveSession.role ? effectiveSession.role.charAt(0).toUpperCase() + effectiveSession.role.slice(1) : 'Designer'}
           </div>
           <div className="app-session-line">
-            {session.franchiseName || session.franchiseCode || session.franchiseId || 'Unknown'}
+            {effectiveSession.franchiseName || effectiveSession.franchiseCode || effectiveSession.franchiseId || 'Unknown'}
           </div>
         </div>
       )}
       {showPricingData && (
         <PricingDataModal
           onClose={() => setShowPricingData(false)}
-          franchiseId={session?.franchiseId}
+          franchiseId={effectiveSession?.franchiseId}
         />
       )}
       {showLogin && (

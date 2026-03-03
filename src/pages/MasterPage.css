@@ -41,6 +41,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .master-card-header h2 {
@@ -71,12 +72,59 @@
   font-size: 0.95rem;
 }
 
+.master-kicker {
+  margin: 4px 0 0;
+  color: #4b647f;
+  font-size: 0.9rem;
+}
+
+.master-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.master-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #4b647f;
+}
+
+.master-filter input,
+.master-filter select,
+.master-copy-controls select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #c9d7e3;
+  font-size: 0.9rem;
+  background: #ffffff;
+}
+
+.master-table-meta {
+  margin-left: auto;
+  color: #4b647f;
+  font-size: 0.9rem;
+}
+
 .master-error {
   background: rgba(220, 53, 69, 0.08);
   color: #b51221;
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid rgba(220, 53, 69, 0.2);
+  font-size: 0.9rem;
+}
+
+.master-success {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
   font-size: 0.9rem;
 }
 
@@ -88,6 +136,11 @@
   border-radius: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.master-primary-btn.master-small-btn {
+  padding: 8px 12px;
+  font-size: 0.85rem;
 }
 
 .master-danger-btn {
@@ -116,6 +169,22 @@
   background: #f8fafc;
 }
 
+.master-franchise-row.is-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.master-franchise-row.is-clickable:hover {
+  border-color: #1e88e5;
+  background: #eef5ff;
+  box-shadow: 0 6px 16px rgba(30, 136, 229, 0.12);
+}
+
+.master-franchise-row.is-acting {
+  border-color: #1e88e5;
+  background: #eef5ff;
+}
+
 .master-franchise-row.is-inactive {
   opacity: 0.7;
 }
@@ -140,6 +209,14 @@
   color: #b91c1c;
 }
 
+.master-franchise-acting {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #1e88e5;
+}
+
 .master-franchise-users {
   display: flex;
   flex-direction: column;
@@ -150,6 +227,54 @@
 
 .master-franchise-actions {
   display: flex;
+  align-items: center;
+}
+
+.master-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.master-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.master-table th,
+.master-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e6edf5;
+  vertical-align: middle;
+}
+
+.master-table th {
+  color: #4b647f;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.master-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.master-table-primary {
+  font-weight: 600;
+}
+
+.master-table-secondary {
+  font-size: 0.8rem;
+  color: #b91c1c;
+  margin-top: 4px;
+}
+
+.master-copy-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
 }
 

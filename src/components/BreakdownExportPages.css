@@ -1,0 +1,248 @@
+.breakdown-export-cost-sheet,
+.breakdown-export-warranty-sheet {
+  width: 100%;
+  color: #16253f;
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.breakdown-export-cost-sheet {
+  border: 1px solid #c7d4e6;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.28in 0.3in;
+  box-sizing: border-box;
+  min-height: 9.9in;
+  display: flex;
+  flex-direction: column;
+}
+
+.breakdown-export-warranty-sheet {
+  border: 1px solid #d7e0ee;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.24in 0.26in;
+  box-sizing: border-box;
+}
+
+.breakdown-export-cost-header,
+.breakdown-export-warranty-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.35in;
+  border-bottom: 1px solid #dce5f2;
+  padding-bottom: 0.14in;
+  margin-bottom: 0.18in;
+}
+
+.breakdown-export-eyebrow {
+  margin: 0 0 0.05in;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334b72;
+}
+
+.breakdown-export-title {
+  margin: 0;
+  font-size: 31px;
+  line-height: 1.1;
+  color: #0f1f3f;
+  font-weight: 700;
+}
+
+.breakdown-export-subtitle {
+  margin: 0.08in 0 0;
+  font-size: 19px;
+  color: #4a5f7b;
+  font-style: italic;
+}
+
+.breakdown-export-subtitle span {
+  font-weight: 600;
+  color: #152849;
+}
+
+.breakdown-export-logo img {
+  max-height: 0.52in;
+  width: auto;
+}
+
+.breakdown-export-table-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.14in 0.18in;
+  margin-bottom: 0.16in;
+  flex: 1;
+  min-height: 0;
+}
+
+.breakdown-export-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.breakdown-export-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.08in;
+  flex: 1 1 0;
+  border-bottom: 1px solid #e4ebf5;
+  padding: 0.045in 0;
+}
+
+.breakdown-export-row--empty {
+  color: transparent;
+}
+
+.breakdown-export-row-label {
+  width: 68%;
+  min-width: 0;
+  font-weight: 600;
+  color: #4a5e78;
+  font-size: 15px;
+  line-height: 1.35;
+  padding-right: 0.08in;
+}
+
+.breakdown-export-row-value {
+  width: 32%;
+  min-width: 0;
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  color: #1a2a42;
+  font-size: 15px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.breakdown-export-total {
+  border-top: 2px solid #cad7ea;
+  padding-top: 0.11in;
+  display: flex;
+  justify-content: space-between;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f1f3f;
+}
+
+.breakdown-export-total span:last-child {
+  font-family: 'Courier New', monospace;
+}
+
+.breakdown-export-warranty-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.11in;
+}
+
+.breakdown-export-warranty-card {
+  border: 1px solid #d9e1ee;
+  border-radius: 12px;
+  overflow: hidden;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.breakdown-export-warranty-card-header {
+  display: grid;
+  grid-template-columns: 1fr 0.33fr;
+}
+
+.breakdown-export-warranty-card-header h3 {
+  margin: 0;
+  background: #0f274d;
+  color: #ffffff;
+  padding: 0.08in 0.12in;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.breakdown-export-warranty-card-header span {
+  background: #e3ba0d;
+  color: #4f4318;
+  padding: 0.08in 0.12in;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.breakdown-export-warranty-card-body {
+  display: grid;
+  grid-template-columns: 1fr 0.33fr;
+}
+
+.breakdown-export-feature-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.09in 0.12in;
+  display: flex;
+  flex-direction: column;
+  gap: 0.06in;
+}
+
+.breakdown-export-feature-list li {
+  position: relative;
+  padding-left: 0.18in;
+}
+
+.breakdown-export-feature-list li::before {
+  content: '\2713';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #274777;
+  font-weight: 700;
+}
+
+.breakdown-export-feature-label {
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: #16263f;
+}
+
+.breakdown-export-feature-detail {
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.24;
+  color: #4b5f78;
+}
+
+.breakdown-export-advantage-list {
+  padding: 0.09in 0.1in;
+  border-left: 1px solid #dde5f0;
+  background: #fbfcff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.06in;
+}
+
+.breakdown-export-advantage-chip {
+  border: 1px solid #ebdca7;
+  background: #f6edcb;
+  color: #655323;
+  border-radius: 10px;
+  padding: 0.06in 0.08in;
+  font-size: 14px;
+  line-height: 1.22;
+  text-align: center;
+  font-weight: 700;
+}
+
+.breakdown-export-advantage-chip.muted {
+  background: #f3f4f6;
+  border-color: #d8dce3;
+  color: #6b7280;
+}
+
+@media print {
+  .breakdown-export-cost-sheet,
+  .breakdown-export-warranty-sheet {
+    box-shadow: none;
+  }
+}

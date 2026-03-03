@@ -27,14 +27,14 @@ import {
   getDefaultCustomFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
+  mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { listAllVersions } from '../utils/proposalVersions';
 import TempPasswordModal from '../components/TempPasswordModal';
 
 const DEFAULT_FRANCHISE_ID = 'default';
-const PERFORMANCE_SCALE_BASELINE = 200;
-const PERFORMANCE_SCALE_STEP = 25;
+const FRANCHISE_MARGIN_LIMIT = 18;
 
 type SessionInfo = {
   userName?: string;
@@ -59,6 +59,12 @@ const getStatusColor = (status: string) => {
   }
 };
 
+const getRoleLabel = (role?: string) => {
+  if (role === 'owner') return 'Owner';
+  if (role === 'admin') return 'Admin';
+  return 'Designer';
+};
+
 const formatDate = (value?: string) => {
   if (!value) return 'N/A';
   const date = new Date(value);
@@ -69,6 +75,13 @@ const normalizeDesignerName = (value?: string) => (value ?? '').trim();
 const isSubmittedStatus = (status?: string) => {
   const normalized = (status || '').toLowerCase();
   return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
+};
+
+const hasExcessiveDiscount = (proposal: Proposal) => {
+  const adjustments = proposal.retailAdjustments || [];
+  const hasNegativeAdjustment = adjustments.some((adj) => (Number(adj?.amount) || 0) < 0);
+  const grossMargin = proposal.pricing?.grossProfitMargin ?? 0;
+  return hasNegativeAdjustment && Number.isFinite(grossMargin) && grossMargin < FRANCHISE_MARGIN_LIMIT;
 };
 
 function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
@@ -86,9 +99,11 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [userError, setUserError] = useState<string | null>(null);
+  const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [promotingUserId, setPromotingUserId] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [designerFilter, setDesignerFilter] = useState('all');
   const userListRef = useRef<HTMLDivElement | null>(null);
   const userWheelLockRef = useRef<number>(0);
@@ -146,6 +161,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
           interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
           manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
+          retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
           papDiscounts: input.papDiscounts || (base as any).papDiscounts,
         };
       };
@@ -214,6 +230,17 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     }
   };
 
+  const selectedUser = useMemo(
+    () => franchiseUsers.find((user) => user.id === selectedUserId) || null,
+    [franchiseUsers, selectedUserId]
+  );
+
+  useEffect(() => {
+    if (selectedUserId && !selectedUser) {
+      setSelectedUserId(null);
+    }
+  }, [selectedUser, selectedUserId]);
+
   const handleSetActiveModel = async (modelId: string) => {
     if (!modelId) return;
     setActivatingModelId(modelId);
@@ -252,6 +279,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       });
       setNewUserName('');
       setNewUserEmail('');
+      setShowAddUserForm(false);
       if (result?.tempPassword) {
         setTempPassword(result.tempPassword);
       }
@@ -276,6 +304,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       await markDesignerProposalsDeleted(franchiseId, targetName);
       await loadUsers(franchiseId);
       await loadProposals(franchiseId);
+      setSelectedUserId(null);
     } catch (error) {
       console.error('Failed to remove user:', error);
     }
@@ -305,6 +334,19 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     } finally {
       setResettingUserId(null);
     }
+  };
+
+  const handleOpenAddUserForm = () => {
+    setShowAddUserForm(true);
+    setUserError(null);
+    setSelectedUserId(null);
+  };
+
+  const handleCloseAddUserForm = () => {
+    setShowAddUserForm(false);
+    setNewUserName('');
+    setNewUserEmail('');
+    setUserError(null);
   };
 
   const submittedProposals = useMemo(
@@ -346,12 +388,6 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         return a.name.localeCompare(b.name);
       });
   }, [franchiseUsers, submittedProposals, session?.userName]);
-
-  const performanceScaleMax = useMemo(() => {
-    const maxProposals = performanceData.reduce((max, item) => Math.max(max, item.proposals), 0);
-    const scaleTarget = Math.max(maxProposals, PERFORMANCE_SCALE_BASELINE);
-    return Math.ceil(scaleTarget / PERFORMANCE_SCALE_STEP) * PERFORMANCE_SCALE_STEP;
-  }, [performanceData]);
 
   const sortedProposals = useMemo(
     () =>
@@ -510,7 +546,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           <div className="admin-card-header">
             <div>
               <h2 className="admin-card-title">Franchise Performance</h2>
-              <p className="admin-kicker">Proposals submitted by designer</p>
+              <p className="admin-kicker">Total Proposals from Designers & Admins</p>
             </div>
           </div>
           <div className="admin-divider" />
@@ -518,9 +554,6 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
             <div className="admin-performance-chart">
               <div className="performance-list">
                 {performanceData.map((item) => {
-                  const width = performanceScaleMax
-                    ? Math.min((item.proposals / performanceScaleMax) * 100, 100)
-                    : 0;
                   const isEmpty = item.proposals === 0;
                   return (
                     <div className={`performance-row${isEmpty ? ' is-empty' : ''}`} key={item.name}>
@@ -528,11 +561,8 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                         <span>{item.name}</span>
                         {isEmpty && <span className="performance-empty-label">No proposals</span>}
                       </div>
-                      <div className="performance-bar-track">
-                        <div className="performance-bar-fill" style={{ width: `${width}%` }} />
-                        <div className={`performance-value${isEmpty ? ' empty' : ''}`}>
-                          {item.proposals.toLocaleString('en-US')}
-                        </div>
+                      <div className={`performance-count${isEmpty ? ' empty' : ''}`}>
+                        {item.proposals.toLocaleString('en-US')}
                       </div>
                     </div>
                   );
@@ -548,32 +578,17 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
               <h2 className="admin-card-title">Designers</h2>
               <p className="admin-kicker">Allowed users for this franchise</p>
             </div>
+            <button
+              className="admin-primary-btn ghost admin-add-designer-btn"
+              type="button"
+              onClick={handleOpenAddUserForm}
+              aria-expanded={showAddUserForm}
+            >
+              Add a New Designer
+            </button>
           </div>
           <div className="admin-divider" />
           <div className="admin-users">
-            <div className="admin-users-form">
-              <input
-                type="text"
-                value={newUserName}
-                onChange={(e) => setNewUserName(e.target.value)}
-                placeholder="Designer name"
-              />
-              <input
-                type="email"
-                value={newUserEmail}
-                onChange={(e) => setNewUserEmail(e.target.value)}
-                placeholder="Designer email"
-              />
-              <button
-                className="admin-primary-btn"
-                type="button"
-                onClick={handleAddUser}
-                disabled={addingUser}
-              >
-                {addingUser ? 'Adding...' : 'Add Designer'}
-              </button>
-            </div>
-            {userError && <div className="admin-error">{userError}</div>}
             {loadingUsers ? (
               <div className="admin-empty">Loading designers...</div>
             ) : franchiseUsers.length === 0 ? (
@@ -586,47 +601,23 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                 onWheel={handleUserListWheel}
               >
                 {franchiseUsers.map((user) => (
-                  <div className="admin-user-row" key={user.id} role="listitem">
+                    <div
+                      className={`admin-user-row role-${user.role}${selectedUserId === user.id ? ' selected' : ''}`}
+                      key={user.id}
+                    role="listitem"
+                    tabIndex={0}
+                    onClick={() => setSelectedUserId(user.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedUserId(user.id);
+                      }
+                    }}
+                    aria-label={`View ${user.name || user.email}`}
+                  >
                     <div className="admin-user-meta">
                       <div className="admin-user-name">{user.name || user.email}</div>
-                      <div className="admin-user-email">{user.email}</div>
-                      <div className="admin-user-role">
-                        {user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : 'Designer'}
-                      </div>
-                    </div>
-                    <div className="admin-user-actions">
-                      {user.role === 'designer' && (
-                        <button
-                          className="admin-primary-btn ghost"
-                          type="button"
-                          onClick={() => handlePromoteUser(user.id)}
-                          disabled={promotingUserId === user.id}
-                          title="Promote to admin"
-                        >
-                          {promotingUserId === user.id ? 'Promoting...' : 'Make Admin'}
-                        </button>
-                      )}
-                      {user.role === 'designer' && (
-                        <button
-                          className="admin-remove-btn"
-                          type="button"
-                          onClick={() => handleRemoveUser(user.id, user.role)}
-                          title="Remove user"
-                        >
-                          Remove
-                        </button>
-                      )}
-                      {user.role !== 'owner' && (
-                        <button
-                          className="admin-primary-btn ghost"
-                          type="button"
-                          onClick={() => handleResetPassword(user.id)}
-                          disabled={resettingUserId === user.id}
-                          title="Reset password"
-                        >
-                          {resettingUserId === user.id ? 'Resetting...' : 'Reset Password'}
-                        </button>
-                      )}
+                      <div className="admin-user-role">{getRoleLabel(user.role)}</div>
                     </div>
                   </div>
                 ))}
@@ -727,6 +718,10 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                     : isRemoved
                     ? 'proposal-model-pill removed'
                     : 'proposal-model-pill inactive';
+                  const discountLimitExceeded =
+                    proposal.status === 'submitted' && hasExcessiveDiscount(proposal);
+                  const statusLabel = discountLimitExceeded ? `${proposal.status}*` : proposal.status;
+                  const statusColor = discountLimitExceeded ? '#ef4444' : getStatusColor(proposal.status);
 
                   return (
                     <tr
@@ -738,12 +733,42 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                       <td className="customer-name">{proposal.customerInfo.customerName}</td>
                       <td>{new Date(proposal.lastModified || proposal.createdDate).toLocaleDateString()}</td>
                       <td>
-                        <span
-                          className="status-badge-table"
-                          style={{ backgroundColor: getStatusColor(proposal.status) }}
-                        >
-                          {proposal.status}
-                        </span>
+                        <div className="proposal-status-cell">
+                          <span
+                            className="status-badge-table"
+                            style={{ backgroundColor: statusColor }}
+                          >
+                            {statusLabel}
+                          </span>
+                          {discountLimitExceeded && (
+                            <span
+                              className="status-warning-icon"
+                              title="Discount applied that exceeds 18% threshold"
+                              aria-label="Discount applied that exceeds 18% threshold"
+                              role="img"
+                            >
+                              <svg width="16" height="14" viewBox="0 0 24 20" aria-hidden="true">
+                                <path
+                                  d="M12 1.5 23 19.5H1L12 1.5Z"
+                                  fill="#facc15"
+                                  stroke="#b45309"
+                                  strokeWidth="1.2"
+                                />
+                                <text
+                                  x="12"
+                                  y="15"
+                                  textAnchor="middle"
+                                  fontSize="12"
+                                  fontWeight="700"
+                                  fill="#7c2d12"
+                                  fontFamily="Arial, sans-serif"
+                                >
+                                  !
+                                </text>
+                              </svg>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <span className={modelClass}>
@@ -772,6 +797,140 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           </div>
         )}
       </div>
+
+      {showAddUserForm && (
+        <div className="admin-user-modal-backdrop" onClick={handleCloseAddUserForm}>
+          <div
+            className="admin-user-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="admin-user-modal-header">
+              <div>
+                <p className="admin-user-modal-kicker">Designers</p>
+                <h3 className="admin-user-modal-title">Add a New Designer</h3>
+              </div>
+              <button
+                className="admin-user-modal-close"
+                type="button"
+                onClick={handleCloseAddUserForm}
+                aria-label="Close add designer form"
+              >
+                ×
+              </button>
+            </div>
+            <div className="admin-users-add">
+              <div className="admin-users-add-card">
+                <div className="admin-users-add-field">
+                  <label className="admin-users-add-label" htmlFor="designer-name-input">
+                    Designer Name
+                  </label>
+                  <input
+                    id="designer-name-input"
+                    type="text"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    placeholder="Enter Designer Name"
+                    disabled={addingUser}
+                  />
+                </div>
+                <div className="admin-users-add-field">
+                  <label className="admin-users-add-label" htmlFor="designer-email-input">
+                    Designer Email
+                  </label>
+                  <div className="admin-users-add-email">
+                    <input
+                      id="designer-email-input"
+                      type="email"
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      placeholder="Enter Designer Email"
+                      disabled={addingUser}
+                    />
+                    <button
+                      className="admin-primary-btn"
+                      type="button"
+                      onClick={handleAddUser}
+                      disabled={addingUser}
+                    >
+                      {addingUser ? 'Adding...' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {userError && <div className="admin-error">{userError}</div>}
+          </div>
+        </div>
+      )}
+
+      {selectedUser && (
+        <div className="admin-user-modal-backdrop" onClick={() => setSelectedUserId(null)}>
+          <div
+            className="admin-user-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="admin-user-modal-header">
+              <div>
+                <p className="admin-user-modal-kicker">Designer Details</p>
+                <h3 className="admin-user-modal-title">{selectedUser.name || selectedUser.email}</h3>
+              </div>
+              <button
+                className="admin-user-modal-close"
+                type="button"
+                onClick={() => setSelectedUserId(null)}
+                aria-label="Close designer details"
+              >
+                ×
+              </button>
+            </div>
+            <div className="admin-user-modal-details">
+              <div className="admin-user-detail">
+                <span className="admin-user-detail-label">Role</span>
+                <span className="admin-user-detail-value">{getRoleLabel(selectedUser.role)}</span>
+              </div>
+              <div className="admin-user-detail">
+                <span className="admin-user-detail-label">Email</span>
+                <span className="admin-user-detail-value">{selectedUser.email}</span>
+              </div>
+            </div>
+            <div className="admin-user-modal-actions">
+              {selectedUser.role === 'designer' && (
+                <button
+                  className="admin-primary-btn ghost"
+                  type="button"
+                  onClick={() => handlePromoteUser(selectedUser.id)}
+                  disabled={promotingUserId === selectedUser.id}
+                >
+                  {promotingUserId === selectedUser.id ? 'Promoting...' : 'Make Admin'}
+                </button>
+              )}
+              {selectedUser.role !== 'owner' && (
+                <button
+                  className="admin-primary-btn ghost"
+                  type="button"
+                  onClick={() => handleResetPassword(selectedUser.id)}
+                  disabled={resettingUserId === selectedUser.id}
+                >
+                  {resettingUserId === selectedUser.id ? 'Resetting...' : 'Reset Password'}
+                </button>
+              )}
+              {selectedUser.role === 'designer' && (
+                <button
+                  className="admin-remove-btn"
+                  type="button"
+                  onClick={() => handleRemoveUser(selectedUser.id, selectedUser.role)}
+                >
+                  Remove User
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {tempPassword && (
         <TempPasswordModal
           tempPassword={tempPassword}

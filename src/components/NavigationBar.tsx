@@ -10,9 +10,19 @@ interface NavigationBarProps {
   isAdmin?: boolean;
   isMaster?: boolean;
   franchiseId?: string;
+  actingAsLabel?: string;
+  onStopActing?: () => void;
 }
 
-function NavigationBar({ userName = 'User', onLogout, isAdmin = false, isMaster = false, franchiseId }: NavigationBarProps) {
+function NavigationBar({
+  userName = 'User',
+  onLogout,
+  isAdmin = false,
+  isMaster = false,
+  franchiseId,
+  actingAsLabel,
+  onStopActing,
+}: NavigationBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { displayName } = useFranchiseAppName(franchiseId);
@@ -35,7 +45,19 @@ function NavigationBar({ userName = 'User', onLogout, isAdmin = false, isMaster 
         <FranchiseLogo className="nav-logo" alt="Franchise Logo" franchiseId={franchiseId} />
         <div className="nav-title-container">
           <div className="nav-brand">{displayName}</div>
-          <div className="nav-title">Proposal Builder</div>
+          <div className="nav-title-row">
+            <div className="nav-title">Proposal Builder</div>
+            {actingAsLabel && (
+              <div className="nav-acting">
+                <span className="nav-acting-text">Acting as Owner for Franchise {actingAsLabel}</span>
+                {onStopActing && (
+                  <button className="nav-acting-btn" type="button" onClick={onStopActing}>
+                    Sign Out
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -88,7 +110,6 @@ function NavigationBar({ userName = 'User', onLogout, isAdmin = false, isMaster 
           <span className="nav-welcome">Welcome,</span>
           <span className="nav-username">{userName}</span>
           <div className="nav-avatar">{userName.charAt(0).toUpperCase()}</div>
-          <span className="nav-caret">{menuOpen ? '^' : 'v'}</span>
         </button>
         {menuOpen && onLogout && (
           <div className="nav-user-menu">

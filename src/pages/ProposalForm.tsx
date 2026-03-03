@@ -15,6 +15,7 @@ import {
   getDefaultCustomFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
+  mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import MasterPricingEngine from '../services/masterPricingEngine';
@@ -31,7 +32,6 @@ import WaterFeaturesSectionNew from '../components/WaterFeaturesSectionNew';
 import InteriorFinishSectionNew from '../components/InteriorFinishSectionNew';
 import CustomFeaturesSectionNew from '../components/CustomFeaturesSectionNew';
 import CostBreakdownView from '../components/CostBreakdownView';
-import LiveCostBreakdown from '../components/LiveCostBreakdown';
 import CostBreakdownPage from '../components/CostBreakdownPage';
 import FranchiseLogo from '../components/FranchiseLogo';
 import './ProposalForm.css';
@@ -61,11 +61,13 @@ import pricingData from '../services/pricingData';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { hasSupabaseConnection } from '../services/supabaseClient';
+import type { CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
   getSessionFranchiseCode,
   getSessionFranchiseId,
   getSessionRole,
   getSessionUserName,
+  isMasterImpersonating,
 } from '../services/session';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 
@@ -211,18 +213,24 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
     customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
     manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
+    retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
     papDiscounts: input.papDiscounts || base.papDiscounts,
     costBreakdown: input.costBreakdown || base.costBreakdown,
   };
 };
 
-function ProposalForm() {
+type ProposalFormProps = {
+  cloudIssue?: CloudConnectionIssue;
+};
+
+function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
   const location = useLocation();
   const sessionRole = getSessionRole();
   const canViewCostBreakdown = sessionRole === 'admin' || sessionRole === 'owner';
+  const isMasterActingAsOwner = isMasterImpersonating();
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
   const versionNameFromState = (location.state as any)?.versionName as string | undefined;
   const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -230,26 +238,27 @@ function ProposalForm() {
     if (typeof window === 'undefined') return true;
     return window.innerWidth >= 1100;
   };
-  const getInitialRightCost = () => {
-    if (typeof window === 'undefined') return true;
-    return window.innerWidth >= 1250;
-  };
+
+  useEffect(() => {
+    if (!isMasterActingAsOwner) return;
+    if (proposalNumber) {
+      navigate(`/proposal/view/${proposalNumber}`, { replace: true });
+    } else {
+      navigate('/', { replace: true });
+    }
+  }, [isMasterActingAsOwner, navigate, proposalNumber]);
   const [currentSection, setCurrentSection] = useState(0);
   const [isLoading, setIsLoading] = useState(!!proposalNumber);
   const loadRequestRef = useRef(0);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showLeftNav, setShowLeftNav] = useState<boolean>(getInitialLeftNav);
-  const [showRightCost, setShowRightCost] = useState<boolean>(getInitialRightCost);
   const [navManuallyToggled, setNavManuallyToggled] = useState(false);
-  const [costManuallyToggled, setCostManuallyToggled] = useState(false);
   const [viewportWidth, setViewportWidth] = useState<number>(getViewportWidth);
   const [showCostModal, setShowCostModal] = useState(false);
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showOfflineConfirm, setShowOfflineConfirm] = useState(false);
-  const [pendingSaveMode, setPendingSaveMode] = useState<'draft' | 'submit' | null>(null);
-  const [pendingSaveOptions, setPendingSaveOptions] = useState<{ navigateToSummary?: boolean } | null>(null);
+  const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const readPapDiscountsFromModel = (): PAPDiscounts => {
     const snapshot = getPricingDataSnapshot();
     return snapshot?.papDiscountRates ? { ...snapshot.papDiscountRates } : getDefaultPAPDiscounts();
@@ -461,23 +470,17 @@ function ProposalForm() {
       const width = getViewportWidth();
       setViewportWidth(width);
       const forceHideNav = width < 960;
-      const forceHideCost = width < 1150;
       if (forceHideNav && showLeftNav) {
         setShowLeftNav(false);
       } else if (!navManuallyToggled && width > 1200 && !showLeftNav) {
         setShowLeftNav(true);
-      }
-      if (forceHideCost && showRightCost) {
-        setShowRightCost(false);
-      } else if (!costManuallyToggled && width > 1280 && !showRightCost) {
-        setShowRightCost(true);
       }
     };
 
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [costManuallyToggled, navManuallyToggled, showLeftNav, showRightCost]);
+  }, [navManuallyToggled, showLeftNav]);
 
   const getInitialProposal = (): Partial<Proposal> => {
     const base = getDefaultProposal();
@@ -758,18 +761,19 @@ function ProposalForm() {
 
   const handleSave = async (
     mode: 'draft' | 'submit',
-    options?: { forceLocal?: boolean; navigateToSummary?: boolean }
+    options?: { navigateToSummary?: boolean }
   ): Promise<boolean> => {
     if (isSaving) return false;
 
     const currentVersionId = proposal.versionId || editingVersionId || 'original';
     const isVersionEdit = !(proposal.isOriginalVersion ?? currentVersionId === 'original');
     const effectiveMode = isVersionEdit ? 'draft' : mode;
-    const supabaseConnected = options?.forceLocal ? false : await hasSupabaseConnection();
-    if (!supabaseConnected && !options?.forceLocal) {
-      setPendingSaveMode(mode);
-      setPendingSaveOptions(options || null);
-      setShowOfflineConfirm(true);
+    const supabaseConnected = await hasSupabaseConnection(true);
+    if (!supabaseConnected) {
+      showToast({
+        type: 'error',
+        message: 'No internet connection. Connect to save this proposal.',
+      });
       return false;
     }
 
@@ -819,8 +823,6 @@ function ProposalForm() {
         totalCost: toFiniteNumber(totals.totalCost),
       };
 
-      const saveOptions = supabaseConnected && !options?.forceLocal ? {} : { forceLocal: true };
-
       const cleanExistingVersions = versionList.length
         ? versionList.map((v) => ({ ...v, versions: [] }))
         : [{ ...finalProposal }];
@@ -837,7 +839,7 @@ function ProposalForm() {
         activeVersionId || finalProposal.versionId || currentVersionId
       );
 
-      const saved = await saveProposalRemote(containerToSave, saveOptions);
+      const saved = await saveProposalRemote(containerToSave);
 
       const savedActive = applyActiveVersion(saved as Proposal);
       setProposal({ ...(savedActive as Proposal) });
@@ -845,16 +847,11 @@ function ProposalForm() {
       setActiveVersionId(savedActive.activeVersionId || currentVersionId);
       setEditingVersionId(savedActive.versionId || currentVersionId);
       setHasEdits(false);
-      const isPending = (saved as any).syncStatus === 'pending';
       showToast({
-        type: isPending ? 'warning' : 'success',
+        type: 'success',
         message:
           effectiveMode === 'submit'
-            ? isPending
-              ? 'Saved locally. Will submit when cloud connection returns.'
-              : 'Proposal submitted successfully!'
-            : isPending
-            ? 'Saved locally. Will sync to cloud when back online.'
+            ? 'Proposal submitted successfully!'
             : 'Proposal saved successfully!',
       });
 
@@ -880,8 +877,6 @@ function ProposalForm() {
       return false;
     } finally {
       setIsSaving(false);
-      setPendingSaveMode(null);
-      setPendingSaveOptions(null);
     }
   };
 
@@ -1245,12 +1240,16 @@ function ProposalForm() {
 
   const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(mergeWithDefaults(proposal), papDiscounts);
   const canSubmit = Boolean(proposal.customerInfo?.customerName?.trim());
-    const submitTooltip = !canSubmit ? 'Must include Customer Name' : undefined;
-    const isCompactLayout = viewportWidth < 1300;
-    const isMobileLayout = viewportWidth < 1024;
-    const customerTitle = (proposal.customerInfo?.customerName || '').trim();
-    const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
-    const franchiseLogoId = proposal.franchiseId || getSessionFranchiseId();
+  const submitTooltip = isOffline
+    ? 'No internet connection. Connect to save.'
+    : !canSubmit
+    ? 'Must include Customer Name'
+    : undefined;
+  const isCompactLayout = viewportWidth < 1300;
+  const isMobileLayout = viewportWidth < 1024;
+  const customerTitle = (proposal.customerInfo?.customerName || '').trim();
+  const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
+  const franchiseLogoId = proposal.franchiseId || getSessionFranchiseId();
   const editingVersionKey = proposal.versionId || editingVersionId || 'original';
   const isVersionEdit = !(proposal.isOriginalVersion ?? editingVersionKey === 'original');
   const retailPrice = toFiniteNumber(
@@ -1261,21 +1260,32 @@ function ProposalForm() {
   );
   const formattedRetailPrice = formatCurrency(retailPrice);
   const proposalIndicator = buildProposalIndicator(currentCostBreakdown.pricing?.grossProfitMargin);
-  const showCostSidebar = canViewCostBreakdown && showRightCost;
+  const showCostSidebar = false;
 
   const handleCompleteClick = () => {
     if (!canSubmit || isSaving) return;
     void handleSave('draft', { navigateToSummary: true });
   };
 
+  if (isMasterActingAsOwner) {
+    return null;
+  }
+
   return (
     <div className="proposal-form">
-        <header className="form-header">
-          <div className="form-header-title">
-            <FranchiseLogo className="form-logo" alt="Franchise Logo" franchiseId={franchiseLogoId} />
-            <h1>{headerTitle}</h1>
-          </div>
-        </header>
+      {isOffline && (
+        <div className="offline-save-banner" role="alert">
+          {cloudIssue === 'server-issue'
+            ? 'CLOUD UNAVAILABLE - CONNECT TO SAVE PROPOSAL'
+            : 'NO INTERNET - CONNECT TO SAVE PROPOSAL'}
+        </div>
+      )}
+      <header className="form-header">
+        <div className="form-header-title">
+          <FranchiseLogo className="form-logo" alt="Franchise Logo" franchiseId={franchiseLogoId} />
+          <h1>{headerTitle}</h1>
+        </div>
+      </header>
 
       <div
         className={`form-layout ${isCompactLayout ? 'is-compact' : ''} ${isMobileLayout ? 'is-mobile' : ''} ${!showCostSidebar ? 'no-cost' : ''} ${!showLeftNav ? 'no-nav' : ''}`}
@@ -1332,9 +1342,23 @@ function ProposalForm() {
                   </button>
                 </div>
               ) : (
-                <div className="nav-retail-price">
-                  <span className="nav-retail-label">Retail Price:</span>
-                  <span className="nav-retail-value">{formattedRetailPrice}</span>
+                <div className="nav-retail-block">
+                  <div className="nav-retail-price">
+                    <span className="nav-retail-label">Retail Price:</span>
+                    <span className="nav-retail-value">{formattedRetailPrice}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="nav-customer-breakdown-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCostModal(true);
+                    }}
+                    data-tooltip="View Customer Cost and Warranty Breakdown"
+                    aria-label="View Customer Cost and Warranty Breakdown"
+                  >
+                    Customer Cost and Warranty Breakdown
+                  </button>
                 </div>
               )}
               <span className="nav-divider" />
@@ -1382,7 +1406,7 @@ function ProposalForm() {
                 <button
                   className="btn btn-success"
                   onClick={handleCompleteClick}
-                  disabled={!canSubmit || isSaving}
+                  disabled={!canSubmit || isSaving || isOffline}
                   title={submitTooltip}
                 >
                   Complete Proposal
@@ -1416,32 +1440,6 @@ function ProposalForm() {
           </div>
         </div>
 
-        {showCostSidebar && (
-          <aside className="cost-sidebar">
-            <LiveCostBreakdown
-              costBreakdown={currentCostBreakdown.costBreakdown}
-              totalCOGS={currentCostBreakdown.pricing.totalCOGS}
-              onToggle={() => {
-                setCostManuallyToggled(true);
-                setShowRightCost(false);
-              }}
-            />
-          </aside>
-        )}
-
-        {canViewCostBreakdown && !showCostSidebar && (
-          <button
-            className="sidebar-show-button right-show"
-            onClick={() => {
-              setCostManuallyToggled(true);
-              setShowRightCost(true);
-            }}
-            title="Show cost breakdown"
-            data-tooltip="Click to reveal Cost Breakdown"
-          >
-            &lt;
-          </button>
-        )}
       </div>
 
       {showCostModal && (
@@ -1455,6 +1453,14 @@ function ProposalForm() {
               customerName={proposal.customerInfo?.customerName || ''}
               proposal={proposal}
               pricing={currentCostBreakdown.pricing}
+              showWarranty
+              showZoomControl={canViewCostBreakdown}
+              allowRetailAdjustments={!isMasterActingAsOwner}
+              onRetailAdjustmentsChange={
+                !isMasterActingAsOwner
+                  ? (adjustments) => updateProposal('retailAdjustments', adjustments)
+                  : undefined
+              }
             />
           </div>
         </div>
@@ -1471,30 +1477,6 @@ function ProposalForm() {
           }}
         />
       )}
-
-      <ConfirmDialog
-        open={showOfflineConfirm}
-        title="Offline Save"
-        message="Warning: You are not connected to the cloud. Save locally instead? (Proposal will be uploaded when connection is restored)"
-        confirmLabel="Save locally"
-        cancelLabel="Go Back"
-        onConfirm={async () => {
-          setShowOfflineConfirm(false);
-          if (pendingSaveMode) {
-            await handleSave(pendingSaveMode, {
-              forceLocal: true,
-              navigateToSummary: pendingSaveOptions?.navigateToSummary,
-            });
-          }
-          setPendingSaveMode(null);
-          setPendingSaveOptions(null);
-        }}
-        onCancel={() => {
-          setShowOfflineConfirm(false);
-          setPendingSaveMode(null);
-          setPendingSaveOptions(null);
-        }}
-      />
 
       <ConfirmDialog
         open={showCancelConfirm}
