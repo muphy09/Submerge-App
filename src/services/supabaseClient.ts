@@ -5,15 +5,6 @@ let client: SupabaseClient | null = null;
 let loggedMissing = false;
 let loggedEnabled = false;
 
-type SupabaseContext = {
-  franchiseId?: string;
-  franchiseCode?: string;
-  userName?: string;
-  role?: 'owner' | 'admin' | 'designer';
-};
-
-let currentContext: SupabaseContext = {};
-
 // Cache Supabase reachability checks so we do not spam the endpoint
 let lastReachabilityCheck = 0;
 let lastReachabilityResult = false;
@@ -28,15 +19,6 @@ export type SupabaseReachability = {
   reachable: boolean;
   reason: SupabaseReachabilityReason;
 };
-
-function buildHeaders(context: SupabaseContext) {
-  const headers: Record<string, string> = {};
-  if (context.franchiseId) headers['x-submerge-franchise-id'] = context.franchiseId;
-  if (context.franchiseCode) headers['x-submerge-franchise-code'] = context.franchiseCode;
-  if (context.userName) headers['x-submerge-user-name'] = context.userName;
-  if (context.role) headers['x-submerge-role'] = context.role;
-  return headers;
-}
 
 export function isSupabaseEnabled() {
   const url = getEnvVar('VITE_SUPABASE_URL');
@@ -55,17 +37,8 @@ function createSupabaseClient() {
     return null;
   }
 
-  // Attach headers dynamically so we don't need to recreate the client (which was triggering
-  // multiple GoTrueClient warnings) every time the context changes.
-  const fetchWithContext: typeof fetch = (input, init) => {
-    const headers = new Headers(init?.headers || {});
-    Object.entries(buildHeaders(currentContext)).forEach(([k, v]) => headers.set(k, v));
-    return fetch(input, { ...init, headers });
-  };
-
   const instance = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { fetch: fetchWithContext },
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   });
   if (!loggedEnabled) {
     console.info('Supabase client initialized with provided env vars.');
@@ -78,10 +51,6 @@ export function getSupabaseClient() {
   if (client) return client;
   client = createSupabaseClient();
   return client;
-}
-
-export function setSupabaseContext(context: SupabaseContext) {
-  currentContext = { ...context };
 }
 
 function cacheReachability(
@@ -117,6 +86,18 @@ export async function getSupabaseReachability(forceRefresh = false): Promise<Sup
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REACHABILITY_TIMEOUT_MS);
+  const supabase = getSupabaseClient();
+  let authHeader = '';
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        authHeader = `Bearer ${data.session.access_token}`;
+      }
+    } catch (error) {
+      authHeader = '';
+    }
+  }
 
   try {
     const response = await fetch(
@@ -125,13 +106,13 @@ export async function getSupabaseReachability(forceRefresh = false): Promise<Sup
         method: 'HEAD',
         headers: {
           apikey: key,
-          Authorization: `Bearer ${key}`,
-          ...buildHeaders(currentContext),
+          Authorization: authHeader || `Bearer ${key}`,
         },
         signal: controller.signal,
       }
     );
-    return cacheReachability(response.ok, response.ok ? null : 'server-issue');
+    const reachable = response.ok || response.status === 401 || response.status === 403;
+    return cacheReachability(reachable, reachable ? null : 'server-issue');
   } catch (error) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
     return cacheReachability(false, offline ? 'no-internet' : 'server-issue');

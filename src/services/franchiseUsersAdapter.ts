@@ -1,27 +1,60 @@
-import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
+import { getSupabaseClient } from './supabaseClient';
 import { Proposal } from '../types/proposal-new';
 import { isEnvFlagTrue } from './env';
 
-type FranchiseUser = {
+export type FranchiseUser = {
   id: string;
   franchiseId: string;
-  name: string;
+  email: string;
+  name?: string | null;
   role: 'owner' | 'admin' | 'designer';
   isActive: boolean;
+  passwordResetRequired?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
-function normalizeName(name: string) {
-  return name?.trim();
+function normalizeName(name?: string | null) {
+  return String(name || '').trim();
+}
+
+function normalizeEmail(email?: string | null) {
+  return String(email || '').trim().toLowerCase();
 }
 
 function requireSupabase() {
   if (SUPABASE_REQUIRED) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
+}
+
+async function extractFunctionErrorMessage(error: any): Promise<string | null> {
+  const context = error?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const parsed = await context.json();
+      return typeof parsed?.error === 'string' ? parsed.error : null;
+    } catch (parseError) {
+      // fall through
+    }
+  }
+
+  const body = context?.body;
+  if (!body) return null;
+  if (typeof body === 'string') {
+    try {
+      const parsed = JSON.parse(body);
+      return typeof parsed?.error === 'string' ? parsed.error : null;
+    } catch (parseError) {
+      return null;
+    }
+  }
+  if (typeof body?.error === 'string') {
+    return body.error;
+  }
+  return null;
 }
 
 export async function listFranchiseUsers(franchiseId: string): Promise<FranchiseUser[]> {
@@ -32,7 +65,7 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
   }
   const { data, error } = await supabase
     .from('franchise_users')
-    .select('id,franchise_id,name,role,is_active,created_at,updated_at')
+    .select('id,franchise_id,name,email,role,is_active,password_reset_required,created_at,updated_at')
     .eq('franchise_id', franchiseId)
     .order('name', { ascending: true });
   if (error) throw error;
@@ -40,37 +73,53 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
     id: row.id,
     franchiseId: row.franchise_id,
     name: row.name,
+    email: row.email,
     role: row.role,
     isActive: Boolean(row.is_active),
+    passwordResetRequired: Boolean(row.password_reset_required),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
   const weight = { owner: 2, admin: 1, designer: 0 } as Record<string, number>;
-  return rows.sort((a, b) => weight[b.role] - weight[a.role] || a.name.localeCompare(b.name));
+  return rows.sort(
+    (a, b) =>
+      weight[b.role] - weight[a.role] ||
+      normalizeName(a.name).localeCompare(normalizeName(b.name)) ||
+      a.email.localeCompare(b.email)
+  );
 }
 
-export async function addFranchiseUser(payload: {
+export async function createFranchiseUser(payload: {
   franchiseId: string;
-  name: string;
+  email: string;
+  name?: string | null;
   role?: 'owner' | 'admin' | 'designer';
-  isActive?: boolean;
 }) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
     return null;
   }
-  const name = normalizeName(payload.name);
-  if (!name) throw new Error('Name is required');
-  const { error } = await supabase.from('franchise_users').upsert({
-    franchise_id: payload.franchiseId,
-    name,
-    role: payload.role || 'designer',
-    is_active: payload.isActive ?? true,
-    updated_at: new Date().toISOString(),
+  const email = normalizeEmail(payload.email);
+  if (!email) throw new Error('Email is required');
+  const displayName = normalizeName(payload.name || '') || null;
+
+  const { data, error } = await supabase.functions.invoke('create-franchise-user', {
+    body: {
+      franchiseId: payload.franchiseId,
+      email,
+      name: displayName,
+      role: payload.role || 'designer',
+    },
   });
-  if (error) throw error;
-  return true;
+  if (error) {
+    const message = await extractFunctionErrorMessage(error);
+    if (message) {
+      throw new Error(message);
+    }
+    throw error;
+  }
+  return data as { tempPassword?: string; userId?: string };
 }
 
 export async function updateFranchiseUserRole(userId: string, role: 'owner' | 'admin' | 'designer') {
@@ -116,14 +165,7 @@ export async function setFranchiseUserActive(userId: string, isActive: boolean) 
 }
 
 export async function deleteFranchiseUser(userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    requireSupabase();
-    return null;
-  }
-  const { error } = await supabase.from('franchise_users').delete().eq('id', userId);
-  if (error) throw error;
-  return true;
+  return setFranchiseUserActive(userId, false);
 }
 
 export async function markDesignerProposalsDeleted(franchiseId: string, name: string) {
@@ -162,62 +204,15 @@ export async function markDesignerProposalsDeleted(franchiseId: string, name: st
   return true;
 }
 
-export async function ensureAdminUser(
-  franchiseId: string,
-  name: string,
-  targetRole: 'owner' | 'admin' = 'admin'
-) {
+export async function resetFranchiseUserPassword(userId: string) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
     return null;
   }
-  const cleanName = normalizeName(name);
-  const { data, error } = await supabase
-    .from('franchise_users')
-    .select('id,is_active,role')
-    .eq('franchise_id', franchiseId)
-    .ilike('name', cleanName)
-    .maybeSingle();
-  if (error && error.code !== 'PGRST116') throw error;
-  if (!data) {
-    await addFranchiseUser({ franchiseId, name: cleanName, role: targetRole, isActive: true });
-    return;
-  }
-  if (!data.is_active || data.role !== targetRole) {
-    await supabase
-      .from('franchise_users')
-      .update({ is_active: true, role: targetRole, updated_at: new Date().toISOString() })
-      .eq('id', data.id);
-  }
-}
-
-export async function assertUserAllowed(franchiseId: string, name: string): Promise<FranchiseUser['role']> {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    requireSupabase();
-    return 'designer';
-  }
-  const cleanName = normalizeName(name);
-  if (!cleanName) {
-    const err: any = new Error('Username not valid');
-    err.code = 'USERNAME_INVALID';
-    throw err;
-  }
-  const { data, error } = await supabase
-    .from('franchise_users')
-    .select('id,is_active,role')
-    .eq('franchise_id', franchiseId)
-    .ilike('name', cleanName)
-    .maybeSingle();
-  if (error && error.code !== 'PGRST116') throw error;
-  const normalizedRole = String(data?.role || '').toLowerCase();
-  const isAllowedRole =
-    normalizedRole === 'owner' || normalizedRole === 'admin' || normalizedRole === 'designer';
-  if (!data || !data.is_active || !isAllowedRole) {
-    const err: any = new Error('Username not valid');
-    err.code = 'USERNAME_INVALID';
-    throw err;
-  }
-  return normalizedRole as FranchiseUser['role'];
+  const { data, error } = await supabase.functions.invoke('reset-franchise-user-password', {
+    body: { userId },
+  });
+  if (error) throw error;
+  return data as { tempPassword?: string };
 }

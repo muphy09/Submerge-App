@@ -4,14 +4,13 @@ import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { useFranchiseLogo } from '../hooks/useFranchiseLogo';
 import { saveFranchiseAppName, saveFranchiseLogo } from '../services/franchiseBranding';
 import { saveFranchiseCode } from '../services/franchisesAdapter';
-import { setSupabaseContext } from '../services/supabaseClient';
 import {
   getSessionFranchiseCode,
   getSessionFranchiseId,
   getSessionRole,
   getSessionUserName,
   readSession,
-  SESSION_STORAGE_KEY,
+  updateSession,
 } from '../services/session';
 import './SettingsPage.css';
 
@@ -62,7 +61,6 @@ const SettingsPage: React.FC = () => {
   const normalizedCurrentCode = (currentFranchiseCode || '').trim().toUpperCase();
   const hasPendingCodeChange = normalizedPendingCode !== normalizedCurrentCode;
   const hasPendingCodeValue = normalizedPendingCode.length > 0;
-  const pendingCodeHasAdminSuffix = normalizedPendingCode.endsWith('-A');
   const canResetFranchiseCode = pendingFranchiseCode !== currentFranchiseCode;
 
   const renderChangelog = (content: string) => {
@@ -250,17 +248,9 @@ const SettingsPage: React.FC = () => {
   }, [savedAppName]);
 
   const updateStoredSessionCode = (nextCode: string) => {
-    if (typeof localStorage === 'undefined') return;
     const session = readSession();
     if (!session) return;
-    const updatedSession = { ...session, franchiseCode: nextCode };
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedSession));
-    setSupabaseContext({
-      franchiseId: updatedSession.franchiseId,
-      franchiseCode: nextCode,
-      userName: updatedSession.userName,
-      role: updatedSession.role || 'designer',
-    });
+    updateSession({ franchiseCode: nextCode });
   };
 
   const handleLogoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -415,10 +405,6 @@ const SettingsPage: React.FC = () => {
     if (!hasPendingCodeChange) return;
     if (!hasPendingCodeValue) {
       setFranchiseCodeStatus({ type: 'error', message: 'Franchise code is required.' });
-      return;
-    }
-    if (pendingCodeHasAdminSuffix) {
-      setFranchiseCodeStatus({ type: 'error', message: 'Franchise codes cannot end with "-A".' });
       return;
     }
     setFranchiseCodeSaving(true);
@@ -593,8 +579,7 @@ const SettingsPage: React.FC = () => {
               <div className="franchise-name-section franchise-code-section">
                 <div className="franchise-logo-label">Franchise Code</div>
                 <p className="franchise-logo-note">
-                  Used when logging in. Admin and owner logins append "-A" (for example: {normalizedCurrentCode || 'CODE'}-A).
-                  Codes cannot end with "-A".
+                  Used when logging in to select the correct franchise.
                 </p>
                 <div className="franchise-name-current">
                   Current: <span className="franchise-name-value">{normalizedCurrentCode || 'Not set'}</span>
@@ -611,7 +596,7 @@ const SettingsPage: React.FC = () => {
                   <button
                     className="settings-button branding-save-button"
                     onClick={handleSaveFranchiseCode}
-                    disabled={!hasPendingCodeChange || !hasPendingCodeValue || pendingCodeHasAdminSuffix || franchiseCodeSaving}
+                    disabled={!hasPendingCodeChange || !hasPendingCodeValue || franchiseCodeSaving}
                   >
                     {franchiseCodeSaving ? 'Saving...' : 'Save Code'}
                   </button>

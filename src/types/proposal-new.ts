@@ -610,7 +610,7 @@ export interface Proposal {
   isOriginalVersion?: boolean;
   franchiseId?: string;
   designerName?: string;
-  designerRole?: 'owner' | 'admin' | 'designer';
+  designerRole?: 'master' | 'owner' | 'admin' | 'designer';
   designerCode?: string;
   pricingModelId?: string;
   pricingModelName?: string;

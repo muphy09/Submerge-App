@@ -13,22 +13,15 @@ import { initPricingDataStore, setActiveFranchiseId } from './services/pricingDa
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
-import { assertUserAllowed, ensureAdminUser } from './services/franchiseUsersAdapter';
-import { getSupabaseReachability, isSupabaseEnabled, setSupabaseContext } from './services/supabaseClient';
+import { getSupabaseReachability, isSupabaseEnabled } from './services/supabaseClient';
 import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
 import useKeyboardNavigation from './hooks/useKeyboardNavigation';
+import PasswordResetModal from './components/PasswordResetModal';
+import { completePasswordReset, loadSessionFromSupabase, signInWithEmail, signOut } from './services/auth';
+import { assertLoginAllowed, clearLoginAttempts, recordLoginFailure } from './services/loginRateLimiter';
+import { DEFAULT_FRANCHISE_ID, type UserSession, updateSession } from './services/session';
+import MasterPage from './pages/MasterPage';
 import './App.css';
-
-type UserSession = {
-  userName: string;
-  franchiseId: string;
-  franchiseName?: string;
-  franchiseCode: string;
-  role?: 'owner' | 'admin' | 'designer';
-};
-
-const SESSION_STORAGE_KEY = 'submerge-user-session';
-const DEFAULT_FRANCHISE_ID = 'default';
 
 function AppContent() {
   const navigate = useNavigate();
@@ -39,6 +32,7 @@ function AppContent() {
   const [showPricingData, setShowPricingData] = useState(false);
   const [session, setSession] = useState<UserSession | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [cloudIssue, setCloudIssue] = useState<CloudConnectionIssue>(null);
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
@@ -51,26 +45,30 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    // Restore session if present
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as UserSession;
-        setSession(saved);
-        void loadPricingForFranchise(saved.franchiseId);
-        setSupabaseContext({
-          franchiseId: saved.franchiseId,
-          franchiseCode: saved.franchiseCode,
-          userName: saved.userName,
-          role: saved.role || 'designer',
-        });
-      } else {
+    // Restore session from Supabase Auth if possible
+    let cancelled = false;
+    const restoreSession = async () => {
+      try {
+        const restored = await loadSessionFromSupabase();
+        if (cancelled) return;
+        if (restored?.session) {
+          setSession(restored.session);
+          setShowLogin(false);
+          setShowPasswordReset(restored.passwordResetRequired);
+          const targetId = restored.session.franchiseId || DEFAULT_FRANCHISE_ID;
+          void loadPricingForFranchise(targetId);
+        } else {
+          setSession(null);
+          void signOut();
+          setShowLogin(true);
+        }
+      } catch (error) {
+        console.warn('Unable to restore saved session:', error);
         setShowLogin(true);
       }
-    } catch (error) {
-      console.warn('Unable to restore saved session:', error);
-      setShowLogin(true);
-    }
+    };
+
+    void restoreSession();
 
     // Listen for proposals opened from file system
     if (window.electron && window.electron.onOpenProposal) {
@@ -98,6 +96,9 @@ function AppContent() {
         setTimeout(() => setUpdateStatus(null), 10000);
       });
     }
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   useEffect(() => {
@@ -112,62 +113,50 @@ function AppContent() {
     }
   };
 
-  const handleLogin = async ({ userName, franchiseCode }: { userName: string; franchiseCode: string }) => {
-    if (!window.electron?.enterFranchiseCode) {
-      throw new Error('Franchise code login is not available.');
+  const handleLogin = async ({
+    email,
+    password,
+    franchiseCode,
+  }: {
+    email: string;
+    password: string;
+    franchiseCode?: string;
+  }) => {
+    assertLoginAllowed(email, franchiseCode);
+    try {
+      const result = await signInWithEmail({ email, password, franchiseCode });
+      clearLoginAttempts(email, franchiseCode);
+      setSession(result.session);
+      setShowLogin(false);
+      setShowPasswordReset(result.passwordResetRequired);
+      navigate('/', { replace: true });
+      const targetId = result.session.franchiseId || DEFAULT_FRANCHISE_ID;
+      await loadPricingForFranchise(targetId);
+    } catch (error) {
+      recordLoginFailure(email, franchiseCode);
+      throw error;
     }
-    const response = await window.electron.enterFranchiseCode({
-      franchiseCode,
-      displayName: userName,
-    });
-
-    const trimmedCode = String(franchiseCode || '').trim().toUpperCase();
-    const isOwnerLogin = trimmedCode === '1111-A';
-    const isAdminLogin = trimmedCode.endsWith('-A');
-    const baseContext = {
-      franchiseId: response.franchiseId,
-      franchiseCode: response.franchiseCode,
-      userName,
-    };
-    const initialRole: UserSession['role'] = isOwnerLogin ? 'owner' : isAdminLogin ? 'admin' : 'designer';
-    let resolvedRole = initialRole;
-    setSupabaseContext({ ...baseContext, role: initialRole });
-
-    // Validate or create user in Supabase
-    if (isAdminLogin) {
-      await ensureAdminUser(response.franchiseId, userName, isOwnerLogin ? 'owner' : 'admin');
-    } else {
-      resolvedRole = await assertUserAllowed(response.franchiseId, userName);
-      if (resolvedRole !== initialRole) {
-        setSupabaseContext({ ...baseContext, role: resolvedRole });
-      }
-    }
-
-    const nextSession: UserSession = {
-      userName,
-      franchiseId: response.franchiseId,
-      franchiseName: response.franchiseName,
-      franchiseCode: response.franchiseCode,
-      role: resolvedRole,
-    };
-
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
-    setSession(nextSession);
-    setShowLogin(false);
-    navigate('/', { replace: true });
-    await loadPricingForFranchise(response.franchiseId);
   };
 
   const handleLogout = async () => {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
+    await signOut();
     setSession(null);
-    setSupabaseContext({});
     setShowLogin(true);
+    setShowPasswordReset(false);
     try {
       await loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
     } catch (error) {
       console.warn('Unable to reset pricing to default on logout:', error);
     }
+  };
+
+  const handlePasswordReset = async (newPassword: string) => {
+    await completePasswordReset(newPassword);
+    const updated = updateSession({ passwordResetRequired: false });
+    if (updated) {
+      setSession(updated);
+    }
+    setShowPasswordReset(false);
   };
 
   useEffect(() => {
@@ -210,9 +199,10 @@ function AppContent() {
     <div className="app">
       {showNavigation && (
         <NavigationBar
-          userName={session?.userName || 'User'}
+          userName={session?.userName || session?.userEmail || 'User'}
           onLogout={session ? handleLogout : undefined}
           isAdmin={['owner', 'admin'].includes((session?.role || '').toLowerCase())}
+          isMaster={(session?.role || '').toLowerCase() === 'master'}
           franchiseId={session?.franchiseId}
         />
       )}
@@ -233,6 +223,7 @@ function AppContent() {
         <Route path="/proposals" element={<ProposalsListPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/master" element={<MasterPage session={session} />} />
         <Route path="/proposal/new" element={<ProposalForm key="new" />} />
         <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm key={location.pathname} />} />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
@@ -263,7 +254,10 @@ function AppContent() {
         />
       )}
       {showLogin && (
-        <LoginModal onSubmit={handleLogin} existingName={session?.userName} />
+        <LoginModal onSubmit={handleLogin} existingEmail={session?.userEmail} />
+      )}
+      {showPasswordReset && (
+        <PasswordResetModal onSubmit={handlePasswordReset} onLogout={handleLogout} />
       )}
     </div>
   );

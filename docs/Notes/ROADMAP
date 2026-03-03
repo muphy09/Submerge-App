@@ -10,11 +10,14 @@ Short Term -
 - Include Customer Prop as button for designer view
     - Remove cost breakdown in prop builder for admin
 
+- Name area in top section cleanup.
+- Admin designer list cleanup
+    - Include admin users in the Proposal list designer dropdown
+- Ensure internet remains required, remove any offline functionality
+
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-- Login passwords and role promotion / pass reset
-    I want you to review the file i have made at /docs/Notes/Login Overhaul and before making any changes ensure you understand what needs to be done or ask any questions you may have. If I have left out anything that you think should be added bring that up too. Then i will tell you to implement this change
-- Admin Pricing Menu
+
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
 - Admin proposal large screen

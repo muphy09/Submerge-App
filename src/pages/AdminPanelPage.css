@@ -117,6 +117,7 @@
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .admin-users-form input {
@@ -174,6 +175,11 @@
 .admin-user-name {
   font-weight: 700;
   color: #1e3a5f;
+}
+
+.admin-user-email {
+  color: #4b5563;
+  font-size: 0.85rem;
 }
 
 .admin-user-role {

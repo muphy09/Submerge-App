@@ -2,17 +2,19 @@ import { useState } from 'react';
 import './LoginModal.css';
 
 type LoginPayload = {
-  userName: string;
-  franchiseCode: string;
+  email: string;
+  password: string;
+  franchiseCode?: string;
 };
 
 interface LoginModalProps {
   onSubmit: (payload: LoginPayload) => Promise<void>;
-  existingName?: string;
+  existingEmail?: string;
 }
 
-const LoginModal = ({ onSubmit, existingName }: LoginModalProps) => {
-  const [userName, setUserName] = useState(existingName || '');
+const LoginModal = ({ onSubmit, existingEmail }: LoginModalProps) => {
+  const [email, setEmail] = useState(existingEmail || '');
+  const [password, setPassword] = useState('');
   const [franchiseCode, setFranchiseCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,18 +22,22 @@ const LoginModal = ({ onSubmit, existingName }: LoginModalProps) => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (!userName.trim()) {
-      setError('Please enter your name.');
+    if (!email.trim()) {
+      setError('Please enter your email.');
       return;
     }
-    if (!franchiseCode.trim()) {
-      setError('Please enter a franchise code.');
+    if (!password.trim()) {
+      setError('Please enter your password.');
       return;
     }
 
     try {
       setLoading(true);
-      await onSubmit({ userName: userName.trim(), franchiseCode: franchiseCode.trim() });
+      await onSubmit({
+        email: email.trim(),
+        password: password.trim(),
+        franchiseCode: franchiseCode.trim() || undefined,
+      });
     } catch (err: any) {
       setError(err?.message || 'Unable to log in. Please try again.');
     } finally {
@@ -43,15 +49,22 @@ const LoginModal = ({ onSubmit, existingName }: LoginModalProps) => {
     <div className="login-modal-backdrop">
       <div className="login-modal">
         <h2>Welcome</h2>
-        <p className="login-subtitle">Enter your name and franchise code to continue.</p>
+        <p className="login-subtitle">Enter your email, password, and franchise code to continue.</p>
         <form onSubmit={handleSubmit} className="login-form">
           <label className="login-label">
-            Your Name
+            Email
             <input
-              type="text"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              placeholder="Jane Doe"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label className="login-label">
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
           </label>
           <label className="login-label">
@@ -60,12 +73,11 @@ const LoginModal = ({ onSubmit, existingName }: LoginModalProps) => {
               type="text"
               value={franchiseCode}
               onChange={(e) => setFranchiseCode(e.target.value)}
-              placeholder="1111 or 2222"
             />
           </label>
           {error && <div className="login-error">{error}</div>}
           <button className="login-submit" type="submit" disabled={loading}>
-            {loading ? 'Signing in…' : 'Continue'}
+            {loading ? 'Signing in...' : 'Continue'}
           </button>
         </form>
       </div>

@@ -7,10 +7,11 @@ import { listProposals as listProposalsRemote } from '../services/proposalsAdapt
 import { initPricingDataStore } from '../services/pricingDataStore';
 import './AdminPanelPage.css';
 import {
-  addFranchiseUser,
+  createFranchiseUser,
   deleteFranchiseUser,
   listFranchiseUsers,
   markDesignerProposalsDeleted,
+  resetFranchiseUserPassword,
   updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
 import {
@@ -29,6 +30,7 @@ import {
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { listAllVersions } from '../utils/proposalVersions';
+import TempPasswordModal from '../components/TempPasswordModal';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 const PERFORMANCE_SCALE_BASELINE = 200;
@@ -39,7 +41,7 @@ type SessionInfo = {
   franchiseId?: string;
   franchiseName?: string;
   franchiseCode?: string;
-  role?: 'owner' | 'admin' | 'designer';
+  role?: 'master' | 'owner' | 'admin' | 'designer';
 };
 
 interface AdminPanelPageProps {
@@ -77,13 +79,16 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [loadingModels, setLoadingModels] = useState(true);
   const [activatingModelId, setActivatingModelId] = useState<string | null>(null);
   const [franchiseUsers, setFranchiseUsers] = useState<
-    { id: string; name: string; role: 'owner' | 'admin' | 'designer'; isActive: boolean }[]
+    { id: string; name?: string | null; email: string; role: 'owner' | 'admin' | 'designer'; isActive: boolean }[]
   >([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [addingUser, setAddingUser] = useState(false);
   const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
   const [userError, setUserError] = useState<string | null>(null);
   const [promotingUserId, setPromotingUserId] = useState<string | null>(null);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [designerFilter, setDesignerFilter] = useState('all');
   const userListRef = useRef<HTMLDivElement | null>(null);
   const userWheelLockRef = useRef<number>(0);
@@ -196,6 +201,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         (rows || []).map((row: any) => ({
           id: row.id,
           name: row.name,
+          email: row.email,
           role: row.role,
           isActive: Boolean(row.isActive),
         }))
@@ -226,20 +232,29 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   };
 
   const handleAddUser = async () => {
-    if (!newUserName.trim()) {
-      setUserError('Please enter a name.');
+    const trimmedName = newUserName.trim();
+    if (!newUserEmail.trim()) {
+      setUserError('Please enter an email.');
+      return;
+    }
+    if (!trimmedName) {
+      setUserError('Please enter a display name.');
       return;
     }
     setUserError(null);
     setAddingUser(true);
     try {
-      await addFranchiseUser({
+      const result = await createFranchiseUser({
         franchiseId,
-        name: newUserName.trim(),
+        email: newUserEmail.trim().toLowerCase(),
+        name: trimmedName,
         role: 'designer',
-        isActive: true,
       });
       setNewUserName('');
+      setNewUserEmail('');
+      if (result?.tempPassword) {
+        setTempPassword(result.tempPassword);
+      }
       await loadUsers(franchiseId);
     } catch (error: any) {
       console.error('Failed to add user:', error);
@@ -255,7 +270,8 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       return;
     }
     try {
-      const targetName = franchiseUsers.find((u) => u.id === userId)?.name || '';
+      const targetUser = franchiseUsers.find((u) => u.id === userId);
+      const targetName = targetUser?.name || targetUser?.email || '';
       await deleteFranchiseUser(userId);
       await markDesignerProposalsDeleted(franchiseId, targetName);
       await loadUsers(franchiseId);
@@ -274,6 +290,20 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       console.error('Failed to promote user to admin:', error);
     } finally {
       setPromotingUserId(null);
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    setResettingUserId(userId);
+    try {
+      const result = await resetFranchiseUserPassword(userId);
+      if (result?.tempPassword) {
+        setTempPassword(result.tempPassword);
+      }
+    } catch (error) {
+      console.error('Failed to reset password:', error);
+    } finally {
+      setResettingUserId(null);
     }
   };
 
@@ -528,6 +558,12 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                 onChange={(e) => setNewUserName(e.target.value)}
                 placeholder="Designer name"
               />
+              <input
+                type="email"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="Designer email"
+              />
               <button
                 className="admin-primary-btn"
                 type="button"
@@ -552,7 +588,8 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                 {franchiseUsers.map((user) => (
                   <div className="admin-user-row" key={user.id} role="listitem">
                     <div className="admin-user-meta">
-                      <div className="admin-user-name">{user.name}</div>
+                      <div className="admin-user-name">{user.name || user.email}</div>
+                      <div className="admin-user-email">{user.email}</div>
                       <div className="admin-user-role">
                         {user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : 'Designer'}
                       </div>
@@ -577,6 +614,17 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                           title="Remove user"
                         >
                           Remove
+                        </button>
+                      )}
+                      {user.role !== 'owner' && (
+                        <button
+                          className="admin-primary-btn ghost"
+                          type="button"
+                          onClick={() => handleResetPassword(user.id)}
+                          disabled={resettingUserId === user.id}
+                          title="Reset password"
+                        >
+                          {resettingUserId === user.id ? 'Resetting...' : 'Reset Password'}
                         </button>
                       )}
                     </div>
@@ -724,6 +772,14 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           </div>
         )}
       </div>
+      {tempPassword && (
+        <TempPasswordModal
+          tempPassword={tempPassword}
+          onClose={() => setTempPassword(null)}
+          title="Temporary Password"
+          description="Copy this password now. It will only be shown once."
+        />
+      )}
     </div>
   );
 }

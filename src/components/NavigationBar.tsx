@@ -8,10 +8,11 @@ interface NavigationBarProps {
   userName?: string;
   onLogout?: () => void;
   isAdmin?: boolean;
+  isMaster?: boolean;
   franchiseId?: string;
 }
 
-function NavigationBar({ userName = 'User', onLogout, isAdmin = false, franchiseId }: NavigationBarProps) {
+function NavigationBar({ userName = 'User', onLogout, isAdmin = false, isMaster = false, franchiseId }: NavigationBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { displayName } = useFranchiseAppName(franchiseId);
@@ -72,6 +73,14 @@ function NavigationBar({ userName = 'User', onLogout, isAdmin = false, franchise
         >
           Settings
         </NavLink>
+        {isMaster && (
+          <NavLink
+            to="/master"
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            Master
+          </NavLink>
+        )}
       </div>
 
       <div className="nav-right" ref={menuRef}>

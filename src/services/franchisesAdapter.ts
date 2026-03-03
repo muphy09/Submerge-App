@@ -20,6 +20,16 @@ function normalizeCode(value: string | null | undefined) {
   return String(value || '').trim().toUpperCase();
 }
 
+function isFranchiseCodeConflict(error: any) {
+  const code = String(error?.code || '').trim();
+  if (code === '23505') return true;
+  const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return (
+    message.includes('franchise_code') &&
+    (message.includes('duplicate') || message.includes('unique') || message.includes('already exists'))
+  ) || message.includes('franchises_code');
+}
+
 async function updateSupabaseFranchiseCode(payload: { franchiseId: string; franchiseName?: string | null; franchiseCode: string }) {
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -67,11 +77,18 @@ export async function saveFranchiseCode(payload: FranchiseCodeUpdate) {
   }
 
   if (supabaseEnabled) {
-    await updateSupabaseFranchiseCode({
-      franchiseId: payload.franchiseId,
-      franchiseName: payload.franchiseName,
-      franchiseCode,
-    });
+    try {
+      await updateSupabaseFranchiseCode({
+        franchiseId: payload.franchiseId,
+        franchiseName: payload.franchiseName,
+        franchiseCode,
+      });
+    } catch (error: any) {
+      if (isFranchiseCodeConflict(error)) {
+        throw new Error('This franchise code is in use');
+      }
+      throw error;
+    }
   }
 
   try {
