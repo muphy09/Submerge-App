@@ -3,7 +3,7 @@ Short Term -
 - Exposed Pool Wall (Out of ground Forming) - Same as RBB for SQFT calc. Only taking forming cost from RBB. Add strip forming cost to OUGF
     - Add backside facing
         - No facing, Parched Concrete $9.00, (RBB facing options). Split face -- St. $9. sqft, Split ledge = panel ledge
- - Backside facing toggle for RBB
+ - Backside facing toggle for RBB - double cost
 PLUMBING COST
 .5 = 2.50
 3/4= 4.50
@@ -12,13 +12,10 @@ PLUMBING COST
 2.0 = 6
 2.5 = 8
 3 = 10
-
 WF auto = 6
 Conduit = 3.25
-
 Add wf run = 6
 
-Pool bonding = LF perimiter of pool times times 1.1 @ 2per ft (Always) Billed into excavation category NOT Electrical
 
 Separate blower category in equipment, Blower automatically added when spa is selected - 2hp default
 
@@ -68,6 +65,15 @@ Commission amount needs to be set per user - set up by admin (place inside of de
 Removing user logic and proposal transfer stipulations
 
 Logic for submit proposal, ask to include measurements or supporting docs. 
+
+Full package option - (fence sod etc) - Fence & sod no profit line items (charge exactly what manu charges)
+
+- ability in custom price to change the markup (should be default to 30%) -- ONLY for the package option -- Seperate cost NOT in COGS - Cannot go into the contract (NC SC) has to be as addendum
+
+**Decking -- On or Off Contract checkbox - can combine labor and material when off contract, not in decking, only custom lines
+    - Selecting off contract, just removes profit margin, (take out from COGS), would not show up in contract anymore, needs to show up in off contract addendum (coming from John)
+    - Will bill to RETAIL only not COGS, custom line item as "Off Contract", no retail price increase
+confirm custom has tax
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Improve export flow for Breadowns (naming)

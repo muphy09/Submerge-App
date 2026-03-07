@@ -290,6 +290,22 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const handleListChange = (list: ListConfig, index: number, field: ListField, raw: any) => {
     const parsed =
       field.type === 'number' ? toNumber(String(raw)) : field.type === 'boolean' ? Boolean(raw) : raw;
+    const isDefaultLightChoice =
+      field.key === 'defaultLightChoice' &&
+      list.path[0] === 'equipment' &&
+      list.path[1] === 'lights' &&
+      (list.path[2] === 'poolLights' || list.path[2] === 'spaLights');
+
+    if (isDefaultLightChoice && parsed) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const nextList = entries.map((entry, idx) => ({
+        ...entry,
+        defaultLightChoice: idx === index,
+      }));
+      updatePricingValue(list.path, nextList);
+      setHasChanges(true);
+      return;
+    }
     updatePricingListItem(list.path, index, field.key, parsed);
     setHasChanges(true);
   };
@@ -690,6 +706,26 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               { label: '36" RBB', path: ['excavation', 'rbb36'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
             ],
           },
+          {
+            title: 'Pool Bonding',
+            scalars: [
+              {
+                label: 'Price per LNFT',
+                path: ['excavation', 'poolBonding', 'pricePerLnft'],
+                type: 'number',
+                prefix: '$',
+                note: 'Applied to pool perimeter before markup.',
+              },
+              {
+                label: 'Markup %',
+                path: ['excavation', 'poolBonding', 'markup'],
+                type: 'number',
+                prefix: '%',
+                isPercent: true,
+                note: 'Adds on top of (price × perimeter).',
+              },
+            ],
+          },
         ],
       },
       {
@@ -722,19 +758,36 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
+            title: 'Pipe sizes',
+            scalars: [
+              { label: '1/2" pipe (per ft)', path: ['plumbing', 'cleanerPerFt'], type: 'number' },
+              { label: '3/4" pipe (per ft)', path: ['plumbing', 'threeQuarterInchPipe'], type: 'number' },
+              { label: '1" pipe (per ft)', path: ['plumbing', 'autoFillPerFt'], type: 'number' },
+              { label: '1.5" pipe (per ft)', path: ['plumbing', 'onePointFiveInchPipe'], type: 'number' },
+              { label: '2" pipe (per ft)', path: ['plumbing', 'twoInchPipe'], type: 'number' },
+              { label: '2.5" pipe (per ft)', path: ['plumbing', 'twoPointFiveInchPipe'], type: 'number' },
+              { label: '3" pipe (per ft)', path: ['plumbing', 'threeInchPipe'], type: 'number' },
+            ],
+          },
+          {
             title: 'Water feature plumbing',
             scalars: [
               { label: 'Setup (per run)', path: ['plumbing', 'waterFeatureRun', 'setup'], type: 'number' },
               { label: 'Base allowance (ft)', path: ['plumbing', 'waterFeatureRun', 'baseAllowanceFt'], type: 'number' },
               { label: 'Per ft over allowance', path: ['plumbing', 'waterFeatureRun', 'perFt'], type: 'number' },
+              { label: 'Add\'l water feature run (per ft)', path: ['plumbing', 'additionalWaterFeatureRunPerFt'], type: 'number' },
             ],
           },
           {
             title: 'Misc plumbing',
             scalars: [
-              { label: 'Cleaner line (per ft)', path: ['plumbing', 'cleanerPerFt'], type: 'number' },
-              { label: 'Auto-fill (per ft)', path: ['plumbing', 'autoFillPerFt'], type: 'number' },
               { label: 'Additional skimmer', path: ['plumbing', 'additionalSkimmer'], type: 'number' },
+              { label: 'Infloor (per ft)', path: ['plumbing', 'infloorPerFt'], type: 'number' },
+              { label: 'Conduit (per ft)', path: ['plumbing', 'conduitPerFt'], type: 'number' },
+              { label: 'Manifold', path: ['plumbing', 'manifold'], type: 'number' },
+              { label: 'Heater set', path: ['plumbing', 'heaterSet'], type: 'number' },
+              { label: 'Strip forms', path: ['plumbing', 'stripForms'], type: 'number' },
+              { label: 'Travel (per mile)', path: ['plumbing', 'travelPerMile'], type: 'number' },
             ],
           },
         ],
@@ -866,7 +919,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               { label: '36" RBB steel (per lnft)', path: ['steel', 'rbb36PerLnft'], type: 'number' },
               { label: 'Double curtain (per lnft)', path: ['steel', 'doubleCurtainPerLnft'], type: 'number' },
               { label: 'Spa double curtain', path: ['steel', 'spaDoubleCurtain'], type: 'number' },
-              { label: 'Pool bonding', path: ['steel', 'poolBonding'], type: 'number' },
               { label: 'Travel per mile', path: ['steel', 'travelPerMile'], type: 'number' },
             ],
           },
@@ -1038,6 +1090,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 addLabel: 'Add pool light',
                 fields: [
                   { key: 'name', label: 'Name', type: 'text', placeholder: 'Pool light name' },
+                  { key: 'defaultLightChoice', label: 'Default Light Choice', type: 'boolean' },
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
@@ -1049,6 +1102,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 addLabel: 'Add spa light',
                 fields: [
                   { key: 'name', label: 'Name', type: 'text', placeholder: 'Spa light name' },
+                  { key: 'defaultLightChoice', label: 'Default Light Choice', type: 'boolean' },
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },

@@ -11,6 +11,7 @@ import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
  * Rounds up to the nearest integer
  */
 const roundUp = (value: number): number => Math.ceil(value);
+const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasGuniteDimensions =
@@ -294,6 +295,23 @@ export class ExcavationCalculations {
         unitPrice: prices.coverBox,
         quantity: poolSpecs.maxWidth,
         total: prices.coverBox * poolSpecs.maxWidth,
+      });
+    }
+
+    // Pool bonding (perimeter-based with markup)
+    const poolBondingConfig = prices.poolBonding;
+    const poolBondingPerLnft = poolBondingConfig?.pricePerLnft ?? 0;
+    const poolBondingMarkup = poolBondingConfig?.markup ?? 0;
+    const poolBondingQty = poolSpecs.perimeter ?? 0;
+    if (poolBondingPerLnft > 0 && poolBondingQty > 0) {
+      const poolBondingUnitPrice = roundCurrency(poolBondingPerLnft);
+      const poolBondingTotal = roundCurrency(poolBondingPerLnft * poolBondingQty * (1 + poolBondingMarkup));
+      items.push({
+        category: 'Excavation',
+        description: 'Pool Bonding',
+        unitPrice: poolBondingUnitPrice,
+        quantity: poolBondingQty,
+        total: poolBondingTotal,
       });
     }
 
@@ -854,15 +872,6 @@ export class SteelCalculations {
         total: prices.doubleCurtainPerLnft * excavation.doubleCurtainLength,
       });
     }
-
-    // Pool bonding
-    items.push({
-      category: 'Steel',
-      description: 'Pool Bonding',
-      unitPrice: prices.poolBonding,
-      quantity: 1,
-      total: prices.poolBonding,
-    });
 
     // Muck Out (standard for gunite pools)
     const muckOutQty = prices.muckOutQty || 100;

@@ -65,6 +65,10 @@ const pricingData = {
     coverBox: 450,
     travelPerMile: 7,
     misc: 75,
+    poolBonding: {
+      pricePerLnft: 2,
+      markup: 0.1,
+    },
   },
   plumbing: {
     shortStub: 550,
@@ -83,6 +87,8 @@ const pricingData = {
     },
     additionalWaterFeatureRunPerFt: 5.5,
     spaPlumbing: 5,
+    threeQuarterInchPipe: 3,
+    onePointFiveInchPipe: 4.5,
     twoInchPipe: 5.5,
     twoPointFiveInchPipe: 7,
     threeInchPipe: 8.75,
@@ -168,7 +174,6 @@ const pricingData = {
     rbb36PerLnft: 7,
     doubleCurtainPerLnft: 35,
     spaDoubleCurtain: 75,
-    poolBonding: 500,
     muckOut: 100, // Unit price (Excel: $100 × 2 qty = $200)
     muckOutQty: 2,
     automaticCover: 0,
@@ -305,12 +310,12 @@ const pricingData = {
     ],
     lights: {
       poolLights: [
-        { name: '24W Nicheless LED (Included by default)', basePrice: 601, addCost1: 0, addCost2: 0 },
-        { name: 'Low Voltage LED', basePrice: 650, addCost1: 0, addCost2: 0 },
+        { name: '24W Nicheless LED (Included by default)', basePrice: 601, addCost1: 0, addCost2: 0, defaultLightChoice: true },
+        { name: 'Low Voltage LED', basePrice: 650, addCost1: 0, addCost2: 0, defaultLightChoice: false },
       ],
       spaLights: [
-        { name: 'Spa LED (Included by default)', basePrice: 528, addCost1: 0, addCost2: 0 },
-        { name: 'Spa Color LED', basePrice: 650, addCost1: 0, addCost2: 0 },
+        { name: 'Spa LED (Included by default)', basePrice: 528, addCost1: 0, addCost2: 0, defaultLightChoice: true },
+        { name: 'Spa Color LED', basePrice: 650, addCost1: 0, addCost2: 0, defaultLightChoice: false },
       ],
     },
     automation: [
@@ -532,7 +537,6 @@ const pricingData = {
       additionalPump: 150,
       ozoneBase: 200,
       heater: 200,
-      poolBonding: 125,
     },
     drainage: {
       baseCost: 150, // includes first 10 ft

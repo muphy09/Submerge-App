@@ -163,8 +163,8 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     },
     heaterQuantity: hasHeaterSelection ? Math.max(data?.heaterQuantity ?? 1, 1) : 0,
     upgradeToVersaFlo: data?.upgradeToVersaFlo ?? false,
-    includePoolLights: data?.includePoolLights ?? false,
-    includeSpaLights: data?.includeSpaLights ?? false,
+    includePoolLights: data?.includePoolLights,
+    includeSpaLights: data?.includeSpaLights,
     poolLights: data?.poolLights,
     spaLights: data?.spaLights,
     numberOfLights: data?.numberOfLights ?? 0,
@@ -262,6 +262,11 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   const poolLightOptions = pricingData.equipment.lights.poolLights || [];
   const spaLightOptions = pricingData.equipment.lights.spaLights || [];
 
+  const getDefaultLightOption = (type: 'pool' | 'spa') => {
+    const list = type === 'pool' ? poolLightOptions : spaLightOptions;
+    return list.find(light => (light as any)?.defaultLightChoice) || list[0];
+  };
+
   const buildLightSelection = (option: any, type: 'pool' | 'spa'): LightSelection => ({
     type,
     name: option?.name || '',
@@ -289,7 +294,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
 
   const findLightOption = (name: string, type: 'pool' | 'spa') => {
     const list = type === 'pool' ? poolLightOptions : spaLightOptions;
-    return list.find(light => light.name === name) || list[0];
+    return list.find(light => light.name === name) || getDefaultLightOption(type);
   };
 
   const togglePump = (val: boolean) => {
@@ -471,7 +476,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   };
 
   const addPoolLight = () => {
-    const defaultLight = poolLightOptions[0];
+    const defaultLight = getDefaultLightOption('pool');
     if (!defaultLight) return;
     const nextPoolLights = [...poolLights, buildLightSelection(defaultLight, 'pool')];
     commitLighting(nextPoolLights, spaLights, true, includeSpaLights);
@@ -496,7 +501,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   };
 
   const addSpaLight = () => {
-    const defaultLight = spaLightOptions[0];
+    const defaultLight = getDefaultLightOption('spa');
     if (!defaultLight || !hasSpa) return;
     const nextSpaLights = [...spaLights, buildLightSelection(defaultLight, 'spa')];
     commitLighting(poolLights, nextSpaLights, includePoolLights, true);
@@ -1009,7 +1014,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
             <h2 className="spec-block-title">Pool Lights</h2>
           </div>
           <div className="spec-field">
-            <LabelWithRetired text="Pool Light" showRetired={retiredFlags.poolLights[0]} />
+            <LabelWithRetired text="Pool Light 1 (Added Automatically)" showRetired={retiredFlags.poolLights[0]} />
             <select
               className="compact-input equipment-select"
               value={includePoolLights && poolLights.length > 0 ? poolLights[0]?.name || noneOptionValue : noneOptionValue}
@@ -1029,13 +1034,13 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
               {poolLights.slice(1).map((light, idx) => (
                 <div key={`pool-light-${idx + 1}`} className="spec-field equipment-extra-field">
                   <LabelWithRetired
-                    text={`Additional Pool Light ${idx + 1}`}
+                    text={idx === 0 ? 'Pool Light 2 (Added Automatically)' : `Additional Pool Light ${idx}`}
                     showRetired={retiredFlags.poolLights[idx + 1]}
                   />
                   <div className="equipment-inline-row">
-                    <select
+                      <select
                       className="compact-input equipment-select"
-                      value={light?.name || poolLightOptions[0]?.name || ''}
+                      value={light?.name || getDefaultLightOption('pool')?.name || ''}
                       onChange={(e) => handlePoolLightChange(idx + 1, e.target.value)}
                     >
                       {retiredFlags.poolLights[idx + 1] && renderRetiredOption(light?.name)}
@@ -1068,7 +1073,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
               <h2 className="spec-block-title">Spa Lights</h2>
             </div>
             <div className="spec-field">
-              <LabelWithRetired text="Spa Light" showRetired={retiredFlags.spaLights[0]} />
+              <LabelWithRetired text="Spa Light (Added Automatically)" showRetired={retiredFlags.spaLights[0]} />
               <select
                 className="compact-input equipment-select"
                 value={includeSpaLights && spaLights.length > 0 ? spaLights[0]?.name || noneOptionValue : noneOptionValue}
@@ -1094,7 +1099,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
                     <div className="equipment-inline-row">
                       <select
                         className="compact-input equipment-select"
-                        value={light?.name || spaLightOptions[0]?.name || ''}
+                        value={light?.name || getDefaultLightOption('spa')?.name || ''}
                         onChange={(e) => handleSpaLightChange(idx + 1, e.target.value)}
                       >
                         {retiredFlags.spaLights[idx + 1] && renderRetiredOption(light?.name)}

@@ -6,6 +6,12 @@ type LightType = 'pool' | 'spa';
 const getLightOptions = (type: LightType) =>
   (type === 'pool' ? pricingData.equipment.lights.poolLights : pricingData.equipment.lights.spaLights) || [];
 
+const getDefaultLightOption = (type: LightType) => {
+  const options = getLightOptions(type);
+  if (!options.length) return null;
+  return options.find(option => (option as any)?.defaultLightChoice) || options[0];
+};
+
 const buildLightSelection = (option: any, type: LightType): LightSelection => ({
   type,
   name: option?.name || '',
@@ -19,7 +25,8 @@ const hydrateLight = (light: Partial<LightSelection> | undefined, type: LightTyp
   const options = getLightOptions(type);
   if (!options.length) return null;
   const match = light?.name ? options.find(opt => opt.name === light.name) : undefined;
-  const option = match || options[0];
+  const option = match || getDefaultLightOption(type);
+  if (!option) return null;
   return buildLightSelection({ ...option, ...light }, type);
 };
 
@@ -61,7 +68,7 @@ export const normalizeEquipmentLighting = (
 
   if (allowPoolLights && needPoolDefaults) {
     const defaultPoolLight = hydrateLight(undefined, 'pool');
-    const total = hasPool ? Math.max(1, legacyExtras + 1) : legacyExtras;
+    const total = hasPool ? Math.max(2, legacyExtras + 1) : legacyExtras;
     if (defaultPoolLight && total > 0) {
       poolLights = Array.from({ length: total }, () => ({ ...defaultPoolLight }));
     }

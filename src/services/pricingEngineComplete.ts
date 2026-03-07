@@ -931,15 +931,6 @@ export class EquipmentCalculations {
       });
     }
 
-    // Pool bonding - Excel PLUM!Row44: $125 × 1 = $125
-    items.push({
-      category: 'Equipment Set',
-      description: 'Pool Bonding',
-      unitPrice: 125,
-      quantity: 1,
-      total: 125,
-    });
-
     const auxiliaryPumpCount =
       normalizedEquipment?.auxiliaryPumps && normalizedEquipment.auxiliaryPumps.length > 0
         ? normalizedEquipment.auxiliaryPumps.length

@@ -504,6 +504,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
   const previousSpaTypeRef = useRef<string>(proposal.poolSpecs?.spaType ?? 'none');
+  const previousHasPoolRef = useRef<boolean>(hasPoolDefinition(proposal.poolSpecs));
 
   useEffect(() => {
     const hasContent =
@@ -564,6 +565,45 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   }, [proposal.poolSpecs?.spaType, proposal.equipment?.spaLights?.length]);
 
   useEffect(() => {
+    const hasPool = hasPoolDefinition(proposal.poolSpecs);
+    const previousHasPool = previousHasPoolRef.current;
+    const poolJustAdded = !previousHasPool && hasPool;
+    const poolRemoved = previousHasPool && !hasPool;
+    const hasPoolLightSelection = (proposal.equipment?.poolLights?.length ?? 0) > 0;
+
+    if (poolJustAdded && !hasPoolLightSelection) {
+      setProposal(prev => {
+        const nextEquipment = normalizeEquipmentLighting(
+          {
+            ...(prev.equipment || getDefaultEquipment()),
+            includePoolLights: true,
+          } as Proposal['equipment'],
+          {
+            poolSpecs: { ...(prev.poolSpecs || {}) } as any,
+            hasPool: true,
+            hasSpa: (prev.poolSpecs?.spaType ?? 'none') !== 'none',
+          }
+        );
+        return { ...prev, equipment: nextEquipment };
+      });
+      setHasEdits(true);
+    } else if (poolRemoved && (proposal.equipment?.poolLights?.length ?? 0) > 0) {
+      setProposal(prev => ({
+        ...prev,
+        equipment: {
+          ...(prev.equipment || getDefaultEquipment()),
+          includePoolLights: false,
+          poolLights: [],
+          numberOfLights: 0,
+        },
+      }));
+      setHasEdits(true);
+    }
+
+    previousHasPoolRef.current = hasPool;
+  }, [proposal.poolSpecs, proposal.equipment?.poolLights?.length]);
+
+  useEffect(() => {
     const requestId = ++loadRequestRef.current;
     if (proposalNumber) {
       setIsLoading(true);
@@ -571,6 +611,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     } else {
       const freshProposal = getInitialProposal();
       previousSpaTypeRef.current = freshProposal.poolSpecs?.spaType ?? 'none';
+      previousHasPoolRef.current = hasPoolDefinition(freshProposal.poolSpecs);
       setProposal(freshProposal);
       setVersionList([freshProposal as Proposal]);
       setActiveVersionId((freshProposal as Proposal).activeVersionId || (freshProposal as Proposal).versionId || 'original');

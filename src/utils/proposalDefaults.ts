@@ -204,8 +204,6 @@ export function getDefaultEquipment(): Equipment {
     },
     heaterQuantity: 0,
     upgradeToVersaFlo: false,
-    includePoolLights: false,
-    includeSpaLights: false,
     poolLights: [],
     spaLights: [],
     numberOfLights: 0,
