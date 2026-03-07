@@ -20,6 +20,14 @@ const findPumpCatalogMatch = (item?: EquipmentCostLike | null) => {
   );
 };
 
+const findAuxiliaryPumpCatalogMatch = (item?: EquipmentCostLike | null) => {
+  if (!item?.name) return null;
+  const list = (pricingData as any)?.equipment?.auxiliaryPumps || [];
+  return list.find(
+    (entry: any) => entry?.name?.toLowerCase?.() === item.name?.toLowerCase?.()
+  );
+};
+
 const findAutomationCatalogMatch = (item?: EquipmentCostLike | null) => {
   if (!item?.name) return null;
   const list = pricingData?.equipment?.automation || [];
@@ -44,7 +52,7 @@ export function getEquipmentItemCost(
   overheadMultiplier: number = 1
 ): number {
   if (!item) return 0;
-  const pumpMatch = findPumpCatalogMatch(item);
+  const pumpMatch = findPumpCatalogMatch(item) || findAuxiliaryPumpCatalogMatch(item);
   const explicitOverhead = Number.isFinite(item.overheadMultiplier) && Number(item.overheadMultiplier) > 0
     ? Number(item.overheadMultiplier)
     : undefined;

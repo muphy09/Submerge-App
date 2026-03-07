@@ -154,12 +154,13 @@ export class TileCopingDeckingCalculations {
 
       // Step trim tile
       if (tileCopingDecking.hasTrimTileOnSteps && poolSpecs.totalStepsAndBench > 0) {
+        const trimTileQty = spaPerimeter + poolSpecs.totalStepsAndBench;
         laborItems.push({
           category: 'Tile Labor',
           description: 'Step Trim Tile',
           unitPrice: prices.tile.labor.stepTrim,
-          quantity: poolSpecs.totalStepsAndBench,
-          total: prices.tile.labor.stepTrim * poolSpecs.totalStepsAndBench,
+          quantity: trimTileQty,
+          total: prices.tile.labor.stepTrim * trimTileQty,
         });
       }
     }
@@ -182,6 +183,17 @@ export class TileCopingDeckingCalculations {
           total: prices.tile.material.level1 * spaPerimeter,
         });
       }
+    }
+
+    if (hasTile && tileCopingDecking.hasTrimTileOnSteps && poolSpecs.totalStepsAndBench > 0) {
+      const trimTileQty = spaPerimeter + poolSpecs.totalStepsAndBench;
+      materialItems.push({
+        category: 'Tile Material',
+        description: 'Step Trim Tile Material',
+        unitPrice: prices.tile.material.stepTrim,
+        quantity: trimTileQty,
+        total: prices.tile.material.stepTrim * trimTileQty,
+      });
     }
 
     // TILE MATERIAL
@@ -586,8 +598,16 @@ export class EquipmentCalculations {
     return heaterQty > 0 && heaterName && !heaterName.includes('no heater') ? heaterQty : 0;
   }
 
+  private static getPumpQuantity(equipment: Equipment): number {
+    const pumpName = equipment.pump?.name?.toLowerCase() || '';
+    if (!pumpName || pumpName.includes('no pump')) return 0;
+    const qty = Math.max(equipment.pumpQuantity ?? 0, 0);
+    return qty > 0 ? qty : 1;
+  }
+
   private static hasEquipmentSelection(equipment: Equipment): boolean {
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
+    const pumpQty = this.getPumpQuantity(equipment);
     const auxiliaryPrices = (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
       ? equipment.auxiliaryPumps
       : equipment.auxiliaryPump
@@ -608,7 +628,7 @@ export class EquipmentCalculations {
       const lightCounts = getLightCounts(equipment);
 
     const pricedSelections = [
-      getEquipmentItemCost(equipment.pump as any, pumpOverhead),
+      pumpQty > 0 ? getEquipmentItemCost(equipment.pump as any, pumpOverhead) * pumpQty : 0,
       ...auxiliaryPrices,
         filterQty > 0 ? getEquipmentItemCost(equipment.filter as any, 1) : 0,
         cleanerQty > 0 ? getEquipmentItemCost(equipment.cleaner as any, 1) : 0,
@@ -645,6 +665,7 @@ export class EquipmentCalculations {
     const items: CostLineItem[] = [];
     const prices = pricingData.equipment;
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
+    const pumpQty = this.getPumpQuantity(normalizedEquipment);
     const auxiliaryPumps =
       normalizedEquipment.auxiliaryPumps && normalizedEquipment.auxiliaryPumps.length > 0
         ? normalizedEquipment.auxiliaryPumps
@@ -689,17 +710,19 @@ export class EquipmentCalculations {
     });
 
     // Pump
-    items.push({
-      category: 'Equipment',
-      description: normalizedEquipment.pump.name,
-      unitPrice: pumpCost,
-      quantity: 1,
-      total: pumpCost,
-    });
+    if (pumpQty > 0) {
+      items.push({
+        category: 'Equipment',
+        description: normalizedEquipment.pump.name,
+        unitPrice: pumpCost,
+        quantity: pumpQty,
+        total: pumpCost * pumpQty,
+      });
+    }
 
     // Auxiliary pumps
     auxiliaryPumps.forEach((pump, idx) => {
-      const auxCost = getEquipmentItemCost(pump as any);
+      const auxCost = getEquipmentItemCost(pump as any, pumpOverhead);
       items.push({
         category: 'Equipment',
         description: pump.name || `Auxiliary Pump ${idx + 1}`,
@@ -905,6 +928,7 @@ export class EquipmentCalculations {
     const hasPool = hasPoolDefinition(poolSpecs);
     const normalizedEquipment = normalizeEquipmentLighting(equipment, { hasPool, hasSpa, poolSpecs });
     const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
+    const pumpQty = this.getPumpQuantity(normalizedEquipment);
 
     if (!this.hasEquipmentSelection(normalizedEquipment)) {
       return items;
@@ -918,16 +942,15 @@ export class EquipmentCalculations {
       total: prices.base,
     });
 
-    // Heater set (for all heaters) - Excel PLUM!Row43: $200 per heater
+    // Heater set (for all heaters, including heat pumps) - Excel PLUM!Row43: $200 per heater
     if (heaterQty > 0) {
       const isHeatPump = normalizedEquipment.heater.name.toLowerCase().includes('heat pump');
-      const unitPrice = isHeatPump ? prices.heatPump : prices.heater;
       items.push({
         category: 'Equipment Set',
         description: isHeatPump ? 'Heat Pump Set' : 'Heater',
-        unitPrice,
+        unitPrice: prices.heater,
         quantity: heaterQty,
-        total: unitPrice * heaterQty,
+        total: prices.heater * heaterQty,
       });
     }
 
@@ -938,13 +961,15 @@ export class EquipmentCalculations {
           ? 1
           : 0;
 
-    if (auxiliaryPumpCount > 0) {
+    const additionalPumpCount = Math.max(pumpQty - 1, 0) + auxiliaryPumpCount;
+
+    if (additionalPumpCount > 0) {
       items.push({
         category: 'Equipment Set',
-        description: 'Additional Pump',
+        description: "Add'l Pump(s)",
         unitPrice: prices.additionalPump,
-        quantity: auxiliaryPumpCount,
-        total: prices.additionalPump * auxiliaryPumpCount,
+        quantity: additionalPumpCount,
+        total: prices.additionalPump * additionalPumpCount,
       });
     }
 
@@ -1128,7 +1153,13 @@ export class InteriorFinishCalculations {
 
     // Fittings (Drains, Vac, Returns, Hydro) as per INT sheet logic
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
-    const mainPumpCount = getEquipmentItemCost(equipment?.pump as any, pumpOverhead) > 0 ? 1 : 0;
+    const pumpName = equipment?.pump?.name?.toLowerCase() || '';
+    const pumpQty = Math.max(
+      equipment?.pumpQuantity ?? (pumpName && !pumpName.includes('no pump') ? 1 : 0),
+      0
+    );
+    const pumpCost = getEquipmentItemCost(equipment?.pump as any, pumpOverhead);
+    const mainPumpCount = pumpCost > 0 ? pumpQty : 0;
     const auxPumpCount = (
       equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
         ? equipment.auxiliaryPumps

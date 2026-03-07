@@ -175,6 +175,7 @@ export function getDefaultEquipment(): Equipment {
       addCost2: (defaultPump as any).addCost2,
       price: getEquipmentItemCost(defaultPump as any, pumpOverhead),
     },
+    pumpQuantity: 0,
     auxiliaryPumps: [],
     filter: {
       name: defaultFilter.name,

@@ -259,6 +259,7 @@ export interface PumpSelection {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
+  autoAddedForSpa?: boolean;
 }
 
 export interface FilterSelection {
@@ -324,11 +325,13 @@ export interface AutoFillSystemSelection {
   addCost1?: number;
   addCost2?: number;
   percentIncrease?: number;
+  requiresElectricRun?: boolean;
 }
 
 export interface Equipment {
   // Main equipment
   pump: PumpSelection;
+  pumpQuantity?: number;
   auxiliaryPump?: PumpSelection; // Deprecated: use auxiliaryPumps
   auxiliaryPumps?: PumpSelection[]; // Optional auxiliary pumps (up to 2)
   filter: FilterSelection;

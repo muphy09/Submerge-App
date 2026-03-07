@@ -2,7 +2,7 @@
 // PRICING ENGINE - Excel Formula Logic Implementation
 // ============================================================================
 
-import { Proposal, PoolSpecs, Excavation, Plumbing, Electrical, CostBreakdown, CostLineItem } from '../types/proposal-new';
+import { Proposal, PoolSpecs, Excavation, Plumbing, Electrical, Equipment, CostBreakdown, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
 
@@ -293,15 +293,15 @@ export class ExcavationCalculations {
         category: 'Excavation',
         description: 'Cover Box',
         unitPrice: prices.coverBox,
-        quantity: poolSpecs.maxWidth,
-        total: prices.coverBox * poolSpecs.maxWidth,
+        quantity: 1,
+        total: prices.coverBox,
       });
     }
 
     // Pool bonding (perimeter-based with markup)
     const poolBondingConfig = prices.poolBonding;
     const poolBondingPerLnft = poolBondingConfig?.pricePerLnft ?? 0;
-    const poolBondingMarkup = poolBondingConfig?.markup ?? 0;
+    const poolBondingMarkup = 0.1; // Fixed 10% overhead (not admin-configurable)
     const poolBondingQty = poolSpecs.perimeter ?? 0;
     if (poolBondingPerLnft > 0 && poolBondingQty > 0) {
       const poolBondingUnitPrice = roundCurrency(poolBondingPerLnft);
@@ -348,7 +348,9 @@ export class ExcavationCalculations {
 export class PlumbingCalculations {
   static calculatePlumbingCost(
     poolSpecs: PoolSpecs,
-    plumbing: Plumbing
+    plumbing: Plumbing,
+    equipment?: Equipment,
+    excavation?: Excavation
   ): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.plumbing;
@@ -360,6 +362,15 @@ export class PlumbingCalculations {
     const infloorValveToEQ = plumbing.runs.infloorValveToEQ || 0;
     const infloorValveToPool = plumbing.runs.infloorValveToPool || 0;
     const infloorCalc = infloorValveToEQ + (infloorValveToPool * 6 * 1.15);
+    const normalizedEquipment = equipment
+      ? normalizeEquipmentLighting(equipment as any, { hasPool: hasPoolDefinition(poolSpecs), hasSpa, poolSpecs })
+      : equipment;
+    const heaterQty = Math.max((normalizedEquipment as any)?.heaterQuantity ?? 0, 0);
+    const hasHeaterSelection = heaterQty > 0;
+    const rbbTotalLnft = (excavation?.rbbLevels || []).reduce(
+      (sum, level) => sum + (Number(level.length) || 0),
+      0
+    );
 
     if (!hasPoolDefinition(poolSpecs)) {
       return items;
@@ -481,12 +492,13 @@ export class PlumbingCalculations {
     // Add'l water feature run allowance
     const totalWFRun = waterFeatureRuns.filter(r => r > 0).reduce((sum, r) => sum + Math.max(r, baseFeatureAllowance), 0);
     if (totalWFRun > 0) {
+      const linkedWaterFeatureRate = prices.twoInchPipe ?? prices.additionalWaterFeatureRunPerFt ?? featureRate;
       items.push({
         category: 'Plumbing',
         description: 'Additional Water Feature Run',
-        unitPrice: prices.additionalWaterFeatureRunPerFt ?? featureRate,
+        unitPrice: linkedWaterFeatureRate,
         quantity: totalWFRun,
-        total: (prices.additionalWaterFeatureRunPerFt ?? featureRate) * totalWFRun,
+        total: linkedWaterFeatureRate * totalWFRun,
       });
     }
 
@@ -529,6 +541,17 @@ export class PlumbingCalculations {
       total: prices.manifold,
     });
 
+    // Heater set (applies unless a spa AND heater are selected)
+    if (!(hasSpa && hasHeaterSelection) && (prices.heaterSet ?? 0) > 0) {
+      items.push({
+        category: 'Plumbing',
+        description: 'Heater Set',
+        unitPrice: prices.heaterSet,
+        quantity: 1,
+        total: prices.heaterSet,
+      });
+    }
+
     // Strip forms for pad
     items.push({
       category: 'Plumbing',
@@ -537,19 +560,28 @@ export class PlumbingCalculations {
       quantity: 1,
       total: prices.stripForms,
     });
+    if (rbbTotalLnft > 0 && (prices.stripFormsRbbAdditional ?? 0) > 0) {
+      items.push({
+        category: 'Plumbing',
+        description: 'Strip Forms (RBB)',
+        unitPrice: prices.stripFormsRbbAdditional,
+        quantity: rbbTotalLnft,
+        total: prices.stripFormsRbbAdditional * rbbTotalLnft,
+      });
+    }
 
     // Cleaner run
     if (plumbing.runs.cleanerRun > 0) {
       items.push({
         category: 'Plumbing',
         description: 'Cleaner Line',
-        unitPrice: prices.cleanerPerFt,
+        unitPrice: prices.twoInchPipe,
         quantity: plumbing.runs.cleanerRun,
-        total: prices.cleanerPerFt * plumbing.runs.cleanerRun,
+        total: prices.twoInchPipe * plumbing.runs.cleanerRun,
       });
     }
 
-    // Auto-fill
+    // Auto-fill (plumbing)
     if (plumbing.runs.autoFillRun > 0) {
       items.push({
         category: 'Plumbing',
@@ -568,6 +600,26 @@ export class PlumbingCalculations {
         unitPrice: prices.additionalSkimmer,
         quantity: plumbing.runs.additionalSkimmers,
         total: prices.additionalSkimmer * plumbing.runs.additionalSkimmers,
+      });
+    }
+
+    const auxiliarySelections = equipment?.auxiliaryPumps?.length
+      ? equipment.auxiliaryPumps
+      : equipment?.auxiliaryPump
+      ? [equipment.auxiliaryPump]
+      : [];
+    const hasAuxPump = auxiliarySelections.some((pump) => {
+      const name = pump?.name?.toLowerCase() || '';
+      return Boolean(name) && !name.includes('no pump') && !name.includes('no aux') && !name.includes('no auxiliary');
+    });
+    const addlMainDrainCost = prices.addlMainDrainWhenAuxPump ?? 0;
+    if (hasAuxPump && addlMainDrainCost > 0) {
+      items.push({
+        category: 'Plumbing',
+        description: "Add'l Main Drain",
+        unitPrice: addlMainDrainCost,
+        quantity: 1,
+        total: addlMainDrainCost,
       });
     }
 
@@ -595,7 +647,8 @@ export class ElectricalCalculations {
   static calculateElectricalCost(
     poolSpecs: PoolSpecs,
     electrical: Electrical,
-    equipment?: any
+    equipment?: any,
+    plumbing?: Plumbing
   ): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.electrical;
@@ -686,6 +739,24 @@ export class ElectricalCalculations {
       total: prices.bonding,
     });
 
+    // Additional sanitation systems (per system beyond the first)
+    const saltName = (normalizedEquipment as any)?.saltSystem?.name?.toLowerCase() || '';
+    const saltQty = Math.max(
+      (normalizedEquipment as any)?.saltSystemQuantity ?? ((normalizedEquipment as any)?.saltSystem ? 1 : 0),
+      0
+    );
+    const hasSaltSystem = saltQty > 0 && saltName && !saltName.includes('no salt');
+    if (hasSaltSystem && saltQty > 1 && prices.saltSystem > 0) {
+      const additionalQty = saltQty - 1;
+      items.push({
+        category: 'Electrical',
+        description: 'Additional Sanitation System',
+        unitPrice: prices.saltSystem,
+        quantity: additionalQty,
+        total: prices.saltSystem * additionalQty,
+      });
+    }
+
     // Outlet - Excel ELEC!Row10: $85 × 1
     items.push({
       category: 'Electrical',
@@ -694,6 +765,22 @@ export class ElectricalCalculations {
       quantity: 1,
       total: prices.outlet,
     });
+
+    // Auto-fill electrical run (only for systems that require electric run)
+    const autoFillSystemName = (equipment as any)?.autoFillSystem?.name;
+    const requiresElectricAutoFill =
+      Boolean((equipment as any)?.autoFillSystem?.requiresElectricRun) ||
+      Boolean(pricingData.equipment?.autoFillSystem?.find((system: any) => system.name === autoFillSystemName)?.requiresElectricRun);
+    const autoFillRun = plumbing?.runs?.autoFillRun ?? 0;
+    if (requiresElectricAutoFill && autoFillRun > 0) {
+      items.push({
+        category: 'Electrical',
+        description: 'Auto-Fill Run',
+        unitPrice: prices.autoFillPerFt,
+        quantity: autoFillRun,
+        total: prices.autoFillPerFt * autoFillRun,
+      });
+    }
 
     // Heat pump electrical
     if (electrical.runs.heatPumpElectricalRun > 0) {
@@ -715,6 +802,17 @@ export class ElectricalCalculations {
           total: (prices.heatPumpPerFtOver ?? prices.heatPumpElectrical) * over,
         });
       }
+    }
+
+    // Travel
+    if (poolSpecs.travelDistance > 0) {
+      items.push({
+        category: 'Electrical',
+        description: 'Travel',
+        unitPrice: prices.travelPerMile,
+        quantity: poolSpecs.travelDistance,
+        total: prices.travelPerMile * poolSpecs.travelDistance,
+      });
     }
 
     return items;
@@ -1154,7 +1252,7 @@ export class PricingEngine {
     const excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
 
     // Plumbing
-    const plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbing);
+    const plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbing, equipment, excavation);
 
     // Gas
     const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
@@ -1163,7 +1261,7 @@ export class PricingEngine {
     const steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
 
     // Electrical
-    const electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment);
+    const electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment, plumbing);
 
     // Shotcrete
     const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation);

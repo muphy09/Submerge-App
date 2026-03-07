@@ -128,10 +128,15 @@ export class MasterPricingEngine {
         lightRun: electrical?.runs?.lightRun ?? 0,
       },
     };
-    let plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbingWithElectrical);
+    let plumbingItems = PlumbingCalculations.calculatePlumbingCost(
+      poolSpecs,
+      plumbingWithElectrical,
+      equipment,
+      normalizedExcavation
+    );
     const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
     let steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
-    let electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment);
+    let electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment, plumbing);
     excavationItems = excavationItems.concat(buildCustomOptionItems(excavation.customOptions, 'Excavation'));
     plumbingItems = plumbingItems.concat(buildCustomOptionItems(plumbing.customOptions, 'Plumbing'));
     electricalItems = electricalItems.concat(buildCustomOptionItems(electrical.customOptions, 'Electrical'));

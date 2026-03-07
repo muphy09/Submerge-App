@@ -96,9 +96,11 @@ const pricingData = {
     conduitPerFt: 2.75,
     manifold: 175,
     stripForms: 700,
+    stripFormsRbbAdditional: 2.5,
     cleanerPerFt: 3.25,
     autoFillPerFt: 3.5,
     additionalSkimmer: 275,
+    addlMainDrainWhenAuxPump: 0,
     travelPerMile: 5,
   },
   waterFeatures: {
@@ -283,6 +285,14 @@ const pricingData = {
       { name: 'Jandy 1.0HP Single Speed Pump', basePrice: 1900, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
       { name: 'Jandy 2.0HP Single Speed Pump', basePrice: 2060, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
     ],
+    auxiliaryPumps: [
+      { name: 'No Auxiliary Pump (Select aux pump)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
+      { name: 'Jandy 1.65HP Variable Pump', basePrice: 2310, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: true },
+      { name: 'Jandy 1.85HP Variable Pump', basePrice: 2540, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
+      { name: 'Jandy 2.7HP Variable Pump', basePrice: 2174.15, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
+      { name: 'Jandy 1.0HP Single Speed Pump', basePrice: 1900, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
+      { name: 'Jandy 2.0HP Single Speed Pump', basePrice: 2060, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
+    ],
     filters: [
       { name: 'No Filter (Select filter)', sqft: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
       { name: '200 SQFT Cartridge Filter', sqft: 200, basePrice: 1103.57, addCost1: 0, addCost2: 0 },
@@ -338,8 +348,8 @@ const pricingData = {
       { name: 'No Salt System', model: 'None', basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
     autoFillSystem: [
-      { name: 'No Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0 },
-      { name: 'Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: 'No Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0, requiresElectricRun: false },
+      { name: 'Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0, requiresElectricRun: true },
     ],
     blanketReel: 0,
     solarBlanket: 0,
@@ -531,9 +541,6 @@ const pricingData = {
     },
     equipmentSet: {
       base: 750,
-      spa: 100,
-      automation: 200,
-      heatPump: 100,
       additionalPump: 150,
       ozoneBase: 200,
       heater: 200,

@@ -72,8 +72,10 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     : equipment.auxiliaryPump
     ? [equipment.auxiliaryPump]
     : [];
+  const auxiliaryCatalog =
+    (pricingData as any).equipment?.auxiliaryPumps || pricingData.equipment.pumps;
   const auxiliaryPumps = auxiliarySelections.map((item) =>
-    isRetiredName(item?.name, pricingData.equipment.pumps)
+    isRetiredName(item?.name, auxiliaryCatalog)
   );
   const filter = filterSelected && isRetiredName(equipment.filter?.name, pricingData.equipment.filters);
   const cleaner = cleanerSelected && isRetiredName(equipment.cleaner?.name, pricingData.equipment.cleaners);

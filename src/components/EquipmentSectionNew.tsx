@@ -103,8 +103,23 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     const badge = getCostBadge(amount ?? 0);
     return badge ? `${label} (${badge})` : label;
   };
+  const isAuxPumpPlaceholder = (name: string) => {
+    const lowered = name.toLowerCase();
+    return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary');
+  };
+  const getDefaultAuxiliaryPump = () =>
+    auxiliaryPumpCatalog.find((pump: any) => pump.defaultAuxiliaryPump) ||
+    auxiliaryPumpCatalog.find((pump: any) => !isAuxPumpPlaceholder(pump.name)) ||
+    auxiliaryPumpCatalog[0];
 
   const pumpOptions = pricingData.equipment.pumps.filter(pump => !pump.name.toLowerCase().includes('no pump'));
+  const auxiliaryPumpCatalog =
+    (pricingData as any).equipment?.auxiliaryPumps?.length
+      ? (pricingData as any).equipment.auxiliaryPumps
+      : pricingData.equipment.pumps;
+  const auxiliaryPumpOptions = auxiliaryPumpCatalog.filter((pump: any) =>
+    !isAuxPumpPlaceholder(pump.name)
+  );
   const filterOptions = pricingData.equipment.filters.filter(filter => !filter.name.toLowerCase().includes('no filter'));
   const cleanerOptions = pricingData.equipment.cleaners.filter(cleaner => !cleaner.name.toLowerCase().includes('no cleaner'));
   const heaterOptions = pricingData.equipment.heaters.filter(heater => !heater.name.toLowerCase().includes('no heater'));
@@ -120,7 +135,10 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     addCost2: (system as any)?.addCost2,
     price: costOf(system),
     percentIncrease: (system as any)?.percentIncrease,
+    requiresElectricRun: (system as any)?.requiresElectricRun,
   });
+
+  const hasPumpSelection = hasRealSelection(data?.pump?.name, 'no pump');
 
   const baseSafeData: Equipment = {
     pump: data?.pump || {
@@ -131,6 +149,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       addCost2: (defaults.pump as any).addCost2,
       price: costOf(defaults.pump, true),
     },
+    pumpQuantity: Math.max(data?.pumpQuantity ?? (hasPumpSelection ? 1 : 0), 0),
     auxiliaryPumps:
       data?.auxiliaryPumps ||
       (data?.auxiliaryPump ? [data.auxiliaryPump] : []),
@@ -231,6 +250,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   );
   const auxiliaryPumps = safeData.auxiliaryPumps || [];
   const maxAuxiliaryPumps = 2;
+  const pumpQuantity = Math.max(safeData.pumpQuantity ?? (includePump ? 1 : 0), 0);
   const cleanerQuantity = Math.max(safeData.cleanerQuantity ?? (includeCleaner ? 1 : 0), 0);
   const filterQuantity = Math.max(safeData.filterQuantity ?? (includeFilter ? 1 : 0), 0);
   const heaterQuantity = Math.max(safeData.heaterQuantity ?? (includeHeater ? 1 : 0), 0);
@@ -240,6 +260,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     safeData.autoFillSystemQuantity ?? (includeAutoFill ? 1 : 0),
     0
   );
+  const autoFillRequiresElectric = includeAutoFill && Boolean(safeData.autoFillSystem?.requiresElectricRun);
   const poolLights = safeData.poolLights || [];
   const spaLights = safeData.spaLights || [];
 
@@ -310,6 +331,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           addCost2: (selectedPump as any)?.addCost2 ?? (defaults.pump as any).addCost2,
           price: costOf(selectedPump || defaults.pump, true),
         },
+        pumpQuantity: Math.max(safeData.pumpQuantity ?? 1, 1),
         auxiliaryPumps: auxiliaryPumps,
         auxiliaryPump: auxiliaryPumps[0],
       });
@@ -323,6 +345,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           addCost2: (defaults.pump as any).addCost2,
           price: costOf(defaults.pump, true),
         },
+        pumpQuantity: 0,
         auxiliaryPumps: [],
         auxiliaryPump: undefined,
       });
@@ -640,35 +663,40 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   const handlePumpChange = (name: string) => {
     const pump = pricingData.equipment.pumps.find(p => p.name === name);
     if (pump) {
-      handleChange('pump', {
-        name: pump.name,
-        model: (pump as any).model,
-        basePrice: (pump as any).basePrice,
-        addCost1: (pump as any).addCost1,
-        addCost2: (pump as any).addCost2,
-        price: costOf(pump, true),
+      updateData({
+        pump: {
+          name: pump.name,
+          model: (pump as any).model,
+          basePrice: (pump as any).basePrice,
+          addCost1: (pump as any).addCost1,
+          addCost2: (pump as any).addCost2,
+          price: costOf(pump, true),
+        },
+        pumpQuantity: Math.max(safeData.pumpQuantity ?? 1, 1),
       });
     }
   };
 
   const handleAuxiliaryPumpChange = (index: number, name: string | number) => {
-    const pump = pricingData.equipment.pumps.find(p => p.name === name);
+    const pump = auxiliaryPumpCatalog.find((p: any) => p.name === name);
     if (!pump) return;
     const next = [...auxiliaryPumps];
+    const existing = next[index];
     next[index] = {
       name: pump.name,
       model: (pump as any).model,
       basePrice: (pump as any).basePrice,
       addCost1: (pump as any).addCost1,
       addCost2: (pump as any).addCost2,
-      price: costOf(pump),
+      price: costOf(pump, true),
+      autoAddedForSpa: existing?.autoAddedForSpa,
     };
     setAuxiliaryPumps(next);
   };
 
   const addAuxiliaryPump = () => {
     if (auxiliaryPumps.length >= maxAuxiliaryPumps) return;
-    const defaultPump = pricingData.equipment.pumps.find(p => !p.name.toLowerCase().includes('no pump')) || selectableDefaults.pump;
+    const defaultPump = getDefaultAuxiliaryPump() || selectableDefaults.pump;
     setAuxiliaryPumps([
       ...auxiliaryPumps,
       {
@@ -678,6 +706,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
         addCost1: (defaultPump as any).addCost1,
         addCost2: (defaultPump as any).addCost2,
         price: costOf(defaultPump, true),
+        autoAddedForSpa: false,
       },
     ]);
   };
@@ -802,39 +831,56 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   return (
     <div className="section-form">
         {/* Pump */}
-        <div className="spec-block">
+      <div className="spec-block">
           <div className="spec-block-header">
             <h2 className="spec-block-title">Pump</h2>
           </div>
-          <div className="spec-field">
-            <LabelWithRetired text="Pump" showRetired={retiredFlags.pump} />
-            <select
-              className="compact-input equipment-select"
-              value={includePump ? safeData.pump.name : noneOptionValue}
-              onChange={(e) => handlePumpSelect(e.target.value)}
-            >
-              <option value={noneOptionValue}>None</option>
-              {retiredFlags.pump && renderRetiredOption(safeData.pump.name)}
-              {pumpOptions.map(pump => (
-                <option key={pump.name} value={pump.name}>
-                  {formatOptionLabel(pump.name, costOf(pump, true))}
-                </option>
-              ))}
-            </select>
+          <div className="spec-grid spec-grid-2">
+            <div className="spec-field">
+              <LabelWithRetired text="Pump" showRetired={retiredFlags.pump} />
+              <select
+                className="compact-input equipment-select"
+                value={includePump ? safeData.pump.name : noneOptionValue}
+                onChange={(e) => handlePumpSelect(e.target.value)}
+              >
+                <option value={noneOptionValue}>None</option>
+                {retiredFlags.pump && renderRetiredOption(safeData.pump.name)}
+                {pumpOptions.map(pump => (
+                  <option key={pump.name} value={pump.name}>
+                    {formatOptionLabel(pump.name, costOf(pump, true))}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {includePump && (
+              <div className="spec-field" style={{ maxWidth: '220px' }}>
+                <label className="spec-label">Pump Quantity</label>
+                <CompactInput
+                  value={pumpQuantity}
+                  onChange={(e) =>
+                    updateData({ pumpQuantity: Math.max(1, parseInt(e.target.value) || 1) })
+                  }
+                  unit="ea"
+                  min="1"
+                  step="1"
+                  placeholder="1"
+                />
+              </div>
+            )}
           </div>
         {includePump && (
           <>
               {auxiliaryPumps.map((pump, idx) => (
                 <div key={idx} className="spec-field equipment-extra-field">
-                  <LabelWithRetired text={`Additional Pump ${idx + 1}`} showRetired={retiredFlags.auxiliaryPumps[idx]} />
+                  <LabelWithRetired text={`Auxiliary Pump ${idx + 1}`} showRetired={retiredFlags.auxiliaryPumps[idx]} />
                   <div className="equipment-inline-row">
                     <select
                       className="compact-input equipment-select"
-                      value={pump?.name || safeData.pump.name}
+                      value={pump?.name || getDefaultAuxiliaryPump()?.name || ''}
                       onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
                     >
-                      {retiredFlags.auxiliaryPumps[idx] && renderRetiredOption(pump?.name || safeData.pump.name)}
-                      {pumpOptions.map(option => (
+                      {retiredFlags.auxiliaryPumps[idx] && renderRetiredOption(pump?.name || getDefaultAuxiliaryPump()?.name)}
+                      {auxiliaryPumpOptions.map(option => (
                         <option key={option.name} value={option.name}>
                           {formatOptionLabel(option.name, costOf(option, true))}
                         </option>
@@ -844,6 +890,9 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
                     Remove
                   </button>
                 </div>
+                {pump?.autoAddedForSpa && (
+                  <small className="form-help">Auto-added for spa.</small>
+                )}
               </div>
             ))}
 
@@ -1250,6 +1299,9 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
                 step="1"
                 placeholder="0"
               />
+              {autoFillRequiresElectric && (
+                <small className="form-help">Also billed as an electrical run.</small>
+              )}
             </div>
           )}
         </div>

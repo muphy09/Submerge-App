@@ -26,11 +26,14 @@ type Path = (string | number)[];
 type ScalarField = {
   label: string;
   path: Path;
+  valuePath?: Path;
   type: 'number' | 'boolean' | 'text';
   note?: string;
   tooltip?: string;
   prefix?: string;
   isPercent?: boolean;
+  disabled?: boolean;
+  isUnused?: boolean;
 };
 
 type ListField = {
@@ -39,6 +42,7 @@ type ListField = {
   type: 'number' | 'boolean' | 'text';
   placeholder?: string;
   prefix?: string;
+  tooltip?: string;
 };
 
 type ListConfig = {
@@ -68,6 +72,13 @@ const toNumber = (value: string) => {
   const parsed = parseFloat(value);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 const emptyFromFields = (fields: ListField[]) =>
   fields.reduce<Record<string, any>>((acc, field) => {
@@ -109,6 +120,30 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     else if (ratio > 0.6) align = 'right';
     e.currentTarget.dataset.align = align;
   };
+  const updateLabelTooltip = (e: React.MouseEvent<HTMLSpanElement>) => {
+    const target = e.currentTarget;
+    const clip = target.firstElementChild as HTMLElement | null;
+    const isTruncated = clip ? clip.scrollWidth > clip.clientWidth : target.scrollWidth > target.clientWidth;
+    target.dataset.truncated = isTruncated ? 'true' : 'false';
+    if (!isTruncated) {
+      delete target.dataset.align;
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const center = rect.left + rect.width / 2;
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const ratio = center / vw;
+    let align: 'left' | 'right' | 'center' = 'center';
+    if (ratio < 0.4) align = 'left';
+    else if (ratio > 0.6) align = 'right';
+    target.dataset.align = align;
+  };
+
+  const renderLabelText = (text: string) => (
+    <span className="pricing-field__label-text" data-tooltip={text} onMouseEnter={updateLabelTooltip}>
+      <span className="pricing-field__label-text-clip">{text}</span>
+    </span>
+  );
 
   useEffect(() => {
     const targetFranchise = franchiseId || getActiveFranchiseId();
@@ -284,6 +319,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       parsed = Boolean(value);
     }
     updatePricingValue(field.path, parsed);
+    if (field.path.join('.') === 'plumbing.twoInchPipe') {
+      updatePricingValue(['plumbing', 'additionalWaterFeatureRunPerFt'], parsed);
+    }
+    if (field.path.join('.') === 'tileCoping.tile.labor.level1') {
+      updatePricingValue(['tileCoping', 'tile', 'labor', 'level2'], parsed);
+      updatePricingValue(['tileCoping', 'tile', 'labor', 'level3'], parsed);
+    }
     setHasChanges(true);
   };
 
@@ -295,6 +337,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       list.path[0] === 'equipment' &&
       list.path[1] === 'lights' &&
       (list.path[2] === 'poolLights' || list.path[2] === 'spaLights');
+    const isDefaultAuxiliaryPump =
+      field.key === 'defaultAuxiliaryPump' &&
+      list.path[0] === 'equipment' &&
+      list.path[1] === 'auxiliaryPumps';
 
     if (isDefaultLightChoice && parsed) {
       const entries = (getValue(data, list.path) as any[]) || [];
@@ -306,6 +352,30 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setHasChanges(true);
       return;
     }
+    if (isDefaultAuxiliaryPump && parsed) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const nextList = entries.map((entry, idx) => ({
+        ...entry,
+        defaultAuxiliaryPump: idx === index,
+      }));
+      updatePricingValue(list.path, nextList);
+      setHasChanges(true);
+      return;
+    }
+
+    const isInteriorFinishName =
+      field.key === 'name' && list.path[0] === 'interiorFinish' && list.path[1] === 'finishes';
+    if (isInteriorFinishName) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const existing = entries[index] || {};
+      if (!existing.id) {
+        const nextId = slugify(String(parsed));
+        if (nextId) {
+          updatePricingListItem(list.path, index, 'id', nextId);
+        }
+      }
+    }
+
     updatePricingListItem(list.path, index, field.key, parsed);
     setHasChanges(true);
   };
@@ -469,25 +539,25 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Preferred Approved Provider Discounts',
             scalars: [
-              { label: 'Excavation', path: ['papDiscountRates', 'excavation'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Plumbing', path: ['papDiscountRates', 'plumbing'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Steel', path: ['papDiscountRates', 'steel'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Electrical', path: ['papDiscountRates', 'electrical'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Shotcrete (Labor + Material)', path: ['papDiscountRates', 'shotcrete'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Tile/Coping Labor', path: ['papDiscountRates', 'tileCopingLabor'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Tile/Coping Material', path: ['papDiscountRates', 'tileCopingMaterial'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Equipment (Pre-Tax)', path: ['papDiscountRates', 'equipment'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Interior Finish Labor', path: ['papDiscountRates', 'interiorFinish'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
-              { label: 'Startup/Orientation', path: ['papDiscountRates', 'startup'], type: 'number', tooltip: 'Placeholder', prefix: '%', isPercent: true },
+              { label: 'Excavation', path: ['papDiscountRates', 'excavation'], type: 'number', tooltip: 'Applies % discount to Excavation line items (not fiberglass pools).', prefix: '%', isPercent: true },
+              { label: 'Plumbing', path: ['papDiscountRates', 'plumbing'], type: 'number', tooltip: 'Applies % discount to Plumbing line items.', prefix: '%', isPercent: true },
+              { label: 'Steel', path: ['papDiscountRates', 'steel'], type: 'number', tooltip: 'Applies % discount to Steel line items.', prefix: '%', isPercent: true },
+              { label: 'Electrical', path: ['papDiscountRates', 'electrical'], type: 'number', tooltip: 'Applies % discount to Electrical line items.', prefix: '%', isPercent: true },
+              { label: 'Shotcrete (Labor + Material)', path: ['papDiscountRates', 'shotcrete'], type: 'number', tooltip: 'Applies % discount to combined Shotcrete labor + material.', prefix: '%', isPercent: true },
+              { label: 'Tile/Coping Labor', path: ['papDiscountRates', 'tileCopingLabor'], type: 'number', tooltip: 'Applies % discount to Tile & Coping labor items.', prefix: '%', isPercent: true },
+              { label: 'Tile/Coping Material', path: ['papDiscountRates', 'tileCopingMaterial'], type: 'number', tooltip: 'Applies % discount to flagstone coping material only.', prefix: '%', isPercent: true },
+              { label: 'Equipment (Pre-Tax)', path: ['papDiscountRates', 'equipment'], type: 'number', tooltip: 'Applies % discount to equipment subtotal before tax (tax recalculated).', prefix: '%', isPercent: true },
+              { label: 'Interior Finish Labor', path: ['papDiscountRates', 'interiorFinish'], type: 'number', tooltip: 'Applies % discount to Interior Finish labor items.', prefix: '%', isPercent: true },
+              { label: 'Startup/Orientation', path: ['papDiscountRates', 'startup'], type: 'number', tooltip: 'Applies % discount to Start-Up / Orientation items.', prefix: '%', isPercent: true },
             ],
           },
           {
             title: 'Manual Retail Price Adjustments',
             scalars: [
-              { label: 'Positive Adjustment 1', path: ['manualAdjustments', 'positive1'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-              { label: 'Positive Adjustment 2', path: ['manualAdjustments', 'positive2'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-              { label: 'Negative Adjustment 1', path: ['manualAdjustments', 'negative1'], type: 'number', tooltip: 'Placeholder', prefix: '-$' },
-              { label: 'Negative Adjustment 2', path: ['manualAdjustments', 'negative2'], type: 'number', tooltip: 'Placeholder', prefix: '-$' },
+              { label: 'Positive Adjustment 1', path: ['manualAdjustments', 'positive1'], type: 'number', tooltip: 'Default value in Adjustments card; adds to retail price.', prefix: '$' },
+              { label: 'Positive Adjustment 2', path: ['manualAdjustments', 'positive2'], type: 'number', tooltip: 'Default value in Adjustments card; adds to retail price.', prefix: '$' },
+              { label: 'Negative Adjustment 1', path: ['manualAdjustments', 'negative1'], type: 'number', tooltip: 'Default value in Adjustments card; subtracts from retail price.', prefix: '-$' },
+              { label: 'Negative Adjustment 2', path: ['manualAdjustments', 'negative2'], type: 'number', tooltip: 'Default value in Adjustments card; subtracts from retail price.', prefix: '-$' },
             ],
           },
         ],
@@ -547,21 +617,21 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Pool',
                 path: ['misc', 'layout', 'poolOnly'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added when a pool is defined. Quantity is always 1 if defined.',
                 prefix: '$',
               },
               {
                 label: 'Spa',
                 path: ['misc', 'layout', 'spa'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added when a spa exists. Quantity is always 1 if spa exists.',
                 prefix: '$',
               },
               {
                 label: 'Silt Fencing',
                 path: ['misc', 'layout', 'siltFencing'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added when silt fencing is selected on the pool specs.',
                 prefix: '$',
               },
             ],
@@ -573,21 +643,21 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Pool',
                 path: ['misc', 'permit', 'poolOnly'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added when a pool is defined. Quantity is always 1 if defined.',
                 prefix: '$',
               },
               {
                 label: 'Spa',
                 path: ['misc', 'permit', 'spa'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added when a spa exists. Quantity is always 1 if spa exists.',
                 prefix: '$',
               },
               {
                 label: 'Permit Runner',
                 path: ['misc', 'permit', 'permitRunner'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added for every defined pool. Quantity is always 1.',
                 prefix: '$',
               },
             ],
@@ -601,79 +671,72 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             title: 'Base & allowances',
             scalars: [
               {
-                label: 'Base excavation (project)',
-                path: ['excavation', 'basePricePerSqft'],
-                type: 'number',
-                tooltip: 'Placeholder',
-                prefix: '$',
-              },
-              {
                 label: 'Over 1,000 sqft surcharge',
                 path: ['excavation', 'over1000Sqft'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Applied per sqft over 1,000 when surface area exceeds 1,000 sqft.',
                 prefix: '$',
               },
               {
                 label: 'Additional 6" depth (per sqft)',
                 path: ['excavation', 'additional6InchDepth'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added per 6" depth increment beyond 8\' end depth.',
                 prefix: '$',
               },
               {
-                label: 'Site prep (per hour)',
+                label: 'Site Prep',
                 path: ['excavation', 'sitePrep'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Applied per additional site-prep hour in Excavation.',
                 prefix: '$',
               },
               {
                 label: 'Backfill',
                 path: ['excavation', 'backfill'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added once for non-fiberglass pools.',
                 prefix: '$',
               },
               {
-                label: 'Gravel install (per ton)',
-                path: ['excavation', 'gravelPerTon'],
+                label: 'Gravel install (per sqft)',
+                path: ['excavation', 'gravelPerSqft'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Applied per sqft when gravel install is selected.',
                 prefix: '$',
               },
               {
-                label: 'Dirt haul (per load)',
-                path: ['excavation', 'dirtHaulPerLoad'],
+                label: 'Dirt haul (per yard)',
+                path: ['excavation', 'dirtHaulPerYard'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Applied per cubic yard when dirt haul is selected.',
                 prefix: '$',
               },
               {
                 label: 'Cover box',
                 path: ['excavation', 'coverBox'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added once when an automatic cover is selected.',
                 prefix: '$',
               },
               {
                 label: 'Travel (per mile)',
                 path: ['excavation', 'travelPerMile'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Applied per mile of travel distance.',
                 prefix: '$',
               },
               {
                 label: 'Miscellaneous',
                 path: ['excavation', 'misc'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added once for non-fiberglass pools.',
                 prefix: '$',
               },
             ],
           },
           {
-            title: 'Base Ranges - Surface Area Breakpoints',
+            title: 'Base excavation (surface area breakpoints)',
             render: renderBaseRanges,
           },
           {
@@ -683,14 +746,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spa base excavation',
                 path: ['excavation', 'baseSpa'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added when a gunite spa exists.',
                 prefix: '$',
               },
               {
                 label: 'Raised spa excavation',
                 path: ['excavation', 'raisedSpa'],
                 type: 'number',
-                tooltip: 'Placeholder',
+                tooltip: 'Added when the spa is raised.',
                 prefix: '$',
               },
             ],
@@ -698,32 +761,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Raised bond beam (per lnft)',
             scalars: [
-              { label: '6" RBB', path: ['excavation', 'rbb6'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-              { label: '12" RBB', path: ['excavation', 'rbb12'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-              { label: '18" RBB', path: ['excavation', 'rbb18'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-              { label: '24" RBB', path: ['excavation', 'rbb24'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-              { label: '30" RBB', path: ['excavation', 'rbb30'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-              { label: '36" RBB', path: ['excavation', 'rbb36'], type: 'number', tooltip: 'Placeholder', prefix: '$' },
-            ],
-          },
-          {
-            title: 'Pool Bonding',
-            scalars: [
-              {
-                label: 'Price per LNFT',
-                path: ['excavation', 'poolBonding', 'pricePerLnft'],
-                type: 'number',
-                prefix: '$',
-                note: 'Applied to pool perimeter before markup.',
-              },
-              {
-                label: 'Markup %',
-                path: ['excavation', 'poolBonding', 'markup'],
-                type: 'number',
-                prefix: '%',
-                isPercent: true,
-                note: 'Adds on top of (price × perimeter).',
-              },
+              { label: '6" RBB', path: ['excavation', 'rbb6'], type: 'number', tooltip: 'Applied per linear foot of 6" raised bond beam.', prefix: '$' },
+              { label: '12" RBB', path: ['excavation', 'rbb12'], type: 'number', tooltip: 'Applied per linear foot of 12" raised bond beam.', prefix: '$' },
+              { label: '18" RBB', path: ['excavation', 'rbb18'], type: 'number', tooltip: 'Applied per linear foot of 18" raised bond beam.', prefix: '$' },
+              { label: '24" RBB', path: ['excavation', 'rbb24'], type: 'number', tooltip: 'Applied per linear foot of 24" raised bond beam.', prefix: '$' },
+              { label: '30" RBB', path: ['excavation', 'rbb30'], type: 'number', tooltip: 'Applied per linear foot of 30" raised bond beam.', prefix: '$' },
+              { label: '36" RBB', path: ['excavation', 'rbb36'], type: 'number', tooltip: 'Applied per linear foot of 36" raised bond beam.', prefix: '$' },
             ],
           },
         ],
@@ -734,60 +777,209 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Base & overruns',
             scalars: [
-              { label: 'Short stub / base plumbing', path: ['plumbing', 'shortStub'], type: 'number' },
-              { label: 'Spa base plumbing', path: ['plumbing', 'spaBase'], type: 'number' },
+              {
+                label: 'Short stub / base plumbing',
+                path: ['plumbing', 'shortStub'],
+                type: 'number',
+                tooltip: 'Added once when a pool is defined.',
+                prefix: '$',
+              },
+              {
+                label: 'Spa base plumbing',
+                path: ['plumbing', 'spaBase'],
+                type: 'number',
+                tooltip: 'Added once when a gunite spa exists.',
+                prefix: '$',
+              },
               {
                 label: 'Pool overrun per ft',
                 path: ['plumbing', 'poolOverrunPerFt'],
                 type: 'number',
+                tooltip: 'Applied to skimmer run length above the threshold.',
+                prefix: '$',
                 note: `Applies over ${data.plumbing.poolOverrunThreshold} ft`,
+              },
+              {
+                label: 'Pool overrun threshold',
+                path: ['plumbing', 'poolOverrunThreshold'],
+                type: 'number',
+                tooltip: 'Feet included before pool overrun charges apply.',
+                prefix: 'LNFT',
               },
               {
                 label: 'Spa overrun per ft',
                 path: ['plumbing', 'spaOverrunPerFt'],
                 type: 'number',
+                tooltip: 'Applied to spa run length above the threshold.',
+                prefix: '$',
                 note: `Applies over ${data.plumbing.spaOverrunThreshold} ft`,
               },
               {
-                label: 'Gas overrun per ft',
-                path: ['plumbing', 'gasOverrunPerFt'],
+                label: 'Spa overrun threshold',
+                path: ['plumbing', 'spaOverrunThreshold'],
                 type: 'number',
-                note: `Applies over ${data.plumbing.gasOverrunThreshold} ft`,
+                tooltip: 'Feet included before spa overrun charges apply.',
+                prefix: 'LNFT',
               },
-              { label: 'Spa plumbing (per ft)', path: ['plumbing', 'spaPlumbing'], type: 'number' },
             ],
           },
           {
             title: 'Pipe sizes',
             scalars: [
-              { label: '1/2" pipe (per ft)', path: ['plumbing', 'cleanerPerFt'], type: 'number' },
-              { label: '3/4" pipe (per ft)', path: ['plumbing', 'threeQuarterInchPipe'], type: 'number' },
-              { label: '1" pipe (per ft)', path: ['plumbing', 'autoFillPerFt'], type: 'number' },
-              { label: '1.5" pipe (per ft)', path: ['plumbing', 'onePointFiveInchPipe'], type: 'number' },
-              { label: '2" pipe (per ft)', path: ['plumbing', 'twoInchPipe'], type: 'number' },
-              { label: '2.5" pipe (per ft)', path: ['plumbing', 'twoPointFiveInchPipe'], type: 'number' },
-              { label: '3" pipe (per ft)', path: ['plumbing', 'threeInchPipe'], type: 'number' },
+              {
+                label: '1/2" pipe (per ft)',
+                path: ['plumbing', 'cleanerPerFt'],
+                type: 'number',
+                tooltip: 'Unused in current plumbing calculations.',
+                prefix: '$',
+                isUnused: true,
+              },
+              {
+                label: '3/4" pipe (per ft)',
+                path: ['plumbing', 'threeQuarterInchPipe'],
+                type: 'number',
+                tooltip: 'Unused in current plumbing calculations.',
+                prefix: '$',
+                isUnused: true,
+              },
+              {
+                label: '1" pipe (per ft)',
+                path: ['plumbing', 'autoFillPerFt'],
+                type: 'number',
+                tooltip: 'Used for auto-fill run length.',
+                prefix: '$',
+              },
+              {
+                label: '1.5" pipe (per ft)',
+                path: ['plumbing', 'onePointFiveInchPipe'],
+                type: 'number',
+                tooltip: 'Unused in current plumbing calculations.',
+                prefix: '$',
+                isUnused: true,
+              },
+              {
+                label: '2" pipe (per ft)',
+                path: ['plumbing', 'twoInchPipe'],
+                type: 'number',
+                tooltip: 'Used for core plumbing runs, cleaner line, and additional water feature run rate.',
+                prefix: '$',
+              },
+              {
+                label: '2.5" pipe (per ft)',
+                path: ['plumbing', 'twoPointFiveInchPipe'],
+                type: 'number',
+                tooltip: 'Used for main drain + spa loop length.',
+                prefix: '$',
+              },
+              {
+                label: '3" pipe (per ft)',
+                path: ['plumbing', 'threeInchPipe'],
+                type: 'number',
+                tooltip: 'Used when gas run exceeds 100 ft (qty = gas run - 100).',
+                prefix: '$',
+              },
             ],
           },
           {
             title: 'Water feature plumbing',
             scalars: [
-              { label: 'Setup (per run)', path: ['plumbing', 'waterFeatureRun', 'setup'], type: 'number' },
-              { label: 'Base allowance (ft)', path: ['plumbing', 'waterFeatureRun', 'baseAllowanceFt'], type: 'number' },
-              { label: 'Per ft over allowance', path: ['plumbing', 'waterFeatureRun', 'perFt'], type: 'number' },
-              { label: 'Add\'l water feature run (per ft)', path: ['plumbing', 'additionalWaterFeatureRunPerFt'], type: 'number' },
+              {
+                label: 'Setup (per run)',
+                path: ['plumbing', 'waterFeatureRun', 'setup'],
+                type: 'number',
+                tooltip: 'Added once per water feature run.',
+                prefix: '$',
+              },
+              {
+                label: 'Base allowance (ft)',
+                path: ['plumbing', 'waterFeatureRun', 'baseAllowanceFt'],
+                type: 'number',
+                tooltip: 'Included feet per water feature run before overage.',
+              },
+              {
+                label: 'Per ft over allowance',
+                path: ['plumbing', 'waterFeatureRun', 'perFt'],
+                type: 'number',
+                tooltip: 'Applied to overage beyond the base allowance.',
+                prefix: '$',
+              },
+              {
+                label: 'Additional Water Feature Run (per ft)',
+                path: ['plumbing', 'additionalWaterFeatureRunPerFt'],
+                valuePath: ['plumbing', 'twoInchPipe'],
+                type: 'number',
+                disabled: true,
+                tooltip: 'Applied to total water feature run length; rate is linked to 2" pipe.',
+                prefix: '$',
+              },
             ],
           },
           {
             title: 'Misc plumbing',
             scalars: [
-              { label: 'Additional skimmer', path: ['plumbing', 'additionalSkimmer'], type: 'number' },
-              { label: 'Infloor (per ft)', path: ['plumbing', 'infloorPerFt'], type: 'number' },
-              { label: 'Conduit (per ft)', path: ['plumbing', 'conduitPerFt'], type: 'number' },
-              { label: 'Manifold', path: ['plumbing', 'manifold'], type: 'number' },
-              { label: 'Heater set', path: ['plumbing', 'heaterSet'], type: 'number' },
-              { label: 'Strip forms', path: ['plumbing', 'stripForms'], type: 'number' },
-              { label: 'Travel (per mile)', path: ['plumbing', 'travelPerMile'], type: 'number' },
+              {
+                label: 'Additional skimmer',
+                path: ['plumbing', 'additionalSkimmer'],
+                type: 'number',
+                tooltip: 'Applied per additional skimmer count.',
+                prefix: '$',
+              },
+              {
+                label: "Add'l Main Drain (When Aux. Pump is active)",
+                path: ['plumbing', 'addlMainDrainWhenAuxPump'],
+                type: 'number',
+                tooltip: 'Added once when an auxiliary pump is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Infloor (per ft)',
+                path: ['plumbing', 'infloorPerFt'],
+                type: 'number',
+                tooltip: 'Applied when infloor is selected; qty = 0.5 x pool surface area.',
+                prefix: '$',
+              },
+              {
+                label: 'Conduit (per ft)',
+                path: ['plumbing', 'conduitPerFt'],
+                type: 'number',
+                tooltip: 'Applied to electrical run + light run x conduit multiplier.',
+                prefix: '$',
+              },
+              {
+                label: 'Manifold',
+                path: ['plumbing', 'manifold'],
+                type: 'number',
+                tooltip: 'Added once per pad (always).',
+                prefix: '$',
+              },
+              {
+                label: 'Heater set',
+                path: ['plumbing', 'heaterSet'],
+                type: 'number',
+                tooltip: 'Added once unless a spa and a heater are both selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Strip forms',
+                path: ['plumbing', 'stripForms'],
+                type: 'number',
+                tooltip: 'Added once per pad (always).',
+                prefix: '$',
+              },
+              {
+                label: 'Strip forms RBB additional',
+                path: ['plumbing', 'stripFormsRbbAdditional'],
+                type: 'number',
+                tooltip: 'Additional cost per LNFT of RBB',
+                prefix: '$',
+              },
+              {
+                label: 'Travel (per mile)',
+                path: ['plumbing', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Applied per mile of travel distance.',
+                prefix: '$',
+              },
             ],
           },
         ],
@@ -865,35 +1057,132 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Electrical runs',
             scalars: [
-              { label: 'Base electrical', path: ['electrical', 'baseElectrical'], type: 'number' },
+              {
+                label: 'Base electrical',
+                path: ['electrical', 'baseElectrical'],
+                type: 'number',
+                tooltip: `Added when a pool is defined. Includes first ${data.electrical.overrunThreshold} ft of electrical run.`,
+                prefix: '$',
+              },
               {
                 label: 'Electrical overrun per ft',
                 path: ['electrical', 'overrunPerFt'],
                 type: 'number',
+                tooltip: 'Applied per ft of electrical run beyond the threshold.',
+                prefix: '$',
                 note: `Applies over ${data.electrical.overrunThreshold} ft`,
               },
-              { label: 'Heater cost', path: ['electrical', 'spaElectrical'], type: 'number' },
-              { label: 'Light additional (each)', path: ['electrical', 'lightAdditionalPerLight'], type: 'number' },
-              { label: 'Light run per ft', path: ['electrical', 'lightRunPerFt'], type: 'number' },
-              { label: 'Heat pump electrical base', path: ['electrical', 'heatPumpElectricalBase'], type: 'number' },
-              { label: 'Heat pump overrun per ft', path: ['electrical', 'heatPumpPerFtOver'], type: 'number' },
-              { label: 'Automation add', path: ['electrical', 'automation'], type: 'number' },
-              { label: 'Sanitation system add', path: ['electrical', 'saltSystem'], type: 'number' },
-              { label: 'Bonding', path: ['electrical', 'bonding'], type: 'number' },
-              { label: 'Outlet', path: ['electrical', 'outlet'], type: 'number' },
-              { label: 'Auto-fill (per ft)', path: ['electrical', 'autoFillPerFt'], type: 'number' },
-              { label: 'Travel per mile', path: ['electrical', 'travelPerMile'], type: 'number' },
+              {
+                label: 'Electrical overrun threshold',
+                path: ['electrical', 'overrunThreshold'],
+                type: 'number',
+                tooltip: 'Feet included before electrical overrun charges apply.',
+                prefix: 'LNFT',
+              },
+              {
+                label: 'Heater cost',
+                path: ['electrical', 'spaElectrical'],
+                type: 'number',
+                tooltip: 'Added per heater when a heater is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Light additional (each)',
+                path: ['electrical', 'lightAdditionalPerLight'],
+                type: 'number',
+                tooltip: 'Added for each light beyond the first.',
+                prefix: '$',
+              },
+              {
+                label: 'Heat pump electrical base',
+                path: ['electrical', 'heatPumpElectricalBase'],
+                type: 'number',
+                tooltip: 'Added once when heat pump electrical run is entered.',
+                prefix: '$',
+              },
+              {
+                label: 'Heat pump overrun per ft',
+                path: ['electrical', 'heatPumpPerFtOver'],
+                type: 'number',
+                tooltip: 'Applied per ft of heat pump electrical run beyond the threshold.',
+                prefix: '$',
+                note: `Applies over ${data.electrical.heatPumpOverrunThreshold ?? 40} ft`,
+              },
+              {
+                label: 'Heat pump overrun threshold',
+                path: ['electrical', 'heatPumpOverrunThreshold'],
+                type: 'number',
+                tooltip: 'Feet included before heat pump electrical overrun applies.',
+                prefix: 'LNFT',
+              },
+              {
+                label: 'Automation add',
+                path: ['electrical', 'automation'],
+                type: 'number',
+                tooltip: 'Added once when automation is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Additional Sanitation System',
+                path: ['electrical', 'saltSystem'],
+                type: 'number',
+                tooltip: 'Added per sanitation system beyond the first.',
+                prefix: '$',
+              },
+              {
+                label: 'Bonding',
+                path: ['electrical', 'bonding'],
+                type: 'number',
+                tooltip: 'Added once per pool (always).',
+                prefix: '$',
+              },
+              {
+                label: 'Outlet',
+                path: ['electrical', 'outlet'],
+                type: 'number',
+                tooltip: 'Added once per pool (always).',
+                prefix: '$',
+              },
+              {
+                label: 'Auto-fill (per ft)',
+                path: ['electrical', 'autoFillPerFt'],
+                type: 'number',
+                tooltip: 'Applied per ft of auto-fill run when the selected system requires electric run.',
+                prefix: '$',
+              },
+              {
+                label: 'Travel per mile',
+                path: ['electrical', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Applied per mile of travel distance.',
+                prefix: '$',
+              },
             ],
           },
           {
             title: 'Gas',
             scalars: [
-              { label: 'Base gas set', path: ['electrical', 'baseGas'], type: 'number' },
+              {
+                label: 'Base gas set',
+                path: ['electrical', 'baseGas'],
+                type: 'number',
+                tooltip: 'Added once when a gas run is entered.',
+                prefix: '$',
+              },
               {
                 label: 'Gas overrun per ft',
                 path: ['electrical', 'gasPerFtOverThreshold'],
                 type: 'number',
+                tooltip: 'Applied per ft of gas run beyond the threshold.',
+                prefix: '$',
                 note: `Applies over ${data.plumbing.gasOverrunThreshold} ft`,
+              },
+              {
+                label: 'Gas overrun threshold',
+                path: ['plumbing', 'gasOverrunThreshold'],
+                type: 'number',
+                tooltip: 'Feet included before gas overrun charges apply.',
+                prefix: 'LNFT',
               },
             ],
           },
@@ -905,21 +1194,131 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Rebar',
             scalars: [
-              { label: 'Pool base (per sqft)', path: ['steel', 'poolBase'], type: 'number' },
-              { label: 'Spa base', path: ['steel', 'spaBase'], type: 'number' },
-              { label: '4-bar beam', path: ['steel', 'fourBarBeam'], type: 'number' },
-              { label: 'Steps & bench (per lnft)', path: ['steel', 'stepsPerLnft'], type: 'number' },
-              { label: 'Tanning shelf', path: ['steel', 'tanningShelf'], type: 'number' },
-              { label: 'Depth over 8ft (per 6")', path: ['steel', 'depthOver8Ft'], type: 'number' },
-              { label: '6" RBB steel (per lnft)', path: ['steel', 'rbb6PerLnft'], type: 'number' },
-              { label: '12" RBB steel (per lnft)', path: ['steel', 'rbb12PerLnft'], type: 'number' },
-              { label: '18" RBB steel (per lnft)', path: ['steel', 'rbb18PerLnft'], type: 'number' },
-              { label: '24" RBB steel (per lnft)', path: ['steel', 'rbb24PerLnft'], type: 'number' },
-              { label: '30" RBB steel (per lnft)', path: ['steel', 'rbb30PerLnft'], type: 'number' },
-              { label: '36" RBB steel (per lnft)', path: ['steel', 'rbb36PerLnft'], type: 'number' },
-              { label: 'Double curtain (per lnft)', path: ['steel', 'doubleCurtainPerLnft'], type: 'number' },
-              { label: 'Spa double curtain', path: ['steel', 'spaDoubleCurtain'], type: 'number' },
-              { label: 'Travel per mile', path: ['steel', 'travelPerMile'], type: 'number' },
+              {
+                label: 'Pool base (per lnft)',
+                path: ['steel', 'poolBase'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of pool perimeter.',
+                prefix: '$',
+              },
+              {
+                label: 'Spa base',
+                path: ['steel', 'spaBase'],
+                type: 'number',
+                tooltip: 'Added once when a gunite spa exists.',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa',
+                path: ['steel', 'raisedSpa'],
+                type: 'number',
+                tooltip: 'Added once when a raised gunite spa is selected.',
+                prefix: '$',
+              },
+              {
+                label: '4-bar beam',
+                path: ['steel', 'fourBarBeam'],
+                type: 'number',
+                tooltip: 'Added once for the pool.',
+                prefix: '$',
+              },
+              {
+                label: 'Steps & bench (per lnft)',
+                path: ['steel', 'stepsPerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of steps/bench.',
+                prefix: '$',
+              },
+              {
+                label: 'Tanning shelf',
+                path: ['steel', 'tanningShelf'],
+                type: 'number',
+                tooltip: 'Added once when a tanning shelf is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Depth over 8ft (per 6")',
+                path: ['steel', 'depthOver8Ft'],
+                type: 'number',
+                tooltip: 'Applied per 6" depth increment over 8 ft end depth.',
+                prefix: '$',
+              },
+              {
+                label: '6" RBB steel (per lnft)',
+                path: ['steel', 'rbb6PerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of 6" raised bond beam.',
+                prefix: '$',
+              },
+              {
+                label: '12" RBB steel (per lnft)',
+                path: ['steel', 'rbb12PerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of 12" raised bond beam.',
+                prefix: '$',
+              },
+              {
+                label: '18" RBB steel (per lnft)',
+                path: ['steel', 'rbb18PerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of 18" raised bond beam.',
+                prefix: '$',
+              },
+              {
+                label: '24" RBB steel (per lnft)',
+                path: ['steel', 'rbb24PerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of 24" raised bond beam.',
+                prefix: '$',
+              },
+              {
+                label: '30" RBB steel (per lnft)',
+                path: ['steel', 'rbb30PerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of 30" raised bond beam.',
+                prefix: '$',
+              },
+              {
+                label: '36" RBB steel (per lnft)',
+                path: ['steel', 'rbb36PerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of 36" raised bond beam.',
+                prefix: '$',
+              },
+              {
+                label: 'Double curtain (per lnft)',
+                path: ['steel', 'doubleCurtainPerLnft'],
+                type: 'number',
+                tooltip: 'Applied per linear foot of double curtain length.',
+                prefix: '$',
+              },
+              {
+                label: 'Spa double curtain',
+                path: ['steel', 'spaDoubleCurtain'],
+                type: 'number',
+                tooltip: 'Added once when a raised gunite spa is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Travel per mile',
+                path: ['steel', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Applied per mile of travel distance.',
+                prefix: '$',
+              },
+              {
+                label: 'Muck out (unit price)',
+                path: ['steel', 'muckOut'],
+                type: 'number',
+                tooltip: 'Added for gunite pools; multiplied by Muck Out Qty.',
+                prefix: '$',
+              },
+              {
+                label: 'Muck out qty',
+                path: ['steel', 'muckOutQty'],
+                type: 'number',
+                tooltip: 'Quantity multiplier for Muck Out.',
+              },
             ],
           },
         ],
@@ -930,13 +1329,54 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Crew rates',
             scalars: [
-              { label: 'Pool base (per yard)', path: ['shotcrete', 'labor', 'poolBase'], type: 'number' },
-              { label: 'Minimum yards', path: ['shotcrete', 'labor', 'minimumYards'], type: 'number' },
-              { label: 'Spa', path: ['shotcrete', 'labor', 'spa'], type: 'number' },
-              { label: 'Automatic Cover (per unit)', path: ['shotcrete', 'labor', 'autoCover'], type: 'number' },
-              { label: 'Distance 251-300', path: ['shotcrete', 'labor', 'distance250to300'], type: 'number' },
-              { label: 'Distance 301-350', path: ['shotcrete', 'labor', 'distance300to350'], type: 'number' },
-              { label: 'Travel per mile', path: ['shotcrete', 'labor', 'travelPerMile'], type: 'number' },
+              {
+                label: 'Pool base (per yard)',
+                path: ['shotcrete', 'labor', 'poolBase'],
+                type: 'number',
+                tooltip: 'Labor rate per yard (used for minimum and additional yardage).',
+                prefix: '$',
+              },
+              {
+                label: 'Minimum yards',
+                path: ['shotcrete', 'labor', 'minimumYards'],
+                type: 'number',
+                tooltip: 'Minimum billable yardage for shotcrete labor.',
+              },
+              {
+                label: 'Spa',
+                path: ['shotcrete', 'labor', 'spa'],
+                type: 'number',
+                tooltip: 'Added once when a gunite spa exists.',
+                prefix: '$',
+              },
+              {
+                label: 'Automatic Cover (per unit)',
+                path: ['shotcrete', 'labor', 'autoCover'],
+                type: 'number',
+                tooltip: 'Applied per automatic cover unit.',
+                prefix: '$',
+              },
+              {
+                label: 'Distance 251-300',
+                path: ['shotcrete', 'labor', 'distance250to300'],
+                type: 'number',
+                tooltip: 'Added when pool-to-street distance is 251-300.',
+                prefix: '$',
+              },
+              {
+                label: 'Distance 301-350',
+                path: ['shotcrete', 'labor', 'distance300to350'],
+                type: 'number',
+                tooltip: 'Added when pool-to-street distance is 301-350.',
+                prefix: '$',
+              },
+              {
+                label: 'Travel per mile',
+                path: ['shotcrete', 'labor', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Applied per mile of travel distance.',
+                prefix: '$',
+              },
             ],
           },
         ],
@@ -947,13 +1387,54 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Material rates',
             scalars: [
-              { label: 'Material per yard', path: ['shotcrete', 'material', 'perYard'], type: 'number' },
-              { label: 'Clean-out', path: ['shotcrete', 'material', 'cleanOut'], type: 'number' },
-              { label: 'Env/Fuel per yard', path: ['shotcrete', 'material', 'envFuelPerYard'], type: 'number' },
-              { label: 'Automatic Cover (per unit)', path: ['shotcrete', 'material', 'autoCover'], type: 'number' },
-              { label: 'Miscellaneous', path: ['shotcrete', 'material', 'misc'], type: 'number' },
-              { label: 'Travel per mile', path: ['shotcrete', 'material', 'travelPerMile'], type: 'number' },
-              { label: 'Tax rate', path: ['shotcrete', 'material', 'taxRate'], type: 'number' },
+              {
+                label: 'Material per yard',
+                path: ['shotcrete', 'material', 'perYard'],
+                type: 'number',
+                tooltip: 'Yardage is rounded up from a formula using perimeter, interior area, RBB sqft, spa perimeter, double bullnose/curtain, and raised spa add.',
+                prefix: '$',
+              },
+              {
+                label: 'Clean-out',
+                path: ['shotcrete', 'material', 'cleanOut'],
+                type: 'number',
+                tooltip: 'Added once for clean-out.',
+                prefix: '$',
+              },
+              {
+                label: 'Env/Fuel per yard',
+                path: ['shotcrete', 'material', 'envFuelPerYard'],
+                type: 'number',
+                tooltip: 'Applied per shotcrete yard (same yardage used for material per yard).',
+                prefix: '$',
+              },
+              {
+                label: 'Automatic Cover (per unit)',
+                path: ['shotcrete', 'material', 'autoCover'],
+                type: 'number',
+                tooltip: 'Applied per automatic cover unit.',
+                prefix: '$',
+              },
+              {
+                label: 'Miscellaneous',
+                path: ['shotcrete', 'material', 'misc'],
+                type: 'number',
+                tooltip: 'Added once as a miscellaneous material charge.',
+                prefix: '$',
+              },
+              {
+                label: 'Travel per mile',
+                path: ['shotcrete', 'material', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Applied per mile of travel distance.',
+                prefix: '$',
+              },
+              {
+                label: 'Tax rate',
+                path: ['shotcrete', 'material', 'taxRate'],
+                type: 'number',
+                tooltip: 'Applied to shotcrete material subtotal.',
+              },
             ],
           },
         ],
@@ -962,50 +1443,326 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Tile, Coping & Decking',
         groups: [
           {
-            title: 'Tile labor (per lnft)',
+            title: 'Tile labor',
             scalars: [
-              { label: 'Level 1', path: ['tileCoping', 'tile', 'labor', 'level1'], type: 'number' },
-              { label: 'Level 2', path: ['tileCoping', 'tile', 'labor', 'level2'], type: 'number' },
-              { label: 'Level 3', path: ['tileCoping', 'tile', 'labor', 'level3'], type: 'number' },
-              { label: 'Step trim tile', path: ['tileCoping', 'tile', 'labor', 'stepTrim'], type: 'number' },
+              {
+                label: 'Tile Labor (per lnft)',
+                path: ['tileCoping', 'tile', 'labor', 'level1'],
+                type: 'number',
+                tooltip: 'Applied per lnft of tile (all tile levels use this rate).',
+                prefix: '$',
+              },
+              {
+                label: 'Step trim (per unit)',
+                path: ['tileCoping', 'tile', 'labor', 'stepTrim'],
+                type: 'number',
+                tooltip: 'Applied to spa perimeter + total steps/bench when trim tile is selected.',
+                prefix: '$',
+              },
             ],
           },
           {
             title: 'Tile material',
             scalars: [
-              { label: 'Level 1 included', path: ['tileCoping', 'tile', 'material', 'level1Included'], type: 'boolean' },
-              { label: 'Level 2 upgrade (per lnft)', path: ['tileCoping', 'tile', 'material', 'level2Upgrade'], type: 'number' },
-              { label: 'Level 3 upgrade (per lnft)', path: ['tileCoping', 'tile', 'material', 'level3Upgrade'], type: 'number' },
+              {
+                label: 'Level 1 (per lnft)',
+                path: ['tileCoping', 'tile', 'material', 'level1'],
+                type: 'number',
+                tooltip: 'Base tile material per lnft of pool + spa perimeter when tile is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Level 2 upgrade (per lnft)',
+                path: ['tileCoping', 'tile', 'material', 'level2Upgrade'],
+                type: 'number',
+                tooltip: 'Added per lnft when Level 2 tile is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Level 3 upgrade (per lnft)',
+                path: ['tileCoping', 'tile', 'material', 'level3Upgrade'],
+                type: 'number',
+                tooltip: 'Added per lnft when Level 3 tile is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Step trim (per unit)',
+                path: ['tileCoping', 'tile', 'material', 'stepTrim'],
+                type: 'number',
+                tooltip: 'Applied to spa perimeter + total steps/bench when trim tile is selected.',
+                prefix: '$',
+              },
             ],
           },
           {
             title: 'Coping labor (per lnft)',
             scalars: [
-              { label: 'Cantilever', path: ['tileCoping', 'coping', 'cantilever'], type: 'number' },
-              { label: 'Flagstone', path: ['tileCoping', 'coping', 'flagstone'], type: 'number' },
-              { label: 'Pavers', path: ['tileCoping', 'coping', 'pavers'], type: 'number' },
-              { label: 'Travertine level 1', path: ['tileCoping', 'coping', 'travertineLevel1'], type: 'number' },
-              { label: 'Travertine level 2', path: ['tileCoping', 'coping', 'travertineLevel2'], type: 'number' },
-              { label: 'Concrete', path: ['tileCoping', 'coping', 'concrete'], type: 'number' },
+              {
+                label: 'Cantilever',
+                path: ['tileCoping', 'coping', 'cantilever'],
+                type: 'number',
+                tooltip: 'Applied per lnft when cantilever coping is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Flagstone',
+                path: ['tileCoping', 'coping', 'flagstone'],
+                type: 'number',
+                tooltip: 'Applied per lnft when flagstone coping is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Pavers',
+                path: ['tileCoping', 'coping', 'pavers'],
+                type: 'number',
+                tooltip: 'Applied per lnft when paver coping is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine level 1',
+                path: ['tileCoping', 'coping', 'travertineLevel1'],
+                type: 'number',
+                tooltip: 'Applied per lnft when Level 1 travertine coping is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine level 2',
+                path: ['tileCoping', 'coping', 'travertineLevel2'],
+                type: 'number',
+                tooltip: 'Applied per lnft when Level 2 travertine coping is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Concrete',
+                path: ['tileCoping', 'coping', 'concrete'],
+                type: 'number',
+                tooltip: 'Applied per lnft when concrete coping is selected.',
+                prefix: '$',
+              },
             ],
           },
           {
-            title: 'Decking labor (per sqft unless noted)',
+            title: 'Coping material (per lnft)',
             scalars: [
-              { label: 'Pavers', path: ['tileCoping', 'decking', 'labor', 'pavers'], type: 'number' },
-              { label: 'Travertine', path: ['tileCoping', 'decking', 'labor', 'travertine'], type: 'number' },
-              { label: 'Concrete', path: ['tileCoping', 'decking', 'labor', 'concrete'], type: 'number' },
-              { label: 'Concrete steps (each)', path: ['tileCoping', 'decking', 'labor', 'concreteSteps'], type: 'number' },
+              {
+                label: 'Paver',
+                path: ['tileCoping', 'decking', 'material', 'coping', 'paver'],
+                type: 'number',
+                tooltip: 'Material rate per lnft for paver coping.',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine level 1',
+                path: ['tileCoping', 'decking', 'material', 'coping', 'travertinelevel1'],
+                type: 'number',
+                tooltip: 'Material rate per lnft for Level 1 travertine coping.',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine level 2',
+                path: ['tileCoping', 'decking', 'material', 'coping', 'travertinelevel2'],
+                type: 'number',
+                tooltip: 'Material rate per lnft for Level 2 travertine coping.',
+                prefix: '$',
+              },
+              {
+                label: 'Concrete',
+                path: ['tileCoping', 'decking', 'material', 'coping', 'concrete'],
+                type: 'number',
+                tooltip: 'Material rate per lnft for concrete coping.',
+                prefix: '$',
+              },
             ],
           },
           {
-            title: 'Decking material (per sqft unless noted)',
+            title: 'Decking labor',
             scalars: [
-              { label: 'Pavers', path: ['tileCoping', 'decking', 'material', 'pavers'], type: 'number' },
-              { label: 'Travertine level 1', path: ['tileCoping', 'decking', 'material', 'travertineLevel1'], type: 'number' },
-              { label: 'Travertine level 2', path: ['tileCoping', 'decking', 'material', 'travertineLevel2'], type: 'number' },
-              { label: 'Concrete', path: ['tileCoping', 'decking', 'material', 'concrete'], type: 'number' },
-              { label: 'Concrete steps (each)', path: ['tileCoping', 'decking', 'material', 'concreteSteps'], type: 'number' },
+              {
+                label: 'Pavers (per sqft)',
+                path: ['tileCoping', 'decking', 'labor', 'pavers'],
+                type: 'number',
+                tooltip: 'Applied to decking area for paver decks (includes 5% waste).',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine (per sqft)',
+                path: ['tileCoping', 'decking', 'labor', 'travertine'],
+                type: 'number',
+                tooltip: 'Applied to decking area for travertine decks (includes 5% waste).',
+                prefix: '$',
+              },
+              {
+                label: 'Concrete (per lnft)',
+                path: ['tileCoping', 'decking', 'labor', 'concrete'],
+                type: 'number',
+                tooltip: 'Applied per lnft of pool perimeter when decking is concrete and coping is concrete.',
+                prefix: '$',
+              },
+              {
+                label: 'Concrete steps (per lnft)',
+                path: ['tileCoping', 'decking', 'labor', 'concreteSteps'],
+                type: 'number',
+                tooltip: 'Applied per lnft of concrete steps length.',
+                prefix: '$',
+              },
+            ],
+          },
+          {
+            title: 'Decking material',
+            scalars: [
+              {
+                label: 'Pavers (per sqft)',
+                path: ['tileCoping', 'decking', 'material', 'pavers'],
+                type: 'number',
+                tooltip: 'Applied to decking area for paver decks (includes 5% waste).',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine level 1 (per sqft)',
+                path: ['tileCoping', 'decking', 'material', 'travertineLevel1'],
+                type: 'number',
+                tooltip: 'Applied to decking area for Level 1 travertine (includes 5% waste).',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine level 2 (per sqft)',
+                path: ['tileCoping', 'decking', 'material', 'travertineLevel2'],
+                type: 'number',
+                tooltip: 'Applied to decking area for Level 2 travertine (includes 5% waste).',
+                prefix: '$',
+              },
+              {
+                label: 'Concrete (per sqft)',
+                path: ['tileCoping', 'decking', 'material', 'concrete'],
+                type: 'number',
+                tooltip: 'Used for concrete deck base/additional quantities (4 ft band + additional area).',
+                prefix: '$',
+              },
+              {
+                label: 'Concrete steps (per lnft)',
+                path: ['tileCoping', 'decking', 'material', 'concreteSteps'],
+                type: 'number',
+                tooltip: 'Applied per lnft of concrete steps length.',
+                prefix: '$',
+              },
+            ],
+          },
+          {
+            title: 'Bullnose & spillway',
+            scalars: [
+              {
+                label: 'Bullnose labor (per lnft)',
+                path: ['tileCoping', 'coping', 'bullnoseLabor'],
+                type: 'number',
+                tooltip: 'Applied to bullnose + double bullnose lnft.',
+                prefix: '$',
+              },
+              {
+                label: 'Bullnose material (per lnft)',
+                path: ['tileCoping', 'decking', 'material', 'bullnose'],
+                type: 'number',
+                tooltip: 'Material rate for bullnose + double bullnose lnft.',
+                prefix: '$',
+              },
+              {
+                label: 'Spillway labor (per unit)',
+                path: ['tileCoping', 'decking', 'spillwayLabor'],
+                type: 'number',
+                tooltip: 'Applied once when spillway length is entered.',
+                prefix: '$',
+              },
+              {
+                label: 'Spillway material (per unit)',
+                path: ['tileCoping', 'decking', 'spillwayMaterial'],
+                type: 'number',
+                tooltip: 'Applied once when spillway length is entered.',
+                prefix: '$',
+              },
+            ],
+          },
+          {
+            title: 'Rockwork labor (per sqft)',
+            scalars: [
+              {
+                label: 'Panel ledge',
+                path: ['tileCoping', 'decking', 'rockworkLabor', 'panelLedge'],
+                type: 'number',
+                tooltip: 'Applied per sqft of panel ledge rockwork.',
+                prefix: '$',
+              },
+              {
+                label: 'Stacked stone',
+                path: ['tileCoping', 'decking', 'rockworkLabor', 'stackedStone'],
+                type: 'number',
+                tooltip: 'Applied per sqft of stacked stone rockwork.',
+                prefix: '$',
+              },
+              {
+                label: 'Tile rockwork',
+                path: ['tileCoping', 'decking', 'rockworkLabor', 'tile'],
+                type: 'number',
+                tooltip: 'Applied per sqft of tile rockwork.',
+                prefix: '$',
+              },
+            ],
+          },
+          {
+            title: 'Rockwork material (per sqft)',
+            scalars: [
+              {
+                label: 'Panel ledge',
+                path: ['tileCoping', 'decking', 'material', 'rockwork', 'panelLedge'],
+                type: 'number',
+                tooltip: 'Applied to panel ledge material sqft (uses material sqft input if provided).',
+                prefix: '$',
+              },
+              {
+                label: 'Stacked stone',
+                path: ['tileCoping', 'decking', 'material', 'rockwork', 'stackedStone'],
+                type: 'number',
+                tooltip: 'Applied to stacked stone rockwork material sqft.',
+                prefix: '$',
+              },
+              {
+                label: 'Tile rockwork',
+                path: ['tileCoping', 'decking', 'material', 'rockwork', 'tile'],
+                type: 'number',
+                tooltip: 'Applied to tile rockwork material sqft.',
+                prefix: '$',
+              },
+            ],
+          },
+          {
+            title: 'Material tax & multipliers',
+            scalars: [
+              {
+                label: 'Tile material tax rate',
+                path: ['tileCoping', 'tileMaterialTaxRate'],
+                type: 'number',
+                tooltip: 'Applied to tile material subtotal.',
+                prefix: '%',
+                isPercent: true,
+              },
+              {
+                label: 'Coping/decking material tax rate',
+                path: ['tileCoping', 'materialTaxRate'],
+                type: 'number',
+                tooltip: 'Applied to coping/decking and rockwork material subtotals.',
+                prefix: '%',
+                isPercent: true,
+              },
+              {
+                label: 'Flagstone material multiplier',
+                path: ['tileCoping', 'flagstoneQuantityMultiplier'],
+                type: 'number',
+                tooltip: 'Multiplies flagstone coping material quantity (1.1 = 10% overage).',
+              },
+              {
+                label: 'Panel ledge material multiplier',
+                path: ['tileCoping', 'rockworkMaterialWaste', 'panelLedge'],
+                type: 'number',
+                tooltip: 'Multiplies panel ledge material sqft when none is provided (1.15 = 15% waste).',
+              },
             ],
           },
         ],
@@ -1023,6 +1780,25 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 defaultItem: { overheadMultiplier: 1.1 },
                 fields: [
                   { key: 'name', label: 'Name', type: 'text', placeholder: 'Pump name' },
+                  { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'overheadMultiplier', label: 'Overhead Multiplier', type: 'number', placeholder: '1.1' },
+                ],
+              },
+            ],
+          },
+          {
+            title: 'Auxiliary Pumps',
+            lists: [
+              {
+                title: 'Auxiliary pump models',
+                path: ['equipment', 'auxiliaryPumps'],
+                addLabel: 'Add auxiliary pump',
+                defaultItem: { overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Auxiliary pump name' },
+                  { key: 'defaultAuxiliaryPump', label: 'Default for Spa', type: 'boolean' },
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
@@ -1157,6 +1933,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'percentIncrease', label: '% cost increase', type: 'number', placeholder: '0' },
+                  { key: 'requiresElectricRun', label: 'Requires electric run', type: 'boolean' },
                 ],
               },
             ],
@@ -1169,14 +1946,76 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Prep & extras',
             scalars: [
-              { label: 'Minimum charge sqft', path: ['interiorFinish', 'minimumChargeSqft'], type: 'number' },
-              { label: 'Pool prep base', path: ['interiorFinish', 'extras', 'poolPrepBase'], type: 'number' },
-              { label: 'Pool prep threshold', path: ['interiorFinish', 'extras', 'poolPrepThreshold'], type: 'number' },
-              { label: 'Pool prep over rate (per sqft)', path: ['interiorFinish', 'extras', 'poolPrepOverRate'], type: 'number' },
-              { label: 'Spa Prep over 1200ft', path: ['interiorFinish', 'extras', 'spaPrep'], type: 'number' },
-              { label: 'Misc', path: ['interiorFinish', 'extras', 'misc'], type: 'number' },
-              { label: 'Travel per mile', path: ['interiorFinish', 'extras', 'travelPerMile'], type: 'number' },
-              { label: 'Step detail per lnft over 20', path: ['interiorFinish', 'extras', 'stepDetailPerLnftOver20'], type: 'number' },
+              {
+                label: 'Minimum charge',
+                path: ['interiorFinish', 'minimumChargeSqft'],
+                type: 'number',
+                tooltip: 'Minimum billable interior finish area in sqft.',
+                prefix: 'SQFT',
+              },
+              {
+                label: 'Pool prep base',
+                path: ['interiorFinish', 'extras', 'poolPrepBase'],
+                type: 'number',
+                tooltip: 'Added once for pool prep.',
+                prefix: '$',
+              },
+              {
+                label: 'Pool prep threshold',
+                path: ['interiorFinish', 'extras', 'poolPrepThreshold'],
+                type: 'number',
+                tooltip: 'Sqft threshold before prep overage applies.',
+                prefix: 'SQFT',
+              },
+              {
+                label: 'Pool prep overage (per sqft)',
+                path: ['interiorFinish', 'extras', 'poolPrepOverRate'],
+                type: 'number',
+                tooltip: 'Applied per sqft above the prep threshold using billed area.',
+                prefix: '$',
+              },
+              {
+                label: 'Spa prep add-on (over threshold)',
+                path: ['interiorFinish', 'extras', 'spaPrep'],
+                type: 'number',
+                tooltip: 'Added once when a gunite spa exists and pool surface area exceeds the prep threshold.',
+                prefix: '$',
+              },
+              {
+                label: 'Miscellaneous',
+                path: ['interiorFinish', 'extras', 'misc'],
+                type: 'number',
+                tooltip: 'Added once as a miscellaneous interior finish charge.',
+                prefix: '$',
+              },
+              {
+                label: 'Travel per mile',
+                path: ['interiorFinish', 'extras', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Applied per mile of travel distance.',
+                prefix: '$',
+              },
+              {
+                label: 'Step & bench detail (per lnft over 20)',
+                path: ['interiorFinish', 'extras', 'stepDetailPerLnftOver20'],
+                type: 'number',
+                tooltip: 'Applied to steps/bench quantity above 20.',
+                prefix: '$',
+              },
+              {
+                label: 'Waterproofing (microglass) per sqft',
+                path: ['interiorFinish', 'extras', 'waterproofingPerSqft'],
+                type: 'number',
+                tooltip: 'Applied per sqft of pool interior + spa waterproofing area when waterproofing is included.',
+                prefix: '$',
+              },
+              {
+                label: 'Waterproofing (raised spa)',
+                path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa'],
+                type: 'number',
+                tooltip: 'Added once when a raised gunite spa is waterproofed.',
+                prefix: '$',
+              },
             ],
           },
           {
@@ -1188,7 +2027,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 addLabel: 'Add finish',
                 fields: [
                   { key: 'name', label: 'Interior Finish Name', type: 'text', placeholder: 'Pebble Sheen - Level 1' },
-                  { key: 'id', label: 'Key (no spaces)', type: 'text', placeholder: 'pebble-sheen-l1' },
                   { key: 'costPerSqft', label: 'Cost Per Sqft', type: 'number', prefix: '$' },
                   { key: 'spaFinishCost', label: 'Spa Finish Cost', type: 'number', prefix: '$' },
                   { key: 'colors', label: 'Finish Colors (comma separated)', type: 'text' },
@@ -1199,8 +2037,20 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Water truck',
             scalars: [
-              { label: 'Base load', path: ['interiorFinish', 'waterTruck', 'base'], type: 'number' },
-              { label: 'Load size (gallons)', path: ['interiorFinish', 'waterTruck', 'loadSizeGallons'], type: 'number' },
+              {
+                label: 'Base load',
+                path: ['interiorFinish', 'waterTruck', 'base'],
+                type: 'number',
+                tooltip: 'Applied per water truck load.',
+                prefix: '$',
+              },
+              {
+                label: 'Load size',
+                path: ['interiorFinish', 'waterTruck', 'loadSizeGallons'],
+                type: 'number',
+                tooltip: 'Gallons per water truck load (used to calculate loads).',
+                prefix: 'Gal',
+              },
             ],
           },
         ],
@@ -1211,12 +2061,48 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Final cleanup',
             scalars: [
-              { label: 'Pool cleanup', path: ['cleanup', 'basePool'], type: 'number' },
-              { label: 'Spa cleanup add-on', path: ['cleanup', 'spa'], type: 'number' },
-              { label: 'Per sqft over 500', path: ['cleanup', 'perSqftOver500'], type: 'number' },
-              { label: 'RBB cleanup (per sqft)', path: ['cleanup', 'rbbPerSqft'], type: 'number' },
-              { label: 'Travel per mile', path: ['cleanup', 'travelPerMile'], type: 'number' },
-              { label: 'Rough grading', path: ['cleanup', 'roughGrading'], type: 'number' },
+              {
+                label: 'Base pool cleanup',
+                path: ['cleanup', 'basePool'],
+                type: 'number',
+                tooltip: 'Added once when a pool is defined.',
+                prefix: '$',
+              },
+              {
+                label: 'Spa cleanup add-on',
+                path: ['cleanup', 'spa'],
+                type: 'number',
+                tooltip: 'Added once when a spa exists.',
+                prefix: '$',
+              },
+              {
+                label: 'Overage per sqft (over 500)',
+                path: ['cleanup', 'perSqftOver500'],
+                type: 'number',
+                tooltip: 'Applied per sqft above 500 sqft of pool surface area.',
+                prefix: '$',
+              },
+              {
+                label: 'RBB cleanup (per sqft)',
+                path: ['cleanup', 'rbbPerSqft'],
+                type: 'number',
+                tooltip: 'Applied per sqft of raised bond beam area.',
+                prefix: '$',
+              },
+              {
+                label: 'Travel per mile',
+                path: ['cleanup', 'travelPerMile'],
+                type: 'number',
+                tooltip: 'Applied per mile of travel distance.',
+                prefix: '$',
+              },
+              {
+                label: 'Rough grading',
+                path: ['cleanup', 'roughGrading'],
+                type: 'number',
+                tooltip: 'Added once when rough grading is selected.',
+                prefix: '$',
+              },
             ],
           },
         ],
@@ -1249,20 +2135,62 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Equipment Set & Drainage',
         groups: [
           {
-            title: 'Equipment set labor',
+            title: 'Equipment Set',
             scalars: [
-              { label: 'Base equipment set', path: ['misc', 'equipmentSet', 'base'], type: 'number' },
-              { label: 'Spa equipment add-on', path: ['misc', 'equipmentSet', 'spa'], type: 'number' },
-              { label: 'Automation add-on', path: ['misc', 'equipmentSet', 'automation'], type: 'number' },
-              { label: 'Heat pump add-on', path: ['misc', 'equipmentSet', 'heatPump'], type: 'number' },
+              {
+                label: 'Base equipment set',
+                path: ['misc', 'equipmentSet', 'base'],
+                type: 'number',
+                tooltip: 'Added once when any equipment is selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Heater set (per unit)',
+                path: ['misc', 'equipmentSet', 'heater'],
+                type: 'number',
+                tooltip: 'Applied per heater or heat pump selected.',
+                prefix: '$',
+              },
+              {
+                label: 'Additional pump (per unit)',
+                path: ['misc', 'equipmentSet', 'additionalPump'],
+                type: 'number',
+                tooltip: 'Applied per pump beyond the first plus each auxiliary pump.',
+                prefix: '$',
+              },
+              {
+                label: 'Pool bonding (per lnft)',
+                path: ['excavation', 'poolBonding', 'pricePerLnft'],
+                type: 'number',
+                prefix: '$',
+                tooltip: 'Applied to pool perimeter with 10% overhead (billed under Excavation).',
+              },
             ],
           },
           {
-            title: 'Drainage (per lnft)',
+            title: 'Drainage rates',
             scalars: [
-              { label: 'Base cost (includes first 10ft)', path: ['misc', 'drainage', 'baseCost'], type: 'number' },
-              { label: 'Included feet', path: ['misc', 'drainage', 'includedFt'], type: 'number' },
-              { label: 'Per ft over included', path: ['misc', 'drainage', 'perFtOver'], type: 'number' },
+              {
+                label: 'Base cost (per line)',
+                path: ['misc', 'drainage', 'baseCost'],
+                type: 'number',
+                tooltip: 'Charged once per drain line when length > 0 (includes first included feet).',
+                prefix: '$',
+              },
+              {
+                label: 'Included feet',
+                path: ['misc', 'drainage', 'includedFt'],
+                type: 'number',
+                tooltip: 'Feet included per drain line before overage applies.',
+                prefix: 'LNFT',
+              },
+              {
+                label: 'Per lnft over included',
+                path: ['misc', 'drainage', 'perFtOver'],
+                type: 'number',
+                tooltip: 'Applied to length above included feet for each drain line.',
+                prefix: '$',
+              },
             ],
           },
         ],
@@ -1273,32 +2201,166 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Columns & facing (labor)',
             scalars: [
-              { label: 'Column base (per column)', path: ['masonry', 'columnBase'], type: 'number' },
-              { label: 'RBB facing labor - tile', path: ['masonry', 'labor', 'rbbFacing', 'tile'], type: 'number' },
-              { label: 'RBB facing labor - panel ledge', path: ['masonry', 'labor', 'rbbFacing', 'panelLedge'], type: 'number' },
-              { label: 'RBB facing labor - stacked stone', path: ['masonry', 'labor', 'rbbFacing', 'stackedStone'], type: 'number' },
-              { label: 'Raised spa facing labor - tile', path: ['masonry', 'labor', 'raisedSpaFacing', 'tile'], type: 'number' },
-              { label: 'Raised spa facing labor - ledgestone', path: ['masonry', 'labor', 'raisedSpaFacing', 'ledgestone'], type: 'number' },
-              { label: 'Raised spa facing labor - stacked stone', path: ['masonry', 'labor', 'raisedSpaFacing', 'stackedStone'], type: 'number' },
-              { label: 'Spillway labor', path: ['masonry', 'labor', 'spillway'], type: 'number' },
+              {
+                label: 'Column base (per ft height)',
+                path: ['masonry', 'columnBase'],
+                type: 'number',
+                tooltip: 'Applied per ft of column height (qty = column count x column height) when columns + facing are selected.',
+                prefix: '$',
+              },
+              {
+                label: 'RBB facing labor - tile (per sqft)',
+                path: ['masonry', 'labor', 'rbbFacing', 'tile'],
+                type: 'number',
+                tooltip: 'Applied per sqft of RBB facing area.',
+                prefix: '$',
+              },
+              {
+                label: 'RBB facing labor - panel ledge (per sqft)',
+                path: ['masonry', 'labor', 'rbbFacing', 'panelLedge'],
+                type: 'number',
+                tooltip: 'Applied per sqft of RBB facing area.',
+                prefix: '$',
+              },
+              {
+                label: 'RBB facing labor - stacked stone (per sqft)',
+                path: ['masonry', 'labor', 'rbbFacing', 'stackedStone'],
+                type: 'number',
+                tooltip: 'Applied per sqft of RBB facing area.',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa facing labor - tile (per sqft)',
+                path: ['masonry', 'labor', 'raisedSpaFacing', 'tile'],
+                type: 'number',
+                tooltip: 'Applied per sqft of raised spa facing area (uses raised spa labor multiplier).',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa facing labor - ledgestone (per sqft)',
+                path: ['masonry', 'labor', 'raisedSpaFacing', 'ledgestone'],
+                type: 'number',
+                tooltip: 'Applied per sqft of raised spa facing area (uses raised spa labor multiplier).',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa facing labor - stacked stone (per sqft)',
+                path: ['masonry', 'labor', 'raisedSpaFacing', 'stackedStone'],
+                type: 'number',
+                tooltip: 'Applied per sqft of raised spa facing area (uses raised spa labor multiplier).',
+                prefix: '$',
+              },
+              {
+                label: 'Spillway labor (per unit)',
+                path: ['masonry', 'labor', 'spillway'],
+                type: 'number',
+                tooltip: 'Added once when a raised spa exists.',
+                prefix: '$',
+              },
             ],
           },
           {
-            title: 'Columns & facing (material)',
+            title: 'Facing material (per sqft)',
             scalars: [
-              { label: 'Raised spa facing - tile', path: ['masonry', 'raisedSpaFacing', 'tile'], type: 'number' },
-              { label: 'Raised spa facing - ledge stone', path: ['masonry', 'raisedSpaFacing', 'ledgestone'], type: 'number' },
-              { label: 'Raised spa facing - stacked stone', path: ['masonry', 'raisedSpaFacing', 'stackedStone'], type: 'number' },
-              { label: 'RBB facing - tile', path: ['masonry', 'rbbFacing', 'tile'], type: 'number' },
-              { label: 'RBB facing - panel ledge', path: ['masonry', 'rbbFacing', 'panelLedge'], type: 'number' },
-              { label: 'RBB facing - stacked stone', path: ['masonry', 'rbbFacing', 'stackedStone'], type: 'number' },
-              { label: 'RBB facing material - tile', path: ['masonry', 'material', 'rbbFacing', 'tile'], type: 'number' },
-              { label: 'RBB facing material - panel ledge', path: ['masonry', 'material', 'rbbFacing', 'panelLedge'], type: 'number' },
-              { label: 'RBB facing material - stacked stone', path: ['masonry', 'material', 'rbbFacing', 'stackedStone'], type: 'number' },
-              { label: 'Raised spa facing material - tile', path: ['masonry', 'material', 'raisedSpaFacing', 'tile'], type: 'number' },
-              { label: 'Raised spa facing material - ledgestone', path: ['masonry', 'material', 'raisedSpaFacing', 'ledgestone'], type: 'number' },
-              { label: 'Raised spa facing material - stacked stone', path: ['masonry', 'material', 'raisedSpaFacing', 'stackedStone'], type: 'number' },
-              { label: 'Spillway material', path: ['masonry', 'material', 'spillway'], type: 'number' },
+              {
+                label: 'RBB facing material - tile (per sqft)',
+                path: ['masonry', 'material', 'rbbFacing', 'tile'],
+                type: 'number',
+                tooltip: 'Applied per sqft of RBB facing material area.',
+                prefix: '$',
+              },
+              {
+                label: 'RBB facing material - panel ledge (per sqft)',
+                path: ['masonry', 'material', 'rbbFacing', 'panelLedge'],
+                type: 'number',
+                tooltip: 'Applied per sqft of RBB facing material area.',
+                prefix: '$',
+              },
+              {
+                label: 'RBB facing material - stacked stone (per sqft)',
+                path: ['masonry', 'material', 'rbbFacing', 'stackedStone'],
+                type: 'number',
+                tooltip: 'Applied per sqft of RBB facing material area.',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa facing material - tile (per sqft)',
+                path: ['masonry', 'material', 'raisedSpaFacing', 'tile'],
+                type: 'number',
+                tooltip: 'Applied per sqft of raised spa facing material area (uses raised spa material multiplier).',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa facing material - ledgestone (per sqft)',
+                path: ['masonry', 'material', 'raisedSpaFacing', 'ledgestone'],
+                type: 'number',
+                tooltip: 'Applied per sqft of raised spa facing material area (uses raised spa material multiplier).',
+                prefix: '$',
+              },
+              {
+                label: 'Raised spa facing material - stacked stone (per sqft)',
+                path: ['masonry', 'material', 'raisedSpaFacing', 'stackedStone'],
+                type: 'number',
+                tooltip: 'Applied per sqft of raised spa facing material area (uses raised spa material multiplier).',
+                prefix: '$',
+              },
+              {
+                label: 'Spillway material (per unit)',
+                path: ['masonry', 'material', 'spillway'],
+                type: 'number',
+                tooltip: 'Added once when a raised spa exists.',
+                prefix: '$',
+              },
+            ],
+          },
+          {
+            title: 'Raised spa multipliers',
+            scalars: [
+              {
+                label: 'Raised spa labor multiplier',
+                path: ['masonry', 'raisedSpaWasteMultiplier'],
+                type: 'number',
+                tooltip: 'Multiplies raised spa facing labor sqft (1.125 = 12.5% waste).',
+              },
+              {
+                label: 'Raised spa material multiplier',
+                path: ['masonry', 'raisedSpaMaterialWaste'],
+                type: 'number',
+                tooltip: 'Multiplies raised spa facing material sqft (1.15 = 15% waste).',
+              },
+            ],
+          },
+          {
+            title: 'Retaining wall catalog',
+            lists: [
+              {
+                title: 'Retaining wall types',
+                path: ['masonry', 'retainingWalls'],
+                addLabel: 'Add retaining wall',
+                fields: [
+                  {
+                    key: 'name',
+                    label: 'Name',
+                    type: 'text',
+                    placeholder: '24\" High - Standard',
+                    tooltip: 'Label shown in the proposal builder.',
+                  },
+                  {
+                    key: 'heightFt',
+                    label: 'Height',
+                    type: 'number',
+                    prefix: 'FT',
+                    tooltip: 'Used to convert length to sqft (height x length).',
+                  },
+                  {
+                    key: 'costPerSqft',
+                    label: 'Cost per sqft',
+                    type: 'number',
+                    prefix: '$',
+                    tooltip: 'Total cost per sqft (labor + material combined).',
+                  },
+                ],
+              },
             ],
           },
         ],
@@ -1306,6 +2368,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     [
       data.electrical.overrunThreshold,
+      data.electrical.heatPumpOverrunThreshold,
       data.plumbing.gasOverrunThreshold,
       data.plumbing.poolOverrunThreshold,
       data.plumbing.spaOverrunThreshold,
@@ -1315,21 +2378,25 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   );
 
   const renderScalar = (field: ScalarField) => {
-    const value = getValue(data, field.path);
+    const value = getValue(data, field.valuePath ?? field.path);
     const displayValue =
       field.type === 'number' && field.isPercent && typeof value === 'number'
         ? value * 100
         : value;
+    const isDisabled = Boolean(field.disabled);
+    const isUnused = Boolean(field.isUnused);
     if (field.type === 'boolean') {
       return (
-        <label className="pricing-field">
+        <label className={`pricing-field${isDisabled ? ' is-disabled' : ''}${isUnused ? ' is-unused' : ''}`}>
           <div className="pricing-field__label">
             <input
               type="checkbox"
               checked={Boolean(value)}
+              disabled={isDisabled}
+              aria-disabled={isDisabled}
               onChange={(e) => handleScalarChange(field, e.target.checked)}
             />
-            <span>{field.label}</span>
+            {renderLabelText(field.label)}
             {field.tooltip && (
               <span
                 className="pricing-field__info"
@@ -1348,27 +2415,29 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     }
 
     return (
-      <label className="pricing-field">
+      <label className={`pricing-field${isDisabled ? ' is-disabled' : ''}${isUnused ? ' is-unused' : ''}`}>
         <div className="pricing-field__label">
-          <span>{field.label}</span>
-            {field.tooltip && (
-              <span
-                className="pricing-field__info"
-                data-tooltip={field.tooltip}
-                aria-label={field.tooltip}
-                role="img"
-                onMouseEnter={updateTooltipAlign}
-              >
-                i
-              </span>
-            )}
-          </div>
+          {renderLabelText(field.label)}
+          {field.tooltip && (
+            <span
+              className="pricing-field__info"
+              data-tooltip={field.tooltip}
+              aria-label={field.tooltip}
+              role="img"
+              onMouseEnter={updateTooltipAlign}
+            >
+              i
+            </span>
+          )}
+        </div>
         <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
           {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
           <input
             className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
             type={field.type === 'number' ? 'number' : 'text'}
             value={typeof displayValue === 'number' ? displayValue : displayValue ?? ''}
+            disabled={isDisabled}
+            aria-disabled={isDisabled}
             onChange={(e) => handleScalarChange(field, e.target.value)}
           />
         </div>
@@ -1409,7 +2478,18 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                             checked={Boolean(fieldValue)}
                             onChange={(e) => handleListChange(config, index, field, e.target.checked)}
                           />
-                          <span>{field.label}</span>
+                          {renderLabelText(field.label)}
+                          {field.tooltip && (
+                            <span
+                              className="pricing-field__info"
+                              data-tooltip={field.tooltip}
+                              aria-label={field.tooltip}
+                              role="img"
+                              onMouseEnter={updateTooltipAlign}
+                            >
+                              i
+                            </span>
+                          )}
                         </div>
                       </label>
                     );
@@ -1417,7 +2497,20 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
                   return (
                     <label key={field.key} className="pricing-field inline">
-                      <div className="pricing-field__label">{field.label}</div>
+                      <div className="pricing-field__label">
+                        {renderLabelText(field.label)}
+                        {field.tooltip && (
+                          <span
+                            className="pricing-field__info"
+                            data-tooltip={field.tooltip}
+                            aria-label={field.tooltip}
+                            role="img"
+                            onMouseEnter={updateTooltipAlign}
+                          >
+                            i
+                          </span>
+                        )}
+                      </div>
                       <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
                         {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
                         <input
@@ -1462,12 +2555,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             {baseRanges.map((range, index) => {
               const max = range?.max ?? 0;
               const min = index === 0 ? 0 : previousMax + 1;
-              const label = `${min}-${max}`;
+              const label = `${min}-${max} LNFT`;
               previousMax = max;
               const price = range?.price ?? 0;
               return (
                 <label key={`base-range-${index}`} className="pricing-field inline">
-                  <div className="pricing-field__label">{label}</div>
+                  <div className="pricing-field__label">{renderLabelText(label)}</div>
                   <div className="pricing-field__input-wrap has-prefix">
                     <span className="pricing-field__prefix">$</span>
                     <input
@@ -1493,7 +2586,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               );
             })}
             <label className="pricing-field inline">
-              <div className="pricing-field__label">1000+</div>
+              <div className="pricing-field__label">{renderLabelText('1000+ LNFT')}</div>
               <div className="pricing-field__input-wrap has-prefix">
                 <span className="pricing-field__prefix">$</span>
                 <input

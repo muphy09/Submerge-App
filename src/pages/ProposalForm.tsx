@@ -417,6 +417,12 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
     const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
     if (!equipment) return false;
+    const pumpName = equipment.pump?.name?.toLowerCase() || '';
+    const pumpQty = Math.max(
+      equipment.pumpQuantity ?? (pumpName && !pumpName.includes('no pump') ? 1 : 0),
+      0
+    );
+    const hasPumpSelection = pumpQty > 0 && hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead));
     const hasCustomOptions = (equipment.customOptions || []).some(
       option =>
         !!option?.name?.trim() ||
@@ -443,7 +449,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0) ||
       !!equipment.auxiliaryPump ||
       hasCustomOptions ||
-      hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead)) ||
+      hasPumpSelection ||
       hasPositive(getEquipmentItemCost(equipment.filter as any, 1)) ||
       hasPositive(getEquipmentItemCost(equipment.cleaner as any, 1)) ||
       hasPositive(getEquipmentItemCost(equipment.heater as any, 1)) ||
@@ -535,34 +541,120 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const spaJustAdded = previousSpaType === 'none' && currentSpaType !== 'none';
     const spaRemoved = previousSpaType !== 'none' && currentSpaType === 'none';
     const hasSpaLightSelection = (proposal.equipment?.spaLights?.length ?? 0) > 0;
+    const hasAuxPumpSelection =
+      (proposal.equipment?.auxiliaryPumps?.length ?? 0) > 0 || !!proposal.equipment?.auxiliaryPump;
+    const auxiliarySelections = proposal.equipment?.auxiliaryPumps?.length
+      ? proposal.equipment.auxiliaryPumps
+      : proposal.equipment?.auxiliaryPump
+      ? [proposal.equipment.auxiliaryPump]
+      : [];
+    const hasAutoAddedAuxPump = auxiliarySelections.some(pump => pump?.autoAddedForSpa);
 
-    if (spaJustAdded && !hasSpaLightSelection) {
+    const auxiliaryPumpCatalog =
+      (pricingData as any).equipment?.auxiliaryPumps?.length
+        ? (pricingData as any).equipment.auxiliaryPumps
+        : pricingData.equipment.pumps;
+    const isAuxPumpPlaceholder = (name: string) => {
+      const lowered = name.toLowerCase();
+      return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary');
+    };
+    const defaultAuxiliaryPump =
+      auxiliaryPumpCatalog.find((pump: any) => pump.defaultAuxiliaryPump) ||
+      auxiliaryPumpCatalog.find((pump: any) => !isAuxPumpPlaceholder(pump.name)) ||
+      auxiliaryPumpCatalog[0];
+    const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
+    const buildAuxiliaryPumpSelection = (pump: any) =>
+      pump
+        ? {
+            name: pump.name,
+            model: (pump as any).model,
+            basePrice: (pump as any).basePrice,
+            addCost1: (pump as any).addCost1,
+            addCost2: (pump as any).addCost2,
+            price: getEquipmentItemCost(pump as any, pumpOverhead),
+            autoAddedForSpa: true,
+          }
+        : null;
+
+    const shouldAddSpaLight = spaJustAdded && !hasSpaLightSelection;
+    const shouldAddAuxPump = spaJustAdded && !hasAuxPumpSelection && Boolean(defaultAuxiliaryPump);
+
+    if (shouldAddSpaLight || shouldAddAuxPump) {
       setProposal(prev => {
-        const nextEquipment = normalizeEquipmentLighting(
-          {
-            ...(prev.equipment || getDefaultEquipment()),
-            includeSpaLights: true,
-          } as Proposal['equipment'],
-          { poolSpecs: { ...(prev.poolSpecs || {}), spaType: currentSpaType } as any, hasSpa: true }
-        );
-        return { ...prev, equipment: nextEquipment };
+        const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+        let nextEquipment = baseEquipment;
+        let updated = false;
+
+        if (shouldAddSpaLight) {
+          nextEquipment = normalizeEquipmentLighting(
+            {
+              ...nextEquipment,
+              includeSpaLights: true,
+            } as Proposal['equipment'],
+            { poolSpecs: { ...(prev.poolSpecs || {}), spaType: currentSpaType } as any, hasSpa: true }
+          );
+          updated = true;
+        }
+
+        if (shouldAddAuxPump) {
+          const selection = buildAuxiliaryPumpSelection(defaultAuxiliaryPump);
+          if (selection) {
+            nextEquipment = {
+              ...nextEquipment,
+              auxiliaryPumps: [selection],
+              auxiliaryPump: selection,
+            };
+            updated = true;
+          }
+        }
+
+        return updated ? { ...prev, equipment: nextEquipment } : prev;
       });
       setHasEdits(true);
-    } else if (spaRemoved && (proposal.equipment?.spaLights?.length ?? 0) > 0) {
-      setProposal(prev => ({
-        ...prev,
-        equipment: {
-          ...(prev.equipment || getDefaultEquipment()),
-          includeSpaLights: false,
-          spaLights: [],
-          hasSpaLight: false,
-        },
-      }));
+    } else if (spaRemoved && ((proposal.equipment?.spaLights?.length ?? 0) > 0 || hasAutoAddedAuxPump)) {
+      setProposal(prev => {
+        const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+        let nextEquipment = { ...baseEquipment };
+        let updated = false;
+
+        if ((baseEquipment.spaLights?.length ?? 0) > 0) {
+          nextEquipment = {
+            ...nextEquipment,
+            includeSpaLights: false,
+            spaLights: [],
+            hasSpaLight: false,
+          };
+          updated = true;
+        }
+
+        const auxSelections = baseEquipment.auxiliaryPumps?.length
+          ? baseEquipment.auxiliaryPumps
+          : baseEquipment.auxiliaryPump
+          ? [baseEquipment.auxiliaryPump]
+          : [];
+        const filteredAux = auxSelections.filter(pump => !pump?.autoAddedForSpa);
+
+        if (filteredAux.length !== auxSelections.length) {
+          nextEquipment = {
+            ...nextEquipment,
+            auxiliaryPumps: filteredAux,
+            auxiliaryPump: filteredAux[0],
+          };
+          updated = true;
+        }
+
+        return updated ? { ...prev, equipment: nextEquipment } : prev;
+      });
       setHasEdits(true);
     }
 
     previousSpaTypeRef.current = currentSpaType;
-  }, [proposal.poolSpecs?.spaType, proposal.equipment?.spaLights?.length]);
+  }, [
+    proposal.poolSpecs?.spaType,
+    proposal.equipment?.spaLights?.length,
+    proposal.equipment?.auxiliaryPumps?.length,
+    proposal.equipment?.auxiliaryPump,
+  ]);
 
   useEffect(() => {
     const hasPool = hasPoolDefinition(proposal.poolSpecs);
