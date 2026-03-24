@@ -59,6 +59,18 @@ import {
   subscribeToPricingData,
 } from '../services/pricingDataStore';
 import pricingData from '../services/pricingData';
+import {
+  CUSTOM_PACKAGE_ID,
+  createFreshEquipmentForPackage,
+  getEnabledEquipmentPackageOptions,
+  getSelectedEquipmentPackage,
+  getPackageWaterFeaturesWithoutExtraPump,
+  isFixedEquipmentPackage,
+  packageAllowsAdditionalPumps,
+  packageAllowsWaterFeatures,
+  packageSupportsSpa,
+} from '../utils/equipmentPackages';
+import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpSelections';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { hasSupabaseConnection } from '../services/supabaseClient';
@@ -179,6 +191,13 @@ const formatCurrency = (amount: number): string => {
     minimumFractionDigits: 2,
   }).format(amount);
 };
+
+const WATER_FEATURE_RUN_FIELDS: Array<keyof Proposal['plumbing']['runs']> = [
+  'waterFeature1Run',
+  'waterFeature2Run',
+  'waterFeature3Run',
+  'waterFeature4Run',
+];
 
 const hasPoolDefinition = (poolSpecs?: Proposal['poolSpecs']) => {
   if (!poolSpecs) return false;
@@ -420,11 +439,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
     const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
     if (!equipment) return false;
-    const pumpName = equipment.pump?.name?.toLowerCase() || '';
-    const pumpQty = Math.max(
-      equipment.pumpQuantity ?? (pumpName && !pumpName.includes('no pump') ? 1 : 0),
-      0
-    );
+    const selectedPackage = getSelectedEquipmentPackage(equipment as any);
+    const pumpQty = getBasePumpQuantity(equipment);
+    const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
     const hasPumpSelection = pumpQty > 0 && hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead));
     const hasCustomOptions = (equipment.customOptions || []).some((option) => hasCustomOptionContent(option));
     const lightCounts = getLightCounts(equipment as any);
@@ -434,7 +451,13 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     );
     const autoFillName = equipment.autoFillSystem?.name?.toLowerCase() || '';
     const hasAutoFillSystem = autoFillQty > 0 && autoFillName && !autoFillName.includes('no auto');
+    const sanitationAccessoryQty = Math.max(
+      equipment.sanitationAccessoryQuantity ??
+        (equipment.sanitationAccessory?.name && !equipment.sanitationAccessory.name.toLowerCase().includes('no sanitation') ? 1 : 0),
+      0
+    );
     return (
+      Boolean(selectedPackage && (isFixedEquipmentPackage(selectedPackage) || selectedPackage.includeCheckValve !== false)) ||
       hasPositive(equipment.totalCost) ||
       lightCounts.total > 0 ||
       hasPositive(equipment.cleanerQuantity) ||
@@ -442,6 +465,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       hasPositive(equipment.heaterQuantity) ||
       hasPositive(equipment.automationQuantity) ||
       hasPositive(equipment.saltSystemQuantity) ||
+      additionalPrimaryPumps.some((pump) => hasPositive(getEquipmentItemCost(pump as any, pumpOverhead))) ||
       (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0) ||
       !!equipment.auxiliaryPump ||
       hasCustomOptions ||
@@ -451,6 +475,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       hasPositive(getEquipmentItemCost(equipment.heater as any, 1)) ||
       hasPositive(getEquipmentItemCost(equipment.automation as any, 1)) ||
       hasPositive(getEquipmentItemCost(equipment.saltSystem as any, 1)) ||
+      (sanitationAccessoryQty > 0 && hasPositive(getEquipmentItemCost(equipment.sanitationAccessory as any, 1))) ||
       hasAutoFillSystem ||
       equipment.hasBlanketReel ||
       equipment.hasSolarBlanket ||
@@ -513,6 +538,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const designerCode = getSessionFranchiseCode();
     const modelMeta = getActivePricingModelMeta();
     const shouldUseActiveDefault = Boolean(modelMeta.isDefault && modelMeta.pricingModelId);
+    const defaultCustomPackage =
+      getEnabledEquipmentPackageOptions().find((option) => option.id === CUSTOM_PACKAGE_ID) ||
+      getEnabledEquipmentPackageOptions().find((option) => option.mode === 'custom');
     return {
       ...base,
       franchiseId,
@@ -522,6 +550,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       pricingModelId: shouldUseActiveDefault ? modelMeta.pricingModelId || undefined : undefined,
       pricingModelName: shouldUseActiveDefault ? modelMeta.pricingModelName || undefined : undefined,
       pricingModelIsDefault: shouldUseActiveDefault ? modelMeta.isDefault : undefined,
+      equipment: {
+        ...getDefaultEquipment(),
+        packageSelectionId: defaultCustomPackage?.id || CUSTOM_PACKAGE_ID,
+      },
     };
   };
 
@@ -713,6 +745,167 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   }, [proposal.poolSpecs, proposal.equipment?.poolLights?.length]);
 
   useEffect(() => {
+    const selectedPackage = getSelectedEquipmentPackage(proposal.equipment as any);
+    if (!selectedPackage || !isFixedEquipmentPackage(selectedPackage) || packageAllowsAdditionalPumps(selectedPackage)) {
+      return;
+    }
+
+    const equipment = proposal.equipment || getDefaultEquipment();
+    const auxiliarySelections = equipment.auxiliaryPumps?.length
+      ? equipment.auxiliaryPumps
+      : equipment.auxiliaryPump
+      ? [equipment.auxiliaryPump]
+      : [];
+    const includedPumpQuantity = Math.max(selectedPackage.includedPumpQuantity ?? 0, 0);
+    const shouldResetPumpQuantity = getBasePumpQuantity(equipment) !== includedPumpQuantity;
+    const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
+
+    if (!auxiliarySelections.length && !additionalPrimaryPumps.length && !shouldResetPumpQuantity) {
+      return;
+    }
+
+    setProposal((prev) => {
+      const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+      const activePackage = getSelectedEquipmentPackage(baseEquipment as any);
+      if (!activePackage || !isFixedEquipmentPackage(activePackage) || packageAllowsAdditionalPumps(activePackage)) {
+        return prev;
+      }
+
+      const normalizedPumpQuantity = Math.max(activePackage.includedPumpQuantity ?? 0, 0);
+      return {
+        ...prev,
+        equipment: {
+          ...baseEquipment,
+          pumpQuantity: normalizedPumpQuantity > 0 ? normalizedPumpQuantity : baseEquipment.pumpQuantity,
+          additionalPumps: [],
+          auxiliaryPumps: [],
+          auxiliaryPump: undefined,
+        } as Proposal['equipment'],
+      };
+    });
+    setHasEdits(true);
+  }, [proposal.equipment]);
+
+  useEffect(() => {
+    const selectedPackage = getSelectedEquipmentPackage(proposal.equipment as any);
+    const auxiliaryPumpCatalog =
+      (pricingData as any).equipment?.auxiliaryPumps?.length
+        ? (pricingData as any).equipment.auxiliaryPumps
+        : pricingData.equipment.pumps;
+    const isAuxPumpPlaceholder = (name: string) => {
+      const lowered = name.toLowerCase();
+      return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary');
+    };
+    const defaultAuxiliaryPump =
+      auxiliaryPumpCatalog.find((pump: any) => pump.defaultAuxiliaryPump) ||
+      auxiliaryPumpCatalog.find((pump: any) => !isAuxPumpPlaceholder(pump.name)) ||
+      auxiliaryPumpCatalog[0];
+    const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
+    const buildWaterFeaturePump = (pump: any) =>
+      pump
+        ? {
+            name: pump.name,
+            model: (pump as any).model,
+            basePrice: (pump as any).basePrice,
+            addCost1: (pump as any).addCost1,
+            addCost2: (pump as any).addCost2,
+            price: getEquipmentItemCost(pump as any, pumpOverhead),
+            autoAddedReason: 'waterFeature' as const,
+          }
+        : null;
+    const waterFeatureQty = (proposal.waterFeatures?.selections || []).reduce(
+      (sum, selection) => sum + Math.max(selection?.quantity ?? 0, 0),
+      0
+    );
+
+    const equipment = proposal.equipment || getDefaultEquipment();
+    const auxSelections = equipment.auxiliaryPumps?.length
+      ? equipment.auxiliaryPumps
+      : equipment.auxiliaryPump
+      ? [equipment.auxiliaryPump]
+      : [];
+    const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
+    const manualAuxSelections = auxSelections.filter((pump) => pump?.autoAddedReason !== 'waterFeature');
+    const waterFeatureAutoPumps = auxSelections.filter((pump) => pump?.autoAddedReason === 'waterFeature');
+
+    if (!selectedPackage || !isFixedEquipmentPackage(selectedPackage) || !packageAllowsWaterFeatures(selectedPackage)) {
+      if (waterFeatureAutoPumps.length > 0) {
+        setProposal((prev) => {
+          const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+          const nextAuxSelections = (baseEquipment.auxiliaryPumps?.length
+            ? baseEquipment.auxiliaryPumps
+            : baseEquipment.auxiliaryPump
+            ? [baseEquipment.auxiliaryPump]
+            : []
+          ).filter((pump) => pump?.autoAddedReason !== 'waterFeature');
+          return {
+            ...prev,
+            equipment: {
+              ...baseEquipment,
+              auxiliaryPumps: nextAuxSelections,
+              auxiliaryPump: nextAuxSelections[0],
+            } as Proposal['equipment'],
+          };
+        });
+        setHasEdits(true);
+      }
+      return;
+    }
+
+    const hasManualAdditionalPump = additionalPrimaryPumps.length > 0 || manualAuxSelections.length > 0;
+    const allowance = getPackageWaterFeaturesWithoutExtraPump(selectedPackage);
+    const needsAdditionalPump = waterFeatureQty > allowance;
+
+    if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0) {
+      const selection = buildWaterFeaturePump(defaultAuxiliaryPump);
+      if (!selection) return;
+      setProposal((prev) => {
+        const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+        const currentAuxSelections = baseEquipment.auxiliaryPumps?.length
+          ? baseEquipment.auxiliaryPumps
+          : baseEquipment.auxiliaryPump
+          ? [baseEquipment.auxiliaryPump]
+          : [];
+        const nextAuxSelections = [...currentAuxSelections, selection];
+        return {
+          ...prev,
+          equipment: {
+            ...baseEquipment,
+            auxiliaryPumps: nextAuxSelections,
+            auxiliaryPump: nextAuxSelections[0],
+          } as Proposal['equipment'],
+        };
+      });
+      setHasEdits(true);
+      return;
+    }
+
+    if (!needsAdditionalPump && waterFeatureAutoPumps.length > 0) {
+      setProposal((prev) => {
+        const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+        const currentAuxSelections = baseEquipment.auxiliaryPumps?.length
+          ? baseEquipment.auxiliaryPumps
+          : baseEquipment.auxiliaryPump
+          ? [baseEquipment.auxiliaryPump]
+          : [];
+        const nextAuxSelections = currentAuxSelections.filter((pump) => pump?.autoAddedReason !== 'waterFeature');
+        return {
+          ...prev,
+          equipment: {
+            ...baseEquipment,
+            auxiliaryPumps: nextAuxSelections,
+            auxiliaryPump: nextAuxSelections[0],
+          } as Proposal['equipment'],
+        };
+      });
+      setHasEdits(true);
+    }
+  }, [
+    proposal.equipment,
+    proposal.waterFeatures?.selections,
+  ]);
+
+  useEffect(() => {
     const requestId = ++loadRequestRef.current;
     if (proposalNumber) {
       setIsLoading(true);
@@ -834,6 +1027,54 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     if (section === 'poolSpecs') {
       setCompletedByAdvance(prev => ({ ...prev, poolSpecs: true }));
     }
+  };
+
+  const handleSelectEquipmentPackage = (packageId: string) => {
+    const nextPackage = getEnabledEquipmentPackageOptions().find((option) => option.id === packageId);
+    if (!nextPackage) return;
+
+    setProposal((prev) => {
+      const basePoolSpecs = prev.poolSpecs || getDefaultPoolSpecs();
+      const hasSpa = (basePoolSpecs.spaType ?? 'none') !== 'none';
+      if (hasSpa && !packageSupportsSpa(nextPackage)) {
+        return prev;
+      }
+
+      const nextEquipment = createFreshEquipmentForPackage(nextPackage, {
+        hasPool: hasPoolDefinition(basePoolSpecs),
+        hasSpa,
+      });
+      const existingPlumbing = prev.plumbing || getDefaultPlumbing();
+      const existingElectrical = prev.electrical || getDefaultElectrical();
+      const nextRuns = {
+        ...existingPlumbing.runs,
+        cleanerRun: 0,
+        autoFillRun: 0,
+        gasRun: 0,
+      };
+      WATER_FEATURE_RUN_FIELDS.forEach((field) => {
+        nextRuns[field] = 0;
+      });
+
+      return {
+        ...prev,
+        equipment: nextEquipment,
+        waterFeatures: getDefaultWaterFeatures(),
+        plumbing: {
+          ...existingPlumbing,
+          runs: nextRuns,
+        },
+        electrical: {
+          ...existingElectrical,
+          runs: {
+            ...existingElectrical.runs,
+            heatPumpElectricalRun: 0,
+          },
+        },
+        lastModified: new Date().toISOString(),
+      };
+    });
+    setHasEdits(true);
   };
 
   useEffect(() => {
@@ -1064,6 +1305,25 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const hasSpa = proposal.poolSpecs?.spaType !== 'none';
     const isFiberglass = proposal.poolSpecs?.poolType === 'fiberglass';
     const hasPool = hasPoolDefinition(proposal.poolSpecs);
+    const selectedPackage = getSelectedEquipmentPackage(proposal.equipment as any);
+    const disableSpaSelections = Boolean(selectedPackage && !packageSupportsSpa(selectedPackage));
+    const disabledSpaMessage = disableSpaSelections
+      ? 'The chosen equipment package cannot support a Spa'
+      : undefined;
+    const waterFeatureDisabledReason =
+      selectedPackage && !packageAllowsWaterFeatures(selectedPackage)
+        ? 'This equipment package cannot support water features.'
+        : undefined;
+    const auxiliarySelections = proposal.equipment?.auxiliaryPumps?.length
+      ? proposal.equipment.auxiliaryPumps
+      : proposal.equipment?.auxiliaryPump
+      ? [proposal.equipment.auxiliaryPump]
+      : [];
+    const packageWaterFeatureWarningMessage = auxiliarySelections.some(
+      (pump) => pump?.autoAddedReason === 'waterFeature'
+    )
+      ? 'Equipment package only supports 1 pump. An Additional pump has been added.'
+      : undefined;
 
     try {
       switch (currentSectionKey) {
@@ -1076,6 +1336,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               onChange={(data) => updateProposal('poolSpecs', data)}
               tileCopingDecking={proposal.tileCopingDecking}
               onChangeTileCopingDecking={(data) => updateProposal('tileCopingDecking', data)}
+              disableSpaSelections={disableSpaSelections}
+              disabledSpaMessage={disabledSpaMessage}
             />
           );
         case 'excavation':
@@ -1126,6 +1388,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             <EquipmentSectionNew
               data={proposal.equipment!}
               onChange={(data) => updateProposal('equipment', data)}
+              onSelectPackage={handleSelectEquipmentPackage}
               plumbingRuns={proposal.plumbing!.runs}
               onChangePlumbingRuns={(runs) =>
                 updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
@@ -1143,6 +1406,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               onChangePlumbingRuns={(runs) =>
                 updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
               }
+              disabledReason={waterFeatureDisabledReason}
+              packageWarningMessage={packageWaterFeatureWarningMessage}
             />
           );
         case 'interiorFinish':

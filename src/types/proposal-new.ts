@@ -271,6 +271,7 @@ export interface PumpSelection {
   addCost1?: number;
   addCost2?: number;
   autoAddedForSpa?: boolean;
+  autoAddedReason?: 'spa' | 'waterFeature';
 }
 
 export interface FilterSelection {
@@ -341,10 +342,69 @@ export interface AutoFillSystemSelection {
   requiresElectricRun?: boolean;
 }
 
+export interface EquipmentAccessorySelection {
+  name: string;
+  price?: number;
+  basePrice?: number;
+  addCost1?: number;
+  addCost2?: number;
+}
+
+export type EquipmentPackageMode = 'fixed' | 'custom';
+
+export interface EquipmentPackageOption {
+  id: string;
+  name: string;
+  mode: EquipmentPackageMode;
+  enabled?: boolean;
+  description?: string;
+  notes?: string;
+  basePrice?: number;
+  includeCheckValve?: boolean;
+  supportsSpa?: boolean;
+  allowAdditionalPumps?: boolean;
+  allowHeaterUpgrade?: boolean;
+  allowCleanerUpgrade?: boolean;
+  allowAutoFillUpgrade?: boolean;
+  allowPoolLightUpgrade?: boolean;
+  allowSpaLightUpgrade?: boolean;
+  allowWaterFeatureUpgrade?: boolean;
+  allowSanitationAccessoryUpgrade?: boolean;
+  includedWaterFeaturesBeforeExtraPump?: number;
+  includedPumpName?: string;
+  includedPumpQuantity?: number;
+  includedFilterName?: string;
+  includedFilterQuantity?: number;
+  includedCleanerName?: string;
+  includedCleanerQuantity?: number;
+  includedHeaterName?: string;
+  includedHeaterQuantity?: number;
+  includedAutomationName?: string;
+  includedAutomationQuantity?: number;
+  includedAutomationZones?: number;
+  includedSaltSystemName?: string;
+  includedSaltSystemQuantity?: number;
+  includedAutoFillSystemName?: string;
+  includedAutoFillSystemQuantity?: number;
+  includedPoolLightName?: string;
+  includedPoolLightQuantity?: number;
+  includedSpaLightName?: string;
+  includedSpaLightQuantity?: number;
+  includedSanitationAccessoryName?: string;
+  includedSanitationAccessoryQuantity?: number;
+  defaultCleanerName?: string;
+  defaultCleanerQuantity?: number;
+  defaultAutoFillSystemName?: string;
+  defaultAutoFillSystemQuantity?: number;
+  defaultSanitationAccessoryName?: string;
+  defaultSanitationAccessoryQuantity?: number;
+}
+
 export interface Equipment {
   // Main equipment
   pump: PumpSelection;
   pumpQuantity?: number;
+  additionalPumps?: PumpSelection[];
   auxiliaryPump?: PumpSelection; // Deprecated: use auxiliaryPumps
   auxiliaryPumps?: PumpSelection[]; // Optional auxiliary pumps (up to 2)
   filter: FilterSelection;
@@ -375,12 +435,19 @@ export interface Equipment {
   autoFillSystem?: AutoFillSystemSelection;
   autoFillSystemQuantity?: number;
 
+  // Sanitation accessories
+  sanitationAccessory?: EquipmentAccessorySelection;
+  sanitationAccessoryQuantity?: number;
+
   // Accessories
   hasBlanketReel: boolean;
   hasSolarBlanket: boolean;
   hasAutoFill: boolean;
   hasHandrail: boolean;
   hasStartupChemicals: boolean;
+
+  // Package pricing
+  packageSelectionId?: string;
 
   // Custom options
   customOptions?: CustomOption[];

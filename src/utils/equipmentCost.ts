@@ -45,6 +45,14 @@ const findAutoFillCatalogMatch = (item?: EquipmentCostLike | null) => {
   );
 };
 
+const findSanitationAccessoryCatalogMatch = (item?: EquipmentCostLike | null) => {
+  if (!item?.name) return null;
+  const list = (pricingData as any)?.equipment?.sanitationAccessories || [];
+  return list.find(
+    (entry: any) => entry?.name?.toLowerCase?.() === item.name?.toLowerCase?.()
+  );
+};
+
 /**
   * Sum base/add costs; fall back to legacy price; optionally apply an overhead multiplier (e.g., 1.1).
   */
@@ -62,6 +70,8 @@ export function getEquipmentItemCost(
     : undefined;
   const automationMatch = findAutomationCatalogMatch(item);
   const autoFillMatch = automationMatch ? null : findAutoFillCatalogMatch(item);
+  const sanitationAccessoryMatch =
+    automationMatch || autoFillMatch ? null : findSanitationAccessoryCatalogMatch(item);
   // Hydrate missing automation fields from the catalog so add-cost pricing still applies when only the name is stored.
   const target: EquipmentCostLike = automationMatch
     ? {
@@ -75,6 +85,11 @@ export function getEquipmentItemCost(
           ...item,
           percentIncrease:
             item.percentIncrease ?? (autoFillMatch as any).percentIncrease,
+        }
+    : sanitationAccessoryMatch
+      ? {
+          ...sanitationAccessoryMatch,
+          ...item,
         }
     : item;
   const hasParts =

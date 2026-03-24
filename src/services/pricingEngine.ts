@@ -17,6 +17,7 @@ import {
 import pricingData from './pricingData';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
 import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
+import { getAdditionalPumpSelections } from '../utils/pumpSelections';
 
 /**
  * ROUNDUP function - Excel-style ceiling function
@@ -532,11 +533,11 @@ export class PlumbingCalculations {
       : equipment?.auxiliaryPump
       ? [equipment.auxiliaryPump]
       : [];
-    const primaryPumpQty = isPlaceholderPumpName(equipment?.pump?.name)
-      ? 0
-      : Math.max(equipment?.pumpQuantity ?? 0, 0) || 1;
+    const additionalPrimaryPumpCount = getAdditionalPumpSelections(equipment).filter(
+      (pump) => !isPlaceholderPumpName(pump?.name)
+    ).length;
     const auxiliaryPumpCount = auxiliarySelections.filter((pump) => !isPlaceholderPumpName(pump?.name)).length;
-    const additionalPumpCount = Math.max(primaryPumpQty - 1, 0) + auxiliaryPumpCount;
+    const additionalPumpCount = additionalPrimaryPumpCount + auxiliaryPumpCount;
     const mainDrainRunMultiplier = 1 + additionalPumpCount;
 
     // Main drain + spa loop - 2.5" (PLUM!K15)

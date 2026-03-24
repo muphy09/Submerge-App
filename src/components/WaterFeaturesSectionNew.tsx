@@ -10,6 +10,8 @@ interface Props {
   onChange: (data: WaterFeatures) => void;
   plumbingRuns: PlumbingRuns;
   onChangePlumbingRuns: (runs: PlumbingRuns) => void;
+  disabledReason?: string;
+  packageWarningMessage?: string;
 }
 
 const CompactInput = ({
@@ -78,9 +80,17 @@ const buildRunKeys = (prefix: string, selections: WaterFeatureSelection[]) => {
   });
 };
 
-function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns }: Props) {
+function WaterFeaturesSectionNew({
+  data,
+  onChange,
+  plumbingRuns,
+  onChangePlumbingRuns,
+  disabledReason,
+  packageWarningMessage,
+}: Props) {
   const catalog = flattenWaterFeatures(pricingData.waterFeatures);
   const hasCatalog = catalog.length > 0;
+  const isDisabled = Boolean(disabledReason);
 
   const catalogByCategory = useMemo(() => {
     const grouped: Record<string, typeof catalog> = {};
@@ -356,54 +366,61 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
 
   return (
     <div className="section-form">
+      {packageWarningMessage && <div className="package-warning">{packageWarningMessage}</div>}
       {!hasCatalogData && (
         <div className="form-help" style={{ fontStyle: 'italic', marginBottom: '1rem' }}>
           No water feature pricing found. Add items in the Admin Pricing Model under Water Features (Name + Base/Adders).
         </div>
       )}
 
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Sheer Descents</h2>
-        </div>
-        {renderCategoryRows('Sheer Descent', sheerOptions, sheerSelections, sheerRunKeys)}
-      </div>
-
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Wok Pots</h2>
-        </div>
-        {renderCategoryRows('Wok Pot', wokOptions, wokSelections, wokRunKeys)}
-      </div>
-
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Jets</h2>
-        </div>
-        {renderCategoryRows('Jet Type', jetOptions, jetSelections, jetRunKeys)}
-      </div>
-
-      <div className="spec-block">
-        <div className="spec-block-header">
-          <h2 className="spec-block-title">Bubblers</h2>
-        </div>
-        {renderCategoryRows(
-          { primary: 'Bubbler Models', additional: 'Bubbler Model' },
-          bubblerOptions,
-          bubblerSelections,
-          bubblerRunKeys
-        )}
-        {selectedBubblerAddsPoolLight && (
-          <div className="info-box" style={{ marginTop: '8px' }}>
-            A Pool Light has been automatically included with the chosen Bubbler.
+      <div className="package-disabled-shell" title={disabledReason || undefined}>
+        {isDisabled && <div className="package-warning secondary">{disabledReason}</div>}
+        <div className="package-disabled-content">
+          <div className="spec-block">
+            <div className="spec-block-header">
+              <h2 className="spec-block-title">Sheer Descents</h2>
+            </div>
+            {renderCategoryRows('Sheer Descent', sheerOptions, sheerSelections, sheerRunKeys)}
           </div>
-        )}
-      </div>
 
-      <CustomOptionsSection
-        data={data.customOptions || []}
-        onChange={(customOptions) => onChange({ ...data, customOptions })}
-      />
+          <div className="spec-block">
+            <div className="spec-block-header">
+              <h2 className="spec-block-title">Wok Pots</h2>
+            </div>
+            {renderCategoryRows('Wok Pot', wokOptions, wokSelections, wokRunKeys)}
+          </div>
+
+          <div className="spec-block">
+            <div className="spec-block-header">
+              <h2 className="spec-block-title">Jets</h2>
+            </div>
+            {renderCategoryRows('Jet Type', jetOptions, jetSelections, jetRunKeys)}
+          </div>
+
+          <div className="spec-block">
+            <div className="spec-block-header">
+              <h2 className="spec-block-title">Bubblers</h2>
+            </div>
+            {renderCategoryRows(
+              { primary: 'Bubbler Models', additional: 'Bubbler Model' },
+              bubblerOptions,
+              bubblerSelections,
+              bubblerRunKeys
+            )}
+            {selectedBubblerAddsPoolLight && (
+              <div className="info-box" style={{ marginTop: '8px' }}>
+                A Pool Light has been automatically included with the chosen Bubbler.
+              </div>
+            )}
+          </div>
+
+          <CustomOptionsSection
+            data={data.customOptions || []}
+            onChange={(customOptions) => onChange({ ...data, customOptions })}
+          />
+        </div>
+        {isDisabled && <div className="package-disabled-overlay" aria-hidden="true" />}
+      </div>
     </div>
   );
 }

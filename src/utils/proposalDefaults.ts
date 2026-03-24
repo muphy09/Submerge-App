@@ -23,6 +23,7 @@ import {
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from './equipmentCost';
 import { getDefaultCleanerOption, getDefaultCleanerQuantity } from './cleanerDefaults';
+import { getNoPumpSelection } from './pumpDefaults';
 
 export function getDefaultPoolSpecs(): PoolSpecs {
   return {
@@ -163,7 +164,7 @@ export function getDefaultEquipment(): Equipment {
   const pickDefault = <T extends { name: string }>(list: T[], multiplier: number = 1) =>
     list.find(item => getEquipmentItemCost(item as any, multiplier) === 0) || list[0];
 
-  const defaultPump = pickDefault(pricingData.equipment.pumps, pumpOverhead);
+  const defaultPump = getNoPumpSelection(pumpOverhead);
   const defaultFilter = pickDefault(pricingData.equipment.filters, 1);
   const defaultCleaner = getDefaultCleanerOption(pricingData.equipment.cleaners) || pickDefault(pricingData.equipment.cleaners, 1);
   const defaultHeater = pickDefault(pricingData.equipment.heaters, 1);
@@ -172,15 +173,9 @@ export function getDefaultEquipment(): Equipment {
   const defaultCleanerQuantity = getDefaultCleanerQuantity(defaultCleaner);
 
   return {
-    pump: {
-      name: defaultPump.name,
-      model: (defaultPump as any).model,
-      basePrice: (defaultPump as any).basePrice,
-      addCost1: (defaultPump as any).addCost1,
-      addCost2: (defaultPump as any).addCost2,
-      price: getEquipmentItemCost(defaultPump as any, pumpOverhead),
-    },
+    pump: { ...defaultPump },
     pumpQuantity: 0,
+    additionalPumps: [],
     auxiliaryPumps: [],
     filter: {
       name: defaultFilter.name,
@@ -228,11 +223,14 @@ export function getDefaultEquipment(): Equipment {
     additionalSaltSystem: undefined,
     autoFillSystem: undefined,
     autoFillSystemQuantity: undefined,
+    sanitationAccessory: undefined,
+    sanitationAccessoryQuantity: 0,
     hasBlanketReel: false,
     hasSolarBlanket: false,
     hasAutoFill: false,
     hasHandrail: false,
     hasStartupChemicals: false,
+    packageSelectionId: undefined,
     customOptions: [],
     totalCost: 0,
     hasBeenEdited: false,

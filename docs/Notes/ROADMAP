@@ -14,18 +14,18 @@ Immediate Changes -
     - Can NOT add any water features
     
 2. PMF03 Standard Automation Package: $3864 + Check valve ($48.04)
-    - Include Salt system (AQRS), CV3030 Filter, 1.65 HP Pump, 1 Pool light
-    - Option to add additonal pool light(s)
-    - Option to add Hydrapure UV Ozone
-    - Option to add Heater
-    - Option to add Pumps
-    - Option to add cleaner (default to 7240)
-    - Option to add autofill (default to none)
-    - Option to add 1 Water Feature without needing another pump (would still bill a Valve actuator). 2 Water features would require another pump
-    - Can NOT do a spa with this package
+    - Includes: Salt system (AQRS), CV3030 Filter, 1.65 HP Pump, 1 Pool light
+        - Option to add additonal pool light(s)
+        - Option to add Hydrapure UV Ozone
+        - Option to add Heater
+        - Option to add Pumps
+        - Option to add cleaner (default to 7240)
+        - Option to add autofill (default to none)
+        - Option to add 1 Water Feature without needing another pump (would still bill a Valve actuator). 2 Water features would require another pump
+        - Can NOT do a spa with this package
     
 3. Custom Automation Package ($ depends on options chosen)
-    - Automation, Heater, Blower, 2 Pool lights (hydura), 1 spa light,
+    - Includes: Nothing, all options are chosen
     - Options: 
         Automation - HL+4, HL Base (can add 2) + (must have) salt cell ($1041.07) 2 salt cells not needed for 2 HL Base, only 1
         Pumps - 1.65HP Pump, 1.85, 2.7HP, XL, Booster
@@ -61,6 +61,7 @@ All WF and additional use 2" pipe
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 
+- Fiberglass Pricing models (email)
 - Booster pump is an add on pump
 - Ability to 'Search' for an input in the Admin Pricing Model
 - Improve export flow for Breadowns (naming)
@@ -79,7 +80,6 @@ Mid Term -
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
 - Admin proposal large screen
-- Fiberglass Shells
 - Performance Data for Admin overhaul
 - Equipment logic for lights when selecting multiple can be cleaned up
 - Add aux pump - double main drain run. every pump gets same drain run

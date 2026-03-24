@@ -7,6 +7,13 @@ import pricingData from './pricingData';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
 import {
+  getPackageTotal,
+  getSelectedEquipmentPackage,
+  isCustomEquipmentPackage,
+  isFixedEquipmentPackage,
+} from '../utils/equipmentPackages';
+import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpSelections';
+import {
   formatMasonryFacingLabel,
   getMasonryFacingOptions,
   getMasonryFacingRate,
@@ -619,15 +626,29 @@ export class EquipmentCalculations {
   }
 
   private static getPumpQuantity(equipment: Equipment): number {
-    const pumpName = equipment.pump?.name?.toLowerCase() || '';
-    if (!pumpName || pumpName.includes('no pump')) return 0;
-    const qty = Math.max(equipment.pumpQuantity ?? 0, 0);
+    return getBasePumpQuantity(equipment);
+  }
+
+  private static getSanitationAccessoryQuantity(equipment: Equipment): number {
+    const name = equipment.sanitationAccessory?.name?.toLowerCase() || '';
+    if (!name || name.includes('no sanitation')) return 0;
+    const qty = Math.max(equipment.sanitationAccessoryQuantity ?? 0, 0);
     return qty > 0 ? qty : 1;
   }
 
   private static hasEquipmentSelection(equipment: Equipment): boolean {
+    const selectedPackage = getSelectedEquipmentPackage(equipment);
+    if (selectedPackage && isFixedEquipmentPackage(selectedPackage)) {
+      return true;
+    }
+    if (selectedPackage && isCustomEquipmentPackage(selectedPackage) && selectedPackage.includeCheckValve !== false) {
+      return true;
+    }
+
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
     const pumpQty = this.getPumpQuantity(equipment);
+    const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
+    const additionalPrimaryPrices = additionalPrimaryPumps.map((pump) => getEquipmentItemCost(pump as any, pumpOverhead));
     const auxiliaryPrices = (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
       ? equipment.auxiliaryPumps
       : equipment.auxiliaryPump
@@ -644,21 +665,25 @@ export class EquipmentCalculations {
         equipment.autoFillSystemQuantity ?? (equipment.autoFillSystem ? 1 : 0),
         0
       );
-      const autoFillName = equipment.autoFillSystem?.name?.toLowerCase() || '';
-      const hasAutoFillSystem = autoFillQty > 0 && autoFillName && !autoFillName.includes('no auto');
-      const lightCounts = getLightCounts(equipment);
+    const autoFillName = equipment.autoFillSystem?.name?.toLowerCase() || '';
+    const hasAutoFillSystem = autoFillQty > 0 && autoFillName && !autoFillName.includes('no auto');
+    const sanitationAccessoryQty = this.getSanitationAccessoryQuantity(equipment);
+    const sanitationAccessoryCost = getEquipmentItemCost(equipment.sanitationAccessory as any, 1);
+    const lightCounts = getLightCounts(equipment);
 
     const pricedSelections = [
       pumpQty > 0 ? getEquipmentItemCost(equipment.pump as any, pumpOverhead) * pumpQty : 0,
+      ...additionalPrimaryPrices,
       ...auxiliaryPrices,
-        filterQty > 0 ? getEquipmentItemCost(equipment.filter as any, 1) : 0,
-        cleanerQty > 0 ? getEquipmentItemCost(equipment.cleaner as any, 1) : 0,
-        heaterQty > 0 ? getEquipmentItemCost(equipment.heater as any, 1) : 0,
-        automationQty > 0 ? getEquipmentItemCost(equipment.automation as any, 1) : 0,
-        saltQty > 0 ? getEquipmentItemCost(equipment.saltSystem as any, 1) : 0,
-        additionalSaltCost,
-        hasAutoFillSystem ? getEquipmentItemCost(equipment.autoFillSystem as any, 1) : 0,
-      ];
+      filterQty > 0 ? getEquipmentItemCost(equipment.filter as any, 1) : 0,
+      cleanerQty > 0 ? getEquipmentItemCost(equipment.cleaner as any, 1) : 0,
+      heaterQty > 0 ? getEquipmentItemCost(equipment.heater as any, 1) : 0,
+      automationQty > 0 ? getEquipmentItemCost(equipment.automation as any, 1) : 0,
+      saltQty > 0 ? getEquipmentItemCost(equipment.saltSystem as any, 1) : 0,
+      additionalSaltCost,
+      hasAutoFillSystem ? getEquipmentItemCost(equipment.autoFillSystem as any, 1) : 0,
+      sanitationAccessoryQty > 0 ? sanitationAccessoryCost : 0,
+    ];
 
     const accessoriesSelected =
       equipment.hasBlanketReel ||
@@ -668,15 +693,16 @@ export class EquipmentCalculations {
       equipment.hasStartupChemicals;
 
     return pricedSelections.some(price => (price ?? 0) > 0) ||
-        filterQty > 0 ||
-        heaterQty > 0 ||
-        automationQty > 0 ||
-        cleanerQty > 0 ||
-        saltQty > 0 ||
-        hasAutoFillSystem ||
-        (equipment.automation?.zones ?? 0) > 0 ||
-        lightCounts.total > 0 ||
-        accessoriesSelected;
+      filterQty > 0 ||
+      heaterQty > 0 ||
+      automationQty > 0 ||
+      cleanerQty > 0 ||
+      saltQty > 0 ||
+      hasAutoFillSystem ||
+      sanitationAccessoryQty > 0 ||
+      (equipment.automation?.zones ?? 0) > 0 ||
+      lightCounts.total > 0 ||
+      accessoriesSelected;
   }
 
   static calculateEquipmentCost(equipment: Equipment, poolSpecs: PoolSpecs): CostLineItem[] {
@@ -686,32 +712,37 @@ export class EquipmentCalculations {
     const items: CostLineItem[] = [];
     const prices = pricingData.equipment;
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
+    const selectedPackage = getSelectedEquipmentPackage(normalizedEquipment);
     const pumpQty = this.getPumpQuantity(normalizedEquipment);
+    const additionalPrimaryPumps = getAdditionalPumpSelections(normalizedEquipment);
     const auxiliaryPumps =
       normalizedEquipment.auxiliaryPumps && normalizedEquipment.auxiliaryPumps.length > 0
         ? normalizedEquipment.auxiliaryPumps
         : normalizedEquipment.auxiliaryPump
           ? [normalizedEquipment.auxiliaryPump]
           : [];
-      const filterQty = Math.max(normalizedEquipment.filterQuantity ?? 0, 0);
-      const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
-      const automationQty = Math.max(normalizedEquipment.automationQuantity ?? 0, 0);
-      const saltQty = Math.max(
-        normalizedEquipment.saltSystemQuantity ?? (normalizedEquipment.saltSystem ? 1 : 0),
-        0
-      );
-      const autoFillQty = Math.max(
-        normalizedEquipment.autoFillSystemQuantity ?? (normalizedEquipment.autoFillSystem ? 1 : 0),
-        0
-      );
-      const pumpCost = getEquipmentItemCost(normalizedEquipment.pump as any, pumpOverhead);
-      const filterCost = getEquipmentItemCost(normalizedEquipment.filter as any, 1);
-      const cleanerCost = getEquipmentItemCost(normalizedEquipment.cleaner as any, 1);
+    const filterQty = Math.max(normalizedEquipment.filterQuantity ?? 0, 0);
+    const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
+    const automationQty = Math.max(normalizedEquipment.automationQuantity ?? 0, 0);
+    const cleanerQty = Math.max(normalizedEquipment.cleanerQuantity ?? 0, 0);
+    const saltQty = Math.max(
+      normalizedEquipment.saltSystemQuantity ?? (normalizedEquipment.saltSystem ? 1 : 0),
+      0
+    );
+    const autoFillQty = Math.max(
+      normalizedEquipment.autoFillSystemQuantity ?? (normalizedEquipment.autoFillSystem ? 1 : 0),
+      0
+    );
+    const sanitationAccessoryQty = this.getSanitationAccessoryQuantity(normalizedEquipment);
+    const pumpCost = getEquipmentItemCost(normalizedEquipment.pump as any, pumpOverhead);
+    const filterCost = getEquipmentItemCost(normalizedEquipment.filter as any, 1);
+    const cleanerCost = getEquipmentItemCost(normalizedEquipment.cleaner as any, 1);
     const heaterCost = heaterQty > 0 ? getEquipmentItemCost(normalizedEquipment.heater as any, 1) : 0;
     const automationCost = getEquipmentItemCost(normalizedEquipment.automation as any, 1);
     const saltCost = getEquipmentItemCost(normalizedEquipment.saltSystem as any, 1);
     const additionalSaltCost = getEquipmentItemCost(normalizedEquipment.additionalSaltSystem as any, 1);
     const autoFillCost = getEquipmentItemCost(normalizedEquipment.autoFillSystem as any, 1);
+    const sanitationAccessoryCost = getEquipmentItemCost(normalizedEquipment.sanitationAccessory as any, 1);
     const autoFillName = normalizedEquipment.autoFillSystem?.name || '';
     const hasAutoFillSystem =
       autoFillQty > 0 && autoFillName && !autoFillName.toLowerCase().includes('no auto');
@@ -722,73 +753,31 @@ export class EquipmentCalculations {
       return items;
     }
 
-    // Base white goods (sheet line 113)
-    items.push({
-      category: 'Equipment',
-      description: 'Base White Goods',
-      unitPrice: prices.baseWhiteGoods,
-      quantity: 1,
-      total: prices.baseWhiteGoods,
-    });
-
-    // Pump
-    if (pumpQty > 0) {
+    const pushItem = (description: string, unitPrice: number, quantity: number, total?: number) => {
+      if (quantity <= 0) return;
       items.push({
         category: 'Equipment',
-        description: normalizedEquipment.pump.name,
-        unitPrice: pumpCost,
-        quantity: pumpQty,
-        total: pumpCost * pumpQty,
+        description,
+        unitPrice,
+        quantity,
+        total: total ?? unitPrice * quantity,
       });
-    }
+    };
 
-    // Auxiliary pumps
-    auxiliaryPumps.forEach((pump, idx) => {
-      const auxCost = getEquipmentItemCost(pump as any, pumpOverhead);
-      items.push({
-        category: 'Equipment',
-        description: pump.name || `Auxiliary Pump ${idx + 1}`,
-        unitPrice: auxCost,
-        quantity: 1,
-        total: auxCost,
-      });
-    });
+    const upgradeLabel = (description: string) =>
+      description.toLowerCase().includes('(upgrade)') ? description : `${description} (upgrade)`;
 
-    // Filter
-    if (filterQty > 0) {
-      items.push({
-        category: 'Equipment',
-        description: normalizedEquipment.filter.name,
-        unitPrice: filterCost,
-        quantity: filterQty,
-        total: filterCost * filterQty,
-      });
-    }
+    const additionalPumpDescription = (name?: string) => (name ? `Additional Pump - ${name}` : 'Additional Pump');
 
-    // Cleaner
-    const cleanerQuantity = Math.max(normalizedEquipment.cleanerQuantity ?? 0, 0);
-    if (cleanerCost > 0 && cleanerQuantity > 0) {
-      items.push({
-        category: 'Equipment',
-        description: normalizedEquipment.cleaner.name,
-        unitPrice: cleanerCost,
-        quantity: cleanerQuantity,
-        total: cleanerCost * cleanerQuantity,
-      });
-    }
+    const pushUpgrade = (description: string, unitPrice: number, quantity: number) => {
+      pushItem(upgradeLabel(description), unitPrice, quantity);
+    };
 
-    // Heater
-    if (heaterQty > 0) {
-      items.push({
-        category: 'Equipment',
-        description: normalizedEquipment.heater.name,
-        unitPrice: heaterCost,
-        quantity: heaterQty,
-        total: heaterCost * heaterQty,
-      });
-    }
+    const pushZeroItem = (description: string, quantity: number) => {
+      pushItem(description, 0, quantity, 0);
+    };
 
-    const addLightGroup = (lights: typeof poolLights, labelPrefix: string) => {
+    const addLightGroup = (lights: typeof poolLights, labelPrefix: string, descriptionSuffix: string = '') => {
       const grouped = new Map<string, { unitPrice: number; quantity: number }>();
       lights.forEach((light) => {
         const cost = getEquipmentItemCost(light as any, 1);
@@ -802,124 +791,245 @@ export class EquipmentCalculations {
 
       grouped.forEach((value, name) => {
         if (value.quantity <= 0) return;
-        items.push({
-          category: 'Equipment',
-          description: `${labelPrefix} Light - ${name}`,
-          unitPrice: value.unitPrice,
-          quantity: value.quantity,
-          total: value.unitPrice * value.quantity,
-        });
+        pushItem(`${labelPrefix} Light - ${name}${descriptionSuffix}`, value.unitPrice, value.quantity);
       });
     };
 
-    addLightGroup(poolLights, 'Pool');
-    if (hasSpa) {
-      addLightGroup(spaLights, 'Spa');
-    }
+    if (selectedPackage && isFixedEquipmentPackage(selectedPackage)) {
+      const includedPumpQty = Math.max(selectedPackage.includedPumpQuantity ?? 0, 0);
+      const includedFilterQty = Math.max(selectedPackage.includedFilterQuantity ?? 0, 0);
+      const includedCleanerQty = Math.max(selectedPackage.includedCleanerQuantity ?? 0, 0);
+      const includedHeaterQty = Math.max(selectedPackage.includedHeaterQuantity ?? 0, 0);
+      const includedAutomationQty = Math.max(selectedPackage.includedAutomationQuantity ?? 0, 0);
+      const includedSaltQty = Math.max(selectedPackage.includedSaltSystemQuantity ?? 0, 0);
+      const includedAutoFillQty = Math.max(selectedPackage.includedAutoFillSystemQuantity ?? 0, 0);
+      const includedPoolLightQty = Math.max(selectedPackage.includedPoolLightQuantity ?? 0, 0);
+      const includedSpaLightQty = Math.max(selectedPackage.includedSpaLightQuantity ?? 0, 0);
+      const includedSanitationAccessoryQty = Math.max(selectedPackage.includedSanitationAccessoryQuantity ?? 0, 0);
+      pushItem(selectedPackage.name, getPackageTotal(selectedPackage), 1);
 
-    // Automation
-    if (automationQty > 0) {
-      items.push({
-        category: 'Equipment',
-        description: normalizedEquipment.automation.name,
-        unitPrice: automationCost,
-        quantity: automationQty,
-        total: automationCost * automationQty,
-      });
-    }
-
-    // Additional automation zones
-    if (automationQty > 0 && normalizedEquipment.automation.zones > 0) {
-      items.push({
-        category: 'Equipment',
-        description: 'Additional Automation Zones',
-        unitPrice: pricingData.equipment.automationZoneAddon,
-        quantity: normalizedEquipment.automation.zones,
-        total: pricingData.equipment.automationZoneAddon * normalizedEquipment.automation.zones,
-      });
-    }
-
-    // Salt system
-      if (saltCost > 0 && normalizedEquipment.saltSystem?.name && saltQty > 0) {
-        items.push({
-          category: 'Equipment',
-          description: normalizedEquipment.saltSystem.name,
-          unitPrice: saltCost,
-          quantity: saltQty,
-          total: saltCost * saltQty,
-        });
+      if (selectedPackage.includeCheckValve !== false) {
+        pushZeroItem('Check Valve', 1);
+      }
+      if (includedPumpQty > 0) {
+        pushZeroItem(selectedPackage.includedPumpName || normalizedEquipment.pump?.name || 'Pump', includedPumpQty);
+      }
+      if (includedFilterQty > 0) {
+        pushZeroItem(selectedPackage.includedFilterName || normalizedEquipment.filter?.name || 'Filter', includedFilterQty);
+      }
+      if (includedCleanerQty > 0) {
+        pushZeroItem(selectedPackage.includedCleanerName || normalizedEquipment.cleaner?.name || 'Cleaner', includedCleanerQty);
+      }
+      if (includedHeaterQty > 0) {
+        pushZeroItem(selectedPackage.includedHeaterName || normalizedEquipment.heater?.name || 'Heater', includedHeaterQty);
+      }
+      if (includedAutomationQty > 0) {
+        pushZeroItem(
+          selectedPackage.includedAutomationName || normalizedEquipment.automation?.name || 'Automation',
+          includedAutomationQty
+        );
+      }
+      if (includedSaltQty > 0) {
+        pushZeroItem(
+          selectedPackage.includedSaltSystemName || normalizedEquipment.saltSystem?.name || 'Sanitation System',
+          includedSaltQty
+        );
+      }
+      if (includedPoolLightQty > 0) {
+        pushZeroItem(
+          `Pool Light - ${selectedPackage.includedPoolLightName || poolLights[0]?.name || 'Pool Light'}`,
+          includedPoolLightQty
+        );
+      }
+      if (includedSpaLightQty > 0) {
+        pushZeroItem(
+          `Spa Light - ${selectedPackage.includedSpaLightName || spaLights[0]?.name || 'Spa Light'}`,
+          includedSpaLightQty
+        );
+      }
+      if (includedAutoFillQty > 0) {
+        pushZeroItem(
+          selectedPackage.includedAutoFillSystemName || normalizedEquipment.autoFillSystem?.name || 'Auto-Fill System',
+          includedAutoFillQty
+        );
+      }
+      if (includedSanitationAccessoryQty > 0) {
+        pushZeroItem(
+          selectedPackage.includedSanitationAccessoryName ||
+            normalizedEquipment.sanitationAccessory?.name ||
+            'Sanitation Accessory',
+          includedSanitationAccessoryQty
+        );
       }
 
-    if (additionalSaltCost > 0 && normalizedEquipment.additionalSaltSystem?.name) {
-      items.push({
-        category: 'Equipment',
-        description: normalizedEquipment.additionalSaltSystem.name,
-        unitPrice: additionalSaltCost,
-        quantity: 1,
-        total: additionalSaltCost,
-      });
-    }
+      if (pumpQty > 0 && includedPumpQty === 0 && normalizedEquipment.pump?.name) {
+        pushUpgrade(normalizedEquipment.pump.name, pumpCost, pumpQty);
+      }
 
-    // Auto-fill system
-    if (hasAutoFillSystem) {
-      items.push({
-        category: 'Equipment',
-        description: normalizedEquipment.autoFillSystem?.name || 'Auto-Fill System',
-        unitPrice: autoFillCost,
-        quantity: autoFillQty,
-        total: autoFillCost * autoFillQty,
+      additionalPrimaryPumps.forEach((pump) => {
+        const additionalPumpCost = getEquipmentItemCost(pump as any, pumpOverhead);
+        pushUpgrade(additionalPumpDescription(pump?.name), additionalPumpCost, 1);
       });
-    }
 
-    // Accessories
-    if (normalizedEquipment.hasBlanketReel) {
-      items.push({
-        category: 'Equipment',
-        description: 'Blanket Reel',
-        unitPrice: pricingData.equipment.blanketReel,
-        quantity: 1,
-        total: pricingData.equipment.blanketReel,
+      auxiliaryPumps.forEach((pump, idx) => {
+        const auxCost = getEquipmentItemCost(pump as any, pumpOverhead);
+        pushUpgrade(pump?.name || `Auxiliary Pump ${idx + 1}`, auxCost, 1);
       });
-    }
 
-    if (normalizedEquipment.hasSolarBlanket) {
-      items.push({
-        category: 'Equipment',
-        description: 'Solar Blanket',
-        unitPrice: pricingData.equipment.solarBlanket,
-        quantity: 1,
-        total: pricingData.equipment.solarBlanket,
-      });
-    }
+      const extraFilterQty = Math.max(filterQty - includedFilterQty, 0);
+      if (extraFilterQty > 0 && normalizedEquipment.filter?.name) {
+        pushUpgrade(normalizedEquipment.filter.name, filterCost, extraFilterQty);
+      }
 
-    if (!hasAutoFillSystem && normalizedEquipment.hasAutoFill) {
-      items.push({
-        category: 'Equipment',
-        description: 'Auto Fill',
-        unitPrice: pricingData.equipment.autoFill,
-        quantity: 1,
-        total: pricingData.equipment.autoFill,
-      });
-    }
+      const extraCleanerQty = Math.max(cleanerQty - includedCleanerQty, 0);
+      if (extraCleanerQty > 0 && normalizedEquipment.cleaner?.name) {
+        pushUpgrade(normalizedEquipment.cleaner.name, cleanerCost, extraCleanerQty);
+      }
 
-    if (normalizedEquipment.hasHandrail) {
-      items.push({
-        category: 'Equipment',
-        description: 'Handrail',
-        unitPrice: pricingData.equipment.handrail,
-        quantity: 1,
-        total: pricingData.equipment.handrail,
-      });
-    }
+      const extraHeaterQty = Math.max(heaterQty - includedHeaterQty, 0);
+      if (extraHeaterQty > 0 && normalizedEquipment.heater?.name) {
+        pushUpgrade(normalizedEquipment.heater.name, heaterCost, extraHeaterQty);
+      }
 
-    if (normalizedEquipment.hasStartupChemicals) {
-      items.push({
-        category: 'Equipment',
-        description: 'Startup Chemicals',
-        unitPrice: pricingData.equipment.startupChemicals,
-        quantity: 1,
-        total: pricingData.equipment.startupChemicals,
+      addLightGroup(poolLights.slice(includedPoolLightQty), 'Pool', ' (upgrade)');
+      if (hasSpa) {
+        addLightGroup(spaLights.slice(includedSpaLightQty), 'Spa', ' (upgrade)');
+      }
+
+      const extraAutomationQty = Math.max(automationQty - includedAutomationQty, 0);
+      if (extraAutomationQty > 0 && normalizedEquipment.automation?.name) {
+        pushUpgrade(normalizedEquipment.automation.name, automationCost, extraAutomationQty);
+      }
+
+      if ((automationQty > 0 || includedAutomationQty > 0) && normalizedEquipment.automation.zones > 0) {
+        pushUpgrade(
+          'Additional Automation Zones',
+          pricingData.equipment.automationZoneAddon,
+          normalizedEquipment.automation.zones
+        );
+      }
+
+      const extraSaltQty = Math.max(saltQty - includedSaltQty, 0);
+      if (extraSaltQty > 0 && normalizedEquipment.saltSystem?.name) {
+        pushUpgrade(normalizedEquipment.saltSystem.name, saltCost, extraSaltQty);
+      }
+
+      if (normalizedEquipment.additionalSaltSystem?.name) {
+        pushUpgrade(normalizedEquipment.additionalSaltSystem.name, additionalSaltCost, 1);
+      }
+
+      const extraAutoFillQty = Math.max(autoFillQty - includedAutoFillQty, 0);
+      if (extraAutoFillQty > 0 && hasAutoFillSystem) {
+        pushUpgrade(normalizedEquipment.autoFillSystem?.name || 'Auto-Fill System', autoFillCost, extraAutoFillQty);
+      }
+
+      const extraSanitationAccessoryQty = Math.max(sanitationAccessoryQty - includedSanitationAccessoryQty, 0);
+      if (extraSanitationAccessoryQty > 0 && normalizedEquipment.sanitationAccessory?.name) {
+        pushUpgrade(normalizedEquipment.sanitationAccessory.name, sanitationAccessoryCost, extraSanitationAccessoryQty);
+      }
+
+      if (normalizedEquipment.hasBlanketReel) {
+        pushUpgrade('Blanket Reel', pricingData.equipment.blanketReel, 1);
+      }
+      if (normalizedEquipment.hasSolarBlanket) {
+        pushUpgrade('Solar Blanket', pricingData.equipment.solarBlanket, 1);
+      }
+      if (!hasAutoFillSystem && normalizedEquipment.hasAutoFill) {
+        pushUpgrade('Auto Fill', pricingData.equipment.autoFill, 1);
+      }
+      if (normalizedEquipment.hasHandrail) {
+        pushUpgrade('Handrail', pricingData.equipment.handrail, 1);
+      }
+      if (normalizedEquipment.hasStartupChemicals) {
+        pushUpgrade('Startup Chemicals', pricingData.equipment.startupChemicals, 1);
+      }
+    } else {
+      const checkValveCost = Number((pricingData as any)?.equipment?.checkValve || 0);
+
+      pushItem('Base White Goods', prices.baseWhiteGoods, 1);
+
+      if (pumpQty > 0) {
+        pushItem(normalizedEquipment.pump.name, pumpCost, pumpQty);
+      }
+
+      additionalPrimaryPumps.forEach((pump) => {
+        const additionalPumpCost = getEquipmentItemCost(pump as any, pumpOverhead);
+        pushItem(additionalPumpDescription(pump?.name), additionalPumpCost, 1);
       });
+
+      auxiliaryPumps.forEach((pump, idx) => {
+        const auxCost = getEquipmentItemCost(pump as any, pumpOverhead);
+        pushItem(pump.name || `Auxiliary Pump ${idx + 1}`, auxCost, 1);
+      });
+
+      if (filterQty > 0) {
+        pushItem(normalizedEquipment.filter.name, filterCost, filterQty);
+      }
+
+      if (cleanerCost > 0 && cleanerQty > 0) {
+        pushItem(normalizedEquipment.cleaner.name, cleanerCost, cleanerQty);
+      }
+
+      if (heaterQty > 0) {
+        pushItem(normalizedEquipment.heater.name, heaterCost, heaterQty);
+      }
+
+      addLightGroup(poolLights, 'Pool');
+      if (hasSpa) {
+        addLightGroup(spaLights, 'Spa');
+      }
+
+      if (automationQty > 0) {
+        pushItem(normalizedEquipment.automation.name, automationCost, automationQty);
+      }
+
+      if (automationQty > 0 && normalizedEquipment.automation.zones > 0) {
+        pushItem(
+          'Additional Automation Zones',
+          pricingData.equipment.automationZoneAddon,
+          normalizedEquipment.automation.zones
+        );
+      }
+
+      if (saltCost > 0 && normalizedEquipment.saltSystem?.name && saltQty > 0) {
+        pushItem(normalizedEquipment.saltSystem.name, saltCost, saltQty);
+      }
+
+      if (additionalSaltCost > 0 && normalizedEquipment.additionalSaltSystem?.name) {
+        pushItem(normalizedEquipment.additionalSaltSystem.name, additionalSaltCost, 1);
+      }
+
+      if (hasAutoFillSystem) {
+        pushItem(normalizedEquipment.autoFillSystem?.name || 'Auto-Fill System', autoFillCost, autoFillQty);
+      }
+
+      if (sanitationAccessoryCost > 0 && sanitationAccessoryQty > 0 && normalizedEquipment.sanitationAccessory?.name) {
+        pushItem(normalizedEquipment.sanitationAccessory.name, sanitationAccessoryCost, sanitationAccessoryQty);
+      }
+
+      if (normalizedEquipment.hasBlanketReel) {
+        pushItem('Blanket Reel', pricingData.equipment.blanketReel, 1);
+      }
+
+      if (normalizedEquipment.hasSolarBlanket) {
+        pushItem('Solar Blanket', pricingData.equipment.solarBlanket, 1);
+      }
+
+      if (!hasAutoFillSystem && normalizedEquipment.hasAutoFill) {
+        pushItem('Auto Fill', pricingData.equipment.autoFill, 1);
+      }
+
+      if (normalizedEquipment.hasHandrail) {
+        pushItem('Handrail', pricingData.equipment.handrail, 1);
+      }
+
+      if (normalizedEquipment.hasStartupChemicals) {
+        pushItem('Startup Chemicals', pricingData.equipment.startupChemicals, 1);
+      }
+
+      if (selectedPackage && isCustomEquipmentPackage(selectedPackage) && selectedPackage.includeCheckValve !== false && checkValveCost > 0) {
+        pushItem('Check Valve', checkValveCost, 1);
+      }
     }
 
     // Equipment tax (7.25% in sheet) - shown as separate line item
@@ -945,7 +1055,6 @@ export class EquipmentCalculations {
     const hasPool = hasPoolDefinition(poolSpecs);
     const normalizedEquipment = normalizeEquipmentLighting(equipment, { hasPool, hasSpa, poolSpecs });
     const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
-    const pumpQty = this.getPumpQuantity(normalizedEquipment);
 
     if (!this.hasEquipmentSelection(normalizedEquipment)) {
       return items;
@@ -977,8 +1086,7 @@ export class EquipmentCalculations {
         : normalizedEquipment?.auxiliaryPump
           ? 1
           : 0;
-
-    const additionalPumpCount = Math.max(pumpQty - 1, 0) + auxiliaryPumpCount;
+    const additionalPumpCount = getAdditionalPumpSelections(normalizedEquipment).length + auxiliaryPumpCount;
 
     if (additionalPumpCount > 0) {
       items.push({
@@ -1170,13 +1278,12 @@ export class InteriorFinishCalculations {
 
     // Fittings (Drains, Vac, Returns, Hydro) as per INT sheet logic
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
-    const pumpName = equipment?.pump?.name?.toLowerCase() || '';
-    const pumpQty = Math.max(
-      equipment?.pumpQuantity ?? (pumpName && !pumpName.includes('no pump') ? 1 : 0),
-      0
-    );
+    const pumpQty = getBasePumpQuantity(equipment);
     const pumpCost = getEquipmentItemCost(equipment?.pump as any, pumpOverhead);
-    const mainPumpCount = pumpCost > 0 ? pumpQty : 0;
+    const additionalPrimaryPumpCount = getAdditionalPumpSelections(equipment).filter(
+      (pump) => pump && getEquipmentItemCost(pump as any, pumpOverhead) > 0
+    ).length;
+    const mainPumpCount = (pumpCost > 0 ? pumpQty : 0) + additionalPrimaryPumpCount;
     const auxPumpCount = (
       equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
         ? equipment.auxiliaryPumps

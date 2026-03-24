@@ -7,6 +7,7 @@ import pricingData from './pricingData';
 import { CalculationModules } from './pricingEngineComplete';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { CUSTOM_OPTIONS_SUBCATEGORY } from '../utils/costBreakdownSubcategories';
+import { getSelectedEquipmentPackage, isFixedEquipmentPackage } from '../utils/equipmentPackages';
 import {
   getCustomOptionTotal,
   getOffContractTotal,
@@ -109,6 +110,7 @@ export class MasterPricingEngine {
     const drainage = proposal.drainage!;
     const equipment = proposal.equipment!;
     const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0, customOptions: [] };
+    const selectedEquipmentPackage = getSelectedEquipmentPackage(equipment);
     const customFeatures = proposal.customFeatures!;
     const interiorFinish = proposal.interiorFinish!;
     const county = proposal.customerInfo?.county;
@@ -156,6 +158,12 @@ export class MasterPricingEngine {
     const waterFeaturesAsEquipment = waterFeaturesItems.map((item) => ({
       ...item,
       category: 'Equipment',
+      description:
+        selectedEquipmentPackage && isFixedEquipmentPackage(selectedEquipmentPackage)
+          ? item.description.toLowerCase().includes('(upgrade)')
+            ? item.description
+            : `${item.description} (upgrade)`
+          : item.description,
     }));
     equipmentItems = rebuildEquipmentTax([...equipmentItems, ...waterFeaturesAsEquipment]);
     const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);

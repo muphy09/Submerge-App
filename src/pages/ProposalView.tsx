@@ -34,6 +34,7 @@ import {
   getDefaultManualAdjustments,
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
+import { getAdditionalPumpSelections } from '../utils/pumpSelections';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
 import { hasRetiredEquipment } from '../utils/retiredEquipment';
@@ -82,6 +83,9 @@ const summarizeSelectionWithQuantity = (
 
 const summarizePumpSelection = (equipment: Proposal['equipment']): string => {
   const primaryPump = hasNamedSelection(equipment.pump?.name, 'no pump') ? [equipment.pump.name] : [];
+  const additionalPrimaryPumps = getAdditionalPumpSelections(equipment)
+    .map((pump) => pump?.name)
+    .filter((name): name is string => hasNamedSelection(name, 'no pump'));
   const auxiliarySelections = equipment.auxiliaryPumps?.length
     ? equipment.auxiliaryPumps
     : equipment.auxiliaryPump
@@ -90,7 +94,7 @@ const summarizePumpSelection = (equipment: Proposal['equipment']): string => {
   const auxiliaryPumps = auxiliarySelections
     .map((pump) => pump?.name)
     .filter((name): name is string => hasNamedSelection(name, 'no pump'));
-  return summarizeNamedSelections([...primaryPump, ...auxiliaryPumps]);
+  return summarizeNamedSelections([...primaryPump, ...additionalPrimaryPumps, ...auxiliaryPumps]);
 };
 
 const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefined): string => {

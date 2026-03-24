@@ -27,12 +27,14 @@ const hasRealSelection = (name: string | undefined, placeholder: string): boolea
 
 export type RetiredEquipmentFlags = {
   pump: boolean;
+  additionalPumps: boolean[];
   auxiliaryPumps: boolean[];
   filter: boolean;
   cleaner: boolean;
   heater: boolean;
   automation: boolean;
   saltSystem: boolean;
+  sanitationAccessory: boolean;
   autoFillSystem: boolean;
   poolLights: boolean[];
   spaLights: boolean[];
@@ -43,12 +45,14 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
   if (!equipment) {
     return {
       pump: false,
+      additionalPumps: [],
       auxiliaryPumps: [],
       filter: false,
       cleaner: false,
       heater: false,
       automation: false,
       saltSystem: false,
+      sanitationAccessory: false,
       autoFillSystem: false,
       poolLights: [],
       spaLights: [],
@@ -66,9 +70,14 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     (equipment.automation?.zones ?? 0) > 0;
   const saltSelected =
     hasRealSelection(equipment.saltSystem?.name, 'no salt') && !isIncludedSaltCellSelection(equipment.saltSystem);
+  const sanitationAccessorySelected = hasRealSelection(equipment.sanitationAccessory?.name, 'no sanitation');
   const autoFillSelected = hasRealSelection(equipment.autoFillSystem?.name, 'no auto');
 
   const pump = pumpSelected && isRetiredName(equipment.pump?.name, pricingData.equipment.pumps);
+  const additionalPumpSelections = equipment.additionalPumps ?? [];
+  const additionalPumps = additionalPumpSelections.map((item) =>
+    isRetiredName(item?.name, pricingData.equipment.pumps)
+  );
   const auxiliarySelections = equipment.auxiliaryPumps?.length
     ? equipment.auxiliaryPumps
     : equipment.auxiliaryPump
@@ -87,6 +96,12 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     saltSelected &&
     !isIncludedSaltCellSelection(equipment.saltSystem) &&
     isRetiredName(equipment.saltSystem?.name, pricingData.equipment.saltSystem);
+  const sanitationAccessory =
+    sanitationAccessorySelected &&
+    isRetiredName(
+      equipment.sanitationAccessory?.name,
+      ((pricingData as any).equipment?.sanitationAccessories || []) as NamedItem[]
+    );
   const autoFillSystem =
     autoFillSelected && isRetiredName(equipment.autoFillSystem?.name, pricingData.equipment.autoFillSystem);
   const poolLights = (equipment.poolLights ?? []).map((light) =>
@@ -103,19 +118,23 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     heater ||
     automation ||
     saltSystem ||
+    sanitationAccessory ||
     autoFillSystem ||
+    additionalPumps.some(Boolean) ||
     auxiliaryPumps.some(Boolean) ||
     poolLights.some(Boolean) ||
     spaLights.some(Boolean);
 
   return {
     pump,
+    additionalPumps,
     auxiliaryPumps,
     filter,
     cleaner,
     heater,
     automation,
     saltSystem,
+    sanitationAccessory,
     autoFillSystem,
     poolLights,
     spaLights,

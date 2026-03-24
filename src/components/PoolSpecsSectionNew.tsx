@@ -17,6 +17,8 @@ interface Props {
   onChangeCustomerInfo: (info: CustomerInfo) => void;
   tileCopingDecking?: TileCopingDecking;
   onChangeTileCopingDecking?: (data: TileCopingDecking) => void;
+  disableSpaSelections?: boolean;
+  disabledSpaMessage?: string;
 }
 
 // Helper component for compact inputs with inline unit labels
@@ -91,6 +93,8 @@ function PoolSpecsSectionNew({
   onChangeCustomerInfo,
   tileCopingDecking,
   onChangeTileCopingDecking,
+  disableSpaSelections = false,
+  disabledSpaMessage,
 }: Props) {
   const dropdownStyle = { width: '100%', height: '38px', padding: '6px 10px', lineHeight: '20px', boxSizing: 'border-box' as const };
   const raisedSpaFacingOptions = getMasonryFacingOptions(pricingData.masonry, 'raisedSpa');
@@ -428,17 +432,25 @@ function PoolSpecsSectionNew({
           </button>
           <button
             type="button"
-            className={`pool-type-btn ${data.spaType === 'gunite' ? 'active' : ''}`}
-            onClick={() => handleChange('spaType', 'gunite')}
+            className={`pool-type-btn ${data.spaType === 'gunite' ? 'active' : ''} ${disableSpaSelections ? 'disabled' : ''}`}
+            onClick={() => {
+              if (disableSpaSelections) return;
+              handleChange('spaType', 'gunite');
+            }}
+            title={disableSpaSelections ? disabledSpaMessage : undefined}
+            aria-disabled={disableSpaSelections}
           >
             Shotcrete (Custom)
           </button>
           <button
             type="button"
-            className={`pool-type-btn ${data.spaType === 'fiberglass' ? 'active' : ''}`}
-            onClick={() =>
-              handleChange('spaType', 'fiberglass')
-            }
+            className={`pool-type-btn ${data.spaType === 'fiberglass' ? 'active' : ''} ${disableSpaSelections ? 'disabled' : ''}`}
+            onClick={() => {
+              if (disableSpaSelections) return;
+              handleChange('spaType', 'fiberglass');
+            }}
+            title={disableSpaSelections ? disabledSpaMessage : undefined}
+            aria-disabled={disableSpaSelections}
           >
             Fiberglass Spa
           </button>

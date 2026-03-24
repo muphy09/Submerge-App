@@ -26,6 +26,7 @@ import {
   deletePricingModel as deletePricingModelRemote,
 } from '../services/pricingModelsAdapter';
 import { getDefaultCleanerIndex } from '../utils/cleanerDefaults';
+import { normalizeEquipmentPackageOptions } from '../utils/equipmentPackages';
 import { slugifyMasonryFacingId } from '../utils/masonryFacing';
 import './PricingDataModal.css';
 
@@ -705,6 +706,322 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           }
         }}
       />
+    );
+  };
+
+  const getPackageBuilderOptions = (path: Path, selected?: string) => {
+    const names = (((getValue(data, path) as any[]) || []) as Array<{ name?: string }>)
+      .map((entry) => String(entry?.name || '').trim())
+      .filter(Boolean);
+    const uniqueNames = Array.from(new Set(names));
+    if (selected && !uniqueNames.includes(selected)) {
+      uniqueNames.unshift(selected);
+    }
+    return uniqueNames;
+  };
+
+  const updatePackageOptions = (nextPackages: any[]) => {
+    updatePricingValue(['equipment', 'packageOptions'], normalizeEquipmentPackageOptions(nextPackages));
+    setHasChanges(true);
+  };
+
+  const getEquipmentPackageOptionsForEditor = () =>
+    normalizeEquipmentPackageOptions((((getValue(data, ['equipment', 'packageOptions']) as any[]) || []) as any[]));
+
+  const updatePackageOption = (index: number, key: string, value: any) => {
+    const current = getEquipmentPackageOptionsForEditor().map((option) => ({ ...option }));
+    current[index] = { ...current[index], [key]: value };
+    updatePackageOptions(current);
+  };
+
+  const addEquipmentPackageOption = () => {
+    const current = getEquipmentPackageOptionsForEditor().map((option) => ({ ...option }));
+    current.push({
+      id: `package-${Date.now()}`,
+      name: 'New Equipment Package',
+      mode: 'fixed',
+      enabled: true,
+      description: '',
+      notes: '',
+      basePrice: 0,
+      includeCheckValve: true,
+      supportsSpa: true,
+      allowAdditionalPumps: false,
+      allowHeaterUpgrade: false,
+      allowCleanerUpgrade: false,
+      allowAutoFillUpgrade: false,
+      allowPoolLightUpgrade: false,
+      allowSpaLightUpgrade: false,
+      allowWaterFeatureUpgrade: false,
+      allowSanitationAccessoryUpgrade: false,
+      includedWaterFeaturesBeforeExtraPump: 0,
+      includedPumpName: '',
+      includedPumpQuantity: 0,
+      includedFilterName: '',
+      includedFilterQuantity: 0,
+      includedCleanerName: '',
+      includedCleanerQuantity: 0,
+      includedHeaterName: '',
+      includedHeaterQuantity: 0,
+      includedAutomationName: '',
+      includedAutomationQuantity: 0,
+      includedSaltSystemName: '',
+      includedSaltSystemQuantity: 0,
+      includedAutoFillSystemName: '',
+      includedAutoFillSystemQuantity: 0,
+      includedPoolLightName: '',
+      includedPoolLightQuantity: 0,
+      includedSpaLightName: '',
+      includedSpaLightQuantity: 0,
+      includedSanitationAccessoryName: '',
+      includedSanitationAccessoryQuantity: 0,
+      defaultCleanerName: '',
+      defaultCleanerQuantity: 0,
+      defaultAutoFillSystemName: '',
+      defaultAutoFillSystemQuantity: 0,
+      defaultSanitationAccessoryName: '',
+      defaultSanitationAccessoryQuantity: 0,
+    });
+    updatePackageOptions(current);
+  };
+
+  const removeEquipmentPackageOption = (index: number) => {
+    const current = getEquipmentPackageOptionsForEditor().map((option) => ({ ...option }));
+    const target = current[index];
+    if (!target || target.mode === 'custom' || target.id === 'custom') {
+      return;
+    }
+    updatePackageOptions(current.filter((_, optionIndex) => optionIndex !== index));
+  };
+
+  const renderEquipmentPackageBuilder = () => {
+    const packageOptions = getEquipmentPackageOptionsForEditor().map((option) => ({ ...option }));
+    const equipmentOptions = {
+      pumps: getPackageBuilderOptions(['equipment', 'pumps']),
+      filters: getPackageBuilderOptions(['equipment', 'filters']),
+      cleaners: getPackageBuilderOptions(['equipment', 'cleaners']),
+      heaters: getPackageBuilderOptions(['equipment', 'heaters']),
+      automation: getPackageBuilderOptions(['equipment', 'automation']),
+      sanitation: getPackageBuilderOptions(['equipment', 'saltSystem']),
+      autoFill: getPackageBuilderOptions(['equipment', 'autoFillSystem']),
+      poolLights: getPackageBuilderOptions(['equipment', 'lights', 'poolLights']),
+      spaLights: getPackageBuilderOptions(['equipment', 'lights', 'spaLights']),
+      sanitationAccessories: getPackageBuilderOptions(['equipment', 'sanitationAccessories']),
+    };
+
+    const renderPackageNameSelect = (
+      pkg: any,
+      index: number,
+      label: string,
+      nameKey: string,
+      quantityKey: string,
+      options: string[],
+      noneLabel: string = 'None'
+    ) => (
+      <div className="pricing-package-item" key={`${pkg.id}-${nameKey}`}>
+        <label className="pricing-input-block">
+          <span className="pricing-input-block__label">{label}</span>
+          <select
+            className="pricing-input"
+            value={pkg[nameKey] || ''}
+            onChange={(e) => updatePackageOption(index, nameKey, e.target.value)}
+          >
+            <option value="">{noneLabel}</option>
+            {options.map((option) => (
+              <option key={`${nameKey}-${option}`} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="pricing-input-block pricing-package-item__qty">
+          <span className="pricing-input-block__label">Qty</span>
+          <input
+            type="number"
+            className="pricing-input"
+            value={pkg[quantityKey] ?? 0}
+            min={0}
+            onChange={(e) => updatePackageOption(index, quantityKey, toNumber(e.target.value))}
+          />
+        </label>
+      </div>
+    );
+
+    const renderPackageCheckbox = (pkg: any, index: number, key: string, label: string, description?: string) => (
+      <label className="pricing-package-flag" key={`${pkg.id}-${key}`}>
+        <input
+          type="checkbox"
+          checked={Boolean(pkg[key])}
+          onChange={(e) => updatePackageOption(index, key, e.target.checked)}
+          disabled={pkg.mode === 'custom' && key === 'enabled'}
+        />
+        <span>
+          <strong>{label}</strong>
+          {description && <small>{description}</small>}
+        </span>
+      </label>
+    );
+
+    return (
+      <div className="pricing-package-builder">
+        <div className="pricing-package-builder__intro">
+          <p>
+            Package options are specific to this pricing model, so each franchise can bundle equipment differently or
+            offer only the Custom option.
+          </p>
+          <button type="button" className="pricing-chip-button" onClick={addEquipmentPackageOption}>
+            Add Package
+          </button>
+        </div>
+        {packageOptions.map((pkg, index) => {
+          const isCustom = pkg.mode === 'custom' || pkg.id === 'custom';
+          return (
+            <div key={pkg.id || `package-${index}`} className={`pricing-package-card ${isCustom ? 'is-custom' : ''}`}>
+              <div className="pricing-package-card__header">
+                <div>
+                  <h5>{pkg.name || (isCustom ? 'Custom' : 'Unnamed Package')}</h5>
+                  <p>
+                    {isCustom
+                      ? 'Custom keeps normal itemized pricing. Keep this option available for franchises that do not use fixed bundles.'
+                      : 'Fixed package price replaces the bundled equipment COGS and leaves extras as upgrades.'}
+                  </p>
+                </div>
+                {!isCustom && (
+                  <button
+                    type="button"
+                    className="pricing-chip-button danger"
+                    onClick={() => removeEquipmentPackageOption(index)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              <div className="pricing-package-card__grid">
+                <label className="pricing-input-block">
+                  <span className="pricing-input-block__label">Package Name</span>
+                  <input
+                    type="text"
+                    className="pricing-input"
+                    value={pkg.name || ''}
+                    onChange={(e) => updatePackageOption(index, 'name', e.target.value)}
+                  />
+                </label>
+                <label className="pricing-input-block">
+                  <span className="pricing-input-block__label">Package ID</span>
+                  <input type="text" className="pricing-input" value={pkg.id || ''} readOnly />
+                </label>
+                <label className="pricing-input-block">
+                  <span className="pricing-input-block__label">Pricing Mode</span>
+                  <input
+                    type="text"
+                    className="pricing-input"
+                    value={isCustom ? 'Custom / Itemized' : 'Fixed Package'}
+                    readOnly
+                  />
+                </label>
+                <label className="pricing-input-block">
+                  <span className="pricing-input-block__label">Base Package Price</span>
+                  <div className="pricing-field__input-wrap has-prefix">
+                    <span className="pricing-field__prefix">$</span>
+                    <input
+                      type="number"
+                      className="pricing-field__input pricing-field__input--bare"
+                      value={pkg.basePrice ?? 0}
+                      onChange={(e) => updatePackageOption(index, 'basePrice', toNumber(e.target.value))}
+                    />
+                  </div>
+                </label>
+                <label className="pricing-input-block">
+                  <span className="pricing-input-block__label">Description</span>
+                  <input
+                    type="text"
+                    className="pricing-input"
+                    value={pkg.description || ''}
+                    onChange={(e) => updatePackageOption(index, 'description', e.target.value)}
+                  />
+                </label>
+                <label className="pricing-input-block pricing-package-card__notes">
+                  <span className="pricing-input-block__label">Designer Notes / Restrictions</span>
+                  <textarea
+                    className="pricing-package-textarea"
+                    value={pkg.notes || ''}
+                    onChange={(e) => updatePackageOption(index, 'notes', e.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="pricing-package-flags">
+                {renderPackageCheckbox(pkg, index, 'enabled', 'Enabled', 'Disable to hide this package from designers.')}
+                {renderPackageCheckbox(pkg, index, 'includeCheckValve', 'Include Check Valve', 'Adds the equipment check valve cost to the package total.')}
+                {renderPackageCheckbox(pkg, index, 'supportsSpa', 'Spa Compatible', 'When off, spa selection and spa-incompatible package buttons are blocked.')}
+              </div>
+
+              {!isCustom && (
+                <>
+                  <div className="pricing-package-section">
+                    <h6>Included Equipment</h6>
+                    <div className="pricing-package-items">
+                      {renderPackageNameSelect(pkg, index, 'Pump', 'includedPumpName', 'includedPumpQuantity', equipmentOptions.pumps)}
+                      {renderPackageNameSelect(pkg, index, 'Filter', 'includedFilterName', 'includedFilterQuantity', equipmentOptions.filters)}
+                      {renderPackageNameSelect(pkg, index, 'Cleaner', 'includedCleanerName', 'includedCleanerQuantity', equipmentOptions.cleaners)}
+                      {renderPackageNameSelect(pkg, index, 'Automation', 'includedAutomationName', 'includedAutomationQuantity', equipmentOptions.automation)}
+                      {renderPackageNameSelect(pkg, index, 'Sanitation System', 'includedSaltSystemName', 'includedSaltSystemQuantity', equipmentOptions.sanitation)}
+                      {renderPackageNameSelect(pkg, index, 'Heater', 'includedHeaterName', 'includedHeaterQuantity', equipmentOptions.heaters)}
+                      {renderPackageNameSelect(pkg, index, 'Pool Lights', 'includedPoolLightName', 'includedPoolLightQuantity', equipmentOptions.poolLights)}
+                      {renderPackageNameSelect(pkg, index, 'Spa Lights', 'includedSpaLightName', 'includedSpaLightQuantity', equipmentOptions.spaLights)}
+                      {renderPackageNameSelect(pkg, index, 'Auto-Fill', 'includedAutoFillSystemName', 'includedAutoFillSystemQuantity', equipmentOptions.autoFill)}
+                      {renderPackageNameSelect(pkg, index, 'Sanitation Accessory', 'includedSanitationAccessoryName', 'includedSanitationAccessoryQuantity', equipmentOptions.sanitationAccessories)}
+                    </div>
+                  </div>
+
+                  <div className="pricing-package-section">
+                    <h6>Default Upgrade Selections</h6>
+                    <div className="pricing-package-items">
+                      {renderPackageNameSelect(pkg, index, 'Cleaner Default', 'defaultCleanerName', 'defaultCleanerQuantity', equipmentOptions.cleaners)}
+                      {renderPackageNameSelect(pkg, index, 'Auto-Fill Default', 'defaultAutoFillSystemName', 'defaultAutoFillSystemQuantity', equipmentOptions.autoFill)}
+                      {renderPackageNameSelect(
+                        pkg,
+                        index,
+                        'Sanitation Accessory Default',
+                        'defaultSanitationAccessoryName',
+                        'defaultSanitationAccessoryQuantity',
+                        equipmentOptions.sanitationAccessories
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pricing-package-section">
+                    <h6>Allowed Upgrades</h6>
+                    <div className="pricing-package-flags">
+                      {renderPackageCheckbox(pkg, index, 'allowAdditionalPumps', 'Additional Pumps')}
+                      {renderPackageCheckbox(pkg, index, 'allowHeaterUpgrade', 'Heaters')}
+                      {renderPackageCheckbox(pkg, index, 'allowCleanerUpgrade', 'Cleaners')}
+                      {renderPackageCheckbox(pkg, index, 'allowAutoFillUpgrade', 'Auto-Fill')}
+                      {renderPackageCheckbox(pkg, index, 'allowPoolLightUpgrade', 'Pool Lights')}
+                      {renderPackageCheckbox(pkg, index, 'allowSpaLightUpgrade', 'Spa Lights')}
+                      {renderPackageCheckbox(pkg, index, 'allowWaterFeatureUpgrade', 'Water Features')}
+                      {renderPackageCheckbox(pkg, index, 'allowSanitationAccessoryUpgrade', 'Sanitation Accessories')}
+                    </div>
+                    <label className="pricing-input-block pricing-package-water-feature-limit">
+                      <span className="pricing-input-block__label">Water Features Allowed Before Another Pump</span>
+                      <input
+                        type="number"
+                        className="pricing-input"
+                        min={0}
+                        value={pkg.includedWaterFeaturesBeforeExtraPump ?? 0}
+                        onChange={(e) =>
+                          updatePackageOption(index, 'includedWaterFeaturesBeforeExtraPump', toNumber(e.target.value))
+                        }
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
     );
   };
 
@@ -1970,6 +2287,15 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Equipment',
         groups: [
           {
+            title: 'Bundle Pricing',
+            scalars: [
+              { label: 'Check Valve', path: ['equipment', 'checkValve'], type: 'number', prefix: '$', tooltip: 'Added to fixed package totals when enabled, and billed directly on the Custom package option.' },
+              { label: 'Base White Goods', path: ['equipment', 'baseWhiteGoods'], type: 'number', prefix: '$', tooltip: 'Legacy itemized equipment charge used outside of fixed package pricing.' },
+              { label: 'Equipment Tax Rate', path: ['equipment', 'taxRate'], type: 'number', prefix: '%', isPercent: true, tooltip: 'Applied after equipment subtotal, including package totals and upgrades.' },
+            ],
+            render: renderEquipmentPackageBuilder,
+          },
+          {
             title: 'Pumps',
             lists: [
               {
@@ -2122,6 +2448,17 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'excludedFromSaltCell', label: 'Excluded from Salt Cell', type: 'boolean' },
+                ],
+              },
+              {
+                title: 'Sanitation accessories',
+                path: ['equipment', 'sanitationAccessories'],
+                addLabel: 'Add sanitation accessory',
+                fields: [
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Accessory name' },
+                  { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
                 ],
               },
             ],
@@ -2517,6 +2854,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       },
     ],
     [
+      data,
       masonryFacingFields,
       data.electrical.overrunThreshold,
       data.electrical.heatPumpOverrunThreshold,
