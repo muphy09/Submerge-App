@@ -1053,7 +1053,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: '2.5" pipe (per ft)',
                 path: ['plumbing', 'twoPointFiveInchPipe'],
                 type: 'number',
-                tooltip: 'Used for main drain + spa loop length.',
+                tooltip: 'Used for main drain length per active pump, plus one spa loop length.',
                 prefix: '$',
               },
               {

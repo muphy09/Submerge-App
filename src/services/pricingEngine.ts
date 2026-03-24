@@ -26,6 +26,11 @@ const roundUp = (value: number): number => Math.ceil(value);
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 const MISC_PLUMBING_SUBCATEGORY = 'Misc. Plumbing';
 
+const isPlaceholderPumpName = (name?: string): boolean => {
+  const normalized = name?.toLowerCase() || '';
+  return !normalized || normalized.includes('no pump') || normalized.includes('no aux') || normalized.includes('no auxiliary');
+};
+
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasGuniteDimensions =
     poolSpecs.surfaceArea > 0 ||
@@ -522,9 +527,22 @@ export class PlumbingCalculations {
       });
     }
 
+    const auxiliarySelections = equipment?.auxiliaryPumps?.length
+      ? equipment.auxiliaryPumps
+      : equipment?.auxiliaryPump
+      ? [equipment.auxiliaryPump]
+      : [];
+    const primaryPumpQty = isPlaceholderPumpName(equipment?.pump?.name)
+      ? 0
+      : Math.max(equipment?.pumpQuantity ?? 0, 0) || 1;
+    const auxiliaryPumpCount = auxiliarySelections.filter((pump) => !isPlaceholderPumpName(pump?.name)).length;
+    const additionalPumpCount = Math.max(primaryPumpQty - 1, 0) + auxiliaryPumpCount;
+    const mainDrainRunMultiplier = 1 + additionalPumpCount;
+
     // Main drain + spa loop - 2.5" (PLUM!K15)
+    // Each added pump gets the same main-drain run; spa loop remains a single run.
     const spaPerimeter = isGuniteSpa ? (poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs)) : 0;
-    const twoPointFiveRun = mainDrainRun + spaPerimeter;
+    const twoPointFiveRun = mainDrainRun * mainDrainRunMultiplier + spaPerimeter;
     const twoPointFiveQty = Math.ceil(twoPointFiveRun);
     if (twoPointFiveQty > 0) {
       items.push({
@@ -706,14 +724,8 @@ export class PlumbingCalculations {
       });
     }
 
-    const auxiliarySelections = equipment?.auxiliaryPumps?.length
-      ? equipment.auxiliaryPumps
-      : equipment?.auxiliaryPump
-      ? [equipment.auxiliaryPump]
-      : [];
     const hasAuxPump = auxiliarySelections.some((pump) => {
-      const name = pump?.name?.toLowerCase() || '';
-      return Boolean(name) && !name.includes('no pump') && !name.includes('no aux') && !name.includes('no auxiliary');
+      return !isPlaceholderPumpName(pump?.name);
     });
     const addlMainDrainCost = prices.addlMainDrainWhenAuxPump ?? 0;
     if (hasAuxPump && addlMainDrainCost > 0) {
