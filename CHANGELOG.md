@@ -1,47 +1,56 @@
-# [2.0.2]
+[2.0.3]
 ## Requested Changes - 
-- ### Plumbing Cost Update
+- 
+
+
+
+
+
+-----
+[2.0.2]
+## Requested Changes - 
+- Plumbing Cost Update
     - Aligned with new prices and exposed options to edit in the Admin Panel
-- ### Exposed Pool Wall (Out of Ground Forming)
+- Exposed Pool Wall (Out of Ground Forming)
     - Added Exposed Pool Wall subcategory to Excavation
     - Same input options as selecting RBB
     - Only the RBB Forming cost bills for the Exposed Pool Wall, in addition to Strip Forms cost per LNFT
         - *Does not include base Strip Form Cost*
     - Added Backside Facing toggle (doubles the facing cost)
         - Added Parched Concrete facing option
-- ### Pool Bonding billed to Excavation category in COGS
+- Pool Bonding billed to Excavation category in COGS
     - Pool bonding now bills as LNFT perimeter of pool @ $2ft, 10% overhead. Editable
     - *Pool Bonding used to bill $500 in Steel & $125 in Equipment Set*
-- ### Blower Equipment Subcategory in Proposal Builder
+- Blower Equipment Subcategory in Proposal Builder
     - Added "Auxillary Pump" to equipment section, defaults with Spa. Fixed additional main drain
-- ### Default Pool Lights
+- Default Pool Lights
     - Pool Lights now default to 2 Pool Lights, Spa defaults to 1 Spa Light
     - Can edit which lights are default in Admin Panel
-- ### HydraPure Sanitation additional add-on
+- HydraPure Sanitation additional add-on
     - Added an "Additional Options" dropdown to include add-ons
     - Can be configured in the Admin Panel
-- ### LED Bubbler & Conduit Run, Pool Light cost
+- LED Bubbler & Conduit Run, Pool Light cost
     - Pool Lights will now bill with specific Bubblers, set in Admin Panel
         - Designer will see a UI prompt notifying them a Light has been included
     - Conduit Run now appears as an input - same value as WF run - and bills the Plumbing Conduit cost
-- ### Valve Actuator per Water Feature Zone
+- Valve Actuator per Water Feature Zone
     - Valve Actuator Cost is now an input in the Admin Panel (Misc. Plum)
     - 1 Valve Actuator is billed per unique category of Water Features
         - Ex: 2 Wok Pots bills with 1 Valve Actuator. 1 Wok Pot & 1 Jet bills with 2 Valve Actuators
-- ### Auto-Fill Electric Runs
+- Auto-Fill Electric Runs
     - Admin can edit which Auto-Fill systems require an Electric Run
     - Electric Run is mirrored to the Auto-Fill Run value, and bills as an electric run
-- ### Travertine Level 3 - Decking
+- Travertine Level 3 - Decking
     - Added Travertine Level 3 decking option
     - *Admin will be able to add / remove levels in a future update*
-- ### Default Cleaner
+- Default Cleaner
     - Admin can select a default Cleaner option (Polaris 7240)
-- ### Automation and Sanitation System logic
+- Automation and Sanitation System logic
     - Admin can select which Automation Systems include a "Salt Cell"
         - When a designer selects one of these Automation Systems, the Sanitation Systems update to only display Additional Options
     - If an Automation System is selected that does not include a Salt Cell, All Sanitation System options remain
     - HydraPure UV locatated in Additional Options of Sanitation System
-- ### Off-Contract Custom Option
+- Off-Contract Custom Option
     - Added ability to input "Off-Contract" costs inside each Custom Options category
         - Off Contract items are NOT billed to COGS and do NOT appear inside of the COGS breakdown or Contract
         - Off Contract items are broken down in a separate block (temporary) in the Proposal Summary screen
@@ -50,25 +59,25 @@
         - Removes any costs associated with Decking and routes the Off Contract Decking Cost input directly to the Retail Cost
         - Does not appear as a line item in COGS, appears in separate block in the Proposal Summary Screen
         - Contract autocomplete for decking fills as "OFF CONTRACT"
-- ###  Strip Forms RBB Additional Cost
+- Strip Forms RBB Additional Cost
     - Strip Forms now bill additional $2.5 per LNFT of RBB
     - Admin can edit price in Misc. Plumbing of Admin Panel
     - *Used to bill flat $700*
-- ### Retail Increase % adjustment option
+- Retail Increase % adjustment option
     - Added input field to adjust retail price % increase in the Admin Panel
         - COGS vs Retail Price Increase
 
 ## Quality of Life Changes
-- ### Admin Price Menu Update
+- Admin Price Menu Update
     - Every input has a label and tooltip describing what the input does
         - If an input appears in a Red background, it is not currently used
     - Ability to rename Additional Cost Columns for clarity
-- ### Save Draft button
+- Save Draft button
     - Save Draft now appears in the proposal builder
         - Takes desginer directly to summary screen in a 'Draft' state
-- ### Price Model location
+- Price Model location
     - Moved Price Model selection to the top of the proposal builder, persistent
-- ### Facing Options for RBB and Exposed Pool Wall
+-  Facing Options for RBB and Exposed Pool Wall
     - Can now add/remove facing options for RBB and EPW
     - Material Costs and labor can be changed in the same table
 
