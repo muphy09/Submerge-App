@@ -6,12 +6,12 @@
     - Added Exposed Pool Wall subcategory to Excavation
     - Same input options as selecting RBB
     - Only the RBB Forming cost bills for the Exposed Pool Wall, in addition to Strip Forms cost per LNFT
-        - * Does not include base Strip Form Cost
+        - *Does not include base Strip Form Cost*
     - Added Backside Facing toggle (doubles the facing cost)
         - Added Parched Concrete facing option
 - ### Pool Bonding billed to Excavation category in COGS
     - Pool bonding now bills as LNFT perimeter of pool @ $2ft, 10% overhead. Editable
-    - * Pool Bonding used to bill $500 in Steel & $125 in Equipment Set
+    - *Pool Bonding used to bill $500 in Steel & $125 in Equipment Set*
 - ### Blower Equipment Subcategory in Proposal Builder
     - Added "Auxillary Pump" to equipment section, defaults with Spa. Fixed additional main drain
 - ### Default Pool Lights
@@ -33,7 +33,7 @@
     - Electric Run is mirrored to the Auto-Fill Run value, and bills as an electric run
 - ### Travertine Level 3 - Decking
     - Added Travertine Level 3 decking option
-    - * Admin will be able to add / remove levels in a future update
+    - *Admin will be able to add / remove levels in a future update*
 - ### Default Cleaner
     - Admin can select a default Cleaner option (Polaris 7240)
 - ### Automation and Sanitation System logic
@@ -53,7 +53,7 @@
 - ###  Strip Forms RBB Additional Cost
     - Strip Forms now bill additional $2.5 per LNFT of RBB
     - Admin can edit price in Misc. Plumbing of Admin Panel
-    - * Used to bill flat $700
+    - *Used to bill flat $700*
 - ### Retail Increase % adjustment option
     - Added input field to adjust retail price % increase in the Admin Panel
         - COGS vs Retail Price Increase
@@ -63,7 +63,6 @@
     - Every input has a label and tooltip describing what the input does
         - If an input appears in a Red background, it is not currently used
     - Ability to rename Additional Cost Columns for clarity
-
 - ### Save Draft button
     - Save Draft now appears in the proposal builder
         - Takes desginer directly to summary screen in a 'Draft' state
