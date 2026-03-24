@@ -3,6 +3,7 @@ import {
   DEFAULT_FRANCHISE_ID,
   clearSession,
   clearMasterImpersonation,
+  readSession,
   saveSession,
   type UserRole,
   type UserSession,
@@ -199,9 +200,16 @@ export async function signInWithEmail(payload: {
 }
 
 export async function loadSessionFromSupabase(): Promise<{ session: UserSession; passwordResetRequired: boolean } | null> {
+  if (!readSession()) return null;
   const supabase = getSupabaseClient();
   if (!supabase) return null;
-  const { data } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    await supabase.auth.signOut({ scope: 'local' });
+    clearMasterImpersonation();
+    clearSession();
+    return null;
+  }
   const authSession = data?.session;
   if (!authSession?.user) return null;
 
@@ -263,7 +271,7 @@ export async function completePasswordReset(newPassword: string) {
 export async function signOut() {
   const supabase = getSupabaseClient();
   if (supabase) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
   }
   clearMasterImpersonation();
   clearSession();

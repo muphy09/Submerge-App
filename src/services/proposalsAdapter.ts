@@ -36,6 +36,37 @@ function coerceTimestamp(value?: string | null): number {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+function normalizeIdentity(value?: string | null) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getEffectiveRole(session?: UserSession | null) {
+  const role = getSessionRole((session?.role || 'designer') as any);
+  return String(role || session?.role || 'designer').trim().toLowerCase();
+}
+
+function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | null, franchiseId?: string) {
+  const role = getEffectiveRole(session);
+  const targetFranchiseId = proposal.franchiseId || franchiseId || session?.franchiseId || DEFAULT_FRANCHISE_ID;
+  const activeFranchiseId = getSessionFranchiseId();
+
+  if (role !== 'master' && targetFranchiseId !== activeFranchiseId) {
+    return false;
+  }
+
+  if (role === 'master' || role === 'owner' || role === 'admin') {
+    return true;
+  }
+
+  const proposalDesigner = normalizeIdentity((proposal as any).designerName);
+  if (!proposalDesigner) {
+    return true;
+  }
+
+  const currentUserName = normalizeIdentity(session?.userName || getSessionUserName());
+  return !currentUserName || proposalDesigner === currentUserName;
+}
+
 let pendingDeleteCache: PendingDelete[] | null = null;
 
 function loadPendingDeletes(): PendingDelete[] {
@@ -320,9 +351,11 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
 async function syncLocalCollectionToSupabase(
   locals: Proposal[],
   supabaseMap: Map<string, Proposal>,
-  franchiseId?: string
+  franchiseId?: string,
+  session?: UserSession | null
 ) {
   for (const local of locals) {
+    if (!canAttemptProposalWrite(local, session, franchiseId)) continue;
     const existing = supabaseMap.get(local.proposalNumber);
     if (!shouldSyncLocal(local, existing)) continue;
     try {
@@ -357,6 +390,7 @@ export async function syncPendingProposals() {
     const pending = (locals || []).filter((p) => p.syncStatus === 'pending');
     if (!pending.length) return;
     for (const proposal of pending) {
+      if (!canAttemptProposalWrite(proposal, session)) continue;
       try {
         const remote = await fetchSupabaseProposal(proposal.proposalNumber, session);
         const remoteTs = coerceTimestamp(remote?.lastModified || remote?.createdDate);
@@ -483,7 +517,7 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
 
   if (supabaseOnline && localRows.length) {
     await syncPendingProposals();
-    await syncLocalCollectionToSupabase(localRows, supabaseMap, targetFranchiseId);
+    await syncLocalCollectionToSupabase(localRows, supabaseMap, targetFranchiseId, session);
   }
 
   const merged = new Map<string, Proposal>();
@@ -547,7 +581,7 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
 
   const [cloud, local] = await Promise.all([supabasePromise, localPromise]);
 
-  if (supabaseOnline && local && shouldSyncLocal(local, cloud)) {
+  if (supabaseOnline && local && canAttemptProposalWrite(local, session) && shouldSyncLocal(local, cloud)) {
     try {
       const synced = await upsertToSupabase(local);
       await persistLocalProposal(synced);

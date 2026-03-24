@@ -13,7 +13,7 @@ import { initPricingDataStore, setActiveFranchiseId } from './services/pricingDa
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
-import { getSupabaseReachability, isSupabaseEnabled } from './services/supabaseClient';
+import { getSupabaseClient, getSupabaseReachability, isSupabaseEnabled } from './services/supabaseClient';
 import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
 import useKeyboardNavigation from './hooks/useKeyboardNavigation';
 import PasswordResetModal from './components/PasswordResetModal';
@@ -23,6 +23,7 @@ import {
   DEFAULT_FRANCHISE_ID,
   type MasterImpersonation,
   type UserSession,
+  clearSession,
   clearMasterImpersonation,
   readMasterImpersonation,
   saveMasterImpersonation,
@@ -76,6 +77,34 @@ function AppContent() {
       console.warn('Unable to load pricing for franchise', franchiseId, error);
     }
   }, []);
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event !== 'SIGNED_OUT') return;
+
+      window.setTimeout(() => {
+        clearSession();
+        clearMasterImpersonation();
+        setSession(null);
+        setShowLogin(true);
+        setShowPasswordReset(false);
+        setMasterImpersonation(null);
+        setAdminPanelAccessFranchiseId(null);
+        setAdminPanelLockoutUntil(null);
+        setAdminPanelPin('');
+        setAdminPanelPinError('');
+        setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
+        void loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
+      }, 0);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [loadPricingForFranchise]);
 
   useEffect(() => {
     // Restore session from Supabase Auth if possible
