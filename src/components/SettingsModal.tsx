@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
+import { getSessionRole } from '../services/session';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -13,7 +14,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [changelogContent, setChangelogContent] = useState('');
   const [changelogError, setChangelogError] = useState('');
   const [changelogLoading, setChangelogLoading] = useState(false);
-  const isChangelogDisabled = true;
+  const sessionRole = getSessionRole();
+  const canViewChangelog = sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'master';
+  const isChangelogDisabled = !canViewChangelog;
   const { displayName } = useFranchiseAppName();
 
   const renderChangelog = (content: string) => {
@@ -174,6 +177,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   };
 
   const openChangelog = async () => {
+    if (!canViewChangelog) return;
+
     setShowChangelog(true);
     setChangelogLoading(true);
     setChangelogError('');
@@ -234,8 +239,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             )}
             <div className="section-row">
               <div>
-                <h4>Changelog</h4>
-                <p className="settings-description">See what changed in the latest builds.</p>
+                <h4>Patch Notes</h4>
               </div>
               <button
                 className="view-changelog-button"
@@ -259,7 +263,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         <div className="changelog-modal-backdrop" onClick={handleChangelogBackdropClick}>
           <div className="changelog-modal" onClick={(e) => e.stopPropagation()}>
             <div className="changelog-header">
-              <h3>Changelog</h3>
+              <h3>Patch Notes</h3>
               <button className="close-button" onClick={closeChangelog}>X</button>
             </div>
             <div className="changelog-body">

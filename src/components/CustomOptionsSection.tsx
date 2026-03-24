@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CustomOption } from '../types/proposal-new';
+import { getCustomOptionTotal, normalizeCustomOption } from '../utils/customOptions';
 import './SectionStyles.css';
 
 interface Props {
@@ -15,9 +16,9 @@ function CustomOptionsSection({ data, onChange }: Props) {
   const formatCurrency = (value?: number) =>
     `$${toNumber(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
-  const optionTotal = (option: CustomOption) => toNumber(option.laborCost) + toNumber(option.materialCost);
+  const optionTotal = (option: CustomOption) => getCustomOptionTotal(option);
   const recalcTotals = (options: CustomOption[]) => {
-    const normalized = options.map(option => ({ ...option, totalCost: optionTotal(option) }));
+    const normalized = options.map((option) => normalizeCustomOption(option));
     onChange(normalized);
   };
 
@@ -34,6 +35,7 @@ function CustomOptionsSection({ data, onChange }: Props) {
       laborCost: 0,
       materialCost: 0,
       totalCost: 0,
+      isOffContract: false,
     };
     if (data.length >= maxOptions) return;
     const next = [...data, newOption];
@@ -63,6 +65,7 @@ function CustomOptionsSection({ data, onChange }: Props) {
       {data.map((option, index) => {
         const isEditing = activeOptionIndex === index;
         const total = optionTotal(option);
+        const isOffContract = Boolean(option.isOffContract);
         const subtitle = option.description?.trim() || 'No description provided';
         const clippedSubtitle = subtitle.length > 120 ? `${subtitle.slice(0, 120)}...` : subtitle;
 
@@ -75,29 +78,52 @@ function CustomOptionsSection({ data, onChange }: Props) {
                   <>
                     <div className="spec-subcard-subtitle">{clippedSubtitle}</div>
                     <div className="spec-subcard-subtitle">
-                      Labor: {formatCurrency(option.laborCost)} | Material: {formatCurrency(option.materialCost)} | Total:{' '}
-                      {formatCurrency(total)}
+                      {isOffContract
+                        ? `Off Contract | Total: ${formatCurrency(total)}`
+                        : `Labor: ${formatCurrency(option.laborCost)} | Material: ${formatCurrency(
+                            option.materialCost
+                          )} | Total: ${formatCurrency(total)}`}
                     </div>
                   </>
                 )}
               </div>
               <div className="spec-subcard-actions stacked-actions">
-                <div className="stacked-primary-actions">
-                  <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => setActiveOptionIndex(isEditing ? null : index)}
-                  >
-                    {isEditing ? 'Collapse' : 'Edit'}
-                  </button>
-                  <button
-                    type="button"
-                    className="link-btn danger"
-                    onClick={() => removeOption(index)}
-                  >
-                    Remove
-                  </button>
-                </div>
+                {isEditing ? (
+                  <div className="stacked-primary-actions custom-option-edit-actions">
+                    <label className="custom-option-toggle">
+                      <input
+                        type="checkbox"
+                        checked={isOffContract}
+                        onChange={(e) => updateOption(index, 'isOffContract', e.target.checked)}
+                      />
+                      <span>Mark as Off-Contract</span>
+                    </label>
+                    <button
+                      type="button"
+                      className="link-btn danger"
+                      onClick={() => removeOption(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="stacked-primary-actions">
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setActiveOptionIndex(index)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="link-btn danger"
+                      onClick={() => removeOption(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
                 {!isEditing && data.length < maxOptions && (
                   <button type="button" className="link-btn small" onClick={addOption}>
                     Add Another
@@ -131,44 +157,61 @@ function CustomOptionsSection({ data, onChange }: Props) {
                   />
                 </div>
 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Labor Cost</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={option.laborCost || ''}
-                      onChange={(e) => updateOption(index, 'laborCost', parseFloat(e.target.value) || 0)}
-                      min="0"
-                      step="0.01"
-                      placeholder="0"
-                    />
+                {isOffContract ? (
+                  <div className="form-row custom-option-single-cost-row">
+                    <div className="form-group">
+                      <label className="form-label">Total Cost</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={option.totalCost || ''}
+                        onChange={(e) => updateOption(index, 'totalCost', parseFloat(e.target.value) || 0)}
+                        min="0"
+                        step="0.01"
+                        placeholder="0"
+                      />
+                    </div>
                   </div>
+                ) : (
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Labor Cost</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={option.laborCost || ''}
+                        onChange={(e) => updateOption(index, 'laborCost', parseFloat(e.target.value) || 0)}
+                        min="0"
+                        step="0.01"
+                        placeholder="0"
+                      />
+                    </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Material Cost</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={option.materialCost || ''}
-                      onChange={(e) => updateOption(index, 'materialCost', parseFloat(e.target.value) || 0)}
-                      min="0"
-                      step="0.01"
-                      placeholder="0"
-                    />
-                  </div>
+                    <div className="form-group">
+                      <label className="form-label">Material Cost</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={option.materialCost || ''}
+                        onChange={(e) => updateOption(index, 'materialCost', parseFloat(e.target.value) || 0)}
+                        min="0"
+                        step="0.01"
+                        placeholder="0"
+                      />
+                    </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Total Cost (Auto)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={formatCurrency(total)}
-                      readOnly
-                      style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
-                    />
+                    <div className="form-group">
+                      <label className="form-label">Total Cost (Auto)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={formatCurrency(total)}
+                        readOnly
+                        style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div
                   className="action-row"

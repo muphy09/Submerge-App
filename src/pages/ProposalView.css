@@ -759,6 +759,45 @@
   font-weight: 700;
 }
 
+.summary-tile.off-contract-tile {
+  background: #ffffff;
+  border: 2px solid #f59e0b;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.2);
+}
+
+.summary-tile.off-contract-tile:hover {
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.3);
+  border-color: #d97706;
+  transform: translateY(-3px);
+}
+
+.summary-tile.off-contract-tile .tile-header {
+  border-bottom-color: rgba(245, 158, 11, 0.28);
+  background: linear-gradient(135deg, #fff4df 0%, #ffe7b8 100%);
+  border-radius: 10px;
+  padding: 14px 12px;
+  margin: -2px -2px 14px -2px;
+}
+
+.summary-tile.off-contract-tile .tile-content-box {
+  border-top-color: rgba(245, 158, 11, 0.24);
+  border-bottom-color: rgba(245, 158, 11, 0.24);
+}
+
+.summary-tile.off-contract-tile .metric-divider {
+  background: rgba(245, 158, 11, 0.22);
+}
+
+.summary-tile.off-contract-tile .tile-icon {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.summary-tile.off-contract-tile .tile-link {
+  color: #b45309;
+  font-weight: 700;
+}
+
 .tile-header {
   display: flex;
   align-items: center;
@@ -923,6 +962,14 @@
 
 .summary-tile.pre-tile .metric-row:nth-child(even) {
   background: #ede3ff;
+}
+
+.summary-tile.off-contract-tile .metric-row:nth-child(odd) {
+  background: #fff8ec;
+}
+
+.summary-tile.off-contract-tile .metric-row:nth-child(even) {
+  background: #ffefcf;
 }
 
 .summary-tile.warranty-tile .tile-content-box {

@@ -29,6 +29,7 @@ Then the system computes:
 Important defaults:
 - overhead multiplier default: 1.01
 - target margin default: 0.70
+  - Admin field: `COGS vs Retail Price Increase` displays this as `70%`
 - G3 fixed retail adder: 1,250
 
 Category-by-Category Cost Logic (COGS)
@@ -89,6 +90,10 @@ E) Plumbing
   - Cleaner line
   - Auto-fill line
   - Additional skimmers
+  - Valve Actuator in Misc. Plumbing
+- Valve Actuator quantity = number of unique selected water-feature zones/subcategories.
+  - Example: Wok Pot + Bubbler = 2 actuators.
+  - Example: quantity 2 of Bubblers only = 1 actuator.
 
 F) Gas
 - Only appears when `plumbing.runs.gasRun > 0`.

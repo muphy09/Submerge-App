@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Excavation, RBBLevel } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import {
+  formatMasonryFacingLabel,
+  getMasonryFacingOptions,
+  normalizeMasonryFacingId,
+  type MasonryFacingOption,
+} from '../utils/masonryFacing';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
@@ -13,7 +19,10 @@ const defaultRBBLevel: RBBLevel = {
   height: 6,
   length: 0,
   facing: 'none',
+  hasBacksideFacing: false,
 };
+
+const wallHeightOptions = [6, 12, 18, 24, 30, 36] as const;
 
 // Compact input with inline units to mirror Pool Specifications styling
 const CompactInput = ({
@@ -54,26 +63,59 @@ const CompactInput = ({
   );
 };
 
-const formatFacingLabel = (facing: RBBLevel['facing']) => {
-  if (facing === 'panel-ledge') return 'Panel Ledge';
-  if (facing === 'stacked-stone') return 'Stacked Stone';
-  return facing === 'none' ? 'No Facing' : facing.charAt(0).toUpperCase() + facing.slice(1);
-};
-
 const formatNumber = (value: number) => {
   const num = Number(value) || 0;
   return Number.isInteger(num) ? num.toString() : num.toFixed(2).replace(/\.?0+$/, '');
 };
 
-const formatRBBTitle = (level: RBBLevel) => {
-  const parts = [`${formatNumber(level.height)}" RBB`, `${formatNumber(level.length)} LNFT`];
+const getFacingSelectOptions = (
+  options: MasonryFacingOption[],
+  currentValue?: string | null
+): MasonryFacingOption[] => {
+  const normalized = normalizeMasonryFacingId(currentValue);
+  if (!normalized || normalized === 'none') {
+    return options;
+  }
+
+  const hasMatch = options.some((option) => normalizeMasonryFacingId(option.id) === normalized);
+  if (hasMatch) {
+    return options;
+  }
+
+  return [
+    ...options,
+    {
+      id: normalized,
+      name: formatMasonryFacingLabel(currentValue, options),
+      materialCost: 0,
+      laborCost: 0,
+    },
+  ];
+};
+
+const formatWallTitle = (
+  label: string,
+  level: RBBLevel,
+  facingOptions: MasonryFacingOption[],
+  includeBacksideFacing: boolean = false
+) => {
+  const parts = [`${formatNumber(level.height)}" ${label}`, `${formatNumber(level.length)} LNFT`];
   if (level.facing && level.facing !== 'none') {
-    parts.push(formatFacingLabel(level.facing));
+    parts.push(formatMasonryFacingLabel(level.facing, facingOptions));
+  }
+  if (includeBacksideFacing && level.hasBacksideFacing) {
+    parts.push('Backside Facing');
   }
   return parts.join(' | ');
 };
 
-const formatColumnsTitle = (columns: Excavation['columns']) => {
+const formatRBBTitle = (level: RBBLevel, facingOptions: MasonryFacingOption[]) =>
+  formatWallTitle('RBB', level, facingOptions);
+
+const formatExposedPoolWallTitle = (level: RBBLevel, facingOptions: MasonryFacingOption[]) =>
+  formatWallTitle('Exposed Pool Wall', level, facingOptions, true);
+
+const formatColumnsTitle = (columns: Excavation['columns'], facingOptions: MasonryFacingOption[]) => {
   const count = formatNumber(columns.count || 0);
   const parts = [
     `${count} ${columns.count === 1 ? 'Column' : 'Columns'}`,
@@ -81,16 +123,18 @@ const formatColumnsTitle = (columns: Excavation['columns']) => {
     `${formatNumber(columns.height || 0)} FT H`,
   ];
   if (columns.facing && columns.facing !== 'none') {
-    parts.push(formatFacingLabel(columns.facing as RBBLevel['facing']));
+    parts.push(formatMasonryFacingLabel(columns.facing, facingOptions));
   }
   return parts.join(' | ');
 };
 
 function ExcavationSectionNew({ data, onChange }: Props) {
   const [activeRBBIndex, setActiveRBBIndex] = useState<number | null>(null);
+  const [activeExposedPoolWallIndex, setActiveExposedPoolWallIndex] = useState<number | null>(null);
   const [columnsEditing, setColumnsEditing] = useState<boolean>(data.columns.count > 0);
   const [doubleCurtainActive, setDoubleCurtainActive] = useState<boolean>(data.doubleCurtainLength > 0);
   const [sitePrepActive, setSitePrepActive] = useState<boolean>(data.additionalSitePrepHours > 0);
+  const rbbFacingOptions = getMasonryFacingOptions(pricingData.masonry, 'rbb');
   const retainingWallOptions = pricingData.masonry.retainingWalls.filter(
     (option: any) => option.name && option.name !== 'No Retaining Wall' && option.name !== 'None',
   );
@@ -98,14 +142,22 @@ function ExcavationSectionNew({ data, onChange }: Props) {
     retainingWallOptions[0]?.name ||
     pricingData.masonry.retainingWalls[0]?.name ||
     'No Retaining Wall';
+  const rbbLevels = data.rbbLevels ?? [];
+  const exposedPoolWallLevels = data.exposedPoolWallLevels ?? [];
   const retainingWalls = data.retainingWalls ?? [];
   const retainingActive = retainingWalls.length > 0;
 
   useEffect(() => {
-    if (data.rbbLevels.length === 0) {
+    if (rbbLevels.length === 0) {
       setActiveRBBIndex(null);
     }
-  }, [data.rbbLevels.length]);
+  }, [rbbLevels.length]);
+
+  useEffect(() => {
+    if (exposedPoolWallLevels.length === 0) {
+      setActiveExposedPoolWallIndex(null);
+    }
+  }, [exposedPoolWallLevels.length]);
 
   useEffect(() => {
     if (data.doubleCurtainLength > 0 && !doubleCurtainActive) {
@@ -141,39 +193,71 @@ function ExcavationSectionNew({ data, onChange }: Props) {
     onChange({ ...data, [field]: value });
   };
 
-  const updateRBBLevel = (index: number, field: keyof RBBLevel, value: any) => {
-    const updated = [...data.rbbLevels];
-    updated[index] = { ...updated[index], [field]: value };
-    handleChange('rbbLevels', updated);
+  const setWallLevels = (field: 'rbbLevels' | 'exposedPoolWallLevels', levels: RBBLevel[]) => {
+    handleChange(field, levels);
   };
 
-  const removeRBBLevel = (index: number) => {
-    const updated = data.rbbLevels.filter((_, i) => i !== index);
-    handleChange('rbbLevels', updated);
-    setActiveRBBIndex(null);
+  const updateWallLevel = (
+    wallField: 'rbbLevels' | 'exposedPoolWallLevels',
+    levels: RBBLevel[],
+    index: number,
+    field: keyof RBBLevel,
+    value: any
+  ) => {
+    const updated = [...levels];
+    const nextValue = field === 'facing' ? normalizeMasonryFacingId(String(value)) || 'none' : value;
+    const nextLevel = { ...updated[index], [field]: nextValue };
+    if (field === 'facing' && nextValue === 'none') {
+      nextLevel.hasBacksideFacing = false;
+    }
+    updated[index] = nextLevel;
+    setWallLevels(wallField, updated);
   };
 
-  const startRBBFlow = () => {
-    if (data.rbbLevels.length === 0) {
-      handleChange('rbbLevels', [{ ...defaultRBBLevel }]);
-      setActiveRBBIndex(0);
+  const removeWallLevel = (
+    wallField: 'rbbLevels' | 'exposedPoolWallLevels',
+    levels: RBBLevel[],
+    index: number,
+    setActive: (value: number | null) => void
+  ) => {
+    const updated = levels.filter((_, i) => i !== index);
+    setWallLevels(wallField, updated);
+    setActive(null);
+  };
+
+  const startWallFlow = (
+    wallField: 'rbbLevels' | 'exposedPoolWallLevels',
+    levels: RBBLevel[],
+    setActive: (value: number | null) => void
+  ) => {
+    if (levels.length === 0) {
+      setWallLevels(wallField, [{ ...defaultRBBLevel }]);
+      setActive(0);
     } else {
-      setActiveRBBIndex(data.rbbLevels.length - 1);
+      setActive(levels.length - 1);
     }
   };
 
-  const addRBBLevel = () => {
-    const updated = [...data.rbbLevels, { ...defaultRBBLevel }];
-    handleChange('rbbLevels', updated);
-    setActiveRBBIndex(updated.length - 1);
+  const addWallLevel = (
+    wallField: 'rbbLevels' | 'exposedPoolWallLevels',
+    levels: RBBLevel[],
+    setActive: (value: number | null) => void
+  ) => {
+    const updated = [...levels, { ...defaultRBBLevel }];
+    setWallLevels(wallField, updated);
+    setActive(updated.length - 1);
   };
 
-  const handleNoRBB = () => {
-    handleChange('rbbLevels', []);
-    setActiveRBBIndex(null);
+  const clearWallLevels = (
+    wallField: 'rbbLevels' | 'exposedPoolWallLevels',
+    setActive: (value: number | null) => void
+  ) => {
+    setWallLevels(wallField, []);
+    setActive(null);
   };
 
-  const hasRBB = data.rbbLevels.length > 0;
+  const hasRBB = rbbLevels.length > 0;
+  const hasExposedPoolWall = exposedPoolWallLevels.length > 0;
 
   const columnsActive = data.columns.count > 0 || columnsEditing;
 
@@ -268,14 +352,14 @@ function ExcavationSectionNew({ data, onChange }: Props) {
           <button
             type="button"
             className={`pool-type-btn ${!hasRBB ? 'active' : ''}`}
-            onClick={handleNoRBB}
+            onClick={() => clearWallLevels('rbbLevels', setActiveRBBIndex)}
           >
             No RBB
           </button>
           <button
             type="button"
             className={`pool-type-btn ${hasRBB ? 'active' : ''}`}
-            onClick={startRBBFlow}
+            onClick={() => startWallFlow('rbbLevels', rbbLevels, setActiveRBBIndex)}
           >
             Add RBB
           </button>
@@ -283,13 +367,13 @@ function ExcavationSectionNew({ data, onChange }: Props) {
 
         {hasRBB ? (
           <>
-            {data.rbbLevels.map((level, index) => {
+            {rbbLevels.map((level, index) => {
               const isEditing = activeRBBIndex === index;
               return (
                 <div key={index} className="spec-subcard">
                   <div className="spec-subcard-header">
                     <div>
-                      <div className="spec-subcard-title">{formatRBBTitle(level)}</div>
+                      <div className="spec-subcard-title">{formatRBBTitle(level, rbbFacingOptions)}</div>
                       {!isEditing && <div className="spec-subcard-subtitle">RBB #{index + 1}</div>}
                     </div>
                     <div className="spec-subcard-actions stacked-actions">
@@ -304,13 +388,17 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                         <button
                           type="button"
                           className="link-btn danger"
-                          onClick={() => removeRBBLevel(index)}
+                          onClick={() => removeWallLevel('rbbLevels', rbbLevels, index, setActiveRBBIndex)}
                         >
                           Remove
                         </button>
                       </div>
                       {!isEditing && (
-                        <button type="button" className="link-btn small" onClick={addRBBLevel}>
+                        <button
+                          type="button"
+                          className="link-btn small"
+                          onClick={() => addWallLevel('rbbLevels', rbbLevels, setActiveRBBIndex)}
+                        >
                           Add Another
                         </button>
                       )}
@@ -325,14 +413,15 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                           <select
                             className="compact-input"
                             value={level.height}
-                            onChange={(e) => updateRBBLevel(index, 'height', parseInt(e.target.value))}
+                            onChange={(e) =>
+                              updateWallLevel('rbbLevels', rbbLevels, index, 'height', parseInt(e.target.value))
+                            }
                           >
-                            <option value={6}>6"</option>
-                            <option value={12}>12"</option>
-                            <option value={18}>18"</option>
-                            <option value={24}>24"</option>
-                            <option value={30}>30"</option>
-                            <option value={36}>36"</option>
+                            {wallHeightOptions.map((height) => (
+                              <option key={height} value={height}>
+                                {height}"
+                              </option>
+                            ))}
                           </select>
                         </div>
 
@@ -340,7 +429,9 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                           <label className="spec-label">Length</label>
                           <CompactInput
                             value={level.length}
-                            onChange={(e) => updateRBBLevel(index, 'length', parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              updateWallLevel('rbbLevels', rbbLevels, index, 'length', parseFloat(e.target.value) || 0)
+                            }
                             unit="LNFT"
                             min="0"
                             step="1"
@@ -351,13 +442,15 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                           <label className="spec-label">Facing</label>
                           <select
                             className="compact-input"
-                            value={level.facing}
-                            onChange={(e) => updateRBBLevel(index, 'facing', e.target.value)}
+                            value={normalizeMasonryFacingId(level.facing) || 'none'}
+                            onChange={(e) => updateWallLevel('rbbLevels', rbbLevels, index, 'facing', e.target.value)}
                           >
                             <option value="none">None</option>
-                            <option value="tile">Tile</option>
-                            <option value="panel-ledge">Panel Ledge</option>
-                            <option value="stacked-stone">Stacked Stone</option>
+                            {getFacingSelectOptions(rbbFacingOptions, level.facing).map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.name}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -366,7 +459,11 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                         <button type="button" className="action-btn" onClick={() => setActiveRBBIndex(null)}>
                           Done
                         </button>
-                        <button type="button" className="action-btn secondary" onClick={addRBBLevel}>
+                        <button
+                          type="button"
+                          className="action-btn secondary"
+                          onClick={() => addWallLevel('rbbLevels', rbbLevels, setActiveRBBIndex)}
+                        >
                           Add Another
                         </button>
                       </div>
@@ -411,7 +508,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
             <div className="spec-subcard">
               <div className="spec-subcard-header">
                 <div>
-                  <div className="spec-subcard-title">{formatColumnsTitle(data.columns)}</div>
+                  <div className="spec-subcard-title">{formatColumnsTitle(data.columns, rbbFacingOptions)}</div>
                   {!columnsEditing && (
                     <div className="spec-subcard-subtitle">
                       {data.columns.count && data.columns.count > 0 ? 'Column #1' : 'Columns'}
@@ -506,13 +603,20 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                     <label className="spec-label">Facing</label>
                     <select
                       className="compact-input"
-                      value={data.columns.facing}
-                      onChange={(e) => handleChange('columns', { ...data.columns, facing: e.target.value })}
+                      value={normalizeMasonryFacingId(data.columns.facing) || 'none'}
+                      onChange={(e) =>
+                        handleChange('columns', {
+                          ...data.columns,
+                          facing: normalizeMasonryFacingId(e.target.value) || 'none',
+                        })
+                      }
                     >
                       <option value="none">None</option>
-                      <option value="tile">Tile</option>
-                      <option value="panel-ledge">Panel Ledge</option>
-                      <option value="stacked-stone">Stacked Stone</option>
+                      {getFacingSelectOptions(rbbFacingOptions, data.columns.facing).map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -617,6 +721,212 @@ function ExcavationSectionNew({ data, onChange }: Props) {
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
             No Retaining Wall
+          </div>
+        )}
+      </div>
+
+      {/* ==================== EXPOSED POOL WALL BLOCK ==================== */}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Exposed Pool Wall (Out of Ground Forming)</h2>
+          <p className="spec-block-subtitle">Add exposed pool wall forming to the project.</p>
+        </div>
+
+        <div className="pool-type-buttons stackable">
+          <button
+            type="button"
+            className={`pool-type-btn ${!hasExposedPoolWall ? 'active' : ''}`}
+            onClick={() => clearWallLevels('exposedPoolWallLevels', setActiveExposedPoolWallIndex)}
+          >
+            No Exposed Pool Wall
+          </button>
+          <button
+            type="button"
+            className={`pool-type-btn ${hasExposedPoolWall ? 'active' : ''}`}
+            onClick={() =>
+              startWallFlow('exposedPoolWallLevels', exposedPoolWallLevels, setActiveExposedPoolWallIndex)
+            }
+          >
+            Add Exposed Pool Wall
+          </button>
+        </div>
+
+        {hasExposedPoolWall ? (
+          <>
+            {exposedPoolWallLevels.map((level, index) => {
+              const isEditing = activeExposedPoolWallIndex === index;
+              return (
+                <div key={`exposed-pool-wall-${index}`} className="spec-subcard">
+                  <div className="spec-subcard-header">
+                    <div>
+                      <div className="spec-subcard-title">{formatExposedPoolWallTitle(level, rbbFacingOptions)}</div>
+                      {!isEditing && (
+                        <div className="spec-subcard-subtitle">Exposed Pool Wall #{index + 1}</div>
+                      )}
+                    </div>
+                    <div className="spec-subcard-actions stacked-actions">
+                      <div className="stacked-primary-actions">
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setActiveExposedPoolWallIndex(isEditing ? null : index)}
+                        >
+                          {isEditing ? 'Collapse' : 'Edit'}
+                        </button>
+                        <button
+                          type="button"
+                          className="link-btn danger"
+                          onClick={() =>
+                            removeWallLevel(
+                              'exposedPoolWallLevels',
+                              exposedPoolWallLevels,
+                              index,
+                              setActiveExposedPoolWallIndex
+                            )
+                          }
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {!isEditing && (
+                        <button
+                          type="button"
+                          className="link-btn small"
+                          onClick={() =>
+                            addWallLevel(
+                              'exposedPoolWallLevels',
+                              exposedPoolWallLevels,
+                              setActiveExposedPoolWallIndex
+                            )
+                          }
+                        >
+                          Add Another
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <>
+                      <div className="spec-grid-3">
+                        <div className="spec-field">
+                          <label className="spec-label">Height</label>
+                          <select
+                            className="compact-input"
+                            value={level.height}
+                            onChange={(e) =>
+                              updateWallLevel(
+                                'exposedPoolWallLevels',
+                                exposedPoolWallLevels,
+                                index,
+                                'height',
+                                parseInt(e.target.value)
+                              )
+                            }
+                          >
+                            {wallHeightOptions.map((height) => (
+                              <option key={height} value={height}>
+                                {height}"
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="spec-field">
+                          <label className="spec-label">Length</label>
+                          <CompactInput
+                            value={level.length}
+                            onChange={(e) =>
+                              updateWallLevel(
+                                'exposedPoolWallLevels',
+                                exposedPoolWallLevels,
+                                index,
+                                'length',
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            unit="LNFT"
+                            min="0"
+                            step="1"
+                          />
+                        </div>
+
+                        <div className="spec-field">
+                          <label className="spec-label">Facing</label>
+                          <select
+                            className="compact-input"
+                            value={normalizeMasonryFacingId(level.facing) || 'none'}
+                            onChange={(e) =>
+                              updateWallLevel(
+                                'exposedPoolWallLevels',
+                                exposedPoolWallLevels,
+                                index,
+                                'facing',
+                                e.target.value
+                              )
+                            }
+                          >
+                            <option value="none">None</option>
+                            {getFacingSelectOptions(rbbFacingOptions, level.facing).map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.name}
+                              </option>
+                            ))}
+                          </select>
+                          <label
+                            className="form-checkbox"
+                            style={{ opacity: (normalizeMasonryFacingId(level.facing) || 'none') === 'none' ? 0.6 : 1 }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(level.hasBacksideFacing)}
+                              disabled={(normalizeMasonryFacingId(level.facing) || 'none') === 'none'}
+                              onChange={(e) =>
+                                updateWallLevel(
+                                  'exposedPoolWallLevels',
+                                  exposedPoolWallLevels,
+                                  index,
+                                  'hasBacksideFacing',
+                                  e.target.checked
+                                )
+                              }
+                            />
+                            <span>Add Backside Facing</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="action-row">
+                        <button
+                          type="button"
+                          className="action-btn"
+                          onClick={() => setActiveExposedPoolWallIndex(null)}
+                        >
+                          Done
+                        </button>
+                        <button
+                          type="button"
+                          className="action-btn secondary"
+                          onClick={() =>
+                            addWallLevel(
+                              'exposedPoolWallLevels',
+                              exposedPoolWallLevels,
+                              setActiveExposedPoolWallIndex
+                            )
+                          }
+                        >
+                          Add Another
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Exposed Pool Wall
           </div>
         )}
       </div>

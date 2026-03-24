@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { Proposal, PAPDiscounts, CostLineItem, ManualAdjustments } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import MasterPricingEngine from '../services/masterPricingEngine';
+import {
+  buildLineItemSubcategories,
+  CUSTOM_OPTIONS_SUBCATEGORY,
+  hasLineItemSubcategory,
+  isCustomOptionItem,
+} from '../utils/costBreakdownSubcategories';
 import './CostBreakdownPage.css';
 
 interface CostBreakdownPageProps {
@@ -21,17 +27,10 @@ interface CategoryData {
 
 type BreakdownViewMode = 'cogs' | 'retail';
 
-const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
-const isCustomOptionItem = (item: CostLineItem): boolean =>
-  item.details?.subcategory === CUSTOM_OPTIONS_SUBCATEGORY;
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
-  customOptions: items.filter(isCustomOptionItem(item)),
+  customOptions: items.filter(isCustomOptionItem),
 });
-const buildCustomOptionsSubcategories = (items?: CostLineItem[]) => {
-  const customOptions = (items || []).filter(isCustomOptionItem);
-  return customOptions.length > 0 ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: customOptions }] : undefined;
-};
 
 function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreakdownPageProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -108,7 +107,11 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   };
 
   const costBasis = pricing.totalCostsBeforeOverhead || costBreakdown.totals?.grandTotal || 0;
-  const retailTarget = pricing.retailPrice || proposal.totalCost || costBasis;
+  const offContractTotal =
+    pricing.offContractTotal ??
+    proposal.pricing?.offContractTotal ??
+    0;
+  const retailTarget = (pricing.retailPrice || proposal.totalCost || costBasis) - offContractTotal;
   const retailFactor = viewMode === 'retail' && costBasis > 0 ? retailTarget / costBasis : 1;
 
   const getRetailOverride = (item?: CostLineItem): number | null => {
@@ -213,14 +216,14 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
       items: costBreakdown.excavation,
       papDiscountKey: 'excavation',
       showPAPInput: true,
-      subcategories: buildCustomOptionsSubcategories(costBreakdown.excavation),
+      subcategories: buildLineItemSubcategories(costBreakdown.excavation),
     },
     {
       name: 'Plumbing',
       items: costBreakdown.plumbing,
       papDiscountKey: 'plumbing',
       showPAPInput: true,
-      subcategories: buildCustomOptionsSubcategories(costBreakdown.plumbing),
+      subcategories: buildLineItemSubcategories(costBreakdown.plumbing),
     },
     { name: 'Gas', items: costBreakdown.gas, showPAPInput: false },
     { name: 'Steel', items: costBreakdown.steel, papDiscountKey: 'steel', showPAPInput: true },
@@ -229,7 +232,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
       items: costBreakdown.electrical,
       papDiscountKey: 'electrical',
       showPAPInput: true,
-      subcategories: buildCustomOptionsSubcategories(costBreakdown.electrical),
+      subcategories: buildLineItemSubcategories(costBreakdown.electrical),
     },
     {
       name: 'Shotcrete',
@@ -278,20 +281,20 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
       name: 'Drainage',
       items: costBreakdown.drainage,
       showPAPInput: false,
-      subcategories: buildCustomOptionsSubcategories(costBreakdown.drainage),
+      subcategories: buildLineItemSubcategories(costBreakdown.drainage),
     },
     {
       name: 'Water Features',
       items: costBreakdown.waterFeatures,
       showPAPInput: false,
-      subcategories: buildCustomOptionsSubcategories(costBreakdown.waterFeatures),
+      subcategories: buildLineItemSubcategories(costBreakdown.waterFeatures),
     },
     { name: 'Equipment Ordered', items: costBreakdown.equipmentOrdered, papDiscountKey: 'equipment', showPAPInput: true },
     {
       name: 'Equipment Set',
       items: costBreakdown.equipmentSet,
       showPAPInput: false,
-      subcategories: buildCustomOptionsSubcategories(costBreakdown.equipmentSet),
+      subcategories: buildLineItemSubcategories(costBreakdown.equipmentSet),
     },
     { name: 'Cleanup', items: costBreakdown.cleanup, showPAPInput: false },
     {
@@ -299,7 +302,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
       items: costBreakdown.interiorFinish,
       papDiscountKey: 'interiorFinish',
       showPAPInput: true,
-      subcategories: buildCustomOptionsSubcategories(costBreakdown.interiorFinish),
+      subcategories: buildLineItemSubcategories(costBreakdown.interiorFinish),
     },
     { name: 'Water Truck', items: costBreakdown.waterTruck, showPAPInput: false },
     { name: 'Fiberglass Shell', items: costBreakdown.fiberglassShell, showPAPInput: false },
@@ -381,11 +384,8 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                 // Calculate labor and material subtotals if applicable
                 const adjustments = category.items.filter(isAdjustmentItem);
                 const visibleItems = category.items.filter((item) => !isAdjustmentItem(item));
-                const hasCustomOptionsSubcategory = Boolean(
-                  category.subcategories?.some((sub) => sub.name === CUSTOM_OPTIONS_SUBCATEGORY)
-                );
-                const baseItems = hasCustomOptionsSubcategory
-                  ? visibleItems.filter((item) => !isCustomOptionItem(item))
+                const baseItems = category.subcategories?.length
+                  ? visibleItems.filter((item) => !hasLineItemSubcategory(item))
                   : visibleItems;
                 const showBaseItems = baseItems.length > 0 && !category.hideBaseItems;
                 const hasLabor = visibleItems.some(isLaborItem);
@@ -647,6 +647,12 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                   <span>Retail Price:</span>
                   <span className="cost-breakdown-summary-value">{formatCurrency(pricing.retailPrice)}</span>
                 </div>
+                {offContractTotal > 0 && (
+                  <div className="cost-breakdown-summary-row muted">
+                    <span>Off Contract Items:</span>
+                    <span>{formatCurrency(offContractTotal)}</span>
+                  </div>
+                )}
                 <div className="cost-breakdown-summary-row muted">
                   <span>Dig Comm. ({(pricing.digCommissionRate * 100).toFixed(2)}%):</span>
                   <span>{formatCurrency(pricing.digCommission)}</span>

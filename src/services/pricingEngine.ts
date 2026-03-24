@@ -2,9 +2,21 @@
 // PRICING ENGINE - Excel Formula Logic Implementation
 // ============================================================================
 
-import { Proposal, PoolSpecs, Excavation, Plumbing, Electrical, Equipment, CostBreakdown, CostLineItem } from '../types/proposal-new';
+import {
+  Proposal,
+  PoolSpecs,
+  Excavation,
+  RBBLevel,
+  Plumbing,
+  Electrical,
+  Equipment,
+  CostBreakdown,
+  CostLineItem,
+  WaterFeatures,
+} from '../types/proposal-new';
 import pricingData from './pricingData';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
+import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
 
 /**
  * ROUNDUP function - Excel-style ceiling function
@@ -12,6 +24,7 @@ import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
  */
 const roundUp = (value: number): number => Math.ceil(value);
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
+const MISC_PLUMBING_SUBCATEGORY = 'Misc. Plumbing';
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
   const hasGuniteDimensions =
@@ -113,14 +126,22 @@ export class PoolCalculations {
 // ============================================================================
 
 export class ExcavationCalculations {
+  static calculateWallLevelsSqft(levels: RBBLevel[] = []): number {
+    return levels.reduce((total, level) => {
+      const heightInFeet = (level.height ?? 0) / 12;
+      return total + (level.length ?? 0) * heightInFeet;
+    }, 0);
+  }
+
+  static calculateWallLevelsLnft(levels: RBBLevel[] = []): number {
+    return levels.reduce((total, level) => total + (level.length ?? 0), 0);
+  }
+
   /**
    * Calculate total RBB square footage
    */
   static calculateTotalRBBSqft(excavation: Excavation): number {
-    return excavation.rbbLevels.reduce((total, level) => {
-      const heightInFeet = level.height / 12;
-      return total + level.length * heightInFeet;
-    }, 0);
+    return this.calculateWallLevelsSqft(excavation.rbbLevels ?? []);
   }
 
   /**
@@ -177,13 +198,27 @@ export class ExcavationCalculations {
     }
 
     // RBB levels
-    excavation.rbbLevels.forEach((level) => {
+    (excavation.rbbLevels ?? []).forEach((level) => {
       if (level.length > 0) {
         const priceKey = `rbb${level.height}` as keyof typeof prices;
         const unitPrice = prices[priceKey] as number;
         items.push({
           category: 'Excavation',
           description: `${level.height}" RBB`,
+          unitPrice,
+          quantity: level.length,
+          total: unitPrice * level.length,
+        });
+      }
+    });
+
+    (excavation.exposedPoolWallLevels ?? []).forEach((level) => {
+      if (level.length > 0) {
+        const priceKey = `rbb${level.height}` as keyof typeof prices;
+        const unitPrice = prices[priceKey] as number;
+        items.push({
+          category: 'Excavation',
+          description: 'Exposed Pool Wall forming',
           unitPrice,
           quantity: level.length,
           total: unitPrice * level.length,
@@ -350,7 +385,8 @@ export class PlumbingCalculations {
     poolSpecs: PoolSpecs,
     plumbing: Plumbing,
     equipment?: Equipment,
-    excavation?: Excavation
+    excavation?: Excavation,
+    waterFeatures?: WaterFeatures
   ): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.plumbing;
@@ -367,10 +403,59 @@ export class PlumbingCalculations {
       : equipment;
     const heaterQty = Math.max((normalizedEquipment as any)?.heaterQuantity ?? 0, 0);
     const hasHeaterSelection = heaterQty > 0;
-    const rbbTotalLnft = (excavation?.rbbLevels || []).reduce(
-      (sum, level) => sum + (Number(level.length) || 0),
-      0
+    const rbbTotalLnft = ExcavationCalculations.calculateWallLevelsLnft(excavation?.rbbLevels ?? []);
+    const exposedPoolWallTotalLnft = ExcavationCalculations.calculateWallLevelsLnft(
+      excavation?.exposedPoolWallLevels ?? []
     );
+    const waterFeatureRunFields: Array<keyof Plumbing['runs']> = [
+      'waterFeature1Run',
+      'waterFeature2Run',
+      'waterFeature3Run',
+      'waterFeature4Run',
+    ];
+    const waterFeatureCatalog = flattenWaterFeatures(pricingData.waterFeatures);
+    const waterFeatureLookup = new Map(waterFeatureCatalog.map((entry) => [entry.id, entry]));
+    const resolveWaterFeature = (featureId?: string) => {
+      if (!featureId) return undefined;
+      return waterFeatureLookup.get(featureId) || waterFeatureCatalog.find((entry) => entry.name === featureId);
+    };
+    const orderedWaterFeatureSelections = (() => {
+      const grouped = {
+        sheer: [] as NonNullable<WaterFeatures['selections']>,
+        woks: [] as NonNullable<WaterFeatures['selections']>,
+        jets: [] as NonNullable<WaterFeatures['selections']>,
+        bubblers: [] as NonNullable<WaterFeatures['selections']>,
+      };
+
+      (waterFeatures?.selections || []).forEach((selection) => {
+        const category = resolveWaterFeature(selection.featureId)?.category;
+        if (category === 'Sheer Descent') {
+          grouped.sheer.push(selection);
+          return;
+        }
+        if (category?.startsWith('Wok Pots')) {
+          grouped.woks.push(selection);
+          return;
+        }
+        if (category === 'Jets') {
+          grouped.jets.push(selection);
+          return;
+        }
+        if (category === 'Bubbler') {
+          grouped.bubblers.push(selection);
+        }
+      });
+
+      return [...grouped.sheer, ...grouped.woks, ...grouped.jets, ...grouped.bubblers];
+    })();
+    const bubblerConduitRunQty = orderedWaterFeatureSelections.reduce((sum, selection, index) => {
+      if ((selection?.quantity ?? 0) <= 0) return sum;
+      const feature = resolveWaterFeature(selection.featureId);
+      if (!feature?.needsPoolLight) return sum;
+      const runField = waterFeatureRunFields[index];
+      if (!runField) return sum;
+      return sum + Math.max(0, plumbing.runs[runField] || 0);
+    }, 0);
 
     if (!hasPoolDefinition(poolSpecs)) {
       return items;
@@ -531,6 +616,15 @@ export class PlumbingCalculations {
         total: prices.conduitPerFt * conduitQty,
       });
     }
+    if (bubblerConduitRunQty > 0) {
+      items.push({
+        category: 'Plumbing',
+        description: 'Bubbler Conduit Run',
+        unitPrice: prices.conduitPerFt,
+        quantity: Math.ceil(bubblerConduitRunQty),
+        total: prices.conduitPerFt * Math.ceil(bubblerConduitRunQty),
+      });
+    }
 
     // Manifold (always one per pad)
     items.push({
@@ -567,6 +661,15 @@ export class PlumbingCalculations {
         unitPrice: prices.stripFormsRbbAdditional,
         quantity: rbbTotalLnft,
         total: prices.stripFormsRbbAdditional * rbbTotalLnft,
+      });
+    }
+    if (exposedPoolWallTotalLnft > 0 && (prices.stripFormsRbbAdditional ?? 0) > 0) {
+      items.push({
+        category: 'Plumbing',
+        description: 'Exposed Pool Wall Strip Forms',
+        unitPrice: prices.stripFormsRbbAdditional,
+        quantity: exposedPoolWallTotalLnft,
+        total: prices.stripFormsRbbAdditional * exposedPoolWallTotalLnft,
       });
     }
 
@@ -620,6 +723,22 @@ export class PlumbingCalculations {
         unitPrice: addlMainDrainCost,
         quantity: 1,
         total: addlMainDrainCost,
+      });
+    }
+
+    const valveActuatorPrice = prices.valveActuator ?? 0;
+    const valveActuatorQty =
+      valveActuatorPrice > 0
+        ? countSelectedWaterFeatureZones(waterFeatures?.selections ?? [], pricingData.waterFeatures)
+        : 0;
+    if (valveActuatorQty > 0) {
+      items.push({
+        category: 'Plumbing',
+        description: 'Valve Actuator',
+        unitPrice: valveActuatorPrice,
+        quantity: valveActuatorQty,
+        total: valveActuatorPrice * valveActuatorQty,
+        details: { subcategory: MISC_PLUMBING_SUBCATEGORY },
       });
     }
 
@@ -741,13 +860,16 @@ export class ElectricalCalculations {
 
     // Additional sanitation systems (per system beyond the first)
     const saltName = (normalizedEquipment as any)?.saltSystem?.name?.toLowerCase() || '';
+    const hasIncludedSaltCell = Boolean((normalizedEquipment as any)?.saltSystem?.includedSaltCellPlaceholder);
     const saltQty = Math.max(
       (normalizedEquipment as any)?.saltSystemQuantity ?? ((normalizedEquipment as any)?.saltSystem ? 1 : 0),
       0
     );
-    const hasSaltSystem = saltQty > 0 && saltName && !saltName.includes('no salt');
-    if (hasSaltSystem && saltQty > 1 && prices.saltSystem > 0) {
-      const additionalQty = saltQty - 1;
+    const hasPrimarySaltSystem = saltQty > 0 && saltName && !saltName.includes('no salt') && !hasIncludedSaltCell;
+    const additionalSaltName = (normalizedEquipment as any)?.additionalSaltSystem?.name?.toLowerCase() || '';
+    const hasAdditionalSaltSystem = Boolean(additionalSaltName) && !additionalSaltName.includes('no salt');
+    const additionalQty = Math.max(hasPrimarySaltSystem ? saltQty - 1 : 0, 0) + (hasAdditionalSaltSystem ? 1 : 0);
+    if ((hasPrimarySaltSystem || hasIncludedSaltCell) && additionalQty > 0 && prices.saltSystem > 0) {
       items.push({
         category: 'Electrical',
         description: 'Additional Sanitation System',
@@ -1252,7 +1374,13 @@ export class PricingEngine {
     const excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
 
     // Plumbing
-    const plumbingItems = PlumbingCalculations.calculatePlumbingCost(poolSpecs, plumbing, equipment, excavation);
+    const plumbingItems = PlumbingCalculations.calculatePlumbingCost(
+      poolSpecs,
+      plumbing,
+      equipment,
+      excavation,
+      proposal.waterFeatures
+    );
 
     // Gas
     const gasItems = ElectricalCalculations.calculateGasCost(plumbing);

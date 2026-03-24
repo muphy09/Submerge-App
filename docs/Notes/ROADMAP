@@ -1,83 +1,20 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-- Exposed Pool Wall (Out of ground Forming) - Same as RBB for SQFT calc. Only taking forming cost from RBB. Add strip forming cost to OUGF
-    - Add backside facing
-        - No facing, Parched Concrete $9.00, (RBB facing options). Split face -- St. $9. sqft, Split ledge = panel ledge
- - Backside facing toggle for RBB - double cost
-
-- Hydrapure Sanitation ONLY ADDITIONAL option after another sanitation system is selected (checkbox option) Sanitation system
-
-- LED bubbler (LED only), inlcude Conduit run (same as water feature run)
- - Update bubbler to include cost of pool light automatically (display in app), update admin pricing to link pool light to bubbler (one of the add cost columns)
-
-- Valve actuator x1 every different set (zone) of water features selected. (1 per zone) add option for valve price in admin price menu
-
-- Update Autofill in equip
-
-*** - Travertine level 3 option decking (include option to add more levels for (tile/coping/decking) level 3 = 1.50 more than level 2
-
-- Default to Polaris 7240 Sport cleaner instead of no cleaner
-
-- ONLY when HLPLSW4 is selected, prefil sanitation to already included (salt cell included, cant change, can add hyrapure still)
-
-    - IF HL Base is seleleted, MUST add salt cell or chlorine (sanitation system), becomes required 
-
-- Autofill in deposit amount into the deposit breakdown (after entered)
-
-- If no automation is selected &or On/Off Freeze Control - have to select a sanitation system (always have to)
-
-*** - Add column for automation add cost 3 - AQRS 25k 87.73 for 3rd column.
-
-*** - Option to rename the columns in the admin price menu UI
-
-- AQRS & HL +4 include salt cell, no selection for sanitation EXCEPT hydrapure
-
-*** - 70% retail increase input field
-
-- Commission amount needs to be set per user - set up by admin (place inside of designers block) - same with discount threshold (default 18%)
-    - Option to require approval for certain users after submitting proposals. 'Submitted for Review' type of workflow
-- Lock admin panel behind Pin for security (not for master)
-
-- Removing user logic and proposal transfer stipulations
-
-- Logic for submit proposal, ask to include measurements or supporting docs. 
-
-- Full package option - (fence sod etc) - Fence & sod no profit line items (charge exactly what manu charges)
-
-- ability in custom price to change the markup (retail) -- Seperate cost NOT in COGS - Cannot go into the contract (NC SC) has to be as addendum
-    - Off Contract checkbox in any custom option box -- will be one cost box, will only bill on RETAIL for the amount input with no markup, and will not go on the contract, only addendum
-
-**Decking -- Off Contract checkbox - labor and material cost boxes
-    - Selecting off contract, just removes profit margin, (take out from COGS), would not show up in contract anymore, needs to show up in off contract addendum (coming from John) contract should say OFF CONTRACT instead
-    - Will bill to RETAIL only not COGS, custom line item as "Off Contract", no retail price increase
-
-- confirm custom has tax
-
-
-Admin Menu reworks-  % cost increase boxes need to change
-D/A - Int Finish Labor, Manual Price Adjust tooltips, add 70% retial adjustment modifier
-Exc - spa base tooltip, travel field?
-Plumbing - Spa base tooltip, infloor not needed, travel? - as a whole change any 'gunite' to shotcrete and waste to overhead
-Shot material -  tax rate should be %
-shot labor - Min yards needs label
 
 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 
 - Ability to 'Search' for an input in the Admin Pricing Model
-- Remove shown prices from admin view in prop builder
 - Improve export flow for Breadowns (naming)
 - Add workflow for transferring proposals to another user in the franchise (prompt before deleting user too)
 - Logic for contracts and different franchises
 - Admin menu redesign
-- Save draft button in prop builder - lets you finish (summary screen) without submitting, puts into draft state
-- Price model input needs to move to top left of center page, only colored box stays, turns into dropdown for different selection (arrow too)
 - Stacked view for nav boxes
 - Tooltips for input fields that appear with logic (if electric autofill is selected, tooltip for autofill run field)
-
-- Segregate franchises so they can be updated and changed independantly
-    - Includes patch notes, admin pricing options, tabs, settings they see, everything.
+- Option to require approval for certain users after submitting proposals. 'Submitted for Review' type of workflow
+- Franchise Code and Admin Access settings need to be behind Admin Panel for security
+- Supporting Documents (measurments) inlcuded when submitting proposal
 
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
@@ -88,7 +25,8 @@ Long Term -
 - Add aux pump - double main drain run. every pump gets same drain run
 - Keyboard Nav dropdown selection trouble
 - Homescreen background change
-
+- Segregate franchises so they can be updated and changed independantly
+    - Includes patch notes, admin pricing options, tabs, settings they see, everything.
 ---------------------------------------------------------------------------------------------------------
 Ideas - 
 - Potential column for "Included Items"
@@ -103,7 +41,8 @@ Help Needed -
     - Remodel**
     - Commercial Pool Pricing
     - Sales Templates (when not in effect)
-
+- Commission amount needs to be set per user - set up by admin (place inside of designers block) - same with discount threshold (default 18%)
+    - Is this the lowest Profit % number?
 ---------------------------------------------------------------------------------------------------------
 
 Confusion -

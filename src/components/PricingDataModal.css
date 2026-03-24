@@ -496,6 +496,14 @@
   padding-right: 20px;
 }
 
+.pricing-field__label.has-rename {
+  padding-right: 34px;
+}
+
+.pricing-field__label.has-rename.has-info {
+  padding-right: 54px;
+}
+
 .pricing-field__label-text {
   position: relative;
   display: inline-flex;
@@ -509,6 +517,29 @@
   max-width: 100%;
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.pricing-field__label-edit {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  padding: 2px 6px;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.18);
+}
+
+.pricing-field__label-edit:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
 }
 
 .pricing-field:not(.inline) .pricing-field__label {
@@ -581,6 +612,42 @@
   z-index: 2;
   pointer-events: auto;
   overflow: visible;
+}
+
+.pricing-field__rename-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.pricing-field__rename-btn:hover {
+  color: #0f4b99;
+}
+
+.pricing-field__rename-btn:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.pricing-field__rename-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pricing-field__rename-btn + .pricing-field__info {
+  right: 28px;
 }
 
 .pricing-field__info::after {
@@ -698,6 +765,73 @@
   overflow: auto;
 }
 
+.pricing-list-card__body--table {
+  padding: 0;
+}
+
+.pricing-table-wrapper {
+  overflow-x: auto;
+}
+
+.pricing-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 540px;
+}
+
+.pricing-table th,
+.pricing-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5ebf5;
+  vertical-align: middle;
+}
+
+.pricing-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fbff;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: left;
+  z-index: 1;
+}
+
+.pricing-table th > span:first-child {
+  display: inline-block;
+}
+
+.pricing-table .pricing-field__info {
+  margin-left: 6px;
+}
+
+.pricing-table td .pricing-field__input-wrap {
+  min-width: 0;
+}
+
+.pricing-table td .pricing-field__input {
+  width: 100%;
+}
+
+.pricing-table__checkbox-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.pricing-table__actions-header,
+.pricing-table__actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.pricing-table__empty {
+  text-align: center;
+  font-size: 12px;
+  color: #475569;
+  padding: 18px 12px;
+}
+
 .base-ranges-card {
   border: none;
   background: transparent;
@@ -752,6 +886,10 @@
 
   .pricing-list-row__fields {
     grid-template-columns: 1fr;
+  }
+
+  .pricing-table {
+    min-width: 0;
   }
 }
 

@@ -7,6 +7,7 @@ import CostBreakdownView from '../components/CostBreakdownView';
 import { BreakdownCostExportPage, BreakdownWarrantyExportPage } from '../components/BreakdownExportPages';
 import ContractView, { ContractViewHandle } from '../components/ContractView';
 import FranchiseLogo from '../components/FranchiseLogo';
+import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
 import RetiredEquipmentIndicator from '../components/RetiredEquipmentIndicator';
 import './ProposalView.css';
@@ -38,10 +39,14 @@ import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '
 import { hasRetiredEquipment } from '../utils/retiredEquipment';
 import { validateProposal } from '../utils/validation';
 import { ContractOverrides } from '../services/contractGenerator';
+import {
+  buildLineItemSubcategories,
+  CUSTOM_OPTIONS_SUBCATEGORY,
+  hasLineItemSubcategory,
+  isCustomOptionItem,
+} from '../utils/costBreakdownSubcategories';
+import { getOffContractItemGroups, getOffContractTotal } from '../utils/customOptions';
 
-const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
-const isCustomOptionItem = (item: CostLineItem): boolean =>
-  item.details?.subcategory === CUSTOM_OPTIONS_SUBCATEGORY;
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
   customOptions: items.filter(isCustomOptionItem),
@@ -124,7 +129,16 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
       automationQuantity,
       'no automation'
     ),
-    sanitationSummary: summarizeSelectionWithQuantity(equipment.saltSystem?.name, saltQuantity, 'no salt'),
+    sanitationSummary: (() => {
+      const primarySummary = equipment.saltSystem?.includedSaltCellPlaceholder
+        ? equipment.saltSystem.name
+        : summarizeSelectionWithQuantity(equipment.saltSystem?.name, saltQuantity, 'no salt');
+      const additionalSummary = hasNamedSelection(equipment.additionalSaltSystem?.name, 'no salt')
+        ? normalizeSummaryName(equipment.additionalSaltSystem?.name)
+        : '';
+      if (!additionalSummary) return primarySummary;
+      return primarySummary === 'None' ? additionalSummary : `${primarySummary} + ${additionalSummary}`;
+    })(),
     autoFillSummary: summarizeSelectionWithQuantity(equipment.autoFillSystem?.name, autoFillQuantity, 'no auto'),
     poolLightSummary: summarizePoolLightSelection(equipment.poolLights),
   };
@@ -140,6 +154,7 @@ function ProposalView() {
   const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
   const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
+  const [offContractVersionId, setOffContractVersionId] = useState<string | null>(null);
   const [contractVersionId, setContractVersionId] = useState<string | null>(null);
   const [breakdownExportOpen, setBreakdownExportOpen] = useState(false);
   const [breakdownExporting, setBreakdownExporting] = useState(false);
@@ -854,6 +869,7 @@ function ProposalView() {
     const totalCost = calculated?.totalCost ?? mergedProposal.totalCost ?? 0;
     const pricing = calculated?.pricing ?? mergedProposal.pricing;
     const retailPrice = pricing?.retailPrice ?? totalCost ?? subtotal ?? 0;
+    const offContractTotal = pricing?.offContractTotal ?? getOffContractTotal(mergedProposal);
     const digCommission = pricing?.digCommission ?? 0;
     const adminFee = pricing?.adminFee ?? 0;
     const closeoutCommission = pricing?.closeoutCommission ?? 0;
@@ -896,7 +912,7 @@ function ProposalView() {
     const baseRetailPriceBeforePap =
       Math.ceil(((costsBeforePapDiscounts * overheadMultiplier) / targetMargin) / 10) * 10;
     const g3UpgradeCost = pricing?.g3UpgradeCost ?? 1250;
-    const retailPriceBeforeDiscounts = baseRetailPriceBeforePap + g3UpgradeCost;
+    const retailPriceBeforeDiscounts = baseRetailPriceBeforePap + g3UpgradeCost + offContractTotal;
     const retailSalePrice = retailPrice;
     const totalSavings = retailPriceBeforeDiscounts - retailSalePrice;
     const totalSavingsPercent = retailPriceBeforeDiscounts > 0 ? (totalSavings / retailPriceBeforeDiscounts) * 100 : 0;
@@ -948,6 +964,8 @@ function ProposalView() {
     const { baseItems: tileLaborBase, customOptions: tileCustomFromLabor } = splitCustomOptions(tileLaborItems);
     const { baseItems: tileMaterialBase, customOptions: tileCustomFromMaterial } = splitCustomOptions(tileMaterialItems);
     const tileCustomOptions = [...tileCustomFromLabor, ...tileCustomFromMaterial];
+    const offContractItemGroups = getOffContractItemGroups(mergedProposal);
+    const offContractItemCount = offContractItemGroups.reduce((sum, group) => sum + group.items.length, 0);
 
     const costLineItems: {
       name: string;
@@ -962,25 +980,19 @@ function ProposalView() {
           {
             name: 'Excavation',
             items: costBreakdownForDisplay.excavation,
-            subcategories: costBreakdownForDisplay.excavation.filter(isCustomOptionItem).length
-              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.excavation.filter(isCustomOptionItem) }]
-              : undefined,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.excavation),
           },
           {
             name: 'Plumbing',
             items: costBreakdownForDisplay.plumbing,
-            subcategories: costBreakdownForDisplay.plumbing.filter(isCustomOptionItem).length
-              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.plumbing.filter(isCustomOptionItem) }]
-              : undefined,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.plumbing),
           },
           { name: 'Gas', items: costBreakdownForDisplay.gas },
           { name: 'Steel', items: costBreakdownForDisplay.steel },
           {
             name: 'Electrical',
             items: costBreakdownForDisplay.electrical,
-            subcategories: costBreakdownForDisplay.electrical.filter(isCustomOptionItem).length
-              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.electrical.filter(isCustomOptionItem) }]
-              : undefined,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.electrical),
           },
           {
             name: 'Shotcrete',
@@ -1028,32 +1040,24 @@ function ProposalView() {
           {
             name: 'Drainage',
             items: costBreakdownForDisplay.drainage,
-            subcategories: costBreakdownForDisplay.drainage.filter(isCustomOptionItem).length
-              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.drainage.filter(isCustomOptionItem) }]
-              : undefined,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.drainage),
           },
           {
             name: 'Water Features',
             items: costBreakdownForDisplay.waterFeatures,
-            subcategories: costBreakdownForDisplay.waterFeatures.filter(isCustomOptionItem).length
-              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.waterFeatures.filter(isCustomOptionItem) }]
-              : undefined,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.waterFeatures),
           },
           { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered },
           {
             name: 'Equipment Set',
             items: costBreakdownForDisplay.equipmentSet,
-            subcategories: costBreakdownForDisplay.equipmentSet.filter(isCustomOptionItem).length
-              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.equipmentSet.filter(isCustomOptionItem) }]
-              : undefined,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.equipmentSet),
           },
           { name: 'Cleanup', items: costBreakdownForDisplay.cleanup },
           {
             name: 'Interior Finish',
             items: costBreakdownForDisplay.interiorFinish,
-            subcategories: costBreakdownForDisplay.interiorFinish.filter(isCustomOptionItem).length
-              ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: costBreakdownForDisplay.interiorFinish.filter(isCustomOptionItem) }]
-              : undefined,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.interiorFinish),
           },
           { name: 'Water Truck', items: costBreakdownForDisplay.waterTruck },
           { name: 'Fiberglass Shell', items: costBreakdownForDisplay.fiberglassShell },
@@ -1128,6 +1132,9 @@ function ProposalView() {
       spaLength,
       spaWidth,
       ...equipmentSummary,
+      offContractTotal,
+      offContractItemGroups,
+      offContractItemCount,
       costLineItems,
       preOverheadCostLineItems,
     };
@@ -1183,6 +1190,9 @@ function ProposalView() {
     : null;
   const preCogsModalView = preCogsBreakdownVersionId
     ? versionMap.get(preCogsBreakdownVersionId) || primaryView
+    : null;
+  const offContractModalView = offContractVersionId
+    ? versionMap.get(offContractVersionId) || primaryView
     : null;
   const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
   const hasMultipleVersions = viewModels.length > 1;
@@ -1460,6 +1470,51 @@ function ProposalView() {
             </div>
             <span className="tile-link">
               View Detailed Breakdown
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
+          </button>
+        )}
+
+        {vm.offContractItemCount > 0 && (
+          <button
+            className="summary-tile off-contract-tile"
+            type="button"
+            onClick={() => setOffContractVersionId(versionId)}
+          >
+            <div className="tile-header">
+              <div className="tile-icon off-contract-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                  <path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                  <path d="M9 12h6M9 16h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div className="tile-header-text">
+                <p className="tile-title">Off Contract<br/>Items</p>
+              </div>
+            </div>
+            <div className="tile-content-box">
+              <div className="tile-metrics">
+                <div className="metric-row">
+                  <p className="metric-label">Categories:</p>
+                  <p className="metric-value">{vm.offContractItemGroups.length}</p>
+                </div>
+                <div className="metric-divider"></div>
+                <div className="metric-row">
+                  <p className="metric-label">Items:</p>
+                  <p className="metric-value">{vm.offContractItemCount}</p>
+                </div>
+                <div className="metric-divider"></div>
+                <div className="metric-row">
+                  <p className="metric-label">Retail Only Total:</p>
+                  <p className="metric-value">{formatCurrency(vm.offContractTotal)}</p>
+                </div>
+              </div>
+            </div>
+            <span className="tile-link">
+              View Breakdown
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
@@ -1903,6 +1958,28 @@ function ProposalView() {
           </div>
         </div>
       )}
+      {offContractVersionId && offContractModalView && (
+        <div className="modal-overlay" onClick={() => setOffContractVersionId(null)}>
+          <div className="modal-content wide off-contract-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <p className="modal-eyebrow">Off Contract Items</p>
+                <h2>Retail-Only Off Contract Breakdown</h2>
+              </div>
+              <button className="modal-close" onClick={() => setOffContractVersionId(null)} aria-label="Close off contract items">
+                x
+              </button>
+            </div>
+            <div className="modal-body-scroll">
+              <OffContractItemsView
+                customerName={offContractModalView.proposal.customerInfo.customerName}
+                franchiseId={offContractModalView.proposal.franchiseId}
+                groups={offContractModalView.offContractItemGroups}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {customerBreakdownVersionId && customerModalView && (
         <>
           <div className="modal-overlay" onClick={() => setCustomerBreakdownVersionId(null)}>
@@ -2056,11 +2133,8 @@ function ProposalView() {
                       {category.subcategories && category.subcategories.length > 0 ? (
                         <div className="cogs-subcategories">
                           {(() => {
-                            const hasCustomOptionsSubcategory = category.subcategories?.some(
-                              (subcategory) => subcategory.name === CUSTOM_OPTIONS_SUBCATEGORY
-                            );
-                            const baseItems = hasCustomOptionsSubcategory
-                              ? category.items.filter(item => !isCustomOptionItem(item))
+                            const baseItems = category.subcategories?.length
+                              ? category.items.filter(item => !hasLineItemSubcategory(item))
                               : category.items;
                             if (category.hideBaseItems || baseItems.length === 0) return null;
                             return (
@@ -2220,11 +2294,8 @@ function ProposalView() {
                       {category.subcategories && category.subcategories.length > 0 ? (
                         <div className="cogs-subcategories">
                           {(() => {
-                            const hasCustomOptionsSubcategory = category.subcategories?.some(
-                              (subcategory) => subcategory.name === CUSTOM_OPTIONS_SUBCATEGORY
-                            );
-                            const baseItems = hasCustomOptionsSubcategory
-                              ? category.items.filter(item => !isCustomOptionItem(item))
+                            const baseItems = category.subcategories?.length
+                              ? category.items.filter(item => !hasLineItemSubcategory(item))
                               : category.items;
                             if (category.hideBaseItems || baseItems.length === 0) return null;
                             return (

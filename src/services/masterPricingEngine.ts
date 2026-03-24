@@ -6,6 +6,14 @@ import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts, CustomOption } fro
 import pricingData from './pricingData';
 import { CalculationModules } from './pricingEngineComplete';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
+import { CUSTOM_OPTIONS_SUBCATEGORY } from '../utils/costBreakdownSubcategories';
+import {
+  getCustomOptionTotal,
+  getOffContractTotal,
+  hasCustomOptionContent,
+  isOffContractCustomOption,
+  normalizeCustomOption,
+} from '../utils/customOptions';
 
 const hasPoolDefinition = (poolSpecs: any): boolean => {
   if (!poolSpecs) return false;
@@ -51,33 +59,24 @@ function rebuildEquipmentTax(equipmentItems: CostLineItem[]): CostLineItem[] {
   return withoutTax;
 }
 
-const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
-
-const hasCustomOptionContent = (option: CustomOption): boolean => {
-  const name = option.name?.trim() || '';
-  const description = option.description?.trim() || '';
-  const labor = Number(option.laborCost) || 0;
-  const material = Number(option.materialCost) || 0;
-  return Boolean(name || description || labor !== 0 || material !== 0);
-};
-
 const buildCustomOptionItems = (options: CustomOption[] | undefined, category: string): CostLineItem[] => {
   if (!options || options.length === 0) return [];
-  return options.filter(hasCustomOptionContent).map((option, index) => {
-    const labor = Number(option.laborCost) || 0;
-    const material = Number(option.materialCost) || 0;
-    const total = labor + material;
-    const description = option.name?.trim() || `Custom Option #${index + 1}`;
-    return {
-      category,
-      description,
-      unitPrice: total,
-      quantity: 1,
-      total,
-      notes: option.description,
-      details: { subcategory: CUSTOM_OPTIONS_SUBCATEGORY },
-    };
-  });
+  return options
+    .filter((option) => hasCustomOptionContent(option) && !isOffContractCustomOption(option))
+    .map((option, index) => {
+      const normalized = normalizeCustomOption(option);
+      const total = getCustomOptionTotal(normalized);
+      const description = normalized.name?.trim() || `Custom Option #${index + 1}`;
+      return {
+        category,
+        description,
+        unitPrice: total,
+        quantity: 1,
+        total,
+        notes: normalized.description,
+        details: { subcategory: CUSTOM_OPTIONS_SUBCATEGORY },
+      };
+    });
 };
 
 export class MasterPricingEngine {
@@ -132,7 +131,8 @@ export class MasterPricingEngine {
       poolSpecs,
       plumbingWithElectrical,
       equipment,
-      normalizedExcavation
+      normalizedExcavation,
+      waterFeatures
     );
     const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
     let steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
@@ -367,6 +367,7 @@ export class MasterPricingEngine {
     const automaticCoverRetail = automaticCoverCost > 0
       ? Math.round(automaticCoverCost * 1.7 * 100) / 100
       : 0;
+    const offContractTotal = getOffContractTotal(proposal);
     if (automaticCoverCost > 0) {
       customFeaturesItems.push({
         category: 'Custom Features',
@@ -457,7 +458,10 @@ export class MasterPricingEngine {
 
     // Get configuration values (these should come from proposal or defaults)
     const overheadMultiplier = proposal.pricing?.overheadMultiplier ?? 1.01; // 1% overhead
-    const targetMargin = proposal.pricing?.targetMargin ?? 0.7; // Excel target margin (COGS ~70% of retail)
+    const targetMargin =
+      (pricingData as any).pricingDefaults?.targetMargin ??
+      proposal.pricing?.targetMargin ??
+      0.7; // Excel target margin (COGS ~70% of retail)
     const discountAmount = proposal.pricing?.discountAmount ?? 0; // Manual discount
     const digCommissionRate = proposal.pricing?.digCommissionRate ?? 0.0275; // 2.75%
     const adminFeeRate = proposal.pricing?.adminFeeRate ?? 0.029; // 2.9%
@@ -486,7 +490,8 @@ export class MasterPricingEngine {
       manualAdjustmentsTotal +
       customFeaturesAdjustmentTotal +
       autoCoverRetailAdjustment +
-      retailAdjustmentsTotal;
+      retailAdjustmentsTotal +
+      offContractTotal;
 
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 1250;
@@ -517,6 +522,7 @@ export class MasterPricingEngine {
       totalCostsBeforeOverhead,
       overheadMultiplier,
       totalCOGS,
+      offContractTotal,
       targetMargin,
       baseRetailPrice,
       g3UpgradeCost,

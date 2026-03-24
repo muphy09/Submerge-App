@@ -1,10 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Equipment, PumpSelection, LightSelection, PlumbingRuns } from '../types/proposal-new';
+import {
+  Equipment,
+  PumpSelection,
+  LightSelection,
+  PlumbingRuns,
+  SaltSystemSelection,
+} from '../types/proposal-new';
 import pricingData from '../services/pricingData';
-import { getSessionRole } from '../services/session';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
+import { getDefaultCleanerOption, getDefaultCleanerQuantity } from '../utils/cleanerDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { getRetiredEquipmentFlags } from '../utils/retiredEquipment';
+import {
+  automationIncludesSaltCell,
+  buildIncludedSaltCellOption,
+  isExcludedFromSaltCell,
+  isIncludedSaltCellOptionName,
+  isIncludedSaltCellSelection,
+  isNoSaltSystemName,
+  isRealSaltSystemSelection,
+} from '../utils/saltCellCompatibility';
 import CustomOptionsSection from './CustomOptionsSection';
 import RetiredEquipmentIndicator from './RetiredEquipmentIndicator';
 import './SectionStyles.css';
@@ -66,15 +81,21 @@ const LabelWithRetired = ({ text, showRetired }: { text: string; showRetired?: b
 );
 
 function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRuns, hasSpa, hasPool }: Props) {
-  const sessionRole = getSessionRole();
-  const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
+  const autoFillSelectionRequiresElectric = (selection?: { name?: string; requiresElectricRun?: boolean }) => {
+    const selectionName = selection?.name?.trim() || '';
+    const normalizedName = selectionName.toLowerCase();
+    const catalogMatch = selectionName
+      ? pricingData.equipment.autoFillSystem.find((system) => system.name === selectionName)
+      : undefined;
+    return Boolean(selection?.requiresElectricRun || catalogMatch?.requiresElectricRun || normalizedName.includes('electric'));
+  };
 
   const defaults = useMemo(() => {
     const byCost = <T,>(list: T[]) =>
       list.find((item: any) => getEquipmentItemCost(item) === 0) || list[0];
     const pump = byCost(pricingData.equipment.pumps);
     const filter = byCost(pricingData.equipment.filters);
-    const cleaner = byCost(pricingData.equipment.cleaners);
+    const cleaner = getDefaultCleanerOption(pricingData.equipment.cleaners) || byCost(pricingData.equipment.cleaners);
     const heater = byCost(pricingData.equipment.heaters);
     const automation = byCost(pricingData.equipment.automation);
     const autoFillSystem = byCost(pricingData.equipment.autoFillSystem);
@@ -86,6 +107,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     filter: pricingData.equipment.filters.find(f => !f.name.toLowerCase().includes('no filter')) || pricingData.equipment.filters[0],
     heater: pricingData.equipment.heaters.find(h => !h.name.toLowerCase().includes('no heater')) || pricingData.equipment.heaters[0],
     automation: pricingData.equipment.automation.find(a => !a.name.toLowerCase().includes('no automation')) || pricingData.equipment.automation[0],
+    saltSystem: pricingData.equipment.saltSystem.find(s => !isNoSaltSystemName(s.name)) || pricingData.equipment.saltSystem[0],
     autoFillSystem: pricingData.equipment.autoFillSystem.find(s => !s.name.toLowerCase().includes('no auto')) || pricingData.equipment.autoFillSystem[0],
   }), []);
 
@@ -96,13 +118,8 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   const costOf = (item: any, applyPumpOverhead?: boolean) =>
     getEquipmentItemCost(item, applyPumpOverhead ? pumpOverhead : 1);
   const hasHeaterSelection = hasRealSelection(data?.heater?.name, 'no heater');
-  const getCostBadge = (amount: number) =>
-    canViewCostAmounts ? (amount > 0 ? `$${amount.toLocaleString()}` : 'Included') : undefined;
   const noneOptionValue = 'none';
-  const formatOptionLabel = (label: string, amount?: number) => {
-    const badge = getCostBadge(amount ?? 0);
-    return badge ? `${label} (${badge})` : label;
-  };
+  const formatOptionLabel = (label: string, _amount?: number) => label;
   const isAuxPumpPlaceholder = (name: string) => {
     const lowered = name.toLowerCase();
     return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary');
@@ -124,7 +141,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   const cleanerOptions = pricingData.equipment.cleaners.filter(cleaner => !cleaner.name.toLowerCase().includes('no cleaner'));
   const heaterOptions = pricingData.equipment.heaters.filter(heater => !heater.name.toLowerCase().includes('no heater'));
   const automationOptions = pricingData.equipment.automation.filter(auto => !auto.name.toLowerCase().includes('no automation'));
-  const saltOptions = pricingData.equipment.saltSystem.filter(system => !system.name.toLowerCase().includes('no salt'));
+  const saltCatalog = pricingData.equipment.saltSystem.filter(system => !isNoSaltSystemName(system.name));
   const autoFillOptions = pricingData.equipment.autoFillSystem.filter(system => !system.name.toLowerCase().includes('no auto'));
 
   const buildAutoFillSelection = (system: any) => ({
@@ -136,6 +153,16 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     price: costOf(system),
     percentIncrease: (system as any)?.percentIncrease,
     requiresElectricRun: (system as any)?.requiresElectricRun,
+  });
+  const buildSaltSystemSelection = (system: any): SaltSystemSelection => ({
+    name: system?.name || '',
+    model: (system as any)?.model,
+    basePrice: (system as any)?.basePrice,
+    addCost1: (system as any)?.addCost1,
+    addCost2: (system as any)?.addCost2,
+    price: costOf(system),
+    excludedFromSaltCell: (system as any)?.excludedFromSaltCell,
+    includedSaltCellPlaceholder: false,
   });
 
   const hasPumpSelection = hasRealSelection(data?.pump?.name, 'no pump');
@@ -170,7 +197,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       addCost2: (defaults.cleaner as any).addCost2,
       price: costOf(defaults.cleaner),
     },
-    cleanerQuantity: data?.cleanerQuantity ?? 0,
+    cleanerQuantity: data?.cleanerQuantity ?? getDefaultCleanerQuantity(data?.cleaner || defaults.cleaner),
     heater: data?.heater || {
       name: defaults.heater.name,
       btu: (defaults.heater as any).btu,
@@ -178,10 +205,8 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       addCost1: (defaults.heater as any).addCost1,
       addCost2: (defaults.heater as any).addCost2,
       price: costOf(defaults.heater),
-      isVersaFlo: defaults.heater.isVersaFlo,
     },
     heaterQuantity: hasHeaterSelection ? Math.max(data?.heaterQuantity ?? 1, 1) : 0,
-    upgradeToVersaFlo: data?.upgradeToVersaFlo ?? false,
     includePoolLights: data?.includePoolLights,
     includeSpaLights: data?.includeSpaLights,
     poolLights: data?.poolLights,
@@ -193,13 +218,16 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       basePrice: (defaults.automation as any).basePrice,
       addCost1: (defaults.automation as any).addCost1,
       addCost2: (defaults.automation as any).addCost2,
+      addCost3: (defaults.automation as any).addCost3,
+      includesSaltCell: (defaults.automation as any).includesSaltCell,
       price: costOf(defaults.automation),
       zones: data?.automation?.zones ?? 0,
-      percentIncrease: (defaults.automation as any).percentIncrease,
     },
     automationQuantity: data?.automationQuantity ?? 0,
     saltSystem: data?.saltSystem,
-    saltSystemQuantity: data?.saltSystemQuantity ?? (data?.saltSystem ? 1 : 0),
+    saltSystemQuantity:
+      data?.saltSystemQuantity ?? (isRealSaltSystemSelection(data?.saltSystem) ? 1 : 0),
+    additionalSaltSystem: data?.additionalSaltSystem,
     autoFillSystem:
       data?.autoFillSystem ??
       (data?.hasAutoFill
@@ -255,21 +283,31 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   const filterQuantity = Math.max(safeData.filterQuantity ?? (includeFilter ? 1 : 0), 0);
   const heaterQuantity = Math.max(safeData.heaterQuantity ?? (includeHeater ? 1 : 0), 0);
   const automationQuantity = Math.max(safeData.automationQuantity ?? (includeAutomation ? 1 : 0), 0);
-  const saltSystemQuantity = Math.max(safeData.saltSystemQuantity ?? (includeSalt ? 1 : 0), 0);
+  const saltSystemQuantity = Math.max(
+    safeData.saltSystemQuantity ?? (isRealSaltSystemSelection(safeData.saltSystem) ? 1 : 0),
+    0
+  );
   const autoFillSystemQuantity = Math.max(
     safeData.autoFillSystemQuantity ?? (includeAutoFill ? 1 : 0),
     0
   );
-  const autoFillRequiresElectric = includeAutoFill && Boolean(safeData.autoFillSystem?.requiresElectricRun);
+  const autoFillRequiresElectric = includeAutoFill && autoFillSelectionRequiresElectric(safeData.autoFillSystem);
+  const automationHasIncludedSaltCell =
+    includeAutomation &&
+    hasRealSelection(safeData.automation?.name, 'no automation') &&
+    automationIncludesSaltCell(safeData.automation);
+  const primarySaltOptions = saltCatalog.filter(system => !isExcludedFromSaltCell(system));
+  const additionalSaltOptions = saltCatalog.filter(system => isExcludedFromSaltCell(system));
+  const visibleSaltOptions = automationHasIncludedSaltCell
+    ? [buildIncludedSaltCellOption(), ...primarySaltOptions]
+    : primarySaltOptions;
+  const showSaltQuantity = includeSalt && isRealSaltSystemSelection(safeData.saltSystem);
+  const showAdditionalSaltOptions = includeSalt;
   const poolLights = safeData.poolLights || [];
   const spaLights = safeData.spaLights || [];
 
   const updateData = (updates: Partial<Equipment>) => {
     onChange({ ...safeData, ...updates, hasBeenEdited: true });
-  };
-
-  const handleChange = (field: keyof Equipment, value: any) => {
-    updateData({ [field]: value } as Partial<Equipment>);
   };
 
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
@@ -424,7 +462,6 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           addCost1: (selected as any)?.addCost1 ?? (defaults.heater as any).addCost1,
           addCost2: (selected as any)?.addCost2 ?? (defaults.heater as any).addCost2,
           price: costOf(selected || defaults.heater),
-          isVersaFlo: selected?.isVersaFlo ?? defaults.heater.isVersaFlo,
         },
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
       });
@@ -437,9 +474,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           addCost1: (defaults.heater as any).addCost1,
           addCost2: (defaults.heater as any).addCost2,
           price: costOf(defaults.heater),
-          isVersaFlo: defaults.heater.isVersaFlo,
         },
-        upgradeToVersaFlo: false,
         heaterQuantity: 0,
       });
     }
@@ -458,6 +493,85 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
       commitLighting(poolLights, [], includePoolLights, false);
     }
   }, [hasSpa, includeSpaLights, spaLights.length, poolLights, includePoolLights]);
+
+  useEffect(() => {
+    const automationSelected =
+      includeAutomation && hasRealSelection(safeData.automation?.name, 'no automation');
+    const currentSaltIsIncluded = isIncludedSaltCellSelection(safeData.saltSystem);
+    const currentSaltIsPrimary =
+      isRealSaltSystemSelection(safeData.saltSystem) && !isExcludedFromSaltCell(safeData.saltSystem);
+
+    if (!automationSelected) {
+      if (currentSaltIsIncluded) {
+        setIncludeSalt(false);
+        updateData({ saltSystem: undefined, saltSystemQuantity: 0, additionalSaltSystem: undefined });
+        return;
+      }
+      if (safeData.saltSystem?.name && !currentSaltIsPrimary) {
+        const fallbackSaltSystem = primarySaltOptions[0] || selectableDefaults.saltSystem;
+        if (fallbackSaltSystem) {
+          updateData({
+            saltSystem: buildSaltSystemSelection(fallbackSaltSystem),
+            saltSystemQuantity: Math.max(safeData.saltSystemQuantity ?? 1, 1),
+          });
+        }
+        return;
+      }
+      if (currentSaltIsPrimary && !includeSalt) {
+        setIncludeSalt(true);
+      }
+      return;
+    }
+
+    if (automationHasIncludedSaltCell) {
+      if (!includeSalt) {
+        setIncludeSalt(true);
+      }
+      if (currentSaltIsPrimary) {
+        if ((safeData.saltSystemQuantity ?? 0) !== Math.max(safeData.saltSystemQuantity ?? 1, 1)) {
+          updateData({ saltSystemQuantity: Math.max(safeData.saltSystemQuantity ?? 1, 1) });
+        }
+        return;
+      }
+      if (
+        !currentSaltIsIncluded ||
+        !safeData.saltSystem?.includedSaltCellPlaceholder ||
+        (safeData.saltSystemQuantity ?? 0) !== 0
+      ) {
+        updateData({ saltSystem: buildIncludedSaltCellOption(), saltSystemQuantity: 0 });
+      }
+      return;
+    }
+
+    if (!includeSalt) {
+      setIncludeSalt(true);
+    }
+
+    if (!currentSaltIsPrimary) {
+      const fallbackSaltSystem = primarySaltOptions[0] || selectableDefaults.saltSystem;
+      if (fallbackSaltSystem) {
+        updateData({
+          saltSystem: buildSaltSystemSelection(fallbackSaltSystem),
+          saltSystemQuantity: Math.max(safeData.saltSystemQuantity ?? 1, 1),
+        });
+      }
+      return;
+    }
+
+    if ((safeData.saltSystemQuantity ?? 0) < 1) {
+      updateData({ saltSystemQuantity: 1 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    includeAutomation,
+    automationHasIncludedSaltCell,
+    includeSalt,
+    safeData.automation?.name,
+    safeData.saltSystem?.name,
+    safeData.saltSystem?.excludedFromSaltCell,
+    safeData.saltSystem?.includedSaltCellPlaceholder,
+    safeData.saltSystemQuantity,
+  ]);
 
   const handlePoolLightSelect = (name: string) => {
     if (name === noneOptionValue) {
@@ -560,9 +674,11 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           basePrice: (selected as any)?.basePrice ?? (defaults.automation as any).basePrice,
           addCost1: (selected as any)?.addCost1 ?? (defaults.automation as any).addCost1,
           addCost2: (selected as any)?.addCost2 ?? (defaults.automation as any).addCost2,
+          addCost3: (selected as any)?.addCost3 ?? (defaults.automation as any).addCost3,
+          includesSaltCell:
+            (selected as any)?.includesSaltCell ?? (defaults.automation as any).includesSaltCell,
           price: costOf(selected || defaults.automation),
           zones: safeData.automation?.zones ?? 0,
-          percentIncrease: (selected as any)?.percentIncrease ?? (defaults.automation as any).percentIncrease,
         },
         automationQuantity: Math.max(safeData.automationQuantity ?? 1, 1),
       });
@@ -573,9 +689,10 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           basePrice: (defaults.automation as any).basePrice,
           addCost1: (defaults.automation as any).addCost1,
           addCost2: (defaults.automation as any).addCost2,
+          addCost3: (defaults.automation as any).addCost3,
+          includesSaltCell: (defaults.automation as any).includesSaltCell,
           price: costOf(defaults.automation),
           zones: 0,
-          percentIncrease: (defaults.automation as any).percentIncrease,
         },
         automationQuantity: 0,
       });
@@ -585,7 +702,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
   const toggleSalt = (val: boolean) => {
     setIncludeSalt(val);
     if (!val) {
-      updateData({ saltSystem: undefined, saltSystemQuantity: 0 });
+      updateData({ saltSystem: undefined, saltSystemQuantity: 0, additionalSaltSystem: undefined });
     }
   };
 
@@ -761,7 +878,6 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           addCost1: (heater as any).addCost1,
           addCost2: (heater as any).addCost2,
           price: costOf(heater),
-          isVersaFlo: heater.isVersaFlo,
         },
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
       });
@@ -777,9 +893,10 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           basePrice: (automation as any).basePrice,
           addCost1: (automation as any).addCost1,
           addCost2: (automation as any).addCost2,
+          addCost3: (automation as any).addCost3,
+          includesSaltCell: (automation as any).includesSaltCell,
           price: costOf(automation),
           zones: safeData.automation.zones,
-          percentIncrease: (automation as any).percentIncrease,
         },
         automationQuantity: Math.max(safeData.automationQuantity ?? 1, 1),
       });
@@ -788,7 +905,11 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
 
   const handleSaltSystemChange = (name?: string) => {
     if (!name) {
-      updateData({ saltSystem: undefined, saltSystemQuantity: 0 });
+      updateData({ saltSystem: undefined, saltSystemQuantity: 0, additionalSaltSystem: undefined });
+      return;
+    }
+    if (isIncludedSaltCellOptionName(name)) {
+      updateData({ saltSystem: buildIncludedSaltCellOption(), saltSystemQuantity: 0 });
       return;
     }
     const system = pricingData.equipment.saltSystem.find(s => s.name === name);
@@ -798,16 +919,22 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
     }
     const nextQuantity = Math.max(safeData.saltSystemQuantity ?? 1, 1);
     updateData({
-      saltSystem: {
-        name: system.name,
-        model: system.model,
-        basePrice: (system as any).basePrice,
-        addCost1: (system as any).addCost1,
-        addCost2: (system as any).addCost2,
-        price: costOf(system),
-      },
+      saltSystem: buildSaltSystemSelection(system),
       saltSystemQuantity: nextQuantity,
     });
+  };
+
+  const handleAdditionalSaltSystemChange = (name?: string) => {
+    if (!name || name === noneOptionValue) {
+      updateData({ additionalSaltSystem: undefined });
+      return;
+    }
+    const system = pricingData.equipment.saltSystem.find(s => s.name === name);
+    if (!system || !isExcludedFromSaltCell(system)) {
+      updateData({ additionalSaltSystem: undefined });
+      return;
+    }
+    updateData({ additionalSaltSystem: buildSaltSystemSelection(system) });
   };
 
   const handleAutoFillSystemChange = (name?: string) => {
@@ -880,7 +1007,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
                       onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
                     >
                       {retiredFlags.auxiliaryPumps[idx] && renderRetiredOption(pump?.name || getDefaultAuxiliaryPump()?.name)}
-                      {auxiliaryPumpOptions.map(option => (
+                      {auxiliaryPumpOptions.map((option: any) => (
                         <option key={option.name} value={option.name}>
                           {formatOptionLabel(option.name, costOf(option, true))}
                         </option>
@@ -1033,28 +1160,6 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           )}
         </div>
 
-        {includeHeater && hasSpa && !safeData.heater.isVersaFlo && (
-          <div className="spec-field">
-            <label className="spec-label">VersaFlo Upgrade</label>
-            <div className="pool-type-buttons">
-              <button
-                type="button"
-                className={`pool-type-btn ${safeData.upgradeToVersaFlo ? 'active' : ''}`}
-                onClick={() => handleChange('upgradeToVersaFlo', true)}
-              >
-                Upgrade for Spa
-              </button>
-              <button
-                type="button"
-                className={`pool-type-btn ${!safeData.upgradeToVersaFlo ? 'active' : ''}`}
-                onClick={() => handleChange('upgradeToVersaFlo', false)}
-              >
-                Skip Upgrade
-              </button>
-            </div>
-            <small className="form-help">Required for spa heating when not VersaFlo.</small>
-          </div>
-        )}
       </div>
 
       {/* Pool Lights */}
@@ -1220,7 +1325,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
         <div className="spec-block-header">
           <h2 className="spec-block-title">Sanitation System</h2>
         </div>
-        <div className="spec-grid spec-grid-2">
+        <div className="spec-grid-3-split">
           <div className="spec-field">
             <LabelWithRetired text="Sanitation System" showRetired={retiredFlags.saltSystem} />
             <select
@@ -1228,23 +1333,45 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
               value={includeSalt ? safeData.saltSystem?.name || noneOptionValue : noneOptionValue}
               onChange={(e) => handleSaltSelect(e.target.value)}
             >
-              <option value={noneOptionValue}>None</option>
+              {!includeAutomation && <option value={noneOptionValue}>None</option>}
               {retiredFlags.saltSystem && renderRetiredOption(safeData.saltSystem?.name)}
-              {saltOptions.map(system => (
+              {visibleSaltOptions.map(system => (
                 <option key={system.name} value={system.name}>
                   {formatOptionLabel(system.name, costOf(system))}
                 </option>
               ))}
             </select>
           </div>
-          {includeSalt && (
+          {showAdditionalSaltOptions && (
+            <div className="spec-field">
+              <label className="spec-label">Additional Options</label>
+              <select
+                className="compact-input equipment-select"
+                value={safeData.additionalSaltSystem?.name || noneOptionValue}
+                onChange={(e) => handleAdditionalSaltSystemChange(e.target.value)}
+              >
+                <option value={noneOptionValue}>None</option>
+                {safeData.additionalSaltSystem?.name &&
+                  !additionalSaltOptions.some((system) => system.name === safeData.additionalSaltSystem?.name) &&
+                  renderRetiredOption(safeData.additionalSaltSystem?.name)}
+                {additionalSaltOptions.map(system => (
+                  <option key={system.name} value={system.name}>
+                    {formatOptionLabel(system.name, costOf(system))}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {showSaltQuantity && (
             <div className="spec-field" style={{ maxWidth: '220px' }}>
               <label className="spec-label">Sanitation System Quantity</label>
               <CompactInput
                 value={saltSystemQuantity}
-                onChange={(e) => updateData({ saltSystemQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
+                onChange={(e) =>
+                  updateData({ saltSystemQuantity: Math.max(1, parseInt(e.target.value) || 1) })
+                }
                 unit="ea"
-                min="0"
+                min="1"
                 step="1"
                 placeholder="1"
               />
@@ -1258,7 +1385,7 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
         <div className="spec-block-header">
           <h2 className="spec-block-title">Auto-fill</h2>
         </div>
-        <div className="spec-grid-3-split">
+        <div className={`spec-grid-3-split auto-fill-grid ${autoFillRequiresElectric ? 'auto-fill-grid-electric' : ''}`}>
           <div className="spec-field">
             <LabelWithRetired text="Auto-Fill System" showRetired={retiredFlags.autoFillSystem} />
             <select
@@ -1290,7 +1417,12 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
           )}
           {includeAutoFill && (
             <div className="spec-field">
-              <label className="spec-label">Auto-Fill Run</label>
+              <label
+                className="spec-label"
+                title={autoFillRequiresElectric ? 'Also billed as an electrical run.' : undefined}
+              >
+                Auto-Fill Run
+              </label>
               <CompactInput
                 value={plumbingRuns.autoFillRun ?? 0}
                 onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
@@ -1299,9 +1431,19 @@ function EquipmentSectionNew({ data, onChange, plumbingRuns, onChangePlumbingRun
                 step="1"
                 placeholder="0"
               />
-              {autoFillRequiresElectric && (
-                <small className="form-help">Also billed as an electrical run.</small>
-              )}
+            </div>
+          )}
+          {includeAutoFill && autoFillRequiresElectric && (
+            <div className="spec-field">
+              <label className="spec-label">Electric Run</label>
+              <CompactInput
+                value={plumbingRuns.autoFillRun ?? 0}
+                onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
+                unit="LNFT"
+                min="0"
+                step="1"
+                placeholder="0"
+              />
             </div>
           )}
         </div>

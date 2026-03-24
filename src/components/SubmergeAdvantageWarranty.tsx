@@ -213,18 +213,17 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
   items.push(
     { label: equipment.filter?.name || 'Filter not selected' },
     {
-      label: equipment.heater?.name
-        ? equipment.upgradeToVersaFlo
-          ? `${equipment.heater.name} (VersaFlo upgrade)`
-          : equipment.heater.name
-        : 'Heater not selected',
+      label: equipment.heater?.name || 'Heater not selected',
     },
     { label: equipment.cleaner?.name || 'Cleaner not selected' },
     { label: equipment.automation?.name || 'Automation not selected' },
   );
 
-  if (equipment.saltSystem?.name) {
-    items.push({ label: equipment.saltSystem.name });
+  const sanitationSelections = [equipment.saltSystem?.name, equipment.additionalSaltSystem?.name].filter(
+    (label): label is string => Boolean(label)
+  );
+  if (sanitationSelections.length > 0) {
+    sanitationSelections.forEach((label) => items.push({ label }));
   } else {
     items.push({ label: 'Sanitation system not selected' });
   }

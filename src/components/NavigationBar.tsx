@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import './NavigationBar.css';
@@ -12,6 +12,7 @@ interface NavigationBarProps {
   franchiseId?: string;
   actingAsLabel?: string;
   onStopActing?: () => void;
+  onAdminPanelClick?: (event: ReactMouseEvent<HTMLAnchorElement>) => void;
 }
 
 function NavigationBar({
@@ -22,6 +23,7 @@ function NavigationBar({
   franchiseId,
   actingAsLabel,
   onStopActing,
+  onAdminPanelClick,
 }: NavigationBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -66,6 +68,7 @@ function NavigationBar({
           <NavLink
             to="/admin"
             className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+            onClick={onAdminPanelClick}
           >
             Admin Panel
           </NavLink>

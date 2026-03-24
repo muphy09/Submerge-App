@@ -2,6 +2,12 @@ import { useEffect } from 'react';
 import { CustomerInfo, PoolSpecs, TileCopingDecking } from '../types/proposal-new';
 import { CalculationModules } from '../services/pricingEngineComplete';
 import pricingData from '../services/pricingData';
+import {
+  formatMasonryFacingLabel,
+  getMasonryFacingOptions,
+  normalizeMasonryFacingId,
+  type MasonryFacingOption,
+} from '../utils/masonryFacing';
 import './SectionStyles.css';
 
 interface Props {
@@ -11,12 +17,6 @@ interface Props {
   onChangeCustomerInfo: (info: CustomerInfo) => void;
   tileCopingDecking?: TileCopingDecking;
   onChangeTileCopingDecking?: (data: TileCopingDecking) => void;
-  pricingModels?: { id: string; name: string; isDefault?: boolean }[];
-  selectedPricingModelId?: string | null;
-  selectedPricingModelName?: string | null;
-  defaultPricingModelId?: string | null;
-  onSelectPricingModel?: (id: string) => void;
-  showStaleIndicator?: boolean;
 }
 
 // Helper component for compact inputs with inline unit labels
@@ -59,6 +59,31 @@ const CompactInput = ({
   );
 };
 
+const getFacingSelectOptions = (
+  options: MasonryFacingOption[],
+  currentValue?: string | null
+): MasonryFacingOption[] => {
+  const normalized = normalizeMasonryFacingId(currentValue);
+  if (!normalized || normalized === 'none') {
+    return options;
+  }
+
+  const hasMatch = options.some((option) => normalizeMasonryFacingId(option.id) === normalized);
+  if (hasMatch) {
+    return options;
+  }
+
+  return [
+    ...options,
+    {
+      id: normalized,
+      name: formatMasonryFacingLabel(currentValue, options),
+      materialCost: 0,
+      laborCost: 0,
+    },
+  ];
+};
+
 function PoolSpecsSectionNew({
   data,
   onChange,
@@ -66,15 +91,9 @@ function PoolSpecsSectionNew({
   onChangeCustomerInfo,
   tileCopingDecking,
   onChangeTileCopingDecking,
-  pricingModels = [],
-  selectedPricingModelId,
-  selectedPricingModelName,
-  defaultPricingModelId,
-  onSelectPricingModel,
-  showStaleIndicator,
-  showRemovedIndicator,
 }: Props) {
   const dropdownStyle = { width: '100%', height: '38px', padding: '6px 10px', lineHeight: '20px', boxSizing: 'border-box' as const };
+  const raisedSpaFacingOptions = getMasonryFacingOptions(pricingData.masonry, 'raisedSpa');
 
   // Auto-calculate gallons and spa perimeter when relevant fields change
   useEffect(() => {
@@ -146,60 +165,6 @@ function PoolSpecsSectionNew({
 
   return (
     <div className="section-form">
-      <div className="spec-block">
-        <h2 className="spec-block-title">Pricing Information</h2>
-        <div className="pricing-info-row">
-          <div className="spec-field spec-full-width">
-            <label className="spec-label">Pricing Model</label>
-            <div className="pricing-model-select">
-              <select
-                value={selectedPricingModelId || ''}
-                onChange={(e) => onSelectPricingModel && onSelectPricingModel(e.target.value)}
-                className="compact-input"
-              >
-                {pricingModels.length === 0 && <option value="">No models</option>}
-                {pricingModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} {model.isDefault ? '(Active)' : ''}
-                  </option>
-                ))}
-              </select>
-              <div
-                className={`pricing-model-pill ${
-                  showRemovedIndicator ? 'removed' : showStaleIndicator ? 'inactive' : ''
-                }`}
-              >
-                <span className="pill-name">
-                  {selectedPricingModelName || 'Unnamed model'}
-                  {showRemovedIndicator &&
-                    !(selectedPricingModelName || '').toLowerCase().includes('(removed)') &&
-                    ' (Removed)'}
-                </span>
-                {selectedPricingModelId === defaultPricingModelId ? (
-                  <span className="pill-default">Active</span>
-                ) : (
-                  <>
-                    {showStaleIndicator && !showRemovedIndicator && <span className="pill-inactive">Inactive</span>}
-                    {showRemovedIndicator && <span className="pill-removed">Removed</span>}
-                  </>
-                )}
-              </div>
-            </div>
-            {showRemovedIndicator ? (
-              <div className="pricing-model-warning">
-                Warning: The Pricing Model that is being used no longer exists. Consider switching to a new Price Model
-              </div>
-            ) : (
-              showStaleIndicator && (
-                <div className="pricing-model-warning">
-                  Pricing Warning: You have selected an alternate Pricing Model
-                </div>
-              )
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* ==================== CUSTOMER INFORMATION ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Customer Information</h2>
@@ -312,7 +277,7 @@ function PoolSpecsSectionNew({
                     .filter(m => !data.fiberglassSize || m.size === data.fiberglassSize)
                     .map(model => (
                       <option key={model.name} value={model.name}>
-                        {model.name} ({model.size}) - ${model.price.toLocaleString()}
+                        {model.name} ({model.size})
                       </option>
                     ))}
                 </select>
@@ -508,7 +473,7 @@ function PoolSpecsSectionNew({
                   <option value="">Select model</option>
                   {pricingData.fiberglass.spaModels.map(model => (
                     <option key={model.name} value={model.name}>
-                      {model.name} - ${model.price.toLocaleString()}
+                      {model.name}
                     </option>
                   ))}
                 </select>
@@ -634,13 +599,15 @@ function PoolSpecsSectionNew({
                   <label className="spec-label">Raised Spa Facing</label>
                   <select
                     className="compact-input"
-                    value={data.raisedSpaFacing}
-                    onChange={(e) => handleChange('raisedSpaFacing', e.target.value)}
+                    value={normalizeMasonryFacingId(data.raisedSpaFacing) || 'none'}
+                    onChange={(e) => handleChange('raisedSpaFacing', normalizeMasonryFacingId(e.target.value) || 'none')}
                   >
                     <option value="none">None</option>
-                    <option value="tile">Tile</option>
-                    <option value="ledgestone">Ledgestone</option>
-                    <option value="stacked-stone">Stacked Stone</option>
+                    {getFacingSelectOptions(raisedSpaFacingOptions, data.raisedSpaFacing).map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

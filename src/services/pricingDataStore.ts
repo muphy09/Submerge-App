@@ -4,6 +4,7 @@ import {
   loadDefaultFranchisePricing,
   savePricingModel as savePricingModelRemote,
 } from './pricingModelsAdapter';
+import { ensureMasonryFacingCatalogs } from '../utils/masonryFacing';
 
 type PricingData = typeof pricingData;
 
@@ -20,6 +21,12 @@ let activePricingModelIsDefault = true;
 const defaultSnapshot: PricingData = deepClone(pricingData);
 let pricingState: PricingData = deepClone(pricingData);
 const listeners = new Set<(data: PricingData) => void>();
+
+function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
+  const normalized = deepClone(snapshot);
+  ensureMasonryFacingCatalogs(normalized, source, defaultSnapshot);
+  return normalized;
+}
 
 function getLocalStorageKey(franchiseId: string) {
   return `pricingDataOverrides-${franchiseId}-${STORAGE_VERSION}`;
@@ -124,7 +131,10 @@ async function loadPricingForFranchise(franchiseId: string, pricingModelId?: str
     if (pricingModelId) {
       const result = await loadPricingModelRemote(franchiseId, pricingModelId);
       if (result?.pricing) {
-        pricingState = mergeDeep(defaultSnapshot, result.pricing ?? {});
+        pricingState = normalizePricingState(
+          mergeDeep(defaultSnapshot, result.pricing ?? {}),
+          result.pricing
+        );
         activeFranchiseId = franchiseId;
         activePricingModelId = result.pricingModelId || pricingModelId;
         activePricingModelName = result.pricingModelName || null;
@@ -139,7 +149,7 @@ async function loadPricingForFranchise(franchiseId: string, pricingModelId?: str
   }
 
   const saved = await fetchPersistedPricing(franchiseId);
-  pricingState = mergeDeep(defaultSnapshot, saved ?? {});
+  pricingState = normalizePricingState(mergeDeep(defaultSnapshot, saved ?? {}), saved);
   activeFranchiseId = franchiseId;
   syncBaseFromState();
   notify();
@@ -264,7 +274,7 @@ export function removePricingListItem(path: (string | number)[], index: number) 
 }
 
 export function resetPricingData() {
-  pricingState = deepClone(defaultSnapshot);
+  pricingState = normalizePricingState(deepClone(defaultSnapshot), defaultSnapshot);
   syncBaseFromState();
   notify();
 }

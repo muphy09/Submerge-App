@@ -6,6 +6,12 @@ import { PoolSpecs, Excavation, TileCopingDecking, Drainage, Equipment, WaterFea
 import pricingData from './pricingData';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
+import {
+  formatMasonryFacingLabel,
+  getMasonryFacingOptions,
+  getMasonryFacingRate,
+  normalizeMasonryFacingId,
+} from '../utils/masonryFacing';
 import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
@@ -111,6 +117,7 @@ export class TileCopingDeckingCalculations {
     const materialItems: CostLineItem[] = [];
     const prices = pricingData.tileCoping;
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
+    const isDeckingOffContract = Boolean(tileCopingDecking.isDeckingOffContract);
     const perimeterWithExtras = poolSpecs.perimeter + tileCopingDecking.additionalTileLength;
     const spaPerimeter = poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs);
     const copingLnft =
@@ -220,6 +227,7 @@ export class TileCopingDeckingCalculations {
     const deckingLabelMap: Record<string, string> = {
       'travertine-level1': 'Level 1 Decking - Travertine',
       'travertine-level2': 'Level 2 Decking - Travertine',
+      'travertine-level3': 'Level 3 Decking - Travertine',
     };
     const formatCopingLabel = (type: string, suffix: string) =>
       copingLabelMap[type] ? copingLabelMap[type] : `${type} ${suffix}`;
@@ -256,7 +264,15 @@ export class TileCopingDeckingCalculations {
 
     // DECKING LABOR
     const deckingLaborRate = this.getDeckingLaborRate(tileCopingDecking.deckingType, prices);
-    if (isConcreteDeck) {
+    if (isDeckingOffContract) {
+      laborItems.push({
+        category: 'Decking Labor',
+        description: 'Decking - Off Contract',
+        unitPrice: 0,
+        quantity: 1,
+        total: 0,
+      });
+    } else if (isConcreteDeck) {
       // Excel only charges concrete deck labor when concrete coping (cantilever) is selected, per perimeter
       if (tileCopingDecking.copingType === 'concrete' && deckingLaborRate > 0) {
         laborItems.push({
@@ -278,7 +294,7 @@ export class TileCopingDeckingCalculations {
     }
 
     // Concrete steps
-    if (tileCopingDecking.concreteStepsLength > 0) {
+    if (!isDeckingOffContract && tileCopingDecking.concreteStepsLength > 0) {
       laborItems.push({
         category: 'Decking Labor',
         description: 'Concrete Steps',
@@ -290,7 +306,9 @@ export class TileCopingDeckingCalculations {
 
     // DECKING MATERIAL
     const deckingMaterialRate = this.getDeckingMaterialRate(tileCopingDecking.deckingType, prices);
-    if (isConcreteDeck && deckingMaterialRate > 0) {
+    if (isDeckingOffContract) {
+      // No decking COGS when the entire decking scope is billed off contract.
+    } else if (isConcreteDeck && deckingMaterialRate > 0) {
       if (concreteBaseQty > 0) {
         materialItems.push({
           category: 'Decking Material',
@@ -320,7 +338,7 @@ export class TileCopingDeckingCalculations {
     }
 
     // Concrete steps material
-    if (tileCopingDecking.concreteStepsLength > 0) {
+    if (!isDeckingOffContract && tileCopingDecking.concreteStepsLength > 0) {
       materialItems.push({
         category: 'Decking Material',
         description: 'Concrete Steps Material',
@@ -453,7 +471,7 @@ export class TileCopingDeckingCalculations {
     });
 
     // Concrete pump (if any concrete work)
-    if (tileCopingDecking.deckingType === 'concrete' || tileCopingDecking.concreteStepsLength > 0) {
+    if (!isDeckingOffContract && (tileCopingDecking.deckingType === 'concrete' || tileCopingDecking.concreteStepsLength > 0)) {
       laborItems.push({
         category: 'Decking Labor',
         description: 'Concrete Pump',
@@ -464,7 +482,7 @@ export class TileCopingDeckingCalculations {
     }
 
     // Concrete band for fiberglass pools
-    if (PoolCalculations.isFiberglassPool(poolSpecs) && tileCopingDecking.deckingType !== 'none') {
+    if (!isDeckingOffContract && PoolCalculations.isFiberglassPool(poolSpecs) && tileCopingDecking.deckingType !== 'none') {
       materialItems.push({
         category: 'Decking Material',
         description: 'Concrete Band for Fiberglass',
@@ -540,6 +558,7 @@ export class TileCopingDeckingCalculations {
       paver: prices.decking.labor.pavers,
       'travertine-level1': prices.decking.labor.travertine,
       'travertine-level2': prices.decking.labor.travertine,
+      'travertine-level3': prices.decking.labor.travertine,
       concrete: prices.decking.labor.concrete,
     };
     return mapping[deckingType] || 0;
@@ -550,6 +569,7 @@ export class TileCopingDeckingCalculations {
       paver: prices.decking.material.pavers,
       'travertine-level1': prices.decking.material.travertineLevel1,
       'travertine-level2': prices.decking.material.travertineLevel2,
+      'travertine-level3': prices.decking.material.travertineLevel3,
       concrete: prices.decking.material.concrete,
     };
     return mapping[deckingType] || 0;
@@ -619,6 +639,7 @@ export class EquipmentCalculations {
       const automationQty = Math.max(equipment.automationQuantity ?? 0, 0);
       const cleanerQty = Math.max(equipment.cleanerQuantity ?? 0, 0);
       const saltQty = Math.max(equipment.saltSystemQuantity ?? (equipment.saltSystem ? 1 : 0), 0);
+      const additionalSaltCost = getEquipmentItemCost(equipment.additionalSaltSystem as any, 1);
       const autoFillQty = Math.max(
         equipment.autoFillSystemQuantity ?? (equipment.autoFillSystem ? 1 : 0),
         0
@@ -635,6 +656,7 @@ export class EquipmentCalculations {
         heaterQty > 0 ? getEquipmentItemCost(equipment.heater as any, 1) : 0,
         automationQty > 0 ? getEquipmentItemCost(equipment.automation as any, 1) : 0,
         saltQty > 0 ? getEquipmentItemCost(equipment.saltSystem as any, 1) : 0,
+        additionalSaltCost,
         hasAutoFillSystem ? getEquipmentItemCost(equipment.autoFillSystem as any, 1) : 0,
       ];
 
@@ -654,8 +676,7 @@ export class EquipmentCalculations {
         hasAutoFillSystem ||
         (equipment.automation?.zones ?? 0) > 0 ||
         lightCounts.total > 0 ||
-        accessoriesSelected ||
-        !!equipment.upgradeToVersaFlo;
+        accessoriesSelected;
   }
 
   static calculateEquipmentCost(equipment: Equipment, poolSpecs: PoolSpecs): CostLineItem[] {
@@ -689,6 +710,7 @@ export class EquipmentCalculations {
     const heaterCost = heaterQty > 0 ? getEquipmentItemCost(normalizedEquipment.heater as any, 1) : 0;
     const automationCost = getEquipmentItemCost(normalizedEquipment.automation as any, 1);
     const saltCost = getEquipmentItemCost(normalizedEquipment.saltSystem as any, 1);
+    const additionalSaltCost = getEquipmentItemCost(normalizedEquipment.additionalSaltSystem as any, 1);
     const autoFillCost = getEquipmentItemCost(normalizedEquipment.autoFillSystem as any, 1);
     const autoFillName = normalizedEquipment.autoFillSystem?.name || '';
     const hasAutoFillSystem =
@@ -766,21 +788,6 @@ export class EquipmentCalculations {
       });
     }
 
-    // VersaFlo upgrade
-    if (heaterQty > 0 && normalizedEquipment.upgradeToVersaFlo && !normalizedEquipment.heater.isVersaFlo) {
-      const upgrade = pricingData.equipment.heaters.find((h) => h.name.includes('VersaFlo'));
-      if (upgrade) {
-        const upgradeCost = getEquipmentItemCost(upgrade as any, pumpOverhead) - heaterCost;
-        items.push({
-          category: 'Equipment',
-          description: 'Upgrade to VersaFlo',
-          unitPrice: upgradeCost,
-          quantity: 1,
-          total: upgradeCost,
-        });
-      }
-    }
-
     const addLightGroup = (lights: typeof poolLights, labelPrefix: string) => {
       const grouped = new Map<string, { unitPrice: number; quantity: number }>();
       lights.forEach((light) => {
@@ -842,6 +849,16 @@ export class EquipmentCalculations {
           total: saltCost * saltQty,
         });
       }
+
+    if (additionalSaltCost > 0 && normalizedEquipment.additionalSaltSystem?.name) {
+      items.push({
+        category: 'Equipment',
+        description: normalizedEquipment.additionalSaltSystem.name,
+        unitPrice: additionalSaltCost,
+        quantity: 1,
+        total: additionalSaltCost,
+      });
+    }
 
     // Auto-fill system
     if (hasAutoFillSystem) {
@@ -1288,7 +1305,7 @@ export class CleanupCalculations {
       });
     }
 
-    if (tileCopingDecking?.hasRoughGrading) {
+    if (tileCopingDecking?.hasRoughGrading && !tileCopingDecking?.isDeckingOffContract) {
       items.push({
         category: 'Cleanup',
         description: 'Rough Grading',
@@ -1536,30 +1553,27 @@ export class MasonryCalculations {
             ]
           : [];
 
-    const normalizeFacingKey = (facing: string): string => {
-      const key = (facing || '').toLowerCase().replace(/\s+/g, '');
-      if (key === 'panelledge' || key === 'panel-ledge') return 'panelLedge';
-      if (key === 'stackedstone' || key === 'stacked-stone') return 'stackedStone';
-      if (key === 'ledgestone') return 'ledgestone';
-      return facing;
-    };
+    const rbbFacingOptions = getMasonryFacingOptions(prices, 'rbb');
+    const raisedSpaFacingOptions = getMasonryFacingOptions(prices, 'raisedSpa');
 
     const getRockworkMaterialWaste = (facingKey: string, hasExplicitQty: boolean): number => {
       if (hasExplicitQty) return 1; // caller already applied waste
-      if (facingKey === 'panelLedge' || facingKey === 'stackedStone') {
+      if (facingKey === 'panel-ledge' || facingKey === 'stacked-stone') {
         return pricingData.tileCoping.rockworkMaterialWaste?.panelLedge ?? 1.15;
       }
       return 1;
     };
 
-    const addFacing = (description: string, sqft: number, facingKey: string, raised: boolean = false, materialQtyOverride?: number) => {
-      const normalizedFacing = normalizeFacingKey(facingKey);
-      const laborRate = raised
-        ? (prices.labor.raisedSpaFacing as any)[normalizedFacing] || 0
-        : (prices.labor.rbbFacing as any)[normalizedFacing] || 0;
-      const materialRate = raised
-        ? (prices.material.raisedSpaFacing as any)[normalizedFacing] || 0
-        : (prices.material.rbbFacing as any)[normalizedFacing] || 0;
+    const addFacing = (
+      description: string,
+      sqft: number,
+      facingKey: string,
+      catalog: 'rbb' | 'raisedSpa',
+      materialQtyOverride?: number
+    ) => {
+      const normalizedFacing = normalizeMasonryFacingId(facingKey);
+      const laborRate = getMasonryFacingRate(prices, catalog, normalizedFacing, 'labor');
+      const materialRate = getMasonryFacingRate(prices, catalog, normalizedFacing, 'material');
       const baseMaterialQty = materialQtyOverride ?? sqft;
       const materialQty =
         Math.round(baseMaterialQty * getRockworkMaterialWaste(normalizedFacing, materialQtyOverride !== undefined) * 100) / 100;
@@ -1580,7 +1594,10 @@ export class MasonryCalculations {
     };
 
     // Columns (only bill when a facing is selected, mirroring NEW POOL!C40 gating)
-    const hasColumnFacingSelected = !!(excavation.columns.facing && excavation.columns.facing !== 'none');
+    const hasColumnFacingSelected = !!(
+      excavation.columns.facing &&
+      normalizeMasonryFacingId(excavation.columns.facing) !== 'none'
+    );
     if (excavation.columns.count > 0 && hasColumnFacingSelected) {
       const totalHeight = excavation.columns.count * excavation.columns.height;
       labor.push({
@@ -1591,31 +1608,43 @@ export class MasonryCalculations {
         total: prices.columnBase * totalHeight,
       });
 
-      const facingKey = normalizeFacingKey(excavation.columns.facing) as keyof typeof prices.rbbFacing;
+      const facingLabel = formatMasonryFacingLabel(excavation.columns.facing, rbbFacingOptions);
       const perimeter = 2 * (excavation.columns.width + excavation.columns.depth);
       const totalFacing = excavation.columns.count * perimeter * excavation.columns.height;
-      addFacing(`Column ${excavation.columns.facing} Facing`, totalFacing, facingKey);
+      addFacing(`Column ${facingLabel} Facing`, totalFacing, excavation.columns.facing, 'rbb');
     }
 
     // RBB facing
     excavation.rbbLevels.forEach((level) => {
-      if (level.length > 0 && level.facing !== 'none') {
-        const facingKey = normalizeFacingKey(level.facing) as keyof typeof prices.rbbFacing;
+      if (level.length > 0 && normalizeMasonryFacingId(level.facing) !== 'none') {
         const sqft = level.length * (level.height / 12);
-        addFacing(`${level.height}" RBB ${level.facing} Facing`, sqft, facingKey);
+        const facingLabel = formatMasonryFacingLabel(level.facing, rbbFacingOptions);
+        addFacing(`${level.height}" RBB ${facingLabel} Facing`, sqft, level.facing, 'rbb');
+      }
+    });
+
+    // Exposed pool wall facing
+    (excavation.exposedPoolWallLevels ?? []).forEach((level) => {
+      if (level.length > 0 && normalizeMasonryFacingId(level.facing) !== 'none') {
+        const sqft = level.length * (level.height / 12);
+        const facingLabel = formatMasonryFacingLabel(level.facing, rbbFacingOptions);
+        addFacing(`Exposed Pool Wall ${facingLabel} Facing`, sqft, level.facing, 'rbb');
+        if (level.hasBacksideFacing) {
+          addFacing(`Backside ${facingLabel} Facing`, sqft, level.facing, 'rbb');
+        }
       }
     });
 
     // Raised spa facing
-    if (poolSpecs.isRaisedSpa && poolSpecs.raisedSpaFacing !== 'none') {
-      const facingKey = normalizeFacingKey(poolSpecs.raisedSpaFacing) as keyof typeof prices.raisedSpaFacing;
+    if (poolSpecs.isRaisedSpa && normalizeMasonryFacingId(poolSpecs.raisedSpaFacing) !== 'none') {
       const spaPerimeter = poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs);
       const raisedHeight = 1.5; // 18 inches
       const wasteFactor = prices.raisedSpaWasteMultiplier ?? 1;
       const materialWaste = prices.raisedSpaMaterialWaste ?? 1;
       const laborSqft = Math.round(spaPerimeter * raisedHeight * wasteFactor);
       const materialSqft = Math.round(laborSqft * materialWaste * 100) / 100;
-      addFacing(`Raised Spa ${poolSpecs.raisedSpaFacing} Facing`, laborSqft, facingKey, true, materialSqft);
+      const facingLabel = formatMasonryFacingLabel(poolSpecs.raisedSpaFacing, raisedSpaFacingOptions);
+      addFacing(`Raised Spa ${facingLabel} Facing`, laborSqft, poolSpecs.raisedSpaFacing, 'raisedSpa', materialSqft);
     }
 
     // Spillway for raised spa

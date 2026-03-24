@@ -88,6 +88,10 @@ function CostBreakdownView({
     0;
   const franchiseId = proposal?.franchiseId;
   const retailAdjustmentsTotal = retailAdjustments.reduce((sum, adj) => sum + (adj.amount || 0), 0);
+  const offContractTotal =
+    pricing?.offContractTotal ??
+    proposal?.pricing?.offContractTotal ??
+    0;
 
   let retailPrice =
     pricing?.retailPrice ??
@@ -98,7 +102,7 @@ function CostBreakdownView({
   if (!retailPrice && costBasis) {
     retailPrice = costBasis;
   }
-  const retailTargetForCategories = retailPrice - retailAdjustmentsTotal;
+  const retailTargetForCategories = retailPrice - retailAdjustmentsTotal - offContractTotal;
   const safeRetailTarget = Number.isFinite(retailTargetForCategories) ? retailTargetForCategories : retailPrice;
   const retailFactor = costBasis > 0 ? safeRetailTarget / costBasis : 1;
 
@@ -208,7 +212,7 @@ function CostBreakdownView({
     return { ...row, retail: retailValue };
   });
 
-  const displayRetailPrice = roundToTwo(retailPrice || (runningRetailTotal + retailAdjustmentsTotal));
+  const displayRetailPrice = roundToTwo(retailPrice || (runningRetailTotal + retailAdjustmentsTotal + offContractTotal));
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -384,6 +388,9 @@ function CostBreakdownView({
   };
   const exportSummaryRows = [
     ...retailRows.map((row) => ({ label: `${row.label}:`, value: formatCurrency(row.retail) })),
+    ...(roundToTwo(offContractTotal) !== 0
+      ? [{ label: 'Off Contract Items:', value: formatCurrency(offContractTotal) }]
+      : []),
     ...retailAdjustments.map((adjustment, index) => {
       const labelFallback = `Line Item ${index + 1}`;
       const displayName = adjustment.name?.trim() || labelFallback;
@@ -440,6 +447,12 @@ function CostBreakdownView({
                   <span>{formatCurrency(row.retail)}</span>
                 </div>
               ))}
+              {roundToTwo(offContractTotal) !== 0 && (
+                <div className="summary-row">
+                  <span>Off Contract Items:</span>
+                  <span>{formatCurrency(offContractTotal)}</span>
+                </div>
+              )}
               {retailAdjustments.map((adjustment, index) => {
                 const showWarning = canEditAdjustments && exceedsFranchiseLimit && adjustment.amount < 0;
                 const labelFallback = `Line Item ${index + 1}`;

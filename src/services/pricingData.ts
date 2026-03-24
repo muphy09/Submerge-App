@@ -2,6 +2,20 @@
 // PRICING DATA - Extracted from Excel Spreadsheet
 // ============================================================================
 
+import type { MasonryFacingOption } from '../utils/masonryFacing';
+
+const defaultRbbFacingOptions: MasonryFacingOption[] = [
+  { id: 'tile', name: 'Tile', materialCost: 0, laborCost: 0 },
+  { id: 'panel-ledge', name: 'Panel Ledge', materialCost: 13, laborCost: 12.5 },
+  { id: 'stacked-stone', name: 'Stacked Stone', materialCost: 27, laborCost: 16 },
+];
+
+const defaultRaisedSpaFacingOptions: MasonryFacingOption[] = [
+  { id: 'tile', name: 'Tile', materialCost: 0, laborCost: 0 },
+  { id: 'ledgestone', name: 'Ledgestone', materialCost: 13, laborCost: 12.5 },
+  { id: 'stacked-stone', name: 'Stacked Stone', materialCost: 27, laborCost: 16 },
+];
+
 const pricingData = {
   // PAP (Preferred Approved Provider) Discount Rates
   // These are applied as negative line items in various sections
@@ -23,6 +37,9 @@ const pricingData = {
     positive2: 0,
     negative1: 0,
     negative2: 0,
+  },
+  pricingDefaults: {
+    targetMargin: 0.7, // Displayed as 70% in Admin Pricing; retail = COGS / targetMargin
   },
   plans: {
     poolOnly: 410,
@@ -100,6 +117,7 @@ const pricingData = {
     cleanerPerFt: 3.25,
     autoFillPerFt: 3.5,
     additionalSkimmer: 275,
+    valveActuator: 0,
     addlMainDrainWhenAuxPump: 0,
     travelPerMile: 5,
   },
@@ -135,7 +153,7 @@ const pricingData = {
       ],
     },
     bubblers: [
-      { id: 'led-bubbler', name: 'LED Bubbler (with light)', basePrice: 1380, addCost1: 0, addCost2: 0, note: 'Includes bubbler and light; add matching light run + water feature run' },
+      { id: 'led-bubbler', name: 'LED Bubbler (with light)', basePrice: 1380, addCost1: 0, addCost2: 0, note: 'Includes bubbler and light; add matching light run + water feature run', needsPoolLight: false },
     ],
   },
   electrical: {
@@ -244,6 +262,7 @@ const pricingData = {
         pavers: 7,
         travertineLevel1: 7.5,
         travertineLevel2: 9.75,
+        travertineLevel3: 11.25,
         concrete: 7,
         concreteSteps: 7.5,
         flagstone: 25,
@@ -303,20 +322,19 @@ const pricingData = {
       { name: '60 SQFT DE Filter', sqft: 60, basePrice: 1224.37, addCost1: 0, addCost2: 0 },
     ],
     cleaners: [
-      { name: 'Polaris Epic IQ', basePrice: 1540, addCost1: 0, addCost2: 0 },
-      { name: 'Polaris Alpha IQ', basePrice: 1397.13, addCost1: 0, addCost2: 0 },
-      { name: 'Polaris 360 Standard', basePrice: 1618.57, addCost1: 0, addCost2: 0 },
-      { name: 'Polaris 360 Black', basePrice: 1677.43, addCost1: 0, addCost2: 0 },
-      { name: 'Polaris 280 w/ Booster', basePrice: 2133.57, addCost1: 0, addCost2: 0 },
-      { name: 'No Cleaner', basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: 'Polaris Epic IQ', basePrice: 1540, addCost1: 0, addCost2: 0, defaultCleaner: true },
+      { name: 'Polaris Alpha IQ', basePrice: 1397.13, addCost1: 0, addCost2: 0, defaultCleaner: false },
+      { name: 'Polaris 360 Standard', basePrice: 1618.57, addCost1: 0, addCost2: 0, defaultCleaner: false },
+      { name: 'Polaris 360 Black', basePrice: 1677.43, addCost1: 0, addCost2: 0, defaultCleaner: false },
+      { name: 'Polaris 280 w/ Booster', basePrice: 2133.57, addCost1: 0, addCost2: 0, defaultCleaner: false },
+      { name: 'No Cleaner', basePrice: 0, addCost1: 0, addCost2: 0, defaultCleaner: false },
     ],
     heaters: [
-      { name: 'No Heater (Select heater)', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0, isVersaFlo: false },
-      { name: 'Jandy 400K BTU - VersaFlo', btu: 400000, basePrice: 3297, addCost1: 0, addCost2: 0, isVersaFlo: true },
-      { name: 'Jandy LXI 250K BTU', btu: 250000, basePrice: 1885, addCost1: 0, addCost2: 0, isVersaFlo: false },
-      { name: 'Jandy JXI 400K - No Bypass', btu: 400000, basePrice: 2308, addCost1: 0, addCost2: 0, isVersaFlo: false },
-      { name: 'Jandy JXI 400K - w/ Bypass', btu: 400000, basePrice: 2475, addCost1: 0, addCost2: 0, isVersaFlo: false },
-      { name: 'Heat Pump', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0, isVersaFlo: false },
+      { name: 'No Heater (Select heater)', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy LXI 250K BTU', btu: 250000, basePrice: 1885, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy JXI 400K - No Bypass', btu: 400000, basePrice: 2308, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy JXI 400K - w/ Bypass', btu: 400000, basePrice: 2475, addCost1: 0, addCost2: 0 },
+      { name: 'Heat Pump', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
     lights: {
       poolLights: [
@@ -330,22 +348,22 @@ const pricingData = {
     },
     automation: [
       // Automation prices include the 6614 base panel and any required install adders (matches EQUIP sheet rows 61-69)
-      { name: 'No Automation', basePrice: 0, addCost1: 0, addCost2: 0 },
-      { name: '6614 APL BASE PANEL', basePrice: 1600, addCost1: 0, addCost2: 0 },
-      { name: 'Additional JVA', basePrice: 1800, addCost1: 0, addCost2: 0 }, // base panel + JVA
-      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', basePrice: 2250, addCost1: 0, addCost2: 0 }, // base + 650
-      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', basePrice: 2575, addCost1: 0, addCost2: 0 }, // base + 650 + install
-      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', basePrice: 3025, addCost1: 0, addCost2: 0 }, // base + 1100 + install
-      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', basePrice: 3722, addCost1: 0, addCost2: 0 }, // base + 1797 + install
-      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', basePrice: 4525, addCost1: 0, addCost2: 0 }, // base + 2600 + install
-      { name: 'IQ Pump 01', basePrice: 1721, addCost1: 0, addCost2: 0 }, // base + 121
+      { name: 'No Automation', basePrice: 0, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false },
+      { name: '6614 APL BASE PANEL', basePrice: 1600, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false },
+      { name: 'Additional JVA', basePrice: 1800, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base panel + JVA
+      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', basePrice: 2250, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 650
+      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', basePrice: 2575, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 650 + install
+      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', basePrice: 3025, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 1100 + install
+      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', basePrice: 3722, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 1797 + install
+      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', basePrice: 4525, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 2600 + install
+      { name: 'IQ Pump 01', basePrice: 1721, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 121
     ],
     automationZoneAddon: 365, // Per additional zone
     saltSystem: [
-      { name: 'Jandy AquaPure 1400', model: 'AquaPure', basePrice: 0, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy Tru-Clear', model: 'TruClear', basePrice: 1150, addCost1: 0, addCost2: 0 },
-      { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', basePrice: 1000, addCost1: 0, addCost2: 0 },
-      { name: 'No Salt System', model: 'None', basePrice: 0, addCost1: 0, addCost2: 0 },
+      { name: 'Jandy AquaPure 1400', model: 'AquaPure', basePrice: 0, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
+      { name: 'Jandy Tru-Clear', model: 'TruClear', basePrice: 1150, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
+      { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', basePrice: 1000, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
+      { name: 'No Salt System', model: 'None', basePrice: 0, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
     ],
     autoFillSystem: [
       { name: 'No Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0, requiresElectricRun: false },
@@ -559,6 +577,8 @@ const pricingData = {
   },
   masonry: {
     columnBase: 500,
+    rbbFacingOptions: defaultRbbFacingOptions,
+    raisedSpaFacingOptions: defaultRaisedSpaFacingOptions,
     labor: {
       rbbFacing: {
         tile: 0,

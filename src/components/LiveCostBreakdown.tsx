@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { CostBreakdown, CostLineItem } from '../types/proposal-new';
+import {
+  buildLineItemSubcategories,
+  CUSTOM_OPTIONS_SUBCATEGORY,
+  getLineItemSubcategory,
+  hasLineItemSubcategory,
+  isCustomOptionItem,
+} from '../utils/costBreakdownSubcategories';
 import './LiveCostBreakdown.css';
 
 interface Props {
@@ -13,10 +20,6 @@ interface HighlightedItem {
   itemIndex: number;
   timestamp: number;
 }
-
-const CUSTOM_OPTIONS_SUBCATEGORY = 'Custom Options';
-const isCustomOptionItem = (item: CostLineItem): boolean =>
-  item.details?.subcategory === CUSTOM_OPTIONS_SUBCATEGORY;
 
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
@@ -226,8 +229,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
   ];
 
   const buildCustomOptionsSubcategories = (items?: CostLineItem[]) => {
-    const customOptions = (items || []).filter(isCustomOptionItem);
-    return customOptions.length > 0 ? [{ name: CUSTOM_OPTIONS_SUBCATEGORY, items: customOptions }] : [];
+    return buildLineItemSubcategories(items) || [];
   };
 
   const allItemGroups: CostLineItem[][] = [
@@ -278,26 +280,23 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     options?: { hideBaseItems?: boolean }
   ) => {
     const safeItems = items || [];
-    const hasCustomOptionsSubcategory =
-      subcategories?.some((sub) => sub.name === CUSTOM_OPTIONS_SUBCATEGORY) ?? false;
-    const baseItems = hasCustomOptionsSubcategory
-      ? safeItems.filter(item => !isCustomOptionItem(item))
-      : safeItems;
-    const displayItems = baseItems.filter(
-      (item) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0
-    );
+    const visibleEntries = safeItems
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0);
+    const displayEntries = subcategories?.length
+      ? visibleEntries.filter(({ item }) => !hasLineItemSubcategory(item))
+      : visibleEntries;
     const isExpanded = expandedSections.has(categoryName);
     const categoryTotal = safeItems.reduce((sum, item) => sum + (item.total ?? 0), 0);
     const categoryHasHighlight = isCategoryHighlighted(categoryName);
     const subcategoryDisplays =
       subcategories?.map((sub) => ({
         name: sub.name,
-        items: (sub.items || []).filter((item) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0),
+        entries: visibleEntries.filter(({ item }) => getLineItemSubcategory(item) === sub.name),
       })) || [];
-    const hasSubcategories = subcategoryDisplays.some((s) => s.items.length > 0);
+    const hasSubcategories = subcategoryDisplays.some((s) => s.entries.length > 0);
     const hideBaseItems = options?.hideBaseItems ?? false;
-    const showBaseItems = displayItems.length > 0 && (!hasSubcategories || !hideBaseItems);
-    const baseOffset = showBaseItems ? displayItems.length : 0;
+    const showBaseItems = displayEntries.length > 0 && (!hasSubcategories || !hideBaseItems);
 
     return (
       <div className="live-cost-category">
@@ -326,7 +325,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {displayItems.map((item, index) => {
+                {displayEntries.map(({ item, index }) => {
                   const isHighlighted = isItemHighlighted(categoryName, index);
                   return (
                     <tr key={index} className={isHighlighted ? 'highlighted' : ''}>
@@ -343,12 +342,8 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
 
         {isExpanded && hasSubcategories && (
           <div className="live-subcategories">
-            {subcategoryDisplays.map((sub, subIdx) => {
-              if (!sub.items.length) return null;
-              let rowOffset = 0;
-              subcategoryDisplays.slice(0, subIdx).forEach((prev) => {
-                rowOffset += prev.items.length;
-              });
+            {subcategoryDisplays.map((sub) => {
+              if (!sub.entries.length) return null;
               return (
                 <div key={sub.name} className="live-subcategory-block">
                   <div className="live-subcategory-title">{sub.name}</div>
@@ -361,9 +356,8 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {sub.items.map((item, index) => {
-                        const globalIndex = baseOffset + rowOffset + index;
-                        const isHighlighted = isItemHighlighted(categoryName, globalIndex);
+                      {sub.entries.map(({ item, index }) => {
+                        const isHighlighted = isItemHighlighted(categoryName, index);
                         return (
                           <tr key={index} className={isHighlighted ? 'highlighted' : ''}>
                             <td>{item.description}</td>
@@ -380,7 +374,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
           </div>
         )}
 
-        {isExpanded && displayItems.length === 0 && !hasSubcategories && (
+        {isExpanded && displayEntries.length === 0 && !hasSubcategories && (
           <div className="live-line-items empty">
             <div className="live-empty-state">No line items yet</div>
           </div>

@@ -5,6 +5,7 @@ export type EquipmentCostLike = {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
+  addCost3?: number;
   price?: number;
   percentIncrease?: number;
   overheadMultiplier?: number;
@@ -61,14 +62,12 @@ export function getEquipmentItemCost(
     : undefined;
   const automationMatch = findAutomationCatalogMatch(item);
   const autoFillMatch = automationMatch ? null : findAutoFillCatalogMatch(item);
-  // Hydrate missing automation fields from the catalog so percent adjustments still apply when only the name is stored.
+  // Hydrate missing automation fields from the catalog so add-cost pricing still applies when only the name is stored.
   const target: EquipmentCostLike = automationMatch
     ? {
         ...automationMatch,
         ...item,
         zones: item.zones ?? (automationMatch as any).zones ?? 0,
-        percentIncrease:
-          item.percentIncrease ?? (automationMatch as any).percentIncrease,
       }
     : autoFillMatch
       ? {
@@ -79,11 +78,18 @@ export function getEquipmentItemCost(
         }
     : item;
   const hasParts =
-    target.basePrice !== undefined || target.addCost1 !== undefined || target.addCost2 !== undefined;
+    target.basePrice !== undefined ||
+    target.addCost1 !== undefined ||
+    target.addCost2 !== undefined ||
+    target.addCost3 !== undefined;
   const percentIncrease = Number.isFinite(target.percentIncrease)
     ? Number(target.percentIncrease)
     : undefined;
-  let totalParts = (target.basePrice ?? 0) + (target.addCost1 ?? 0) + (target.addCost2 ?? 0);
+  let totalParts =
+    (target.basePrice ?? 0) +
+    (target.addCost1 ?? 0) +
+    (target.addCost2 ?? 0) +
+    (target.addCost3 ?? 0);
   if (hasParts && percentIncrease !== undefined) {
     const divisor = percentIncrease / 100;
     totalParts = divisor !== 0 ? totalParts / divisor : totalParts;

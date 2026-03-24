@@ -102,6 +102,13 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
 
   const selections = data?.selections ?? [];
 
+  const catalogLookup = useMemo(() => new Map(catalog.map((entry) => [entry.id, entry])), [catalog]);
+
+  const resolveCatalogEntry = (featureId?: string) => {
+    if (!featureId) return undefined;
+    return catalogLookup.get(featureId) || catalog.find((entry) => entry.name === featureId);
+  };
+
   const cogsLookup = useMemo(
     () => new Map(catalog.map((entry) => [entry.id, getWaterFeatureCogs(entry)])),
     [catalog]
@@ -240,11 +247,11 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
     prevRunKeysRef.current = runOrderKeys;
   }, [runOrderSignature, runOrderKeys, plumbingRuns, onChangePlumbingRuns]);
 
-  const renderRunInput = (field?: keyof PlumbingRuns) => {
+  const renderRunInput = (label: string, field?: keyof PlumbingRuns) => {
     if (!field) return null;
     return (
       <div className="spec-field">
-        <label className="spec-label">Water Feature Run</label>
+        <label className="spec-label">{label}</label>
         <CompactInput
           value={plumbingRuns[field] ?? 0}
           onChange={(e) => onChangePlumbingRuns({ ...plumbingRuns, [field]: parseFloat(e.target.value) || 0 })}
@@ -257,24 +264,32 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
     );
   };
 
-  const buildRowLabel = (label: string, index: number) =>
-    index === 0 ? label : `Additional ${label} ${index}`;
+  const buildRowLabel = (
+    label: string | { primary: string; additional?: string },
+    index: number
+  ) => {
+    const primaryLabel = typeof label === 'string' ? label : label.primary;
+    const additionalLabel = typeof label === 'string' ? label : label.additional || label.primary;
+    return index === 0 ? primaryLabel : `Additional ${additionalLabel} ${index}`;
+  };
 
   const renderCategoryRows = (
-    label: string,
+    label: string | { primary: string; additional?: string },
     options: Array<{ id: string; name: string }>,
     categorySelections: WaterFeatureSelection[],
     runKeys: string[]
   ) => {
+    const labelKey = typeof label === 'string' ? label : label.primary;
     const rows = categorySelections.length > 0 ? categorySelections : [null];
     return rows.map((selection, index) => {
       const isSelected = Boolean(selection);
       const runField = isSelected ? runKeyByFeature.get(runKeys[index]) : undefined;
       const showAddAnother = isSelected && index === categorySelections.length - 1;
+      const needsConduitRun = Boolean(resolveCatalogEntry(selection?.featureId)?.needsPoolLight);
       return (
         <div
-          key={`${label}-${selection?.featureId || 'none'}-${index}`}
-          className="spec-grid-4-fixed water-feature-row"
+          key={`${labelKey}-${selection?.featureId || 'none'}-${index}`}
+          className={`${needsConduitRun ? 'spec-grid-5-fixed water-feature-row water-feature-row-with-conduit' : 'spec-grid-4-fixed water-feature-row'}`}
         >
           <div className="spec-field">
             <label className="spec-label">{buildRowLabel(label, index)}</label>
@@ -307,7 +322,10 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
                   placeholder="1"
                 />
               </div>
-              {runField ? renderRunInput(runField) : <div className="spec-field water-feature-placeholder" aria-hidden="true" />}
+              {runField ? renderRunInput('Water Feature Run', runField) : <div className="spec-field water-feature-placeholder" aria-hidden="true" />}
+              {needsConduitRun
+                ? (runField ? renderRunInput('Conduit Run', runField) : <div className="spec-field water-feature-placeholder" aria-hidden="true" />)
+                : null}
               <div className="spec-field water-feature-action">
                 <label className="spec-label" aria-hidden="true">&nbsp;</label>
                 {showAddAnother && (
@@ -326,6 +344,11 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
       );
     });
   };
+
+  const selectedBubblerAddsPoolLight = bubblerSelections.some((selection) => {
+    if ((selection?.quantity ?? 0) <= 0) return false;
+    return Boolean(resolveCatalogEntry(selection.featureId)?.needsPoolLight);
+  });
 
   const hasCatalogData =
     hasCatalog &&
@@ -362,9 +385,19 @@ function WaterFeaturesSectionNew({ data, onChange, plumbingRuns, onChangePlumbin
 
       <div className="spec-block">
         <div className="spec-block-header">
-          <h2 className="spec-block-title">LED Bubblers</h2>
+          <h2 className="spec-block-title">Bubblers</h2>
         </div>
-        {renderCategoryRows('LED Bubbler', bubblerOptions, bubblerSelections, bubblerRunKeys)}
+        {renderCategoryRows(
+          { primary: 'Bubbler Models', additional: 'Bubbler Model' },
+          bubblerOptions,
+          bubblerSelections,
+          bubblerRunKeys
+        )}
+        {selectedBubblerAddsPoolLight && (
+          <div className="info-box" style={{ marginTop: '8px' }}>
+            A Pool Light has been automatically included with the chosen Bubbler.
+          </div>
+        )}
       </div>
 
       <CustomOptionsSection

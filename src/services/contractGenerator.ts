@@ -1,6 +1,7 @@
 import { Proposal, WaterFeatureSelection } from '../types/proposal-new';
 import MasterPricingEngine from './masterPricingEngine';
 import pricingData from './pricingData';
+import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/masonryFacing';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
 
@@ -115,20 +116,12 @@ function formatCount(value: number | null | undefined): string {
 }
 
 function formatFacingValue(value?: string | null): string {
-  if (!value || value === 'none') return 'None';
-  if (value === 'panel-ledge') return 'Panel Ledge';
-  if (value === 'stacked-stone') return 'Stacked Stone';
-  if (value === 'tile') return 'Tile';
-  if (value === 'ledgestone') return 'Ledgestone';
-  return String(value);
+  return formatMasonryFacingLabel(value, getMasonryFacingOptions(pricingData.masonry, 'rbb'));
 }
 
 function formatRaisedSpaFacing(value?: string | null): string {
-  if (!value || value === 'none') return 'NONE';
-  if (value === 'tile') return 'Tile';
-  if (value === 'ledgestone') return 'Ledgestone';
-  if (value === 'stacked-stone') return 'Stacked Stone';
-  return String(value);
+  const label = formatMasonryFacingLabel(value, getMasonryFacingOptions(pricingData.masonry, 'raisedSpa'));
+  return label === 'None' ? 'NONE' : label;
 }
 
 function stripParenSuffix(value: string): string {
@@ -429,7 +422,13 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     const pumps = [...auxPumps, ...legacyAux];
     return pumps[1]?.name || 'None';
   }
-  if (/sanitation i/.test(label)) return proposal.equipment?.saltSystem?.name || 'None';
+  if (/sanitation i/.test(label)) {
+    const sanitationSelections = [
+      proposal.equipment?.saltSystem?.name,
+      proposal.equipment?.additionalSaltSystem?.name,
+    ].filter(Boolean);
+    return sanitationSelections.length ? sanitationSelections.join(' + ') : 'None';
+  }
   if (/sanitation ii/.test(label)) return 'None';
   if (/sanitation iii/.test(label)) return 'None';
   if (/cleaner/.test(label)) {
@@ -463,10 +462,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   }
   if (/decking drainage/.test(label)) return proposal.drainage?.deckDrainTotalLF ? 'BY BUILDER' : overrideDefault;
   if (/decking\b/i.test(label)) {
+    if (proposal.tileCopingDecking?.isDeckingOffContract) return 'OFF CONTRACT';
     const lookup: Record<string, string> = {
       none: 'None',
       'travertine-level1': 'Travertine Lvl 1',
       'travertine-level2': 'Travertine Lvl 2',
+      'travertine-level3': 'Travertine Lvl 3',
       paver: 'Paver',
       concrete: 'Concrete',
     };

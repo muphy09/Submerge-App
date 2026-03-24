@@ -1,6 +1,5 @@
 import { Plumbing, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
-import { getSessionRole } from '../services/session';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
@@ -52,9 +51,6 @@ const CompactInput = ({
 };
 
 function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
-  const sessionRole = getSessionRole();
-  const canViewCostAmounts = sessionRole === 'admin' || sessionRole === 'owner';
-
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
     onChange({
       ...data,
@@ -63,12 +59,8 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
   };
 
   const SKIMMER_THRESHOLD = pricingData.plumbing.poolOverrunThreshold;
-  const SKIMMER_RATE = pricingData.plumbing.poolOverrunPerFt;
   const skimmerOverrun = Math.max(0, (data.runs.skimmerRun || 0) - SKIMMER_THRESHOLD);
-  const skimmerOverrunCost = skimmerOverrun * SKIMMER_RATE;
-  const skimmerOverrunMessage = canViewCostAmounts
-    ? `Additional charges added - $${skimmerOverrunCost.toLocaleString()}`
-    : 'Additional charges apply';
+  const skimmerOverrunMessage = 'Additional charges apply';
 
   const renderRunInput = (
     label: string,

@@ -1,5 +1,6 @@
 import pricingData from '../services/pricingData';
 import { Equipment } from '../types/proposal-new';
+import { isIncludedSaltCellSelection } from './saltCellCompatibility';
 
 type NamedItem = { name?: string | null };
 
@@ -63,7 +64,8 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     hasRealSelection(equipment.automation?.name, 'no automation') ||
     (equipment.automationQuantity ?? 0) > 0 ||
     (equipment.automation?.zones ?? 0) > 0;
-  const saltSelected = hasRealSelection(equipment.saltSystem?.name, 'no salt');
+  const saltSelected =
+    hasRealSelection(equipment.saltSystem?.name, 'no salt') && !isIncludedSaltCellSelection(equipment.saltSystem);
   const autoFillSelected = hasRealSelection(equipment.autoFillSystem?.name, 'no auto');
 
   const pump = pumpSelected && isRetiredName(equipment.pump?.name, pricingData.equipment.pumps);
@@ -81,7 +83,10 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
   const cleaner = cleanerSelected && isRetiredName(equipment.cleaner?.name, pricingData.equipment.cleaners);
   const heater = heaterSelected && isRetiredName(equipment.heater?.name, pricingData.equipment.heaters);
   const automation = automationSelected && isRetiredName(equipment.automation?.name, pricingData.equipment.automation);
-  const saltSystem = saltSelected && isRetiredName(equipment.saltSystem?.name, pricingData.equipment.saltSystem);
+  const saltSystem =
+    saltSelected &&
+    !isIncludedSaltCellSelection(equipment.saltSystem) &&
+    isRetiredName(equipment.saltSystem?.name, pricingData.equipment.saltSystem);
   const autoFillSystem =
     autoFillSelected && isRetiredName(equipment.autoFillSystem?.name, pricingData.equipment.autoFillSystem);
   const poolLights = (equipment.poolLights ?? []).map((light) =>

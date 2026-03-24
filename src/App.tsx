@@ -1,5 +1,5 @@
 import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import HomePage from './pages/HomePage';
 import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
@@ -30,6 +30,16 @@ import {
 } from './services/session';
 import MasterPage from './pages/MasterPage';
 import type { MasterFranchise } from './services/masterAdminAdapter';
+import AdminPinModal from './components/AdminPinModal';
+import {
+  ADMIN_PANEL_PIN_LENGTH,
+  ADMIN_PANEL_PIN_LOCKOUT_MESSAGE,
+  clearAdminPanelPinFailures,
+  getAdminPanelPinLockout,
+  isAdminPanelPinValid,
+  recordFailedAdminPanelPinAttempt,
+  sanitizeAdminPanelPinInput,
+} from './services/adminPanelPin';
 import './App.css';
 
 function AppContent() {
@@ -44,6 +54,19 @@ function AppContent() {
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [cloudIssue, setCloudIssue] = useState<CloudConnectionIssue>(null);
   const [masterImpersonation, setMasterImpersonation] = useState<MasterImpersonation | null>(() => readMasterImpersonation());
+  const [adminPanelPin, setAdminPanelPin] = useState('');
+  const [adminPanelPinError, setAdminPanelPinError] = useState('');
+  const [adminPanelPinPrompt, setAdminPanelPinPrompt] = useState<{
+    isOpen: boolean;
+    targetPath: string | null;
+    cancelDestination: string | null;
+  }>({
+    isOpen: false,
+    targetPath: null,
+    cancelDestination: null,
+  });
+  const [adminPanelAccessFranchiseId, setAdminPanelAccessFranchiseId] = useState<string | null>(null);
+  const [adminPanelLockoutUntil, setAdminPanelLockoutUntil] = useState<number | null>(null);
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
     try {
@@ -184,6 +207,11 @@ function AppContent() {
     setSession(null);
     setShowLogin(true);
     setShowPasswordReset(false);
+    setAdminPanelAccessFranchiseId(null);
+    setAdminPanelLockoutUntil(null);
+    setAdminPanelPin('');
+    setAdminPanelPinError('');
+    setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
     clearMasterImpersonation();
     setMasterImpersonation(null);
     try {
@@ -271,6 +299,10 @@ function AppContent() {
   const showNavigation = !location.pathname.startsWith('/proposal/');
   const effectiveRole = (effectiveSession?.role || '').toLowerCase();
   const isAdmin = effectiveRole === 'admin' || effectiveRole === 'owner';
+  const adminPanelRequiresPin = isAdmin && Boolean(effectiveSession?.franchiseId);
+  const isAdminPanelUnlocked = adminPanelAccessFranchiseId === (effectiveSession?.franchiseId || null);
+  const canRenderAdminPanel = !adminPanelRequiresPin || isAdminPanelUnlocked;
+  const isAdminPanelLocked = Boolean(adminPanelLockoutUntil && adminPanelLockoutUntil > Date.now());
   const actingLabel = isMaster && masterImpersonation
     ? masterImpersonation.franchiseName && masterImpersonation.franchiseCode
       ? `${masterImpersonation.franchiseName} (${masterImpersonation.franchiseCode})`
@@ -278,6 +310,125 @@ function AppContent() {
         masterImpersonation.franchiseCode ||
         masterImpersonation.franchiseId
     : null;
+
+  const openAdminPanelPrompt = useCallback(
+    (options?: { targetPath?: string | null; cancelDestination?: string | null }) => {
+      if (!adminPanelRequiresPin) return;
+      const franchiseId = effectiveSession?.franchiseId;
+      const lockout = franchiseId ? getAdminPanelPinLockout(franchiseId) : null;
+      setAdminPanelPin('');
+      setAdminPanelLockoutUntil(lockout?.lockedUntil ?? null);
+      setAdminPanelPinError(lockout?.locked ? ADMIN_PANEL_PIN_LOCKOUT_MESSAGE : '');
+      setAdminPanelPinPrompt({
+        isOpen: true,
+        targetPath: options?.targetPath ?? '/admin',
+        cancelDestination: options?.cancelDestination ?? null,
+      });
+    },
+    [adminPanelRequiresPin, effectiveSession?.franchiseId]
+  );
+
+  const handleAdminPanelTabClick = useCallback(
+    (event: ReactMouseEvent<HTMLAnchorElement>) => {
+      if (!adminPanelRequiresPin || isAdminPanelUnlocked) return;
+      event.preventDefault();
+      openAdminPanelPrompt({ targetPath: '/admin', cancelDestination: null });
+    },
+    [adminPanelRequiresPin, isAdminPanelUnlocked, openAdminPanelPrompt]
+  );
+
+  const closeAdminPanelPrompt = useCallback(() => {
+    const cancelDestination = adminPanelPinPrompt.cancelDestination;
+    setAdminPanelPin('');
+    setAdminPanelPinError((current) => (current === ADMIN_PANEL_PIN_LOCKOUT_MESSAGE ? current : ''));
+    setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
+    if (cancelDestination) {
+      navigate(cancelDestination, { replace: true });
+    }
+  }, [adminPanelPinPrompt.cancelDestination, navigate]);
+
+  const submitAdminPanelPin = useCallback(() => {
+    const franchiseId = effectiveSession?.franchiseId;
+    if (!franchiseId) return;
+
+    const lockout = getAdminPanelPinLockout(franchiseId);
+    if (lockout.locked) {
+      setAdminPanelPin('');
+      setAdminPanelLockoutUntil(lockout.lockedUntil ?? null);
+      setAdminPanelPinError(ADMIN_PANEL_PIN_LOCKOUT_MESSAGE);
+      return;
+    }
+
+    const normalizedPin = sanitizeAdminPanelPinInput(adminPanelPin);
+    if (normalizedPin.length !== ADMIN_PANEL_PIN_LENGTH) {
+      setAdminPanelPinError(`Enter ${ADMIN_PANEL_PIN_LENGTH} digits.`);
+      return;
+    }
+
+    if (!isAdminPanelPinValid(franchiseId, normalizedPin)) {
+      const failedAttempt = recordFailedAdminPanelPinAttempt(franchiseId);
+      setAdminPanelPin('');
+      setAdminPanelLockoutUntil(failedAttempt.lockedUntil ?? null);
+      setAdminPanelPinError(failedAttempt.locked ? ADMIN_PANEL_PIN_LOCKOUT_MESSAGE : 'Incorrect PIN.');
+      return;
+    }
+
+    clearAdminPanelPinFailures(franchiseId);
+    const targetPath = adminPanelPinPrompt.targetPath;
+    setAdminPanelAccessFranchiseId(franchiseId);
+    setAdminPanelLockoutUntil(null);
+    setAdminPanelPin('');
+    setAdminPanelPinError('');
+    setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
+    if (targetPath) {
+      navigate(targetPath);
+    }
+  }, [adminPanelPin, adminPanelPinPrompt.targetPath, effectiveSession?.franchiseId, navigate]);
+
+  useEffect(() => {
+    setAdminPanelAccessFranchiseId(null);
+    setAdminPanelLockoutUntil(null);
+    setAdminPanelPin('');
+    setAdminPanelPinError('');
+    setAdminPanelPinPrompt((current) => (current.isOpen ? { isOpen: false, targetPath: null, cancelDestination: null } : current));
+  }, [effectiveSession?.userId, effectiveSession?.franchiseId]);
+
+  useEffect(() => {
+    if (!adminPanelLockoutUntil) return;
+    const remainingMs = adminPanelLockoutUntil - Date.now();
+    if (remainingMs <= 0) {
+      setAdminPanelLockoutUntil(null);
+      setAdminPanelPinError((current) => (current === ADMIN_PANEL_PIN_LOCKOUT_MESSAGE ? '' : current));
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setAdminPanelLockoutUntil(null);
+      setAdminPanelPinError((current) => (current === ADMIN_PANEL_PIN_LOCKOUT_MESSAGE ? '' : current));
+    }, remainingMs + 50);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [adminPanelLockoutUntil]);
+
+  useEffect(() => {
+    if (location.pathname !== '/admin') {
+      setAdminPanelAccessFranchiseId(null);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!adminPanelPinPrompt.isOpen || isAdminPanelLocked) return;
+    if (adminPanelPin.length !== ADMIN_PANEL_PIN_LENGTH) return;
+    submitAdminPanelPin();
+  }, [adminPanelPin, adminPanelPinPrompt.isOpen, isAdminPanelLocked, submitAdminPanelPin]);
+
+  useEffect(() => {
+    if (location.pathname !== '/admin') return;
+    if (!adminPanelRequiresPin || isAdminPanelUnlocked || adminPanelPinPrompt.isOpen) return;
+    openAdminPanelPrompt({ targetPath: null, cancelDestination: '/' });
+  }, [adminPanelPinPrompt.isOpen, adminPanelRequiresPin, isAdminPanelUnlocked, location.pathname, openAdminPanelPrompt]);
 
   return (
     <div className="app">
@@ -290,6 +441,7 @@ function AppContent() {
           franchiseId={effectiveSession?.franchiseId}
           actingAsLabel={actingLabel || undefined}
           onStopActing={actingLabel ? handleStopActing : undefined}
+          onAdminPanelClick={handleAdminPanelTabClick}
         />
       )}
       <Routes>
@@ -300,10 +452,12 @@ function AppContent() {
         <Route
           path="/admin"
           element={
-            <AdminPanelPage
-              onOpenPricingData={() => setShowPricingData(true)}
-              session={effectiveSession}
-            />
+            canRenderAdminPanel ? (
+              <AdminPanelPage
+                onOpenPricingData={() => setShowPricingData(true)}
+                session={effectiveSession}
+              />
+            ) : null
           }
         />
         <Route path="/proposals" element={<ProposalsListPage />} />
@@ -371,6 +525,20 @@ function AppContent() {
       {showPasswordReset && (
         <PasswordResetModal onSubmit={handlePasswordReset} onLogout={handleLogout} />
       )}
+      <AdminPinModal
+        isOpen={adminPanelPinPrompt.isOpen}
+        pin={adminPanelPin}
+        error={adminPanelPinError}
+        isDisabled={isAdminPanelLocked}
+        onPinChange={(value) => {
+          setAdminPanelPin(value);
+          if (adminPanelPinError && adminPanelPinError !== ADMIN_PANEL_PIN_LOCKOUT_MESSAGE) {
+            setAdminPanelPinError('');
+          }
+        }}
+        onSubmit={submitAdminPanelPin}
+        onClose={closeAdminPanelPrompt}
+      />
     </div>
   );
 }

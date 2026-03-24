@@ -1,3 +1,7 @@
+import type { WaterFeatureSelection } from '../types/proposal-new';
+import pricingData from '../services/pricingData';
+import { getEquipmentItemCost } from './equipmentCost';
+
 export type WaterFeatureItem = {
   id?: string;
   name?: string;
@@ -5,6 +9,7 @@ export type WaterFeatureItem = {
   addCost1?: number;
   addCost2?: number;
   note?: string;
+  needsPoolLight?: boolean;
 };
 
 export type WaterFeatureCatalogItem = WaterFeatureItem & {
@@ -14,6 +19,12 @@ export type WaterFeatureCatalogItem = WaterFeatureItem & {
 };
 
 export const DEFAULT_WATER_FEATURE_MARGIN = 0.7;
+
+const getDefaultPoolLightCost = () => {
+  const poolLights = pricingData?.equipment?.lights?.poolLights || [];
+  const defaultPoolLight = poolLights.find((option: any) => option?.defaultLightChoice) || poolLights[0];
+  return getEquipmentItemCost(defaultPoolLight);
+};
 
 const slugify = (value: string) =>
   value
@@ -32,9 +43,20 @@ const normalizeCategory = (category?: string) => {
   return category || 'Water Feature';
 };
 
+const normalizeZoneCategory = (category?: string) => {
+  const normalized = normalizeCategory(category);
+  if (normalized.startsWith('Wok Pots')) return 'Wok Pots';
+  return normalized;
+};
+
 export function getWaterFeatureCogs(item?: WaterFeatureItem | null): number {
   if (!item) return 0;
-  return (item.basePrice ?? 0) + (item.addCost1 ?? 0) + (item.addCost2 ?? 0);
+  return (
+    (item.basePrice ?? 0) +
+    (item.addCost1 ?? 0) +
+    (item.addCost2 ?? 0) +
+    (item.needsPoolLight ? getDefaultPoolLightCost() : 0)
+  );
 }
 
 export function getWaterFeatureRetail(item?: WaterFeatureItem | null, retailMargin: number = DEFAULT_WATER_FEATURE_MARGIN): number {
@@ -72,6 +94,7 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
         addCost1: item.addCost1 ?? 0,
         addCost2: item.addCost2 ?? 0,
         note: item.note,
+        needsPoolLight: Boolean(item.needsPoolLight),
       });
     });
   });
@@ -90,6 +113,7 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
         addCost1: item.addCost1 ?? 0,
         addCost2: item.addCost2 ?? 0,
         note: item.note,
+        needsPoolLight: Boolean(item.needsPoolLight),
       };
       const existingIndex = flattened.findIndex((feature) => feature.id === id);
       // If we already have a structured entry for this id (new model), keep it and ignore legacy overrides.
@@ -99,4 +123,26 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
   }
 
   return flattened;
+}
+
+export function countSelectedWaterFeatureZones(
+  selections: WaterFeatureSelection[] = [],
+  config?: any
+): number {
+  if (!Array.isArray(selections) || selections.length === 0) return 0;
+
+  const catalog = flattenWaterFeatures(config);
+  const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
+  const zones = new Set<string>();
+
+  selections.forEach((selection) => {
+    if (!selection || (selection.quantity ?? 0) <= 0) return;
+    const feature = lookup.get(selection.featureId) || catalog.find((entry) => entry.name === selection.featureId);
+    const zone = normalizeZoneCategory(feature?.category);
+    if (zone) {
+      zones.add(zone);
+    }
+  });
+
+  return zones.size;
 }

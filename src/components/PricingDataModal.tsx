@@ -15,10 +15,18 @@ import {
   updatePricingValue,
 } from '../services/pricingDataStore';
 import {
+  buildPricingFieldLabelOverrideKey,
+  loadPricingFieldLabelOverrides,
+  savePricingFieldLabelOverrides,
+  type PricingFieldLabelOverrides,
+} from '../services/pricingFieldLabels';
+import {
   listPricingModels,
   setDefaultPricingModel,
   deletePricingModel as deletePricingModelRemote,
 } from '../services/pricingModelsAdapter';
+import { getDefaultCleanerIndex } from '../utils/cleanerDefaults';
+import { slugifyMasonryFacingId } from '../utils/masonryFacing';
 import './PricingDataModal.css';
 
 type Path = (string | number)[];
@@ -51,6 +59,8 @@ type ListConfig = {
   fields: ListField[];
   addLabel: string;
   defaultItem?: Record<string, any> | (() => Record<string, any>);
+  variant?: 'card' | 'table';
+  emptyMessage?: string;
 };
 
 type Group = {
@@ -63,6 +73,12 @@ type Group = {
 type Section = {
   title: string;
   groups: Group[];
+};
+
+type ActiveListFieldRename = {
+  cellKey: string;
+  overrideKey: string;
+  defaultLabel: string;
 };
 
 const getValue = (target: any, path: Path) =>
@@ -93,6 +109,9 @@ interface PricingDataModalProps {
 
 const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseId }) => {
   const [data, setData] = useState(getPricingDataSnapshot());
+  const [fieldLabelOverrides, setFieldLabelOverrides] = useState<PricingFieldLabelOverrides>({});
+  const [activeListFieldRename, setActiveListFieldRename] = useState<ActiveListFieldRename | null>(null);
+  const [activeListFieldRenameDraft, setActiveListFieldRenameDraft] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [pricingModels, setPricingModels] = useState<any[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() => {
@@ -110,6 +129,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<{ id: string; name: string } | null>(null);
+  const labelFranchiseId = franchiseId || getActiveFranchiseId() || 'default';
+  const activeRenameInputRef = useRef<HTMLInputElement | null>(null);
   const updateTooltipAlign = (e: React.MouseEvent<HTMLSpanElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const center = rect.left + rect.width / 2;
@@ -152,11 +173,22 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setModelName('');
     setSelectedModelId(null);
     setHasChanges(false);
+    setFieldLabelOverrides(loadPricingFieldLabelOverrides(targetFranchise || 'default'));
+    setActiveListFieldRename(null);
+    setActiveListFieldRenameDraft('');
     initPricingDataStore(targetFranchise);
     const unsubscribe = subscribeToPricingData(setData);
     void loadModels(targetFranchise);
     return unsubscribe;
   }, [franchiseId]);
+
+  useEffect(() => {
+    if (!activeListFieldRename || !activeRenameInputRef.current) {
+      return;
+    }
+    activeRenameInputRef.current.focus();
+    activeRenameInputRef.current.select();
+  }, [activeListFieldRename]);
 
   const emitModelsUpdated = () => {
     window.dispatchEvent(new Event('pricing-models-updated'));
@@ -341,6 +373,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       field.key === 'defaultAuxiliaryPump' &&
       list.path[0] === 'equipment' &&
       list.path[1] === 'auxiliaryPumps';
+    const isDefaultCleaner =
+      field.key === 'defaultCleaner' &&
+      list.path[0] === 'equipment' &&
+      list.path[1] === 'cleaners';
 
     if (isDefaultLightChoice && parsed) {
       const entries = (getValue(data, list.path) as any[]) || [];
@@ -362,6 +398,18 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setHasChanges(true);
       return;
     }
+    if (isDefaultCleaner) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const currentDefaultIndex = getDefaultCleanerIndex(entries);
+      const nextDefaultIndex = parsed ? index : currentDefaultIndex;
+      const nextList = entries.map((entry, idx) => ({
+        ...entry,
+        defaultCleaner: idx === nextDefaultIndex,
+      }));
+      updatePricingValue(list.path, nextList);
+      setHasChanges(true);
+      return;
+    }
 
     const isInteriorFinishName =
       field.key === 'name' && list.path[0] === 'interiorFinish' && list.path[1] === 'finishes';
@@ -370,6 +418,30 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       const existing = entries[index] || {};
       if (!existing.id) {
         const nextId = slugify(String(parsed));
+        if (nextId) {
+          updatePricingListItem(list.path, index, 'id', nextId);
+        }
+      }
+    }
+
+    const isMasonryFacingName =
+      field.key === 'name' &&
+      list.path[0] === 'masonry' &&
+      (list.path[1] === 'rbbFacingOptions' || list.path[1] === 'raisedSpaFacingOptions');
+    if (isMasonryFacingName) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const existing = entries[index] || {};
+      if (!existing.id) {
+        const baseId = slugifyMasonryFacingId(String(parsed));
+        let nextId = baseId;
+        let suffix = 2;
+        while (
+          nextId &&
+          entries.some((entry, entryIndex) => entryIndex !== index && String(entry?.id || '').trim() === nextId)
+        ) {
+          nextId = `${baseId}-${suffix}`;
+          suffix += 1;
+        }
         if (nextId) {
           updatePricingListItem(list.path, index, 'id', nextId);
         }
@@ -530,6 +602,111 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     []
   );
+  const bubblerFields: ListField[] = useMemo(
+    () => [
+      ...waterFeatureFields,
+      {
+        key: 'needsPoolLight',
+        label: 'Needs Pool Light',
+        type: 'boolean',
+        tooltip: 'Adds the default pool light cost to this bubbler in proposals.',
+      },
+    ],
+    [waterFeatureFields]
+  );
+  const masonryFacingFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Facing Option',
+        type: 'text',
+        placeholder: 'Split Face',
+        tooltip: 'Label shown in RBB, exposed pool wall, column, and raised spa facing selectors.',
+      },
+      {
+        key: 'materialCost',
+        label: 'Material Cost',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Material rate for this facing option.',
+      },
+      {
+        key: 'laborCost',
+        label: 'Labor Cost',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Labor rate for this facing option.',
+      },
+    ],
+    []
+  );
+
+  const isRenamableAddCostField = (field: ListField) => /^addCost\d+$/.test(field.key);
+  const getListFieldOverrideKey = (list: ListConfig, field: ListField) =>
+    buildPricingFieldLabelOverrideKey(list.path, field.key);
+  const getListFieldLabel = (list: ListConfig, field: ListField) =>
+    fieldLabelOverrides[getListFieldOverrideKey(list, field)] || field.label;
+  const handleStartRenameListField = (list: ListConfig, field: ListField, cellKey: string) => {
+    setActiveListFieldRename({
+      cellKey,
+      overrideKey: getListFieldOverrideKey(list, field),
+      defaultLabel: field.label,
+    });
+    setActiveListFieldRenameDraft(getListFieldLabel(list, field));
+  };
+  const handleCancelRenameListField = () => {
+    setActiveListFieldRename(null);
+    setActiveListFieldRenameDraft('');
+  };
+  const handleCommitRenameListField = () => {
+    if (!activeListFieldRename) {
+      return;
+    }
+
+    const normalized = activeListFieldRenameDraft.trim();
+    const nextOverrides = { ...fieldLabelOverrides };
+
+    if (!normalized || normalized === activeListFieldRename.defaultLabel) {
+      delete nextOverrides[activeListFieldRename.overrideKey];
+    } else {
+      nextOverrides[activeListFieldRename.overrideKey] = normalized;
+    }
+
+    const saved = savePricingFieldLabelOverrides(labelFranchiseId, nextOverrides);
+    setFieldLabelOverrides(saved);
+    setActiveListFieldRename(null);
+    setActiveListFieldRenameDraft('');
+  };
+  const getListFieldLabelClassName = (field: ListField) =>
+    `pricing-field__label${isRenamableAddCostField(field) ? ' has-rename' : ''}${field.tooltip ? ' has-info' : ''}`;
+  const renderListFieldLabelText = (list: ListConfig, field: ListField, cellKey: string) => {
+    if (activeListFieldRename?.cellKey !== cellKey) {
+      return renderLabelText(getListFieldLabel(list, field));
+    }
+
+    return (
+      <input
+        ref={activeRenameInputRef}
+        type="text"
+        className="pricing-field__label-edit"
+        value={activeListFieldRenameDraft}
+        onChange={(e) => setActiveListFieldRenameDraft(e.target.value)}
+        onBlur={handleCommitRenameListField}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancelRenameListField();
+          }
+        }}
+      />
+    );
+  };
 
   const sections: Section[] = useMemo(
     () => [
@@ -554,6 +731,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {
             title: 'Manual Retail Price Adjustments',
             scalars: [
+              {
+                label: 'COGS vs Retail Price Increase',
+                path: ['pricingDefaults', 'targetMargin'],
+                type: 'number',
+                tooltip: 'Controls the default model-wide retail pricing formula. 70 means retail is calculated as COGS divided by 0.70 before fixed retail adjustments.',
+                prefix: '%',
+                isPercent: true,
+              },
               { label: 'Positive Adjustment 1', path: ['manualAdjustments', 'positive1'], type: 'number', tooltip: 'Default value in Adjustments card; adds to retail price.', prefix: '$' },
               { label: 'Positive Adjustment 2', path: ['manualAdjustments', 'positive2'], type: 'number', tooltip: 'Default value in Adjustments card; adds to retail price.', prefix: '$' },
               { label: 'Negative Adjustment 1', path: ['manualAdjustments', 'negative1'], type: 'number', tooltip: 'Default value in Adjustments card; subtracts from retail price.', prefix: '-$' },
@@ -746,7 +931,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spa base excavation',
                 path: ['excavation', 'baseSpa'],
                 type: 'number',
-                tooltip: 'Added when a gunite spa exists.',
+                tooltip: 'Added when a shotcrete spa exists.',
                 prefix: '$',
               },
               {
@@ -788,7 +973,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spa base plumbing',
                 path: ['plumbing', 'spaBase'],
                 type: 'number',
-                tooltip: 'Added once when a gunite spa exists.',
+                tooltip: 'Added once when a shotcrete spa exists.',
                 prefix: '$',
               },
               {
@@ -915,13 +1100,20 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
-            title: 'Misc plumbing',
+            title: 'Misc. Plumbing',
             scalars: [
               {
                 label: 'Additional skimmer',
                 path: ['plumbing', 'additionalSkimmer'],
                 type: 'number',
                 tooltip: 'Applied per additional skimmer count.',
+                prefix: '$',
+              },
+              {
+                label: 'Valve Actuator',
+                path: ['plumbing', 'valveActuator'],
+                type: 'number',
+                tooltip: 'Added once per unique selected water feature zone/subcategory. Duplicate quantities in the same zone do not add extra actuators.',
                 prefix: '$',
               },
               {
@@ -1044,7 +1236,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 title: 'Bubbler models',
                 path: ['waterFeatures', 'bubblers'],
                 addLabel: 'Add bubbler',
-                fields: waterFeatureFields,
+                fields: bubblerFields,
                 defaultItem: () => ({ id: `wf-bubbler-${Date.now()}` }),
               },
             ],
@@ -1205,14 +1397,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spa base',
                 path: ['steel', 'spaBase'],
                 type: 'number',
-                tooltip: 'Added once when a gunite spa exists.',
+                tooltip: 'Added once when a shotcrete spa exists.',
                 prefix: '$',
               },
               {
                 label: 'Raised spa',
                 path: ['steel', 'raisedSpa'],
                 type: 'number',
-                tooltip: 'Added once when a raised gunite spa is selected.',
+                tooltip: 'Added once when a raised shotcrete spa is selected.',
                 prefix: '$',
               },
               {
@@ -1296,7 +1488,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spa double curtain',
                 path: ['steel', 'spaDoubleCurtain'],
                 type: 'number',
-                tooltip: 'Added once when a raised gunite spa is selected.',
+                tooltip: 'Added once when a raised shotcrete spa is selected.',
                 prefix: '$',
               },
               {
@@ -1310,7 +1502,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Muck out (unit price)',
                 path: ['steel', 'muckOut'],
                 type: 'number',
-                tooltip: 'Added for gunite pools; multiplied by Muck Out Qty.',
+                tooltip: 'Added for shotcrete pools; multiplied by Muck Out Qty.',
                 prefix: '$',
               },
               {
@@ -1346,7 +1538,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spa',
                 path: ['shotcrete', 'labor', 'spa'],
                 type: 'number',
-                tooltip: 'Added once when a gunite spa exists.',
+                tooltip: 'Added once when a shotcrete spa exists.',
                 prefix: '$',
               },
               {
@@ -1581,14 +1773,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Pavers (per sqft)',
                 path: ['tileCoping', 'decking', 'labor', 'pavers'],
                 type: 'number',
-                tooltip: 'Applied to decking area for paver decks (includes 5% waste).',
+                tooltip: 'Applied to decking area for paver decks (includes 5% overhead).',
                 prefix: '$',
               },
               {
                 label: 'Travertine (per sqft)',
                 path: ['tileCoping', 'decking', 'labor', 'travertine'],
                 type: 'number',
-                tooltip: 'Applied to decking area for travertine decks (includes 5% waste).',
+                tooltip: 'Applied to decking area for travertine decks (includes 5% overhead).',
                 prefix: '$',
               },
               {
@@ -1614,21 +1806,28 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Pavers (per sqft)',
                 path: ['tileCoping', 'decking', 'material', 'pavers'],
                 type: 'number',
-                tooltip: 'Applied to decking area for paver decks (includes 5% waste).',
+                tooltip: 'Applied to decking area for paver decks (includes 5% overhead).',
                 prefix: '$',
               },
               {
                 label: 'Travertine level 1 (per sqft)',
                 path: ['tileCoping', 'decking', 'material', 'travertineLevel1'],
                 type: 'number',
-                tooltip: 'Applied to decking area for Level 1 travertine (includes 5% waste).',
+                tooltip: 'Applied to decking area for Level 1 travertine (includes 5% overhead).',
                 prefix: '$',
               },
               {
                 label: 'Travertine level 2 (per sqft)',
                 path: ['tileCoping', 'decking', 'material', 'travertineLevel2'],
                 type: 'number',
-                tooltip: 'Applied to decking area for Level 2 travertine (includes 5% waste).',
+                tooltip: 'Applied to decking area for Level 2 travertine (includes 5% overhead).',
+                prefix: '$',
+              },
+              {
+                label: 'Travertine level 3 (per sqft)',
+                path: ['tileCoping', 'decking', 'material', 'travertineLevel3'],
+                type: 'number',
+                tooltip: 'Applied to decking area for Level 3 travertine (includes 5% overhead).',
                 prefix: '$',
               },
               {
@@ -1761,7 +1960,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Panel ledge material multiplier',
                 path: ['tileCoping', 'rockworkMaterialWaste', 'panelLedge'],
                 type: 'number',
-                tooltip: 'Multiplies panel ledge material sqft when none is provided (1.15 = 15% waste).',
+                tooltip: 'Multiplies panel ledge material sqft when none is provided (1.15 = 15% overhead).',
               },
             ],
           },
@@ -1832,6 +2031,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 addLabel: 'Add cleaner',
                 fields: [
                   { key: 'name', label: 'Name', type: 'text', placeholder: 'Cleaner name' },
+                  {
+                    key: 'defaultCleaner',
+                    label: 'Default Cleaner',
+                    type: 'boolean',
+                    tooltip: 'Used as the preselected cleaner for new proposals. Only one cleaner can be selected.',
+                  },
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
@@ -1851,7 +2056,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
-                  { key: 'isVersaFlo', label: 'VersaFlo capable', type: 'boolean' },
                 ],
               },
             ],
@@ -1893,7 +2097,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
-                  { key: 'percentIncrease', label: '% cost increase', type: 'number', placeholder: '0' },
+                  { key: 'addCost3', label: 'Add. Cost 3', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'includesSaltCell', label: 'Includes Salt Cell', type: 'boolean' },
                 ],
               },
             ],
@@ -1916,6 +2121,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                  { key: 'excludedFromSaltCell', label: 'Excluded from Salt Cell', type: 'boolean' },
                 ],
               },
             ],
@@ -1978,7 +2184,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spa prep add-on (over threshold)',
                 path: ['interiorFinish', 'extras', 'spaPrep'],
                 type: 'number',
-                tooltip: 'Added once when a gunite spa exists and pool surface area exceeds the prep threshold.',
+                tooltip: 'Added once when a shotcrete spa exists and pool surface area exceeds the prep threshold.',
                 prefix: '$',
               },
               {
@@ -2013,7 +2219,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Waterproofing (raised spa)',
                 path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa'],
                 type: 'number',
-                tooltip: 'Added once when a raised gunite spa is waterproofed.',
+                tooltip: 'Added once when a raised shotcrete spa is waterproofed.',
                 prefix: '$',
               },
             ],
@@ -2199,7 +2405,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Masonry',
         groups: [
           {
-            title: 'Columns & facing (labor)',
+            title: 'Columns & spillway',
             scalars: [
               {
                 label: 'Column base (per ft height)',
@@ -2209,99 +2415,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 prefix: '$',
               },
               {
-                label: 'RBB facing labor - tile (per sqft)',
-                path: ['masonry', 'labor', 'rbbFacing', 'tile'],
-                type: 'number',
-                tooltip: 'Applied per sqft of RBB facing area.',
-                prefix: '$',
-              },
-              {
-                label: 'RBB facing labor - panel ledge (per sqft)',
-                path: ['masonry', 'labor', 'rbbFacing', 'panelLedge'],
-                type: 'number',
-                tooltip: 'Applied per sqft of RBB facing area.',
-                prefix: '$',
-              },
-              {
-                label: 'RBB facing labor - stacked stone (per sqft)',
-                path: ['masonry', 'labor', 'rbbFacing', 'stackedStone'],
-                type: 'number',
-                tooltip: 'Applied per sqft of RBB facing area.',
-                prefix: '$',
-              },
-              {
-                label: 'Raised spa facing labor - tile (per sqft)',
-                path: ['masonry', 'labor', 'raisedSpaFacing', 'tile'],
-                type: 'number',
-                tooltip: 'Applied per sqft of raised spa facing area (uses raised spa labor multiplier).',
-                prefix: '$',
-              },
-              {
-                label: 'Raised spa facing labor - ledgestone (per sqft)',
-                path: ['masonry', 'labor', 'raisedSpaFacing', 'ledgestone'],
-                type: 'number',
-                tooltip: 'Applied per sqft of raised spa facing area (uses raised spa labor multiplier).',
-                prefix: '$',
-              },
-              {
-                label: 'Raised spa facing labor - stacked stone (per sqft)',
-                path: ['masonry', 'labor', 'raisedSpaFacing', 'stackedStone'],
-                type: 'number',
-                tooltip: 'Applied per sqft of raised spa facing area (uses raised spa labor multiplier).',
-                prefix: '$',
-              },
-              {
                 label: 'Spillway labor (per unit)',
                 path: ['masonry', 'labor', 'spillway'],
                 type: 'number',
                 tooltip: 'Added once when a raised spa exists.',
-                prefix: '$',
-              },
-            ],
-          },
-          {
-            title: 'Facing material (per sqft)',
-            scalars: [
-              {
-                label: 'RBB facing material - tile (per sqft)',
-                path: ['masonry', 'material', 'rbbFacing', 'tile'],
-                type: 'number',
-                tooltip: 'Applied per sqft of RBB facing material area.',
-                prefix: '$',
-              },
-              {
-                label: 'RBB facing material - panel ledge (per sqft)',
-                path: ['masonry', 'material', 'rbbFacing', 'panelLedge'],
-                type: 'number',
-                tooltip: 'Applied per sqft of RBB facing material area.',
-                prefix: '$',
-              },
-              {
-                label: 'RBB facing material - stacked stone (per sqft)',
-                path: ['masonry', 'material', 'rbbFacing', 'stackedStone'],
-                type: 'number',
-                tooltip: 'Applied per sqft of RBB facing material area.',
-                prefix: '$',
-              },
-              {
-                label: 'Raised spa facing material - tile (per sqft)',
-                path: ['masonry', 'material', 'raisedSpaFacing', 'tile'],
-                type: 'number',
-                tooltip: 'Applied per sqft of raised spa facing material area (uses raised spa material multiplier).',
-                prefix: '$',
-              },
-              {
-                label: 'Raised spa facing material - ledgestone (per sqft)',
-                path: ['masonry', 'material', 'raisedSpaFacing', 'ledgestone'],
-                type: 'number',
-                tooltip: 'Applied per sqft of raised spa facing material area (uses raised spa material multiplier).',
-                prefix: '$',
-              },
-              {
-                label: 'Raised spa facing material - stacked stone (per sqft)',
-                path: ['masonry', 'material', 'raisedSpaFacing', 'stackedStone'],
-                type: 'number',
-                tooltip: 'Applied per sqft of raised spa facing material area (uses raised spa material multiplier).',
                 prefix: '$',
               },
               {
@@ -2314,19 +2431,52 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
+            title: 'Facing options',
+            lists: [
+              {
+                title: 'RBB / Exposed Pool Wall facings',
+                path: ['masonry', 'rbbFacingOptions'],
+                addLabel: 'Add facing option',
+                variant: 'table',
+                emptyMessage: 'No RBB facing options yet. Add one to get started.',
+                defaultItem: () => ({
+                  id: '',
+                  name: '',
+                  materialCost: 0,
+                  laborCost: 0,
+                }),
+                fields: masonryFacingFields,
+              },
+              {
+                title: 'Raised Spa facings',
+                path: ['masonry', 'raisedSpaFacingOptions'],
+                addLabel: 'Add facing option',
+                variant: 'table',
+                emptyMessage: 'No raised spa facing options yet. Add one to get started.',
+                defaultItem: () => ({
+                  id: '',
+                  name: '',
+                  materialCost: 0,
+                  laborCost: 0,
+                }),
+                fields: masonryFacingFields,
+              },
+            ],
+          },
+          {
             title: 'Raised spa multipliers',
             scalars: [
               {
                 label: 'Raised spa labor multiplier',
                 path: ['masonry', 'raisedSpaWasteMultiplier'],
                 type: 'number',
-                tooltip: 'Multiplies raised spa facing labor sqft (1.125 = 12.5% waste).',
+                tooltip: 'Multiplies raised spa facing labor sqft (1.125 = 12.5% overhead).',
               },
               {
                 label: 'Raised spa material multiplier',
                 path: ['masonry', 'raisedSpaMaterialWaste'],
                 type: 'number',
-                tooltip: 'Multiplies raised spa facing material sqft (1.15 = 15% waste).',
+                tooltip: 'Multiplies raised spa facing material sqft (1.15 = 15% overhead).',
               },
             ],
           },
@@ -2367,6 +2517,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       },
     ],
     [
+      masonryFacingFields,
       data.electrical.overrunThreshold,
       data.electrical.heatPumpOverrunThreshold,
       data.plumbing.gasOverrunThreshold,
@@ -2448,13 +2599,106 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const renderList = (config: ListConfig) => {
     const entries = (getValue(data, config.path) as any[]) || [];
+    const isCleanerList = config.path[0] === 'equipment' && config.path[1] === 'cleaners';
+    const defaultCleanerIndex = isCleanerList ? getDefaultCleanerIndex(entries) : -1;
+
+    if (config.variant === 'table') {
+      return (
+        <div className="pricing-list-card pricing-list-card--table">
+          <div className="pricing-list-card__header">
+            <h5>{config.title}</h5>
+            <button className="pricing-chip-button" onClick={() => handleAddListItem(config)}>
+              {config.addLabel}
+            </button>
+          </div>
+          <div className="pricing-list-card__body pricing-list-card__body--table">
+            <div className="pricing-table-wrapper">
+              <table className="pricing-table">
+                <thead>
+                  <tr>
+                    {config.fields.map((field) => (
+                      <th key={`${config.title}-${field.key}`} scope="col">
+                        <span>{field.label}</span>
+                        {field.tooltip && (
+                          <span
+                            className="pricing-field__info"
+                            data-tooltip={field.tooltip}
+                            aria-label={field.tooltip}
+                            role="img"
+                            onMouseEnter={updateTooltipAlign}
+                          >
+                            i
+                          </span>
+                        )}
+                      </th>
+                    ))}
+                    <th scope="col" className="pricing-table__actions-header">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry, index) => (
+                    <tr key={`${config.title}-${index}`}>
+                      {config.fields.map((field) => {
+                        const fieldValue = entry ? entry[field.key] : '';
+                        return (
+                          <td key={field.key}>
+                            {field.type === 'boolean' ? (
+                              <label className="pricing-table__checkbox-cell">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(fieldValue)}
+                                  onChange={(e) => handleListChange(config, index, field, e.target.checked)}
+                                />
+                              </label>
+                            ) : (
+                              <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
+                                {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
+                                <input
+                                  type={field.type === 'number' ? 'number' : 'text'}
+                                  className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
+                                  value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
+                                  placeholder={field.placeholder}
+                                  onChange={(e) => handleListChange(config, index, field, e.target.value)}
+                                />
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="pricing-table__actions">
+                        <button
+                          className="pricing-chip-button danger"
+                          onClick={() => handleRemoveListItem(config, index)}
+                          aria-label="Remove item"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {entries.length === 0 && (
+                    <tr>
+                      <td colSpan={config.fields.length + 1} className="pricing-table__empty">
+                        {config.emptyMessage || 'No items yet. Add one to get started.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="pricing-list-card">
         <div className="pricing-list-card__header">
           <h5>{config.title}</h5>
           <button className="pricing-chip-button" onClick={() => handleAddListItem(config)}>
-            Add
+            {config.addLabel || 'Add'}
           </button>
         </div>
         <div className="pricing-list-card__body">
@@ -2462,6 +2706,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             <div key={`${config.title}-${index}`} className="pricing-list-row">
               <div className="pricing-list-row__fields">
                 {config.fields.map((field) => {
+                  const cellKey = `${config.path.join('.')}.${index}.${field.key}`;
                   let fieldValue = entry ? entry[field.key] : '';
                   if (field.key === 'colors' && Array.isArray(fieldValue)) {
                     fieldValue = fieldValue.join(', ');
@@ -2469,16 +2714,43 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   if (field.key === 'overheadMultiplier' && (fieldValue === undefined || fieldValue === null)) {
                     fieldValue = 1.1;
                   }
+                  if (isCleanerList && field.key === 'defaultCleaner') {
+                    fieldValue = index === defaultCleanerIndex;
+                  }
                   if (field.type === 'boolean') {
                     return (
                       <label key={field.key} className="pricing-field inline">
-                        <div className="pricing-field__label">
+                        <div className={getListFieldLabelClassName(field)}>
                           <input
                             type="checkbox"
                             checked={Boolean(fieldValue)}
                             onChange={(e) => handleListChange(config, index, field, e.target.checked)}
                           />
-                          {renderLabelText(field.label)}
+                          {renderListFieldLabelText(config, field, cellKey)}
+                          {isRenamableAddCostField(field) && (
+                            <button
+                              type="button"
+                              className="pricing-field__rename-btn"
+                              aria-label={`Rename ${field.label} for ${config.title}`}
+                              title={`Rename ${field.label}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleStartRenameListField(config, field, cellKey);
+                              }}
+                            >
+                              <svg viewBox="0 0 16 16" aria-hidden="true">
+                                <path
+                                  d="M11.7 2.3a1 1 0 011.4 0l.6.6a1 1 0 010 1.4l-7.9 7.9-2.6.6.6-2.6 7.9-7.9zM9.9 4.1l2 2"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.3"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                          )}
                           {field.tooltip && (
                             <span
                               className="pricing-field__info"
@@ -2497,8 +2769,32 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
                   return (
                     <label key={field.key} className="pricing-field inline">
-                      <div className="pricing-field__label">
-                        {renderLabelText(field.label)}
+                      <div className={getListFieldLabelClassName(field)}>
+                        {renderListFieldLabelText(config, field, cellKey)}
+                        {isRenamableAddCostField(field) && (
+                          <button
+                            type="button"
+                            className="pricing-field__rename-btn"
+                            aria-label={`Rename ${field.label} for ${config.title}`}
+                            title={`Rename ${field.label}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleStartRenameListField(config, field, cellKey);
+                            }}
+                          >
+                            <svg viewBox="0 0 16 16" aria-hidden="true">
+                              <path
+                                d="M11.7 2.3a1 1 0 011.4 0l.6.6a1 1 0 010 1.4l-7.9 7.9-2.6.6.6-2.6 7.9-7.9zM9.9 4.1l2 2"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        )}
                         {field.tooltip && (
                           <span
                             className="pricing-field__info"
@@ -2535,7 +2831,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             </div>
           ))}
           {entries.length === 0 && (
-            <div className="pricing-empty">No items yet. Add one to get started.</div>
+            <div className="pricing-empty">{config.emptyMessage || 'No items yet. Add one to get started.'}</div>
           )}
         </div>
       </div>

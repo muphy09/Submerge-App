@@ -18,6 +18,7 @@ import {
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
+import { hasCustomOptionContent } from '../utils/customOptions';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { CalculationModules } from '../services/pricingEngineComplete';
 import { validateProposal } from '../utils/validation';
@@ -274,7 +275,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const [manualAdjustments, setManualAdjustments] = useState<ManualAdjustments>(readManualAdjustmentsFromModel());
   const manualAdjustmentsSourceRef = useRef<'pricingModel' | 'proposal'>('pricingModel');
   const pricingModelManualAdjustmentsRef = useRef<ManualAdjustments>(readManualAdjustmentsFromModel());
+  const formHeaderRef = useRef<HTMLElement | null>(null);
   const sectionContentRef = useRef<HTMLDivElement | null>(null);
+  const [formHeaderHeight, setFormHeaderHeight] = useState<number>(68);
   const createCompletionMap = () =>
     sections.reduce((acc, section) => {
       acc[section.key] = false;
@@ -423,13 +426,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       0
     );
     const hasPumpSelection = pumpQty > 0 && hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead));
-    const hasCustomOptions = (equipment.customOptions || []).some(
-      option =>
-        !!option?.name?.trim() ||
-        !!option?.description?.trim() ||
-        hasPositive(option?.laborCost) ||
-        hasPositive(option?.materialCost)
-    );
+    const hasCustomOptions = (equipment.customOptions || []).some((option) => hasCustomOptionContent(option));
     const lightCounts = getLightCounts(equipment as any);
     const autoFillQty = Math.max(
       equipment.autoFillSystemQuantity ?? (equipment.autoFillSystem ? 1 : 0),
@@ -440,7 +437,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     return (
       hasPositive(equipment.totalCost) ||
       lightCounts.total > 0 ||
-      equipment.upgradeToVersaFlo ||
       hasPositive(equipment.cleanerQuantity) ||
       hasPositive(equipment.filterQuantity) ||
       hasPositive(equipment.heaterQuantity) ||
@@ -487,6 +483,27 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [navManuallyToggled, showLeftNav]);
+
+  useEffect(() => {
+    const header = formHeaderRef.current;
+    if (!header) return;
+
+    const updateHeaderHeight = () => {
+      const nextHeight = Math.ceil(header.getBoundingClientRect().height);
+      setFormHeaderHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    updateHeaderHeight();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => updateHeaderHeight());
+      observer.observe(header);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', updateHeaderHeight);
+    return () => window.removeEventListener('resize', updateHeaderHeight);
+  }, []);
 
   const getInitialProposal = (): Partial<Proposal> => {
     const base = getDefaultProposal();
@@ -894,7 +911,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
   const handleSave = async (
     mode: 'draft' | 'submit',
-    options?: { navigateToSummary?: boolean }
+    options?: { navigateToSummary?: boolean; forceDraftStatus?: boolean }
   ): Promise<boolean> => {
     if (isSaving) return false;
 
@@ -934,7 +951,12 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         totals.versionName ||
         versionNameFromState ||
         (currentVersionId === 'original' ? 'Original Version' : `Version ${versionList.length}`);
-      const nextStatus = effectiveMode === 'submit' ? 'submitted' : proposal.status || 'draft';
+      const nextStatus =
+        effectiveMode === 'submit'
+          ? 'submitted'
+          : options?.forceDraftStatus
+          ? 'draft'
+          : proposal.status || 'draft';
       const finalProposal: Proposal = {
         ...totals,
         proposalNumber: proposal.proposalNumber || proposalNumber || `PROP-${Date.now()}`,
@@ -985,6 +1007,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         message:
           effectiveMode === 'submit'
             ? 'Proposal submitted successfully!'
+            : options?.forceDraftStatus
+            ? 'Proposal saved as draft.'
             : 'Proposal saved successfully!',
       });
 
@@ -1021,6 +1045,11 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     navigate('/');
   };
 
+  const handleSelectPricingModel = async (id: string) => {
+    const model = pricingModels.find((entry) => entry.id === id);
+    await applyPricingModelSelection(id, model?.name, model?.isDefault, Boolean(model?.removed), true);
+  };
+
   const renderSection = () => {
     // Ensure we have valid proposal data before rendering
     if (!proposal.poolSpecs || !proposal.customerInfo) {
@@ -1047,23 +1076,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               onChange={(data) => updateProposal('poolSpecs', data)}
               tileCopingDecking={proposal.tileCopingDecking}
               onChangeTileCopingDecking={(data) => updateProposal('tileCopingDecking', data)}
-              pricingModels={pricingModels}
-              selectedPricingModelId={selectedPricingModelId}
-              selectedPricingModelName={selectedPricingModelName}
-              defaultPricingModelId={defaultPricingModelId}
-              onSelectPricingModel={async (id) => {
-                const model = pricingModels.find((m) => m.id === id);
-                await applyPricingModelSelection(id, model?.name, model?.isDefault, Boolean(model?.removed), true);
-              }}
-              showStaleIndicator={
-                Boolean(selectedPricingModelId) &&
-                Boolean(defaultPricingModelId) &&
-                selectedPricingModelId !== defaultPricingModelId &&
-                !pricingModels.some((m) => m.id === selectedPricingModelId && m.removed)
-              }
-              showRemovedIndicator={
-                Boolean(selectedPricingModelId) && pricingModels.some((m) => m.id === selectedPricingModelId && m.removed)
-              }
             />
           );
         case 'excavation':
@@ -1182,13 +1194,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const sectionCompletion = useMemo<Record<SectionKey, boolean>>(() => {
     const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
     const hasAnyPositive = (...values: Array<number | undefined>) => values.some(v => hasPositive(v));
-    const hasCustomOptions = (options?: Array<{ name?: string; description?: string; laborCost?: number; materialCost?: number }>) =>
-      (options || []).some(
-        option =>
-          !!option?.name?.trim() ||
-          !!option?.description?.trim() ||
-          hasAnyPositive(option?.laborCost, option?.materialCost)
-      );
+    const hasCustomOptions = (options?: Proposal['excavation']['customOptions']) =>
+      (options || []).some((option) => hasCustomOptionContent(option));
 
     const poolSpecs = proposal.poolSpecs;
     const hasPoolSpecsData =
@@ -1222,6 +1229,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const hasExcavationData =
       !!excavation &&
       ((excavation.rbbLevels?.length ?? 0) > 0 ||
+        (excavation.exposedPoolWallLevels?.length ?? 0) > 0 ||
         hasPositive(excavation.totalRBBSqft) ||
         hasAnyPositive(
           excavation.columns?.count,
@@ -1282,6 +1290,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       (tile.tileLevel !== 1 ||
         tile.copingType !== 'travertine-level1' ||
         tile.deckingType !== 'travertine-level1' ||
+        tile.isDeckingOffContract ||
+        hasPositive(tile.deckingOffContractCost) ||
         tile.hasTrimTileOnSteps ||
         tile.hasRoughGrading === false ||
         hasAnyPositive(
@@ -1373,6 +1383,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
   const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(mergeWithDefaults(proposal), papDiscounts);
   const canSubmit = Boolean(proposal.customerInfo?.customerName?.trim());
+  const saveDraftTooltip = isOffline
+    ? 'No internet connection. Connect to save.'
+    : undefined;
   const submitTooltip = isOffline
     ? 'No internet connection. Connect to save.'
     : !canSubmit
@@ -1394,9 +1407,91 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const formattedRetailPrice = formatCurrency(retailPrice);
   const proposalIndicator = buildProposalIndicator(currentCostBreakdown.pricing?.grossProfitMargin);
   const showCostSidebar = false;
+  const selectedPricingModel = useMemo(
+    () => pricingModels.find((model) => model.id === selectedPricingModelId) || null,
+    [pricingModels, selectedPricingModelId]
+  );
+  const showRemovedPricingModelIndicator = Boolean(selectedPricingModelId && selectedPricingModel?.removed);
+  const showStalePricingModelIndicator =
+    Boolean(selectedPricingModelId) &&
+    Boolean(defaultPricingModelId) &&
+    selectedPricingModelId !== defaultPricingModelId &&
+    !showRemovedPricingModelIndicator;
+  const isActivePricingModel =
+    Boolean(selectedPricingModelId) && selectedPricingModelId === defaultPricingModelId && !showRemovedPricingModelIndicator;
+  const normalizedSelectedPricingModelName = (selectedPricingModelName || selectedPricingModel?.name || '').trim();
+  const pricingModelDisplayName = showRemovedPricingModelIndicator
+    ? normalizedSelectedPricingModelName.toLowerCase().includes('(removed)')
+      ? normalizedSelectedPricingModelName
+      : `${normalizedSelectedPricingModelName || 'Unknown Pricing Model'} (Removed)`
+    : normalizedSelectedPricingModelName || 'Select Pricing Model';
+  const pricingModelStatusLabel = showRemovedPricingModelIndicator
+    ? 'Removed'
+    : showStalePricingModelIndicator
+    ? 'Inactive'
+    : isActivePricingModel
+    ? 'Active'
+    : selectedPricingModelId
+    ? 'Selected'
+    : pricingModels.length === 0
+    ? 'No Models'
+    : 'Select';
+  const pricingModelHeaderStateClass = showRemovedPricingModelIndicator
+    ? 'form-header-pricing--removed'
+    : showStalePricingModelIndicator
+    ? 'form-header-pricing--inactive'
+    : selectedPricingModelId
+    ? 'form-header-pricing--active'
+    : 'form-header-pricing--empty';
+  const proposalFormStyle = useMemo(
+    () => ({ ['--form-header-height' as any]: `${formHeaderHeight}px` }),
+    [formHeaderHeight]
+  );
+  const pricingModelControl = (
+    <label
+      className={`form-header-pricing ${pricingModelHeaderStateClass}`}
+      data-tooltip="Click to change from the Active Price Model"
+      aria-label={`Current pricing model: ${pricingModelDisplayName}. Click to change from the Active Price Model`}
+    >
+      <select
+        value={selectedPricingModelId || ''}
+        onChange={(e) => void handleSelectPricingModel(e.target.value)}
+        className="form-header-pricing-select"
+        disabled={pricingModels.length === 0 || isSaving}
+        aria-label={`Pricing Model. Current selection: ${pricingModelDisplayName}`}
+      >
+        <option value="" disabled>
+          {pricingModels.length === 0 ? 'No pricing models available' : 'Select pricing model'}
+        </option>
+        {pricingModels.map((model) => {
+          const baseLabel =
+            model.removed && !model.name.toLowerCase().includes('(removed)')
+              ? `${model.name} (Removed)`
+              : model.name;
+          return (
+            <option key={model.id} value={model.id}>
+              {baseLabel}
+            </option>
+          );
+        })}
+      </select>
+      <span className="form-header-pricing-body">
+        <span className="form-header-pricing-name">{pricingModelDisplayName}</span>
+        {pricingModelStatusLabel !== 'Select' && pricingModelStatusLabel !== 'No Models' && (
+          <span className="form-header-pricing-pill">{pricingModelStatusLabel}</span>
+        )}
+        <span className="form-header-pricing-arrow" aria-hidden="true" />
+      </span>
+    </label>
+  );
+
+  const handleSaveDraftClick = () => {
+    if (isSaving || isOffline) return;
+    void handleSave('draft', { navigateToSummary: true, forceDraftStatus: true });
+  };
 
   const handleCompleteClick = () => {
-    if (!canSubmit || isSaving) return;
+    if (!canSubmit || isSaving || isOffline) return;
     void handleSave('draft', { navigateToSummary: true });
   };
 
@@ -1405,7 +1500,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   }
 
   return (
-    <div className="proposal-form">
+    <div className="proposal-form" style={proposalFormStyle}>
       {isOffline && (
         <div className="offline-save-banner" role="alert">
           {cloudIssue === 'server-issue'
@@ -1413,10 +1508,12 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             : 'NO INTERNET - CONNECT TO SAVE PROPOSAL'}
         </div>
       )}
-      <header className="form-header">
-        <div className="form-header-title">
-          <FranchiseLogo className="form-logo" alt="Franchise Logo" franchiseId={franchiseLogoId} />
-          <h1>{headerTitle}</h1>
+      <header className="form-header" ref={formHeaderRef}>
+        <div className="form-header-row">
+          <div className="form-header-title">
+            <FranchiseLogo className="form-logo" alt="Franchise Logo" franchiseId={franchiseLogoId} />
+            <h1>{headerTitle}</h1>
+          </div>
         </div>
       </header>
 
@@ -1534,8 +1631,17 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showCostSidebar ? 'no-right-cost' : ''}`}>
           <div className="section-content" ref={sectionContentRef}>
             <div className="section-title-row">
+              <div className="section-title-pricing">{pricingModelControl}</div>
               <h2 className="section-title">{sections[currentSection]?.label}</h2>
-              <div className="section-title-actions" title={submitTooltip}>
+              <div className="section-title-actions">
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleSaveDraftClick}
+                  disabled={isSaving || isOffline}
+                  title={saveDraftTooltip}
+                >
+                  Save Draft
+                </button>
                 <button
                   className="btn btn-success"
                   onClick={handleCompleteClick}
@@ -1619,7 +1725,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         cancelLabel="Discard"
         onConfirm={async () => {
           setShowCancelConfirm(false);
-          await handleSave('draft');
+          await handleSave('draft', { forceDraftStatus: true });
         }}
         onCancel={() => {
           setShowCancelConfirm(false);

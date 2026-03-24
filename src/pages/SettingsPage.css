@@ -339,6 +339,47 @@
   color: #64748b;
 }
 
+.admin-pin-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+}
+
+.admin-pin-settings-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin-pin-settings-input-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.admin-pin-settings-input {
+  flex: 1;
+  min-width: 0;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  text-align: center;
+}
+
+.admin-pin-visibility-button {
+  background: #ffffff;
+  color: #1e3a5f;
+  border: 1px solid #dbe3ee;
+}
+
+.admin-pin-settings-current {
+  font-size: 0.85rem;
+  color: #475569;
+}
+
 /* Changelog Modal Styles */
 .changelog-modal-backdrop {
   position: fixed;
@@ -525,5 +566,10 @@
 
   .franchise-logo-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-pin-settings-input-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

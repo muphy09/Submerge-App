@@ -2,6 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import submergeLogo from '../../Submerge Logo.png';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { useFranchiseLogo } from '../hooks/useFranchiseLogo';
+import {
+  ADMIN_PANEL_PIN_LENGTH,
+  DEFAULT_ADMIN_PANEL_PIN,
+  MAX_ADMIN_PANEL_PIN_LENGTH,
+  getStoredAdminPanelPin,
+  resetAdminPanelPin,
+  sanitizeAdminPanelPinInput,
+  saveAdminPanelPin,
+} from '../services/adminPanelPin';
 import { saveFranchiseAppName, saveFranchiseLogo } from '../services/franchiseBranding';
 import { saveFranchiseCode } from '../services/franchisesAdapter';
 import {
@@ -24,9 +33,11 @@ const SettingsPage: React.FC = () => {
   const [changelogContent, setChangelogContent] = useState('');
   const [changelogError, setChangelogError] = useState('');
   const [changelogLoading, setChangelogLoading] = useState(false);
-  const isChangelogDisabled = true;
   const sessionRole = getSessionRole();
+  const canViewChangelog = sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'master';
+  const isChangelogDisabled = !canViewChangelog;
   const isAdmin = sessionRole === 'admin' || sessionRole === 'owner';
+  const isOwner = sessionRole === 'owner';
   const franchiseId = getSessionFranchiseId();
   const { appName: savedAppName, displayName, isLoading: appNameLoading } = useFranchiseAppName(franchiseId);
   const { logoUrl: savedLogoUrl, isLoading: logoLoading } = useFranchiseLogo(franchiseId);
@@ -48,6 +59,11 @@ const SettingsPage: React.FC = () => {
   const [appNameStatus, setAppNameStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(
     null
   );
+  const [pendingAdminPin, setPendingAdminPin] = useState('');
+  const [adminPinStatus, setAdminPinStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(
+    null
+  );
+  const [showAdminPin, setShowAdminPin] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewLogoUrl = pendingLogoUrl || savedLogoUrl || submergeLogo;
   const hasCustomLogo = Boolean(savedLogoUrl);
@@ -62,6 +78,9 @@ const SettingsPage: React.FC = () => {
   const hasPendingCodeChange = normalizedPendingCode !== normalizedCurrentCode;
   const hasPendingCodeValue = normalizedPendingCode.length > 0;
   const canResetFranchiseCode = pendingFranchiseCode !== currentFranchiseCode;
+  const normalizedPendingAdminPin = sanitizeAdminPanelPinInput(pendingAdminPin);
+  const currentAdminPin = getStoredAdminPanelPin(franchiseId);
+  const hasPendingAdminPinChange = normalizedPendingAdminPin !== currentAdminPin;
 
   const renderChangelog = (content: string) => {
     const lines = content.split(/\r?\n/);
@@ -211,6 +230,8 @@ const SettingsPage: React.FC = () => {
   };
 
   const openChangelog = async () => {
+    if (!canViewChangelog) return;
+
     setShowChangelog(true);
     setChangelogLoading(true);
     setChangelogError('');
@@ -246,6 +267,11 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     setPendingAppName(savedAppName || '');
   }, [savedAppName]);
+
+  useEffect(() => {
+    setPendingAdminPin(getStoredAdminPanelPin(franchiseId));
+    setAdminPinStatus(null);
+  }, [franchiseId]);
 
   const updateStoredSessionCode = (nextCode: string) => {
     const session = readSession();
@@ -432,6 +458,51 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleAdminPinChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setAdminPinStatus(null);
+    setPendingAdminPin(sanitizeAdminPanelPinInput(event.target.value));
+  };
+
+  const handleSaveAdminPin = () => {
+    if (!hasPendingAdminPinChange) return;
+    if (normalizedPendingAdminPin.length !== ADMIN_PANEL_PIN_LENGTH) {
+      setAdminPinStatus({
+        type: 'error',
+        message: `PIN must be exactly ${ADMIN_PANEL_PIN_LENGTH} digits.`,
+      });
+      return;
+    }
+
+    try {
+      const savedPin = saveAdminPanelPin(franchiseId, normalizedPendingAdminPin);
+      setPendingAdminPin(savedPin);
+      setAdminPinStatus({ type: 'success', message: 'Admin panel PIN updated.' });
+    } catch (error: any) {
+      console.error('Failed to save admin panel PIN:', error);
+      setAdminPinStatus({
+        type: 'error',
+        message: error?.message || 'Unable to save the admin panel PIN.',
+      });
+    }
+  };
+
+  const handleResetAdminPin = () => {
+    try {
+      const nextPin = resetAdminPanelPin(franchiseId);
+      setPendingAdminPin(nextPin);
+      setAdminPinStatus({
+        type: 'success',
+        message: 'Admin panel PIN reset to default.',
+      });
+    } catch (error) {
+      console.error('Failed to reset admin panel PIN:', error);
+      setAdminPinStatus({
+        type: 'error',
+        message: 'Unable to reset the admin panel PIN.',
+      });
+    }
+  };
+
   return (
     <div className="settings-page">
       <div className="settings-page-header">
@@ -458,8 +529,7 @@ const SettingsPage: React.FC = () => {
           )}
           <div className="section-row">
             <div>
-              <h3>Changelog</h3>
-              <p className="settings-description">See what changed in the latest builds.</p>
+              <h3>Patch Notes</h3>
             </div>
             <button
               className="settings-button view-changelog-button"
@@ -618,6 +688,63 @@ const SettingsPage: React.FC = () => {
             </div>
           )}
 
+        {isOwner && (
+          <div className="settings-card">
+            <h2>Admin Access</h2>
+            <p className="settings-description">
+              Require a PIN before anyone on this franchise can open the admin panel on this device.
+            </p>
+            <div className="admin-pin-settings-panel">
+              <div className="admin-pin-settings-copy">
+                <div className="franchise-logo-label">Admin Panel PIN</div>
+                <p className="franchise-logo-note">
+                  Use exactly {ADMIN_PANEL_PIN_LENGTH} digits.
+                </p>
+              </div>
+              <div className="admin-pin-settings-input-row">
+                <input
+                  type={showAdminPin ? 'text' : 'password'}
+                  className="franchise-name-input admin-pin-settings-input"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={MAX_ADMIN_PANEL_PIN_LENGTH}
+                  placeholder="Enter admin PIN"
+                  value={pendingAdminPin}
+                  onChange={handleAdminPinChange}
+                />
+                <button
+                  type="button"
+                  className="settings-button admin-pin-visibility-button"
+                  onClick={() => setShowAdminPin((current) => !current)}
+                >
+                  {showAdminPin ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <div className="admin-pin-settings-current">
+                Current PIN status:{' '}
+                <span className="franchise-name-value">
+                  {currentAdminPin === DEFAULT_ADMIN_PANEL_PIN ? 'Default' : 'Custom'}
+                </span>
+              </div>
+              <div className="franchise-logo-actions">
+                <button
+                  className="settings-button branding-save-button"
+                  onClick={handleSaveAdminPin}
+                  disabled={!hasPendingAdminPinChange}
+                >
+                  Save PIN
+                </button>
+                <button className="settings-button branding-reset-button" onClick={handleResetAdminPin}>
+                  Reset to Default
+                </button>
+              </div>
+              {adminPinStatus && (
+                <div className={`logo-status ${adminPinStatus.type}`}>{adminPinStatus.message}</div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="settings-card">
           <h2>About</h2>
           <p className="about-text">Submerge Proposal Builder</p>
@@ -630,7 +757,7 @@ const SettingsPage: React.FC = () => {
         <div className="changelog-modal-backdrop" onClick={handleChangelogBackdropClick}>
           <div className="changelog-modal" onClick={(e) => e.stopPropagation()}>
             <div className="changelog-header">
-              <h3>Changelog</h3>
+              <h3>Patch Notes</h3>
               <button className="close-button" onClick={closeChangelog}>✕</button>
             </div>
             <div className="changelog-body">

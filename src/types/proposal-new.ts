@@ -23,6 +23,7 @@ export type SpaType = 'none' | 'gunite' | 'fiberglass';
 export type SpaShape = 'round' | 'square';
 export type FiberglassModelSize = 'small' | 'medium' | 'large';
 export type FiberglassCraneOption = 'no-crane' | 'crane-small' | 'crane-medium' | 'crane-large';
+export type MasonryFacing = string;
 
 export interface PoolSpecs {
   // Pool Type
@@ -56,7 +57,7 @@ export interface PoolSpecs {
   spaFiberglassModelName?: string;
   spaFiberglassModelPrice?: number;
   isRaisedSpa: boolean; // +18"
-  raisedSpaFacing: 'none' | 'tile' | 'ledgestone' | 'stacked-stone';
+  raisedSpaFacing: MasonryFacing;
   hasSpillover: boolean;
 
   // Decking
@@ -83,7 +84,8 @@ export interface PoolSpecs {
 export interface RBBLevel {
   height: 6 | 12 | 18 | 24 | 30 | 36;
   length: number; // LNFT
-  facing: 'none' | 'tile' | 'panel-ledge' | 'stacked-stone';
+  facing: MasonryFacing;
+  hasBacksideFacing?: boolean;
 }
 
 export interface ColumnSpec {
@@ -91,7 +93,7 @@ export interface ColumnSpec {
   width: number; // FT
   depth: number; // FT
   height: number; // FT
-  facing: 'none' | 'tile' | 'panel-ledge' | 'stacked-stone';
+  facing: MasonryFacing;
 }
 
 export interface RetainingWallSelection {
@@ -103,6 +105,7 @@ export interface Excavation {
   // RBB (Raised Bond Beam)
   rbbLevels: RBBLevel[];
   totalRBBSqft: number; // Auto-calculated
+  exposedPoolWallLevels: RBBLevel[];
 
   // Columns
   columns: ColumnSpec;
@@ -197,7 +200,13 @@ export type CopingType =
   | 'travertine-level1'
   | 'travertine-level2'
   | 'concrete';
-export type DeckingType = 'none' | 'paver' | 'travertine-level1' | 'travertine-level2' | 'concrete';
+export type DeckingType =
+  | 'none'
+  | 'paver'
+  | 'travertine-level1'
+  | 'travertine-level2'
+  | 'travertine-level3'
+  | 'concrete';
 export type CopingSize = '12x12' | '12x24' | '16x16';
 
 export interface TileCopingDecking {
@@ -215,6 +224,8 @@ export interface TileCopingDecking {
   deckingType: DeckingType;
   deckingArea: number; // SQFT
   concreteStepsLength: number; // LNFT
+  isDeckingOffContract?: boolean;
+  deckingOffContractCost?: number;
 
   // Specialty details
   bullnoseLnft?: number; // Regular bullnose (single)
@@ -286,7 +297,6 @@ export interface HeaterSelection {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
-  isVersaFlo: boolean;
 }
 
 export interface AutomationSelection {
@@ -295,8 +305,9 @@ export interface AutomationSelection {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
+  addCost3?: number;
+  includesSaltCell?: boolean;
   zones: number; // Additional zones beyond base
-  percentIncrease?: number; // Optional percent increase applied to summed parts
 }
 
 export interface LightSelection {
@@ -315,6 +326,8 @@ export interface SaltSystemSelection {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
+  excludedFromSaltCell?: boolean;
+  includedSaltCellPlaceholder?: boolean;
 }
 
 export interface AutoFillSystemSelection {
@@ -340,7 +353,6 @@ export interface Equipment {
   cleanerQuantity?: number; // Excel NEW POOL B119 qty (0 to exclude cleaner)
   heater: HeaterSelection;
   heaterQuantity?: number;
-  upgradeToVersaFlo: boolean;
 
   // Lights
   poolLights?: LightSelection[];
@@ -357,6 +369,7 @@ export interface Equipment {
   // Salt system
   saltSystem?: SaltSystemSelection;
   saltSystemQuantity?: number;
+  additionalSaltSystem?: SaltSystemSelection;
 
   // Auto-fill system
   autoFillSystem?: AutoFillSystemSelection;
@@ -406,6 +419,7 @@ export interface CustomOption {
   laborCost: number;
   materialCost: number;
   totalCost: number;
+  isOffContract?: boolean;
 }
 
 // ============================================================================
@@ -574,6 +588,7 @@ export interface PricingCalculations {
   totalCostsBeforeOverhead: number; // Sum of all cost sections
   overheadMultiplier: number; // Default 1.01 (1% overhead)
   totalCOGS: number; // totalCostsBeforeOverhead × overheadMultiplier
+  offContractTotal: number; // Retail-only custom options excluded from COGS
 
   // Retail price calculation
   targetMargin: number; // Default 0.70 (70% - meaning 30% profit)

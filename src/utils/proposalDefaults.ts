@@ -22,6 +22,7 @@ import {
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from './equipmentCost';
+import { getDefaultCleanerOption, getDefaultCleanerQuantity } from './cleanerDefaults';
 
 export function getDefaultPoolSpecs(): PoolSpecs {
   return {
@@ -64,6 +65,7 @@ export function getDefaultExcavation(): Excavation {
   return {
     rbbLevels: [],
     totalRBBSqft: 0,
+    exposedPoolWallLevels: [],
     columns: {
       count: 0,
       width: 0,
@@ -130,6 +132,8 @@ export function getDefaultTileCopingDecking(): TileCopingDecking {
     deckingType: 'travertine-level1',
     deckingArea: 0,
     concreteStepsLength: 0,
+    isDeckingOffContract: false,
+    deckingOffContractCost: 0,
     bullnoseLnft: 0,
     doubleBullnoseLnft: 0,
     spillwayLnft: 0,
@@ -161,10 +165,11 @@ export function getDefaultEquipment(): Equipment {
 
   const defaultPump = pickDefault(pricingData.equipment.pumps, pumpOverhead);
   const defaultFilter = pickDefault(pricingData.equipment.filters, 1);
-  const defaultCleaner = pickDefault(pricingData.equipment.cleaners, 1);
+  const defaultCleaner = getDefaultCleanerOption(pricingData.equipment.cleaners) || pickDefault(pricingData.equipment.cleaners, 1);
   const defaultHeater = pickDefault(pricingData.equipment.heaters, 1);
   const defaultAutomation = pickDefault(pricingData.equipment.automation, 1);
   const otherOverhead = 1;
+  const defaultCleanerQuantity = getDefaultCleanerQuantity(defaultCleaner);
 
   return {
     pump: {
@@ -193,7 +198,7 @@ export function getDefaultEquipment(): Equipment {
       addCost2: (defaultCleaner as any).addCost2,
       price: getEquipmentItemCost(defaultCleaner as any, otherOverhead),
     },
-    cleanerQuantity: 0,
+    cleanerQuantity: defaultCleanerQuantity,
     heater: {
       name: defaultHeater.name,
       btu: (defaultHeater as any).btu,
@@ -201,10 +206,8 @@ export function getDefaultEquipment(): Equipment {
       addCost1: (defaultHeater as any).addCost1,
       addCost2: (defaultHeater as any).addCost2,
       price: getEquipmentItemCost(defaultHeater as any, otherOverhead),
-      isVersaFlo: defaultHeater.isVersaFlo,
     },
     heaterQuantity: 0,
-    upgradeToVersaFlo: false,
     poolLights: [],
     spaLights: [],
     numberOfLights: 0,
@@ -214,13 +217,15 @@ export function getDefaultEquipment(): Equipment {
       basePrice: (defaultAutomation as any).basePrice,
       addCost1: (defaultAutomation as any).addCost1,
       addCost2: (defaultAutomation as any).addCost2,
+      addCost3: (defaultAutomation as any).addCost3,
+      includesSaltCell: (defaultAutomation as any).includesSaltCell,
       price: getEquipmentItemCost(defaultAutomation as any, otherOverhead),
       zones: 0,
-      percentIncrease: (defaultAutomation as any).percentIncrease,
     },
     automationQuantity: 0,
     saltSystem: undefined,
     saltSystemQuantity: undefined,
+    additionalSaltSystem: undefined,
     autoFillSystem: undefined,
     autoFillSystemQuantity: undefined,
     hasBlanketReel: false,
