@@ -1,19 +1,5 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-
-
-Decking SQFT not autofill in contract
-Downspout SQFT doesnt autofill
-Custom features should autofill to bottom of contract
-
-5 year warranty - $399 - startup orientation
-
-parged concrete
-
-Surface returns should be 4 ALWAYS in contract (default 4, change available)
-
-
-
 - Sod and Fencing grouped costs not included bcz of price discrepency
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
@@ -24,7 +10,6 @@ Mid Term -
 - Ability to 'Search' for an input in the Admin Pricing Model
 - Improve export flow for Breadowns (naming)
 - Add workflow for transferring proposals to another user in the franchise (prompt before deleting user too)
-- Logic for contracts and different franchises
 - Admin menu redesign
 - Stacked view for nav boxes
 - Tooltips for input fields that appear with logic (if electric autofill is selected, tooltip for autofill run field)
@@ -34,8 +19,6 @@ Mid Term -
 - Adjust profit margin % per indiviudual designer *need more info
 - Lighted Sheer (needs electric run and price) Is this lighted? checkbox (maybe)
         - Will add pool light and housing cost, Has conduit run and match WF run.
-- Wireless autofill run. No conduit run needed (need price for this)
-
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
 - Admin proposal large screen
@@ -46,6 +29,7 @@ Long Term -
 - Homescreen background change
 - Segregate franchises so they can be updated and changed independantly
     - Includes patch notes, admin pricing options, tabs, settings they see, everything.
+- Logic for contracts and different franchises
 ----------------------------------------------------------------------------------------------------------
 Ideas - 
 - Potential column for "Included Items"
@@ -61,7 +45,9 @@ Help Needed -
     - Commercial Pool Pricing
     - Sales Templates (when not in effect)
 - Commission amount needs to be set per user - set up by admin (place inside of designers block) - same with discount threshold (default 18%)
-    - Is this the lowest Profit % number?
+    - Need Matt for clarification
+- Wireless autofill run. No conduit run needed
+    - Need price for this
 ----------------------------------------------------------------------------------------------------------
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)
