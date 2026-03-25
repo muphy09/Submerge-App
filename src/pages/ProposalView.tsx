@@ -29,7 +29,6 @@ import {
   getDefaultDrainage,
   getDefaultEquipment,
   getDefaultWaterFeatures,
-  getDefaultCustomFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
   mergeRetailAdjustments,
@@ -47,6 +46,9 @@ import {
   isCustomOptionItem,
 } from '../utils/costBreakdownSubcategories';
 import { getOffContractItemGroups, getOffContractTotal } from '../utils/customOptions';
+import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } from '../utils/equipmentPackages';
+import { normalizeCustomFeatures } from '../utils/customFeatures';
+import { useAdminCogsView } from '../hooks/useAdminCogsView';
 
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
@@ -108,6 +110,10 @@ const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefine
 };
 
 const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
+  const selectedPackage = getSelectedEquipmentPackage(equipment as any);
+  const packageSaltName = selectedPackage?.includedSaltSystemName;
+  const effectiveSaltName = getEffectivePrimarySanitationSystemName(equipment as any);
+  const packageIncludesSalt = hasNamedSelection(packageSaltName, 'no salt');
   const filterQuantity = equipment.filterQuantity ?? (hasNamedSelection(equipment.filter?.name, 'no filter') ? 1 : 0);
   const cleanerQuantity =
     equipment.cleanerQuantity ?? (hasNamedSelection(equipment.cleaner?.name, 'no cleaner') ? 1 : 0);
@@ -115,7 +121,14 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
   const automationQuantity =
     equipment.automationQuantity ?? (hasNamedSelection(equipment.automation?.name, 'no automation') ? 1 : 0);
   const saltQuantity = Math.max(
-    equipment.saltSystemQuantity ?? (hasNamedSelection(equipment.saltSystem?.name, 'no salt') ? 1 : 0),
+    packageIncludesSalt
+      ? Math.max(selectedPackage?.includedSaltSystemQuantity ?? 1, 1)
+      : equipment.saltSystemQuantity ??
+          (equipment.saltSystem?.name
+            ? 1
+            : hasNamedSelection(effectiveSaltName, 'no salt')
+            ? 1
+            : 0),
     0
   );
   const autoFillQuantity = Math.max(
@@ -136,7 +149,7 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
     sanitationSummary: (() => {
       const primarySummary = equipment.saltSystem?.includedSaltCellPlaceholder
         ? equipment.saltSystem.name
-        : summarizeSelectionWithQuantity(equipment.saltSystem?.name, saltQuantity, 'no salt');
+        : summarizeSelectionWithQuantity(effectiveSaltName, saltQuantity, 'no salt');
       const additionalSummary = hasNamedSelection(equipment.additionalSaltSystem?.name, 'no salt')
         ? normalizeSummaryName(equipment.additionalSaltSystem?.name)
         : '';
@@ -185,6 +198,8 @@ function ProposalView() {
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
   const canViewFullSummary = sessionRole === 'admin' || sessionRole === 'owner';
+  const { hideCogsFromProposalBuilder } = useAdminCogsView();
+  const canViewCogsBreakdown = canViewFullSummary && !hideCogsFromProposalBuilder;
   const isMasterActingAsOwner = isMasterImpersonating();
   const canEditProposal = !isMasterActingAsOwner;
   const editDisabledReason = isMasterActingAsOwner
@@ -203,7 +218,7 @@ function ProposalView() {
     return {
       ...(base as Proposal),
       ...input,
-      customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+      customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
       poolSpecs,
       excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
       plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
@@ -212,7 +227,7 @@ function ProposalView() {
       drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
       equipment: mergedEquipment,
       waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
-      customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+      customFeatures: normalizeCustomFeatures(input.customFeatures),
       interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
       manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
       retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
@@ -221,9 +236,23 @@ function ProposalView() {
     };
   };
 
+  useEffect(() => {
+    if (canViewCogsBreakdown) return;
+    if (cogsBreakdownVersionId) setCogsBreakdownVersionId(null);
+    if (preCogsBreakdownVersionId) setPreCogsBreakdownVersionId(null);
+  }, [canViewCogsBreakdown, cogsBreakdownVersionId, preCogsBreakdownVersionId]);
+
   const loadProposal = async (num: string) => {
     try {
       const data = await getProposalRemote(num);
+      if (!data) {
+        showToast({
+          type: 'error',
+          message: 'Proposal not found or access denied.',
+        });
+        navigate('/', { replace: true });
+        return;
+      }
       const merged = mergeProposalWithDefaults(data || {}) as Proposal;
       const allVersions = listAllVersions(merged as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
@@ -255,7 +284,7 @@ function ProposalView() {
     if (proposalNumber) {
       loadProposal(proposalNumber);
     }
-  }, [proposalNumber]);
+  }, [navigate, proposalNumber, showToast]);
 
   useEffect(() => {
     if (!breakdownExportOpen) return;
@@ -1437,7 +1466,7 @@ function ProposalView() {
           </span>
         </button>
 
-        {canViewFullSummary && (
+        {canViewCogsBreakdown && (
           <button className="summary-tile cogs-tile" type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
             <div className="tile-header">
               <div className="tile-icon cogs-icon">
@@ -2088,7 +2117,7 @@ function ProposalView() {
         </>
       )}
 
-      {cogsBreakdownVersionId && cogsModalView && (
+      {canViewCogsBreakdown && cogsBreakdownVersionId && cogsModalView && (
         <div className="modal-overlay" onClick={() => setCogsBreakdownVersionId(null)}>
           <div className="modal-content cogs-breakdown-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close-button" onClick={() => setCogsBreakdownVersionId(null)} aria-label="Close COGS breakdown">
@@ -2249,7 +2278,7 @@ function ProposalView() {
         </div>
       )}
 
-      {preCogsBreakdownVersionId && preCogsModalView && (
+      {canViewCogsBreakdown && preCogsBreakdownVersionId && preCogsModalView && (
         <div className="modal-overlay" onClick={() => setPreCogsBreakdownVersionId(null)}>
           <div className="modal-content cogs-breakdown-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close-button" onClick={() => setPreCogsBreakdownVersionId(null)} aria-label="Close pre-COGS breakdown">

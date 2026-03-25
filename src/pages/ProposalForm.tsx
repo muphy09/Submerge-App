@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Proposal, WaterFeatures, PAPDiscounts, ManualAdjustments } from '../types/proposal-new';
+import { Proposal, WaterFeatures, WaterFeatureSelection, PAPDiscounts, ManualAdjustments } from '../types/proposal-new';
 import {
   getDefaultProposal,
   getDefaultPAPDiscounts,
@@ -12,13 +12,11 @@ import {
   getDefaultDrainage,
   getDefaultEquipment,
   getDefaultWaterFeatures,
-  getDefaultCustomFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
-import { hasCustomOptionContent } from '../utils/customOptions';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { CalculationModules } from '../services/pricingEngineComplete';
 import { validateProposal } from '../utils/validation';
@@ -50,7 +48,7 @@ import customIconImg from '../../docs/img/custom.png';
 import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
+import { normalizeEquipmentLighting } from '../utils/lighting';
 import {
   getActivePricingModelMeta,
   initPricingDataStore,
@@ -83,6 +81,20 @@ import {
   isMasterImpersonating,
 } from '../services/session';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
+import { normalizeCustomFeatures } from '../utils/customFeatures';
+import { useAdminCogsView } from '../hooks/useAdminCogsView';
+
+const normalizeWaterFeatureSelections = (selections: any): WaterFeatureSelection[] => {
+  if (!Array.isArray(selections)) return [];
+
+  return selections
+    .filter((selection) => typeof selection?.featureId === 'string' && selection.featureId.trim().length > 0)
+    .map((selection) => ({
+      featureId: selection.featureId,
+      quantity: Number.isFinite(Number(selection?.quantity)) ? Number(selection.quantity) : 0,
+      includeValveActuator: selection?.includeValveActuator !== false,
+    }));
+};
 
 const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
   const customOptions = Array.isArray((waterFeatures as any)?.customOptions)
@@ -90,7 +102,7 @@ const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {
     : [];
   if (waterFeatures && Array.isArray((waterFeatures as any).selections)) {
     return {
-      selections: (waterFeatures as any).selections,
+      selections: normalizeWaterFeatureSelections((waterFeatures as any).selections),
       totalCost: (waterFeatures as any).totalCost ?? 0,
       customOptions,
     };
@@ -221,7 +233,7 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   return {
     ...base,
     ...input,
-    customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+    customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
     poolSpecs: mergedPoolSpecs,
     excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
     plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
@@ -231,7 +243,7 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     equipment: mergedEquipment,
     waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
     interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
-    customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+    customFeatures: normalizeCustomFeatures(input.customFeatures),
     manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
     retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
     papDiscounts: input.papDiscounts || base.papDiscounts,
@@ -250,6 +262,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const location = useLocation();
   const sessionRole = getSessionRole();
   const canViewCostBreakdown = sessionRole === 'admin' || sessionRole === 'owner';
+  const { hideCogsFromProposalBuilder } = useAdminCogsView();
+  const canOpenCogsBreakdown = canViewCostBreakdown && !hideCogsFromProposalBuilder;
   const isMasterActingAsOwner = isMasterImpersonating();
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
   const versionNameFromState = (location.state as any)?.versionName as string | undefined;
@@ -297,12 +311,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const formHeaderRef = useRef<HTMLElement | null>(null);
   const sectionContentRef = useRef<HTMLDivElement | null>(null);
   const [formHeaderHeight, setFormHeaderHeight] = useState<number>(68);
-  const createCompletionMap = () =>
-    sections.reduce((acc, section) => {
-      acc[section.key] = false;
-      return acc;
-    }, {} as Record<SectionKey, boolean>);
-  const [completedByAdvance, setCompletedByAdvance] = useState<Record<SectionKey, boolean>>(createCompletionMap());
   const [pricingModels, setPricingModels] = useState<{ id: string; name: string; isDefault?: boolean; removed?: boolean }[]>([]);
   const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
@@ -310,6 +318,11 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const [versionList, setVersionList] = useState<Proposal[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
   const [editingVersionId, setEditingVersionId] = useState<string>('original');
+
+  useEffect(() => {
+    if (canOpenCogsBreakdown) return;
+    setShowCostBreakdownPage(false);
+  }, [canOpenCogsBreakdown]);
 
   const syncPapDiscountsFromModel = () => {
     const snapshot = getPricingDataSnapshot();
@@ -376,7 +389,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       setManualAdjustments(merged);
       setProposal((prev) => ({ ...prev, manualAdjustments: merged }));
       manualAdjustmentsSourceRef.current = carriedDesignerAdjustments ? 'proposal' : 'pricingModel';
-    } else if (manualAdjustmentsSourceRef.current !== 'proposal' || markDirty) {
+    } else {
       setManualAdjustments(nextModelAdjustments);
       manualAdjustmentsSourceRef.current = 'pricingModel';
       setProposal((prev) => ({ ...prev, manualAdjustments: nextModelAdjustments }));
@@ -410,7 +423,15 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       const missingModelKnown = missingModelId && rows?.some((m: any) => m.id === missingModelId);
       if (missingModelId && !missingModelKnown) {
         const placeholderName = proposal.pricingModelName || selectedPricingModelName || 'Unknown Pricing Model';
-        const removedModel = { id: missingModelId, name: `${placeholderName} (Removed)`, isDefault: false, removed: true };
+        const removedModel = {
+          id: missingModelId,
+          name: `${placeholderName} (Removed)`,
+          version: 'removed',
+          isDefault: false,
+          createdAt: undefined,
+          updatedAt: undefined,
+          removed: true,
+        };
         models = [...models, removedModel];
         setSelectedPricingModelId(missingModelId);
         setSelectedPricingModelName(removedModel.name);
@@ -435,55 +456,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     }
   };
 
-  const computeHasEquipmentData = (equipment?: Proposal['equipment']) => {
-    const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
-    const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
-    if (!equipment) return false;
-    const selectedPackage = getSelectedEquipmentPackage(equipment as any);
-    const pumpQty = getBasePumpQuantity(equipment);
-    const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
-    const hasPumpSelection = pumpQty > 0 && hasPositive(getEquipmentItemCost(equipment.pump, pumpOverhead));
-    const hasCustomOptions = (equipment.customOptions || []).some((option) => hasCustomOptionContent(option));
-    const lightCounts = getLightCounts(equipment as any);
-    const autoFillQty = Math.max(
-      equipment.autoFillSystemQuantity ?? (equipment.autoFillSystem ? 1 : 0),
-      0
-    );
-    const autoFillName = equipment.autoFillSystem?.name?.toLowerCase() || '';
-    const hasAutoFillSystem = autoFillQty > 0 && autoFillName && !autoFillName.includes('no auto');
-    const sanitationAccessoryQty = Math.max(
-      equipment.sanitationAccessoryQuantity ??
-        (equipment.sanitationAccessory?.name && !equipment.sanitationAccessory.name.toLowerCase().includes('no sanitation') ? 1 : 0),
-      0
-    );
-    return (
-      Boolean(selectedPackage && (isFixedEquipmentPackage(selectedPackage) || selectedPackage.includeCheckValve !== false)) ||
-      hasPositive(equipment.totalCost) ||
-      lightCounts.total > 0 ||
-      hasPositive(equipment.cleanerQuantity) ||
-      hasPositive(equipment.filterQuantity) ||
-      hasPositive(equipment.heaterQuantity) ||
-      hasPositive(equipment.automationQuantity) ||
-      hasPositive(equipment.saltSystemQuantity) ||
-      additionalPrimaryPumps.some((pump) => hasPositive(getEquipmentItemCost(pump as any, pumpOverhead))) ||
-      (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0) ||
-      !!equipment.auxiliaryPump ||
-      hasCustomOptions ||
-      hasPumpSelection ||
-      hasPositive(getEquipmentItemCost(equipment.filter as any, 1)) ||
-      hasPositive(getEquipmentItemCost(equipment.cleaner as any, 1)) ||
-      hasPositive(getEquipmentItemCost(equipment.heater as any, 1)) ||
-      hasPositive(getEquipmentItemCost(equipment.automation as any, 1)) ||
-      hasPositive(getEquipmentItemCost(equipment.saltSystem as any, 1)) ||
-      (sanitationAccessoryQty > 0 && hasPositive(getEquipmentItemCost(equipment.sanitationAccessory as any, 1))) ||
-      hasAutoFillSystem ||
-      equipment.hasBlanketReel ||
-      equipment.hasSolarBlanket ||
-      equipment.hasAutoFill ||
-      equipment.hasHandrail ||
-      equipment.hasStartupChemicals
-    );
-  };
   useEffect(() => {
     // Ensure each section starts at top when navigating
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -560,14 +532,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
   const previousSpaTypeRef = useRef<string>(proposal.poolSpecs?.spaType ?? 'none');
   const previousHasPoolRef = useRef<boolean>(hasPoolDefinition(proposal.poolSpecs));
-
-  useEffect(() => {
-    const hasContent =
-      (proposal.equipment?.hasBeenEdited ?? false) && computeHasEquipmentData(proposal.equipment as any);
-    if (!hasContent && completedByAdvance.equipment) {
-      setCompletedByAdvance(prev => ({ ...prev, equipment: false }));
-    }
-  }, [proposal.equipment, completedByAdvance.equipment]);
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
@@ -813,10 +777,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             autoAddedReason: 'waterFeature' as const,
           }
         : null;
-    const waterFeatureQty = (proposal.waterFeatures?.selections || []).reduce(
-      (sum, selection) => sum + Math.max(selection?.quantity ?? 0, 0),
-      0
-    );
+    const selectedWaterFeatureCount = (proposal.waterFeatures?.selections || []).filter(
+      (selection) => Math.max(selection?.quantity ?? 0, 0) > 0
+    ).length;
 
     const equipment = proposal.equipment || getDefaultEquipment();
     const auxSelections = equipment.auxiliaryPumps?.length
@@ -854,7 +817,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
     const hasManualAdditionalPump = additionalPrimaryPumps.length > 0 || manualAuxSelections.length > 0;
     const allowance = getPackageWaterFeaturesWithoutExtraPump(selectedPackage);
-    const needsAdditionalPump = waterFeatureQty > allowance;
+    const needsAdditionalPump = selectedWaterFeatureCount > allowance;
 
     if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0) {
       const selection = buildWaterFeaturePump(defaultAuxiliaryPump);
@@ -922,7 +885,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       setSelectedPricingModelName(freshProposal.pricingModelName || null);
       setCurrentSection(0);
       setIsLoading(false);
-      setCompletedByAdvance(createCompletionMap());
       setHasEdits(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -939,70 +901,75 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const loadProposal = async (num: string, requestId: number) => {
     try {
       const data = await getProposalRemote(num);
-      if (data) {
-        // Deep clone to ensure fresh object references
-        const freshData = mergeWithDefaults(JSON.parse(JSON.stringify(data)));
+      if (!data) {
+        showToast({
+          type: 'error',
+          message: 'Proposal not found or access denied.',
+        });
+        navigate('/', { replace: true });
+        return;
+      }
+      // Deep clone to ensure fresh object references
+      const freshData = mergeWithDefaults(JSON.parse(JSON.stringify(data)));
 
-        // Normalize water features to the new catalog-driven shape
-        freshData.waterFeatures = normalizeWaterFeatures(freshData.waterFeatures);
+      // Normalize water features to the new catalog-driven shape
+      freshData.waterFeatures = normalizeWaterFeatures(freshData.waterFeatures);
 
-        // Ensure franchise + pricing model metadata are present
-        freshData.franchiseId = freshData.franchiseId || getSessionFranchiseId();
-        freshData.designerName = freshData.designerName || getSessionUserName();
-        freshData.designerRole = freshData.designerRole || getSessionRole();
-        freshData.designerCode = freshData.designerCode || getSessionFranchiseCode();
-        freshData.proposalNumber = freshData.proposalNumber || num;
-        freshData.createdDate = freshData.createdDate || new Date().toISOString();
-        freshData.lastModified = freshData.lastModified || new Date().toISOString();
+      // Ensure franchise + pricing model metadata are present
+      freshData.franchiseId = freshData.franchiseId || getSessionFranchiseId();
+      freshData.designerName = freshData.designerName || getSessionUserName();
+      freshData.designerRole = freshData.designerRole || getSessionRole();
+      freshData.designerCode = freshData.designerCode || getSessionFranchiseCode();
+      freshData.proposalNumber = freshData.proposalNumber || num;
+      freshData.createdDate = freshData.createdDate || new Date().toISOString();
+      freshData.lastModified = freshData.lastModified || new Date().toISOString();
 
-        const versioned = applyActiveVersion(freshData as Proposal);
-        const allVersions = listAllVersions(freshData as Proposal);
-        const allVersionsWithDefaults = allVersions.map((v) => ({
-          ...(mergeWithDefaults(v) as Proposal),
-          versionId: v.versionId || 'original',
-          versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
-          isOriginalVersion: v.isOriginalVersion,
-          activeVersionId: v.activeVersionId,
-          versions: [],
-        })) as Proposal[];
-        const desiredVersionId =
-          versionIdFromState || versioned.activeVersionId || versioned.versionId || 'original';
-        const targetVersion =
-          allVersionsWithDefaults.find((v) => v.versionId === desiredVersionId) ||
-          allVersionsWithDefaults.find((v) => v.versionId === versioned.versionId) ||
-          allVersionsWithDefaults[0] ||
-          (mergeWithDefaults(versioned) as Proposal);
-        const sanitizedTarget: Proposal = { ...(targetVersion as Proposal), versions: [] };
-        const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
+      const versioned = applyActiveVersion(freshData as Proposal);
+      const allVersions = listAllVersions(freshData as Proposal);
+      const allVersionsWithDefaults = allVersions.map((v) => ({
+        ...(mergeWithDefaults(v) as Proposal),
+        versionId: v.versionId || 'original',
+        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: v.isOriginalVersion,
+        activeVersionId: v.activeVersionId,
+        versions: [],
+      })) as Proposal[];
+      const desiredVersionId =
+        versionIdFromState || versioned.activeVersionId || versioned.versionId || 'original';
+      const targetVersion =
+        allVersionsWithDefaults.find((v) => v.versionId === desiredVersionId) ||
+        allVersionsWithDefaults.find((v) => v.versionId === versioned.versionId) ||
+        allVersionsWithDefaults[0] ||
+        (mergeWithDefaults(versioned) as Proposal);
+      const sanitizedTarget: Proposal = { ...(targetVersion as Proposal), versions: [] };
+      const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
 
-        if (loadRequestRef.current === requestId) {
-          previousSpaTypeRef.current = sanitizedTarget.poolSpecs?.spaType ?? 'none';
-          setProposal(sanitizedTarget);
-          setVersionList(allVersionsWithDefaults);
-          setActiveVersionId(nextActiveId);
-          setEditingVersionId(sanitizedTarget.versionId || 'original');
-          setSelectedPricingModelId(sanitizedTarget.pricingModelId || null);
-          setSelectedPricingModelName(sanitizedTarget.pricingModelName || null);
-          setCurrentSection(0);
-          setCompletedByAdvance(createCompletionMap());
-          // Load PAP discounts if they exist
-          if (sanitizedTarget.papDiscounts) {
-            setPapDiscounts(sanitizedTarget.papDiscounts);
-            papDiscountSourceRef.current = 'proposal';
-          } else {
-            papDiscountSourceRef.current = 'pricingModel';
-            setPapDiscounts(readPapDiscountsFromModel());
-          }
-          if (sanitizedTarget.manualAdjustments) {
-            setManualAdjustments(sanitizedTarget.manualAdjustments);
-            manualAdjustmentsSourceRef.current = 'proposal';
-          } else {
-            manualAdjustmentsSourceRef.current = 'pricingModel';
-            setManualAdjustments(readManualAdjustmentsFromModel());
-          }
-          pricingModelManualAdjustmentsRef.current = readManualAdjustmentsFromModel();
-          setHasEdits(false);
+      if (loadRequestRef.current === requestId) {
+        previousSpaTypeRef.current = sanitizedTarget.poolSpecs?.spaType ?? 'none';
+        setProposal(sanitizedTarget);
+        setVersionList(allVersionsWithDefaults);
+        setActiveVersionId(nextActiveId);
+        setEditingVersionId(sanitizedTarget.versionId || 'original');
+        setSelectedPricingModelId(sanitizedTarget.pricingModelId || null);
+        setSelectedPricingModelName(sanitizedTarget.pricingModelName || null);
+        setCurrentSection(0);
+        // Load PAP discounts if they exist
+        if (sanitizedTarget.papDiscounts) {
+          setPapDiscounts(sanitizedTarget.papDiscounts);
+          papDiscountSourceRef.current = 'proposal';
+        } else {
+          papDiscountSourceRef.current = 'pricingModel';
+          setPapDiscounts(readPapDiscountsFromModel());
         }
+        if (sanitizedTarget.manualAdjustments) {
+          setManualAdjustments(sanitizedTarget.manualAdjustments);
+          manualAdjustmentsSourceRef.current = 'proposal';
+        } else {
+          manualAdjustmentsSourceRef.current = 'pricingModel';
+          setManualAdjustments(readManualAdjustmentsFromModel());
+        }
+        pricingModelManualAdjustmentsRef.current = readManualAdjustmentsFromModel();
+        setHasEdits(false);
       }
     } catch (error) {
       console.error('Failed to load proposal:', error);
@@ -1024,9 +991,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       lastModified: new Date().toISOString(),
     }));
     setHasEdits(true);
-    if (section === 'poolSpecs') {
-      setCompletedByAdvance(prev => ({ ...prev, poolSpecs: true }));
-    }
   };
 
   const handleSelectEquipmentPackage = (packageId: string) => {
@@ -1136,10 +1100,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
   const handleNext = () => {
     if (currentSection < sections.length - 1) {
-      const currentKey = sections[currentSection]?.key;
-      if (currentKey) {
-        setCompletedByAdvance(prev => ({ ...prev, [currentKey]: true }));
-      }
       setCurrentSection(currentSection + 1);
     }
   };
@@ -1310,6 +1270,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const disabledSpaMessage = disableSpaSelections
       ? 'The chosen equipment package cannot support a Spa'
       : undefined;
+    const waterFeatureAllowance = getPackageWaterFeaturesWithoutExtraPump(selectedPackage);
     const waterFeatureDisabledReason =
       selectedPackage && !packageAllowsWaterFeatures(selectedPackage)
         ? 'This equipment package cannot support water features.'
@@ -1322,7 +1283,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const packageWaterFeatureWarningMessage = auxiliarySelections.some(
       (pump) => pump?.autoAddedReason === 'waterFeature'
     )
-      ? 'Equipment package only supports 1 pump. An Additional pump has been added.'
+      ? waterFeatureAllowance > 0
+        ? `This equipment package supports ${waterFeatureAllowance} water feature${waterFeatureAllowance === 1 ? '' : 's'} before another pump is required. An additional pump has been added automatically.`
+        : 'An additional pump has been added automatically for the selected water features.'
       : undefined;
 
     try {
@@ -1361,6 +1324,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               data={proposal.electrical!}
               onChange={(data) => updateProposal('electrical', data)}
               plumbingRuns={proposal.plumbing!.runs}
+              waterFeatures={proposal.waterFeatures!}
               onChangePlumbingRuns={(runs) =>
                 updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
               }
@@ -1424,6 +1388,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               data={proposal.customFeatures!}
               onChange={(data) => updateProposal('customFeatures', data)}
               retailPrice={retailPrice}
+              groupedOptions={(pricingData as any).customFeatures?.groupedOptions || []}
             />
           );
         default:
@@ -1456,186 +1421,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     }
   };
 
-  const sectionCompletion = useMemo<Record<SectionKey, boolean>>(() => {
-    const hasPositive = (value?: number) => typeof value === 'number' && value > 0;
-    const hasAnyPositive = (...values: Array<number | undefined>) => values.some(v => hasPositive(v));
-    const hasCustomOptions = (options?: Proposal['excavation']['customOptions']) =>
-      (options || []).some((option) => hasCustomOptionContent(option));
-
-    const poolSpecs = proposal.poolSpecs;
-    const hasPoolSpecsData =
-      !!poolSpecs &&
-      !!proposal.customerInfo?.customerName?.trim() &&
-      !!proposal.customerInfo?.city?.trim() &&
-      (poolSpecs.poolType !== 'gunite' ||
-        hasAnyPositive(
-          poolSpecs.perimeter,
-          poolSpecs.surfaceArea,
-          poolSpecs.shallowDepth,
-          poolSpecs.endDepth,
-          poolSpecs.maxLength,
-          poolSpecs.maxWidth,
-          poolSpecs.totalStepsAndBench,
-          poolSpecs.deckingArea,
-          poolSpecs.travelDistance,
-          poolSpecs.poolToStreetDistance,
-          poolSpecs.waterfallCount,
-        ) ||
-        poolSpecs.spaType !== 'none' ||
-        hasAnyPositive(poolSpecs.spaLength, poolSpecs.spaWidth, poolSpecs.spaPerimeter) ||
-        poolSpecs.hasTanningShelf ||
-        poolSpecs.hasAutomaticCover ||
-        !!poolSpecs.fiberglassModelName ||
-        poolSpecs.isRaisedSpa ||
-        poolSpecs.hasSpillover);
-
-    const excavation = proposal.excavation;
-    const retainingWalls = excavation?.retainingWalls ?? [];
-    const hasExcavationData =
-      !!excavation &&
-      ((excavation.rbbLevels?.length ?? 0) > 0 ||
-        (excavation.exposedPoolWallLevels?.length ?? 0) > 0 ||
-        hasPositive(excavation.totalRBBSqft) ||
-        hasAnyPositive(
-          excavation.columns?.count,
-          excavation.columns?.width,
-          excavation.columns?.depth,
-          excavation.columns?.height,
-        ) ||
-        (excavation.columns?.facing && excavation.columns.facing !== 'none') ||
-        hasPositive(excavation.additionalSitePrepHours) ||
-        excavation.hasGravelInstall === false ||
-        excavation.hasDirtHaul === false ||
-        hasPositive(excavation.additionalBench) ||
-        hasPositive(excavation.doubleCurtainLength) ||
-        excavation.needsSoilSampleEngineer ||
-        retainingWalls.some(
-          (wall) =>
-            (wall.length ?? 0) > 0 ||
-            (!!wall.type && wall.type !== 'None' && wall.type !== 'No Retaining Wall')
-        ) ||
-        (excavation.retainingWallType &&
-          excavation.retainingWallType !== 'None' &&
-          excavation.retainingWallType !== 'none') ||
-        hasPositive(excavation.retainingWallLength) ||
-        hasPositive(excavation.cost) ||
-        hasCustomOptions(excavation.customOptions));
-
-    const plumbingRuns = proposal.plumbing?.runs;
-    const hasPlumbingData =
-      !!proposal.plumbing &&
-      (hasAnyPositive(
-        plumbingRuns?.skimmerRun,
-        plumbingRuns?.additionalSkimmers,
-        plumbingRuns?.mainDrainRun,
-        plumbingRuns?.cleanerRun,
-        plumbingRuns?.autoFillRun,
-        plumbingRuns?.infloorValveToEQ,
-        plumbingRuns?.infloorValveToPool,
-        plumbingRuns?.spaRun,
-      ) ||
-        hasPositive(proposal.plumbing.cost) ||
-        hasCustomOptions(proposal.plumbing.customOptions));
-
-    const electricalRuns = proposal.electrical?.runs;
-    const hasElectricalData =
-      !!proposal.electrical &&
-      (hasAnyPositive(
-        electricalRuns?.electricalRun,
-        electricalRuns?.lightRun,
-        electricalRuns?.heatPumpElectricalRun,
-        plumbingRuns?.gasRun,
-      ) ||
-        hasPositive(proposal.electrical.cost) ||
-        hasCustomOptions(proposal.electrical.customOptions));
-
-    const tile = proposal.tileCopingDecking;
-    const hasTileData =
-      !!tile &&
-      (tile.tileLevel !== 1 ||
-        tile.copingType !== 'travertine-level1' ||
-        tile.deckingType !== 'travertine-level1' ||
-        tile.isDeckingOffContract ||
-        hasPositive(tile.deckingOffContractCost) ||
-        tile.hasTrimTileOnSteps ||
-        tile.hasRoughGrading === false ||
-        hasAnyPositive(
-          tile.additionalTileLength,
-          tile.copingLength,
-          tile.deckingArea,
-          tile.concreteStepsLength,
-          tile.bullnoseLnft,
-          tile.doubleBullnoseLnft,
-          tile.spillwayLnft,
-          tile.rockworkPanelLedgeSqft,
-          tile.rockworkPanelLedgeMaterialSqft,
-          tile.rockworkStackedStoneSqft,
-          tile.rockworkTileSqft,
-        ) ||
-        hasPositive(tile.cost) ||
-        hasCustomOptions(tile.customOptions));
-
-    const drainage = proposal.drainage;
-    const hasDrainageData =
-      !!drainage &&
-      (hasAnyPositive(
-        drainage.downspoutTotalLF,
-        drainage.deckDrainTotalLF,
-        drainage.frenchDrainTotalLF,
-        drainage.boxDrainTotalLF,
-      ) ||
-        hasPositive(drainage.cost) ||
-        hasCustomOptions(drainage.customOptions));
-
-    const hasEquipmentData =
-      !!proposal.equipment?.hasBeenEdited && computeHasEquipmentData(proposal.equipment as any);
-
-    const waterFeatures = proposal.waterFeatures;
-    const hasWaterFeaturesData =
-      !!waterFeatures &&
-      (((waterFeatures.selections || []).filter(selection => (selection?.quantity ?? 0) > 0).length > 0) ||
-        hasAnyPositive(
-          plumbingRuns?.waterFeature1Run,
-          plumbingRuns?.waterFeature2Run,
-          plumbingRuns?.waterFeature3Run,
-          plumbingRuns?.waterFeature4Run,
-        ) ||
-        hasPositive(waterFeatures.totalCost) ||
-        hasCustomOptions(waterFeatures.customOptions));
-
-    const interiorFinish = proposal.interiorFinish;
-    const defaultFinishId = pricingData.interiorFinish.finishes?.[0]?.id || 'pebble-tec-l1';
-    const hasInteriorData =
-      !!interiorFinish &&
-      (interiorFinish.finishType !== defaultFinishId ||
-        !!interiorFinish.color?.trim() ||
-        interiorFinish.hasSpa ||
-        hasPositive(interiorFinish.cost) ||
-        hasCustomOptions(interiorFinish.customOptions));
-
-    const customFeatures = proposal.customFeatures;
-    const hasCustomFeatures =
-      !!customFeatures &&
-      (((customFeatures.features || []).filter(feature => feature?.name?.trim() || feature?.description?.trim()).length >
-        0) ||
-        hasPositive(customFeatures.totalCost));
-
-    return {
-      customerInfo: true,
-      poolSpecs: hasPoolSpecsData || completedByAdvance.poolSpecs,
-      excavation: hasExcavationData || completedByAdvance.excavation,
-      plumbing: hasPlumbingData || completedByAdvance.plumbing,
-      electrical: hasElectricalData || completedByAdvance.electrical,
-      tileCopingDecking: hasTileData || completedByAdvance.tileCopingDecking,
-      drainage: hasDrainageData || completedByAdvance.drainage,
-      equipment: hasEquipmentData || completedByAdvance.equipment,
-      waterFeatures: hasWaterFeaturesData || completedByAdvance.waterFeatures,
-      interiorFinish: hasInteriorData || completedByAdvance.interiorFinish,
-      customFeatures: hasCustomFeatures || completedByAdvance.customFeatures,
-    };
-  }, [proposal, completedByAdvance]);
-
-  const progressSections = sections.filter(section => section.includeInProgress !== false);
   if (isLoading) {
     return (
       <div className="proposal-form">
@@ -1661,8 +1446,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const customerTitle = (proposal.customerInfo?.customerName || '').trim();
   const headerTitle = customerTitle ? `Proposal Builder - ${customerTitle}` : 'Proposal Builder';
   const franchiseLogoId = proposal.franchiseId || getSessionFranchiseId();
-  const editingVersionKey = proposal.versionId || editingVersionId || 'original';
-  const isVersionEdit = !(proposal.isOriginalVersion ?? editingVersionKey === 'original');
   const retailPrice = toFiniteNumber(
     currentCostBreakdown.pricing.retailPrice ??
       currentCostBreakdown.totalCost ??
@@ -1813,17 +1596,19 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               <span className="nav-divider" />
               {canViewCostBreakdown ? (
                 <div className="nav-action-buttons">
-                  <button
-                    className="cost-modal-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowCostBreakdownPage(true);
-                    }}
-                    title="View Cost Breakdown"
-                  >
-                    <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
-                    <span className="cost-modal-label">Cost Breakdown</span>
-                  </button>
+                  {canOpenCogsBreakdown && (
+                    <button
+                      className="cost-modal-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCostBreakdownPage(true);
+                      }}
+                      title="View Cost Breakdown"
+                    >
+                      <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
+                      <span className="cost-modal-label">Cost Breakdown</span>
+                    </button>
+                  )}
                   <button
                     className="cost-modal-button"
                     onClick={(e) => {
@@ -1861,11 +1646,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             <div className="section-nav-grid">
               {sections.map((section, index) => {
                 const isActive = index === currentSection;
-                const isCompleted = sectionCompletion[section.key];
                 return (
                   <button
                     key={section.key}
-                    className={`nav-item ${section.key === 'poolSpecs' ? 'pool-specs-item' : ''} ${section.key === 'excavation' ? 'excavation-item' : ''} ${section.key === 'plumbing' ? 'plumbing-item' : ''} ${section.key === 'electrical' ? 'electrical-item' : ''} ${section.key === 'tileCopingDecking' ? 'tile-item' : ''} ${section.key === 'drainage' ? 'drainage-item' : ''} ${section.key === 'waterFeatures' ? 'water-item' : ''} ${section.key === 'interiorFinish' ? 'interior-item' : ''} ${section.key === 'equipment' ? 'equipment-item' : ''} ${section.key === 'customFeatures' ? 'custom-item' : ''} ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                    className={`nav-item ${section.key === 'poolSpecs' ? 'pool-specs-item' : ''} ${section.key === 'excavation' ? 'excavation-item' : ''} ${section.key === 'plumbing' ? 'plumbing-item' : ''} ${section.key === 'electrical' ? 'electrical-item' : ''} ${section.key === 'tileCopingDecking' ? 'tile-item' : ''} ${section.key === 'drainage' ? 'drainage-item' : ''} ${section.key === 'waterFeatures' ? 'water-item' : ''} ${section.key === 'interiorFinish' ? 'interior-item' : ''} ${section.key === 'equipment' ? 'equipment-item' : ''} ${section.key === 'customFeatures' ? 'custom-item' : ''} ${isActive ? 'active' : ''}`}
                     onClick={() => setCurrentSection(index)}
                   >
                     <span className="nav-icon-wrapper" aria-hidden="true">
@@ -1970,7 +1754,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         </div>
       )}
 
-      {showCostBreakdownPage && (
+      {showCostBreakdownPage && canOpenCogsBreakdown && (
         <CostBreakdownPage
           proposal={{ ...proposal, papDiscounts, manualAdjustments: proposal.manualAdjustments }}
           onClose={() => setShowCostBreakdownPage(false)}

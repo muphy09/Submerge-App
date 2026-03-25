@@ -1,10 +1,12 @@
-import type { WaterFeatureSelection } from '../types/proposal-new';
+import type { PlumbingRuns, WaterFeatureSelection } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from './equipmentCost';
 
 export type WaterFeatureItem = {
   id?: string;
   name?: string;
+  category?: string;
+  requiresConduit?: boolean;
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
@@ -18,7 +20,20 @@ export type WaterFeatureCatalogItem = WaterFeatureItem & {
   category: string;
 };
 
+export type WaterFeatureRunEntry = {
+  selection: WaterFeatureSelection;
+  feature?: WaterFeatureCatalogItem;
+  runField?: keyof PlumbingRuns;
+  run: number;
+};
+
 export const DEFAULT_WATER_FEATURE_MARGIN = 0.7;
+export const WATER_FEATURE_RUN_FIELDS: Array<keyof PlumbingRuns> = [
+  'waterFeature1Run',
+  'waterFeature2Run',
+  'waterFeature3Run',
+  'waterFeature4Run',
+];
 
 const getDefaultPoolLightCost = () => {
   const poolLights = pricingData?.equipment?.lights?.poolLights || [];
@@ -48,6 +63,15 @@ const normalizeZoneCategory = (category?: string) => {
   if (normalized.startsWith('Wok Pots')) return 'Wok Pots';
   return normalized;
 };
+
+export const waterFeatureNeedsGasRun = (item?: Pick<WaterFeatureItem, 'category' | 'name'> | null): boolean => {
+  const normalized = normalizeCategory(item?.category || item?.name);
+  return normalized === 'Wok Pots - Fire Only' || normalized === 'Wok Pots - Water & Fire';
+};
+
+export const waterFeatureNeedsConduitRun = (
+  item?: Pick<WaterFeatureItem, 'requiresConduit' | 'needsPoolLight'> | null
+): boolean => Boolean(item?.requiresConduit || item?.needsPoolLight);
 
 export function getWaterFeatureCogs(item?: WaterFeatureItem | null): number {
   if (!item) return 0;
@@ -90,6 +114,7 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
         id,
         name,
         category: normalizedCategory,
+        requiresConduit: Boolean(item.requiresConduit),
         basePrice: item.basePrice ?? 0,
         addCost1: item.addCost1 ?? 0,
         addCost2: item.addCost2 ?? 0,
@@ -109,6 +134,7 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
         id,
         name,
         category: normalizedCategory,
+        requiresConduit: Boolean(item.requiresConduit),
         basePrice: item.unitPrice ?? item.basePrice ?? 0,
         addCost1: item.addCost1 ?? 0,
         addCost2: item.addCost2 ?? 0,
@@ -125,6 +151,78 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
   return flattened;
 }
 
+export function orderWaterFeatureSelectionsForRuns(
+  selections: WaterFeatureSelection[] = [],
+  config?: any
+): Array<{ selection: WaterFeatureSelection; feature?: WaterFeatureCatalogItem }> {
+  const catalog = flattenWaterFeatures(config ?? pricingData.waterFeatures);
+  const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
+  const grouped = {
+    sheer: [] as Array<{ selection: WaterFeatureSelection; feature?: WaterFeatureCatalogItem }>,
+    woks: [] as Array<{ selection: WaterFeatureSelection; feature?: WaterFeatureCatalogItem }>,
+    jets: [] as Array<{ selection: WaterFeatureSelection; feature?: WaterFeatureCatalogItem }>,
+    bubblers: [] as Array<{ selection: WaterFeatureSelection; feature?: WaterFeatureCatalogItem }>,
+  };
+
+  selections.forEach((selection) => {
+    const feature = lookup.get(selection.featureId) || catalog.find((entry) => entry.name === selection.featureId);
+    const category = feature?.category;
+
+    if (category === 'Sheer Descent') {
+      grouped.sheer.push({ selection, feature });
+      return;
+    }
+    if (category?.startsWith('Wok Pots')) {
+      grouped.woks.push({ selection, feature });
+      return;
+    }
+    if (category === 'Jets') {
+      grouped.jets.push({ selection, feature });
+      return;
+    }
+    if (category === 'Bubbler') {
+      grouped.bubblers.push({ selection, feature });
+    }
+  });
+
+  return [...grouped.sheer, ...grouped.woks, ...grouped.jets, ...grouped.bubblers];
+}
+
+export function getWaterFeatureRunEntries(
+  selections: WaterFeatureSelection[] = [],
+  plumbingRuns?: Partial<PlumbingRuns>,
+  config?: any
+): WaterFeatureRunEntry[] {
+  return orderWaterFeatureSelectionsForRuns(selections, config).map(({ selection, feature }, index) => {
+    const runField = WATER_FEATURE_RUN_FIELDS[index];
+    return {
+      selection,
+      feature,
+      runField,
+      run: runField ? Math.max(0, plumbingRuns?.[runField] ?? 0) : 0,
+    };
+  });
+}
+
+export function getDerivedWaterFeatureGasRunTotal(
+  selections: WaterFeatureSelection[] = [],
+  plumbingRuns?: Partial<PlumbingRuns>,
+  config?: any
+): number {
+  return getWaterFeatureRunEntries(selections, plumbingRuns, config).reduce((sum, entry) => {
+    if (!entry.runField || entry.run <= 0 || !waterFeatureNeedsGasRun(entry.feature)) return sum;
+    return sum + entry.run;
+  }, 0);
+}
+
+export function getTotalGasRunForBilling(
+  plumbingRuns?: Partial<PlumbingRuns>,
+  selections: WaterFeatureSelection[] = [],
+  config?: any
+): number {
+  return Math.max(0, plumbingRuns?.gasRun ?? 0) + getDerivedWaterFeatureGasRunTotal(selections, plumbingRuns, config);
+}
+
 export function countSelectedWaterFeatureZones(
   selections: WaterFeatureSelection[] = [],
   config?: any
@@ -136,7 +234,7 @@ export function countSelectedWaterFeatureZones(
   const zones = new Set<string>();
 
   selections.forEach((selection) => {
-    if (!selection || (selection.quantity ?? 0) <= 0) return;
+    if (!selection || (selection.quantity ?? 0) <= 0 || selection.includeValveActuator === false) return;
     const feature = lookup.get(selection.featureId) || catalog.find((entry) => entry.name === selection.featureId);
     const zone = normalizeZoneCategory(feature?.category);
     if (zone) {

@@ -2,7 +2,8 @@ import { Proposal, WaterFeatureSelection } from '../types/proposal-new';
 import MasterPricingEngine from './masterPricingEngine';
 import pricingData from './pricingData';
 import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/masonryFacing';
-import { flattenWaterFeatures } from '../utils/waterFeatureCost';
+import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
+import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
 
 export type ContractOverrides = Record<string, string | number | null>;
@@ -65,6 +66,20 @@ const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set([
 const SANITATION_NONE_FIELD_IDS = new Set(['p1_24', 'p1_25']);
 const WATER_FEATURE_CATALOG = flattenWaterFeatures(pricingData.waterFeatures);
 const WATER_FEATURE_NAME_BY_ID = new Map(WATER_FEATURE_CATALOG.map((item) => [item.id, item.name]));
+export const CONTRACT_DEPOSIT_SOURCE_FIELD_IDS = ['p1_deposit_amount', 'p1_pay_deposit'] as const;
+export const CONTRACT_DEPOSIT_SCHEDULE_FIELD_IDS = [
+  'p1_pay_excavation',
+  'p1_pay_shotcete',
+  'p1_pay_decking',
+  'p1_pay_interior_finish',
+] as const;
+const CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET = new Set<string>(CONTRACT_DEPOSIT_SOURCE_FIELD_IDS);
+const CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES: Record<string, number> = {
+  p1_pay_excavation: 0.3,
+  p1_pay_shotcete: 0.3,
+  p1_pay_decking: 0.3,
+  p1_pay_interior_finish: 0.1,
+};
 
 function normalizeProposal(pr: Proposal): ProposalWithPricing {
   try {
@@ -99,6 +114,53 @@ function formatYesNo(value: any, defaultValue = 'NO'): string {
 function formatCurrency(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '$0.00';
   return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+}
+
+function normalizeContractMonetaryInput(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function parseContractMonetaryInput(value: string | number | null | undefined): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const normalized = normalizeContractMonetaryInput(value);
+  if (!normalized) return null;
+
+  const numeric = normalized.replace(/[^0-9.-]/g, '');
+  if (!numeric || numeric === '-' || numeric === '.' || numeric === '-.') return null;
+
+  const parsed = Number.parseFloat(numeric);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function getContractDepositFieldAutoValue(
+  fieldId: string,
+  depositValue: string | number | null | undefined
+): string {
+  const normalizedDepositValue = normalizeContractMonetaryInput(depositValue);
+
+  if (CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(fieldId)) {
+    return normalizedDepositValue;
+  }
+
+  const percentage = CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES[fieldId];
+  if (!percentage) return '';
+
+  const depositAmount = parseContractMonetaryInput(normalizedDepositValue);
+  if (depositAmount === null) return '';
+
+  return formatCurrency(depositAmount * percentage);
+}
+
+function resolveContractDepositSourceValue(overrides?: ContractOverrides): string {
+  for (const fieldId of CONTRACT_DEPOSIT_SOURCE_FIELD_IDS) {
+    const normalized = normalizeContractMonetaryInput(overrides?.[fieldId]);
+    if (normalized) return normalized;
+  }
+  return '';
 }
 
 function formatNumberValue(value: number | null | undefined): string {
@@ -249,7 +311,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return overrideDefault || 'BY BUILDER';
   }
 
-  if (field.id === 'p2_68') return 'NO';
+  if (field.id === 'p2_68') {
+    return countSelectedWaterFeatureZones(proposal.waterFeatures?.selections ?? [], pricingData.waterFeatures) > 0
+      ? 'YES'
+      : 'NO';
+  }
 
   if (field.id === 'p1_33') {
     const facing = proposal.excavation?.rbbLevels?.[0]?.facing;
@@ -386,7 +452,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return formatCurrency(pricing);
   }
 
-  // Payment schedule amounts are designer-entered; leave empty.
+  // Payment schedule values are derived from the entered deposit amount when present.
   if (field.id.startsWith('p1_pay_')) return '';
   if (/non-refundable deposit/.test(label)) return '';
   if (/prior to shotcete/.test(label) || /prior to excavation/.test(label)) return '';
@@ -424,7 +490,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   }
   if (/sanitation i/.test(label)) {
     const sanitationSelections = [
-      proposal.equipment?.saltSystem?.name,
+      getEffectivePrimarySanitationSystemName(proposal.equipment as any),
       proposal.equipment?.additionalSaltSystem?.name,
     ].filter(Boolean);
     return sanitationSelections.length ? sanitationSelections.join(' + ') : 'None';
@@ -483,7 +549,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return returns ? String(returns) : overrideDefault;
   }
   if (/auto-fill/.test(label)) return formatYesNo(proposal.plumbing?.runs?.autoFillRun, overrideDefault || 'NO');
-  if (/circulation pump/.test(label)) return proposal.equipment?.pump?.name || proposal.equipment?.primaryPump?.name || overrideDefault;
+  if (/circulation pump/.test(label)) {
+    const legacyPrimaryPumpName =
+      (proposal.equipment as (Proposal['equipment'] & { primaryPump?: { name?: string } }) | undefined)?.primaryPump?.name;
+    return proposal.equipment?.pump?.name || legacyPrimaryPumpName || overrideDefault;
+  }
   if (/filter/.test(label) && !/interior/.test(label)) return proposal.equipment?.filter?.name || overrideDefault;
   if (/spa perimeter/.test(label)) return proposal.poolSpecs?.spaPerimeter ? String(proposal.poolSpecs.spaPerimeter) : '';
   if (/spa light/.test(label)) return proposal.poolSpecs?.spaType !== 'none' ? '1' : '0';
@@ -526,6 +596,7 @@ export async function getEditableContractFields(
   const normalized = normalizeProposal(proposal);
   const resolvedTemplateId = templateId || getContractTemplateIdForProposal(proposal);
   const templateFields = getContractTemplate(resolvedTemplateId).fields;
+  const depositSourceValue = resolveContractDepositSourceValue(overrides);
   const fields: ContractFieldRender[] = templateFields
     .filter((field) => (field.label || '').trim().length > 0)
     .map((field) => {
@@ -549,6 +620,12 @@ export async function getEditableContractFields(
         },
         normalized
       );
+      if (
+        CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(field.id) ||
+        Object.prototype.hasOwnProperty.call(CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES, field.id)
+      ) {
+        autoValue = getContractDepositFieldAutoValue(field.id, depositSourceValue);
+      }
       if (field.id === 'p1_30') autoValue = '1';
       const hasOverride = overrides ? Object.prototype.hasOwnProperty.call(overrides, field.id) : false;
       const overrideVal = hasOverride ? overrides?.[field.id] : undefined;

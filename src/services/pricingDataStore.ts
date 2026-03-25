@@ -7,13 +7,20 @@ import {
 import { ensureMasonryFacingCatalogs } from '../utils/masonryFacing';
 
 type PricingData = typeof pricingData;
+type PricingLoadState = {
+  franchiseId: string;
+  pricing: PricingData;
+  pricingModelId: string | null;
+  pricingModelName: string | null;
+  isDefault: boolean;
+};
 
 const STORAGE_VERSION = '2025-03-interior-finish-catalog';
 const LEGACY_STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
 const DEFAULT_FRANCHISE_ID = 'default';
 
-let initialized = false;
 let loadingPromise: Promise<void> | null = null;
+let latestLoadRequestId = 0;
 let activeFranchiseId = DEFAULT_FRANCHISE_ID;
 let activePricingModelId: string | null = null;
 let activePricingModelName: string | null = null;
@@ -53,16 +60,20 @@ function getDeep(target: any, path: (string | number)[]) {
   return path.reduce((acc, key) => (acc ? acc[key] : undefined), target);
 }
 
-function syncBaseFromState() {
+function syncBaseFromSnapshot(snapshot: PricingData) {
   // Replace pricingData contents so existing references see updated values
   Object.keys(pricingData).forEach((key) => {
     // @ts-expect-error dynamic delete
     delete pricingData[key];
   });
-  Object.entries(pricingState).forEach(([key, value]) => {
+  Object.entries(snapshot).forEach(([key, value]) => {
     // @ts-expect-error dynamic assign
     pricingData[key] = deepClone(value);
   });
+}
+
+function syncBaseFromState() {
+  syncBaseFromSnapshot(pricingState);
 }
 
 function mergeDeep(target: any, source: any): any {
@@ -86,14 +97,36 @@ function mergeDeep(target: any, source: any): any {
   return output;
 }
 
-async function fetchPersistedPricing(franchiseId: string): Promise<PricingData | null> {
+async function resolveTargetFranchiseId(franchiseId?: string) {
+  let targetId = franchiseId || DEFAULT_FRANCHISE_ID;
+  if (!franchiseId && window?.electron?.getActiveFranchise) {
+    try {
+      const active = await window.electron.getActiveFranchise();
+      if (active?.id) {
+        targetId = active.id;
+      }
+    } catch (error) {
+      console.warn('Unable to read active franchise from database:', error);
+    }
+  }
+  return targetId;
+}
+
+async function fetchPersistedPricing(franchiseId: string): Promise<{
+  pricing: PricingData | null;
+  pricingModelId: string | null;
+  pricingModelName: string | null;
+  isDefault: boolean;
+}> {
   try {
     const result = await loadDefaultFranchisePricing(franchiseId);
     if (result?.pricing) {
-      activePricingModelId = result.pricingModelId || null;
-      activePricingModelName = result.pricingModelName || null;
-      activePricingModelIsDefault = Boolean(result.isDefault);
-      return result.pricing as PricingData;
+      return {
+        pricing: result.pricing as PricingData,
+        pricingModelId: result.pricingModelId || null,
+        pricingModelName: result.pricingModelName || null,
+        isDefault: Boolean(result.isDefault),
+      };
     }
   } catch (error) {
     console.warn('Unable to load franchise pricing from database:', error);
@@ -111,14 +144,24 @@ async function fetchPersistedPricing(franchiseId: string): Promise<PricingData |
         }
       }
       if (raw) {
-        return JSON.parse(raw);
+        return {
+          pricing: JSON.parse(raw),
+          pricingModelId: null,
+          pricingModelName: null,
+          isDefault: true,
+        };
       }
     }
   } catch (error) {
     console.warn('Unable to load saved pricing data overrides:', error);
   }
 
-  return null;
+  return {
+    pricing: null,
+    pricingModelId: null,
+    pricingModelName: null,
+    isDefault: true,
+  };
 }
 
 function notify() {
@@ -126,22 +169,21 @@ function notify() {
   listeners.forEach((listener) => listener(snapshot));
 }
 
-async function loadPricingForFranchise(franchiseId: string, pricingModelId?: string) {
+async function resolvePricingState(franchiseId: string, pricingModelId?: string): Promise<PricingLoadState> {
   try {
     if (pricingModelId) {
       const result = await loadPricingModelRemote(franchiseId, pricingModelId);
       if (result?.pricing) {
-        pricingState = normalizePricingState(
-          mergeDeep(defaultSnapshot, result.pricing ?? {}),
-          result.pricing
-        );
-        activeFranchiseId = franchiseId;
-        activePricingModelId = result.pricingModelId || pricingModelId;
-        activePricingModelName = result.pricingModelName || null;
-        activePricingModelIsDefault = Boolean(result.isDefault);
-        syncBaseFromState();
-        notify();
-        return;
+        return {
+          franchiseId,
+          pricing: normalizePricingState(
+            mergeDeep(defaultSnapshot, result.pricing ?? {}),
+            result.pricing
+          ),
+          pricingModelId: result.pricingModelId || pricingModelId,
+          pricingModelName: result.pricingModelName || null,
+          isDefault: Boolean(result.isDefault),
+        };
       }
     }
   } catch (error) {
@@ -149,32 +191,51 @@ async function loadPricingForFranchise(franchiseId: string, pricingModelId?: str
   }
 
   const saved = await fetchPersistedPricing(franchiseId);
-  pricingState = normalizePricingState(mergeDeep(defaultSnapshot, saved ?? {}), saved);
-  activeFranchiseId = franchiseId;
+  return {
+    franchiseId,
+    pricing: normalizePricingState(mergeDeep(defaultSnapshot, saved.pricing ?? {}), saved.pricing),
+    pricingModelId: saved.pricingModelId,
+    pricingModelName: saved.pricingModelName,
+    isDefault: saved.isDefault,
+  };
+}
+
+function applyPricingState(state: PricingLoadState) {
+  pricingState = state.pricing;
+  activeFranchiseId = state.franchiseId;
+  activePricingModelId = state.pricingModelId;
+  activePricingModelName = state.pricingModelName;
+  activePricingModelIsDefault = state.isDefault;
   syncBaseFromState();
   notify();
 }
 
+async function loadPricingForFranchise(franchiseId: string, pricingModelId?: string) {
+  const requestId = ++latestLoadRequestId;
+  const resolved = await resolvePricingState(franchiseId, pricingModelId);
+  if (requestId !== latestLoadRequestId) {
+    return resolved;
+  }
+  applyPricingState(resolved);
+  return resolved;
+}
+
 export async function initPricingDataStore(franchiseId?: string, pricingModelId?: string) {
   if (loadingPromise && !franchiseId && !pricingModelId) return loadingPromise;
-  initialized = true;
 
-  loadingPromise = (async () => {
-    let targetId = franchiseId || DEFAULT_FRANCHISE_ID;
-    if (!franchiseId && window?.electron?.getActiveFranchise) {
-      try {
-        const active = await window.electron.getActiveFranchise();
-        if (active?.id) {
-          targetId = active.id;
-        }
-      } catch (error) {
-        console.warn('Unable to read active franchise from database:', error);
-      }
-    }
+  const currentPromise = (async () => {
+    const targetId = await resolveTargetFranchiseId(franchiseId);
     await loadPricingForFranchise(targetId, pricingModelId);
   })();
 
-  return loadingPromise;
+  loadingPromise = currentPromise;
+  try {
+    await currentPromise;
+  } finally {
+    if (loadingPromise === currentPromise) {
+      loadingPromise = null;
+    }
+  }
 }
 
 export function getActiveFranchiseId() {
@@ -204,6 +265,25 @@ export function getActivePricingModelMeta() {
 export async function setActivePricingModel(pricingModelId: string) {
   if (!pricingModelId) return;
   await loadPricingForFranchise(activeFranchiseId, pricingModelId);
+}
+
+export async function loadPricingSnapshotForFranchise(franchiseId?: string, pricingModelId?: string) {
+  const targetId = await resolveTargetFranchiseId(franchiseId);
+  const resolved = await resolvePricingState(targetId, pricingModelId);
+  return {
+    ...resolved,
+    pricing: deepClone(resolved.pricing),
+  };
+}
+
+export function withTemporaryPricingSnapshot<T>(snapshot: PricingData, callback: () => T): T {
+  const previousSnapshot = getPricingDataSnapshot();
+  syncBaseFromSnapshot(snapshot);
+  try {
+    return callback();
+  } finally {
+    syncBaseFromSnapshot(previousSnapshot);
+  }
 }
 
 export function clearActivePricingModelMeta() {

@@ -464,6 +464,7 @@ export interface Equipment {
 export interface WaterFeatureSelection {
   featureId: string;
   quantity: number;
+  includeValveActuator?: boolean;
 }
 
 export interface WaterFeatures {
@@ -493,16 +494,28 @@ export interface CustomOption {
 // CUSTOM FEATURES
 // ============================================================================
 
+export interface GroupedCustomFeatureOption {
+  id: string;
+  name: string;
+  description: string;
+  totalPrice: number;
+}
+
+export type CustomFeatureSource = 'manual' | 'grouped';
+
 export interface CustomFeature {
   name: string;
   description: string;
   laborCost: number;
   materialCost: number;
   totalCost: number;
+  isOffContract?: boolean;
+  source?: CustomFeatureSource;
+  groupedOptionId?: string;
 }
 
 export interface CustomFeatures {
-  features: CustomFeature[]; // Up to 7 custom features
+  features: CustomFeature[];
   totalCost: number;
 }
 

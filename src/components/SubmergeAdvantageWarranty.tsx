@@ -4,6 +4,7 @@ import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import './SubmergeAdvantageWarranty.css';
 import { getLightCounts } from '../utils/lighting';
+import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
 
 export interface WarrantyItem {
   label: string;
@@ -219,9 +220,10 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
     { label: equipment.automation?.name || 'Automation not selected' },
   );
 
-  const sanitationSelections = [equipment.saltSystem?.name, equipment.additionalSaltSystem?.name].filter(
-    (label): label is string => Boolean(label)
-  );
+  const sanitationSelections = [
+    getEffectivePrimarySanitationSystemName(equipment as any),
+    equipment.additionalSaltSystem?.name,
+  ].filter((label): label is string => Boolean(label));
   if (sanitationSelections.length > 0) {
     sanitationSelections.forEach((label) => items.push({ label }));
   } else {

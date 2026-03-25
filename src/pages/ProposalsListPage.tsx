@@ -6,8 +6,8 @@ import { useToast } from '../components/Toast';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import './ProposalsListPage.css';
-import { deleteProposal as deleteProposalRemote, listProposals } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, getSessionUserName, isMasterImpersonating } from '../services/session';
+import { deleteProposal as deleteProposalRemote, listDashboardProposals } from '../services/proposalsAdapter';
+import { getSessionFranchiseId, isMasterImpersonating } from '../services/session';
 import syncGoodIcon from '../../docs/img/syncgood.png';
 import syncBadIcon from '../../docs/img/syncbad.png';
 import { listAllVersions } from '../utils/proposalVersions';
@@ -45,11 +45,7 @@ function ProposalsListPage() {
   const loadProposals = async () => {
     setLoading(true);
     try {
-      const data = await listProposals(getSessionFranchiseId());
-      const userName = getSessionUserName();
-      const filtered = userName && !isMasterActingAsOwner
-        ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === userName.toLowerCase())
-        : data || [];
+      const filtered = await listDashboardProposals(getSessionFranchiseId());
       const enriched = filtered.map((proposal) => {
         try {
           const calculated = MasterPricingEngine.calculateCompleteProposal(
@@ -241,7 +237,7 @@ function ProposalsListPage() {
   return (
     <div className="proposals-list-page">
       <div className="proposals-list-header">
-        <h1>All Proposals</h1>
+        <h1>My Proposals</h1>
         <div className="proposals-list-stats">
           {selectedProposals.size > 0 && (
             <button
@@ -376,7 +372,6 @@ function ProposalsListPage() {
                           modelId === defaultId &&
                           availableSet.has(modelId) &&
                           !explicitRemoved;
-                        const isInactive = Boolean(modelId) && !isActive && !isRemoved;
                         const className = isActive
                           ? 'proposal-model-pill active'
                           : isRemoved

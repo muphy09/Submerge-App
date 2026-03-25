@@ -1,14 +1,20 @@
 import pricingData from '../services/pricingData';
 import { AutomationSelection, SaltSystemSelection } from '../types/proposal-new';
 
-export const INCLUDED_SALT_CELL_OPTION_NAME = 'Salt Cell Included with Automation System';
+export const INCLUDED_SALT_CELL_OPTION_NAME = 'Salt System with Automation';
+const LEGACY_INCLUDED_SALT_CELL_OPTION_NAME = 'Salt Cell Included with Automation System';
 
 const normalizeName = (value?: string | null) => (value ?? '').trim().toLowerCase();
 
 export const isNoSaltSystemName = (name?: string | null) => normalizeName(name).includes('no salt');
 
-export const isIncludedSaltCellOptionName = (name?: string | null) =>
-  normalizeName(name) === normalizeName(INCLUDED_SALT_CELL_OPTION_NAME);
+export const isIncludedSaltCellOptionName = (name?: string | null) => {
+  const normalized = normalizeName(name);
+  return (
+    normalized === normalizeName(INCLUDED_SALT_CELL_OPTION_NAME) ||
+    normalized === normalizeName(LEGACY_INCLUDED_SALT_CELL_OPTION_NAME)
+  );
+};
 
 export const isIncludedSaltCellSelection = (selection?: Partial<SaltSystemSelection> | null) =>
   Boolean(selection?.includedSaltCellPlaceholder) || isIncludedSaltCellOptionName(selection?.name);

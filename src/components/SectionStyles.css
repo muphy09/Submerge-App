@@ -125,6 +125,71 @@
   font-size: 0.9rem;
 }
 
+.custom-feature-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.custom-feature-group-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(12, 34, 67, 0.06);
+}
+
+.custom-feature-group-card.active {
+  border-color: #1d4ed8;
+  background: rgba(29, 78, 216, 0.06);
+}
+
+.custom-feature-group-card.off-contract {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.custom-feature-group-card.retired {
+  border-style: dashed;
+}
+
+.custom-feature-group-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.custom-feature-group-card__title {
+  color: #082556;
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+
+.custom-feature-group-card__status {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.custom-feature-group-card__description {
+  color: #374151;
+  line-height: 1.45;
+  min-height: 3em;
+}
+
+.custom-feature-group-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
 .add-item-section {
   background: #f9fafb;
   padding: 20px;
@@ -474,10 +539,45 @@ select.compact-input {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .water-feature-action .link-btn {
   white-space: nowrap;
+}
+
+.water-feature-actuator-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #082556;
+}
+
+.water-feature-actuator-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.water-feature-actuator-toggle:hover {
+  background: #eff6ff;
+  border-color: #082556;
+}
+
+.water-feature-actuator-toggle.active {
+  background: #eff6ff;
+  border-color: #082556;
+  color: #082556;
+}
+
+.water-feature-actuator-toggle.active:hover {
+  background: #dbeafe;
+  border-color: #0a2d6b;
 }
 
 .water-feature-placeholder {
@@ -519,6 +619,10 @@ select.compact-input {
 
   .spa-facing-field {
     grid-column: auto;
+  }
+
+  .water-feature-actuator-toggle {
+    width: 100%;
   }
 }
 
@@ -896,11 +1000,11 @@ select.compact-input {
   height: 100%;
   padding: 16px 18px 18px;
   border-radius: 18px;
-  border: 1px solid #d7e1ec;
-  background: linear-gradient(180deg, #ffffff 0%, #f4f8fc 100%);
+  border: 1px solid #d1dceb;
+  background: #ffffff;
   color: #0f172a;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 24px rgba(12, 34, 67, 0.06);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
   text-align: left;
   overflow: hidden;
@@ -911,17 +1015,12 @@ select.compact-input {
   position: absolute;
   inset: 0 0 auto 0;
   height: 4px;
-  background: linear-gradient(90deg, #4f8cc9 0%, #8eb5df 45%, #d8e3ef 100%);
+  background: #082556;
   opacity: 0.95;
 }
 
 .equipment-package-button::after {
-  content: '';
-  position: absolute;
-  inset: auto -12% -72px 38%;
-  height: 170px;
-  background: radial-gradient(circle, rgba(125, 168, 214, 0.16) 0%, rgba(125, 168, 214, 0) 70%);
-  pointer-events: none;
+  content: none;
 }
 
 .equipment-package-button > * {
@@ -931,37 +1030,31 @@ select.compact-input {
 
 .equipment-package-button:hover:not(.disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
-  border-color: #9db2c9;
+  box-shadow: 0 18px 36px rgba(12, 34, 67, 0.12);
+  border-color: #082556;
 }
 
 .equipment-package-button.active {
-  border-color: #0c4a93;
-  box-shadow: 0 22px 40px rgba(8, 37, 86, 0.24);
-  background: linear-gradient(160deg, #082556 0%, #0d4a91 58%, #2378c4 100%);
-  color: #ffffff;
+  border-color: #1d4ed8;
+  box-shadow: 0 18px 36px rgba(29, 78, 216, 0.1);
+  background: rgba(29, 78, 216, 0.08);
+  color: #082556;
 }
 
 .equipment-package-button.active::before {
-  height: 100%;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 45%);
-}
-
-.equipment-package-button.active::after {
-  inset: auto -10% -92px 24%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 72%);
+  background: #1d4ed8;
 }
 
 .equipment-package-button.disabled {
   cursor: not-allowed;
   opacity: 0.72;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: #f8fafc;
   border-color: #dbe3ed;
   box-shadow: none;
 }
 
 .equipment-package-button.disabled::before {
-  background: linear-gradient(90deg, #cbd5e1 0%, #e2e8f0 100%);
+  background: #cbd5e1;
 }
 
 .equipment-package-button__header {
@@ -992,14 +1085,14 @@ select.compact-input {
 
 .equipment-package-button__status.available {
   background: #eaf2fb;
-  color: #0f4b99;
+  color: #082556;
   border-color: #c7dbf1;
 }
 
 .equipment-package-button__status.selected {
-  background: rgba(255, 255, 255, 0.16);
+  background: #1d4ed8;
   color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: #1d4ed8;
 }
 
 .equipment-package-button__status.disabled {
@@ -1022,7 +1115,7 @@ select.compact-input {
 
 .equipment-package-button.active .equipment-package-button__eyebrow,
 .equipment-package-button.active .equipment-package-button__description {
-  color: rgba(255, 255, 255, 0.9);
+  color: #0f2a4f;
 }
 
 .equipment-package-button.disabled .equipment-package-button__eyebrow,
@@ -1032,7 +1125,7 @@ select.compact-input {
 
 .equipment-package-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(15, 75, 153, 0.18), 0 16px 32px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 0 0 3px rgba(8, 37, 86, 0.18), 0 16px 32px rgba(12, 34, 67, 0.12);
 }
 
 .package-warning {
@@ -1057,7 +1150,7 @@ select.compact-input {
   position: relative;
 }
 
-.package-disabled-shell .package-disabled-content {
+.package-disabled-shell.is-disabled .package-disabled-content {
   opacity: 0.52;
   pointer-events: none;
   filter: grayscale(0.15);

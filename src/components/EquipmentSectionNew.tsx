@@ -24,6 +24,7 @@ import {
 } from '../utils/saltCellCompatibility';
 import {
   getEnabledEquipmentPackageOptions,
+  getEffectivePrimarySanitationSystemName,
   getSelectedEquipmentPackage,
   isCustomEquipmentPackage,
   isFixedEquipmentPackage,
@@ -462,6 +463,10 @@ function EquipmentSectionNew({
       if (!value) return;
       rows.push({ label, value });
     };
+    const effectiveSaltName = getEffectivePrimarySanitationSystemName(safeData);
+    const effectiveSaltQuantity = packageIncludesSalt
+      ? Math.max(selectedPackage?.includedSaltSystemQuantity ?? saltSystemQuantity, 0)
+      : saltSystemQuantity;
 
     if (
       primaryPumpSummaryQuantity > 0 &&
@@ -504,14 +509,19 @@ function EquipmentSectionNew({
       pushRow('Automation', summarizeQuantity(safeData.automation?.name || 'Automation', automationQuantity));
     }
 
-    if (isIncludedSaltCellSelection(safeData.saltSystem)) {
-      pushRow('Sanitation', safeData.saltSystem?.name || 'Included Salt Cell');
+    if (
+      isIncludedSaltCellSelection(safeData.saltSystem) ||
+      isIncludedSaltCellOptionName(effectiveSaltName)
+    ) {
+      pushRow('Sanitation', effectiveSaltName || 'Included Salt Cell');
     } else if (
       (packageIncludesSalt || includeSalt) &&
-      isRealSaltSystemSelection(safeData.saltSystem) &&
-      saltSystemQuantity > 0
+      effectiveSaltName &&
+      !isNoSaltSystemName(effectiveSaltName) &&
+      !isIncludedSaltCellOptionName(effectiveSaltName) &&
+      effectiveSaltQuantity > 0
     ) {
-      pushRow('Sanitation', summarizeQuantity(safeData.saltSystem?.name || 'Sanitation System', saltSystemQuantity));
+      pushRow('Sanitation', summarizeQuantity(effectiveSaltName || 'Sanitation System', effectiveSaltQuantity));
     }
 
     if (safeData.additionalSaltSystem?.name) {
@@ -1905,7 +1915,7 @@ function EquipmentSectionNew({
             ? renderReadOnlySelection(
                 'Sanitation System',
                 packageIncludesSalt
-                  ? safeData.saltSystem?.name || selectedPackage?.includedSaltSystemName || 'Included'
+                  ? getEffectivePrimarySanitationSystemName(safeData) || 'Included'
                   : 'None',
                 packageIncludesSalt ? packageLockedCategoryMessage : undefined
               )

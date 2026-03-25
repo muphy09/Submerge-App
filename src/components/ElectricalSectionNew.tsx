@@ -1,5 +1,6 @@
-import { Electrical, ElectricalRuns, PlumbingRuns } from '../types/proposal-new';
+import { Electrical, ElectricalRuns, PlumbingRuns, WaterFeatures } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { getDerivedWaterFeatureGasRunTotal, getTotalGasRunForBilling } from '../utils/waterFeatureCost';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
@@ -7,6 +8,7 @@ interface Props {
   data: Electrical;
   onChange: (data: Electrical) => void;
   plumbingRuns: PlumbingRuns;
+  waterFeatures: WaterFeatures;
   onChangePlumbingRuns: (runs: PlumbingRuns) => void;
   hasSpa: boolean;
 }
@@ -56,6 +58,7 @@ function ElectricalSectionNew({
   data,
   onChange,
   plumbingRuns,
+  waterFeatures,
   onChangePlumbingRuns,
   hasSpa,
 }: Props) {
@@ -73,8 +76,18 @@ function ElectricalSectionNew({
   // Pricing constants
   const ELECTRICAL_THRESHOLD = 65; // First 65 ft included in base price
   const gasRun = plumbingRuns?.gasRun ?? 0;
+  const derivedWaterFeatureGasRun = getDerivedWaterFeatureGasRunTotal(
+    waterFeatures?.selections || [],
+    plumbingRuns,
+    pricingData.waterFeatures
+  );
+  const billedGasRun = getTotalGasRunForBilling(
+    plumbingRuns,
+    waterFeatures?.selections || [],
+    pricingData.waterFeatures
+  );
   const GAS_THRESHOLD = pricingData.plumbing.gasOverrunThreshold;
-  const gasOverrun = Math.max(0, gasRun - GAS_THRESHOLD);
+  const gasOverrun = Math.max(0, billedGasRun - GAS_THRESHOLD);
 
   const electricalOverrun = Math.max(0, (data.runs.electricalRun || 0) - ELECTRICAL_THRESHOLD);
   const getOverrunMessage = () => 'Additional charges apply';
@@ -84,7 +97,7 @@ function ElectricalSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Gas Run</h2>
-          <p className="spec-block-subtitle">Base Gas includes the first 25ft.</p>
+          <p className="spec-block-subtitle">Base Gas includes the first 25ft of billed gas run.</p>
         </div>
 
         <div className="spec-grid spec-grid-3-fixed">
@@ -102,9 +115,16 @@ function ElectricalSectionNew({
           </div>
         </div>
 
+        {derivedWaterFeatureGasRun > 0 && (
+          <div className="info-box" style={{ marginTop: '8px' }}>
+            Fire-only and Water &amp; Fire Wok Pots add {derivedWaterFeatureGasRun} ft of gas run automatically from
+            Water Features.
+          </div>
+        )}
         {gasOverrun > 0 && (
           <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
-            <strong>Gas Overrun:</strong> {gasOverrun} ft over {GAS_THRESHOLD} ft maximum. {getOverrunMessage()}
+            <strong>Gas Overrun:</strong> {gasOverrun} ft over {GAS_THRESHOLD} ft maximum across {billedGasRun} total
+            billed ft. {getOverrunMessage()}
           </div>
         )}
       </div>

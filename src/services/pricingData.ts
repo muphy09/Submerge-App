@@ -437,8 +437,8 @@ const pricingData = {
         includedFilterQuantity: 1,
         includedAutomationName: 'HL Base',
         includedAutomationQuantity: 1,
-        includedSaltSystemName: '',
-        includedSaltSystemQuantity: 0,
+        includedSaltSystemName: 'Salt System with Automation',
+        includedSaltSystemQuantity: 1,
         includedPoolLightName: 'Pool Light',
         includedPoolLightQuantity: 1,
         defaultCleanerName: '7240 Sport',
@@ -665,6 +665,9 @@ const pricingData = {
       premium: 800,
       taxRate: 0.0725,
     },
+  },
+  customFeatures: {
+    groupedOptions: [],
   },
   masonry: {
     columnBase: 500,

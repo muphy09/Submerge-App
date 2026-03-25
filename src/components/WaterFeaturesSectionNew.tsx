@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { WaterFeatures, WaterFeatureSelection, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
-import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
+import {
+  flattenWaterFeatures,
+  getWaterFeatureCogs,
+  WATER_FEATURE_RUN_FIELDS,
+  waterFeatureNeedsConduitRun,
+  waterFeatureNeedsGasRun,
+} from '../utils/waterFeatureCost';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
@@ -50,13 +56,6 @@ const CompactInput = ({
   );
 };
 
-const waterFeatureRunFields: Array<keyof PlumbingRuns> = [
-  'waterFeature1Run',
-  'waterFeature2Run',
-  'waterFeature3Run',
-  'waterFeature4Run',
-];
-
 const noneOptionValue = 'none';
 
 const sortSheerOptions = (options: any[]) => {
@@ -79,6 +78,8 @@ const buildRunKeys = (prefix: string, selections: WaterFeatureSelection[]) => {
     return `${prefix}-${featureId}-${count}`;
   });
 };
+
+const isValveActuatorIncluded = (selection?: WaterFeatureSelection | null) => selection?.includeValveActuator !== false;
 
 function WaterFeaturesSectionNew({
   data,
@@ -143,6 +144,9 @@ function WaterFeaturesSectionNew({
     updateSelections([...remaining, ...nextCategorySelections]);
   };
 
+  const isCategoryValveActuatorEnabled = (categorySelections: WaterFeatureSelection[]) =>
+    categorySelections.some((selection) => isValveActuatorIncluded(selection));
+
   const updateCategoryFeature = (
     options: Array<{ id: string }>,
     categorySelections: WaterFeatureSelection[],
@@ -160,7 +164,9 @@ function WaterFeaturesSectionNew({
       const existingQty = next[index].quantity ?? 1;
       next[index] = { ...next[index], featureId, quantity: existingQty };
     } else {
-      next.push({ featureId, quantity: 1 });
+      const includeValveActuator =
+        categorySelections.length > 0 ? isCategoryValveActuatorEnabled(categorySelections) : true;
+      next.push({ featureId, quantity: 1, includeValveActuator });
     }
     updateCategorySelections(options, next);
   };
@@ -177,10 +183,26 @@ function WaterFeaturesSectionNew({
     updateCategorySelections(options, next);
   };
 
+  const updateCategoryValveActuator = (
+    options: Array<{ id: string }>,
+    categorySelections: WaterFeatureSelection[],
+    enabled: boolean
+  ) => {
+    updateCategorySelections(
+      options,
+      categorySelections.map((selection) => ({ ...selection, includeValveActuator: enabled }))
+    );
+  };
+
   const addCategorySelection = (options: Array<{ id: string }>, categorySelections: WaterFeatureSelection[]) => {
     const first = options[0];
     if (!first) return;
-    updateCategorySelections(options, [...categorySelections, { featureId: first.id, quantity: 1 }]);
+    const includeValveActuator =
+      categorySelections.length > 0 ? isCategoryValveActuatorEnabled(categorySelections) : true;
+    updateCategorySelections(options, [
+      ...categorySelections,
+      { featureId: first.id, quantity: 1, includeValveActuator },
+    ]);
   };
 
   const sheerSelections = filterSelections(sheerOptions);
@@ -201,7 +223,7 @@ function WaterFeaturesSectionNew({
   const runKeyByFeature = useMemo(() => {
     const map = new Map<string, keyof PlumbingRuns>();
     runOrderKeys.forEach((key, index) => {
-      const runField = waterFeatureRunFields[index];
+      const runField = WATER_FEATURE_RUN_FIELDS[index];
       if (runField) {
         map.set(key, runField);
       }
@@ -227,18 +249,18 @@ function WaterFeaturesSectionNew({
     const prevValueMap = new Map<string, number>();
     if (prevKeys.length > 0) {
       prevKeys.forEach((key, index) => {
-        const runField = waterFeatureRunFields[index];
+        const runField = WATER_FEATURE_RUN_FIELDS[index];
         if (!runField) return;
         prevValueMap.set(key, plumbingRuns[runField] ?? 0);
       });
     }
 
-    waterFeatureRunFields.forEach((runField) => {
+    WATER_FEATURE_RUN_FIELDS.forEach((runField) => {
       nextRuns[runField] = 0;
     });
 
     runOrderKeys.forEach((key, index) => {
-      const runField = waterFeatureRunFields[index];
+      const runField = WATER_FEATURE_RUN_FIELDS[index];
       if (!runField) return;
       const preservedValue =
         prevKeys.length > 0
@@ -247,7 +269,7 @@ function WaterFeaturesSectionNew({
       nextRuns[runField] = preservedValue;
     });
 
-    const runsChanged = waterFeatureRunFields.some(
+    const runsChanged = WATER_FEATURE_RUN_FIELDS.some(
       (runField) => (nextRuns[runField] ?? 0) !== (plumbingRuns[runField] ?? 0)
     );
     if (runsChanged) {
@@ -293,13 +315,29 @@ function WaterFeaturesSectionNew({
     const rows = categorySelections.length > 0 ? categorySelections : [null];
     return rows.map((selection, index) => {
       const isSelected = Boolean(selection);
+      const valveActuatorEnabled = isCategoryValveActuatorEnabled(categorySelections);
       const runField = isSelected ? runKeyByFeature.get(runKeys[index]) : undefined;
       const showAddAnother = isSelected && index === categorySelections.length - 1;
-      const needsConduitRun = Boolean(resolveCatalogEntry(selection?.featureId)?.needsPoolLight);
+      const feature = resolveCatalogEntry(selection?.featureId);
+      const needsConduitRun = waterFeatureNeedsConduitRun(feature);
+      const sharesConduitRun = needsConduitRun;
+      const showSeparateConduitRun = needsConduitRun && !sharesConduitRun;
+      const needsGasRun = waterFeatureNeedsGasRun(feature);
+      const runLabel = needsGasRun && sharesConduitRun
+        ? 'Gas, Water Feature and Conduit Run'
+        : sharesConduitRun
+          ? 'Water Feature and Conduit Run'
+          : needsGasRun
+            ? 'Gas and Water Feature Run'
+            : 'Water Feature Run';
       return (
         <div
           key={`${labelKey}-${selection?.featureId || 'none'}-${index}`}
-          className={`${needsConduitRun ? 'spec-grid-5-fixed water-feature-row water-feature-row-with-conduit' : 'spec-grid-4-fixed water-feature-row'}`}
+          className={`${
+            showSeparateConduitRun
+              ? 'spec-grid-5-fixed water-feature-row water-feature-row-with-conduit'
+              : 'spec-grid-4-fixed water-feature-row'
+          }`}
         >
           <div className="spec-field">
             <label className="spec-label">{buildRowLabel(label, index)}</label>
@@ -332,20 +370,32 @@ function WaterFeaturesSectionNew({
                   placeholder="1"
                 />
               </div>
-              {runField ? renderRunInput('Water Feature Run', runField) : <div className="spec-field water-feature-placeholder" aria-hidden="true" />}
-              {needsConduitRun
+              {runField ? renderRunInput(runLabel, runField) : <div className="spec-field water-feature-placeholder" aria-hidden="true" />}
+              {showSeparateConduitRun
                 ? (runField ? renderRunInput('Conduit Run', runField) : <div className="spec-field water-feature-placeholder" aria-hidden="true" />)
                 : null}
               <div className="spec-field water-feature-action">
                 <label className="spec-label" aria-hidden="true">&nbsp;</label>
                 {showAddAnother && (
-                  <button
-                    type="button"
-                    className="link-btn small"
-                    onClick={() => addCategorySelection(options, categorySelections)}
-                  >
-                    Add Another
-                  </button>
+                  <>
+                    <label
+                      className={`link-btn small water-feature-actuator-toggle ${valveActuatorEnabled ? 'active' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={valveActuatorEnabled}
+                        onChange={(e) => updateCategoryValveActuator(options, categorySelections, e.target.checked)}
+                      />
+                      <span>Valve Actuator</span>
+                    </label>
+                    <button
+                      type="button"
+                      className="link-btn small"
+                      onClick={() => addCategorySelection(options, categorySelections)}
+                    >
+                      Add Another
+                    </button>
+                  </>
                 )}
               </div>
             </>
@@ -373,7 +423,7 @@ function WaterFeaturesSectionNew({
         </div>
       )}
 
-      <div className="package-disabled-shell" title={disabledReason || undefined}>
+      <div className={`package-disabled-shell${isDisabled ? ' is-disabled' : ''}`} title={disabledReason || undefined}>
         {isDisabled && <div className="package-warning secondary">{disabledReason}</div>}
         <div className="package-disabled-content">
           <div className="spec-block">

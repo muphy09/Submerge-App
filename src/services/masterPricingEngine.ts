@@ -15,6 +15,12 @@ import {
   isOffContractCustomOption,
   normalizeCustomOption,
 } from '../utils/customOptions';
+import {
+  getCustomFeatureTotal,
+  hasCustomFeatureContent,
+  isOffContractCustomFeature,
+  normalizeCustomFeatures,
+} from '../utils/customFeatures';
 
 const hasPoolDefinition = (poolSpecs: any): boolean => {
   if (!poolSpecs) return false;
@@ -80,6 +86,27 @@ const buildCustomOptionItems = (options: CustomOption[] | undefined, category: s
     });
 };
 
+const buildCustomFeatureItems = (
+  customFeatures: Proposal['customFeatures'] | undefined
+): CostLineItem[] => {
+  if (!customFeatures) return [];
+
+  return normalizeCustomFeatures(customFeatures).features
+    .filter((feature) => hasCustomFeatureContent(feature) && !isOffContractCustomFeature(feature))
+    .map((feature, index) => {
+      const total = getCustomFeatureTotal(feature);
+      const description = feature.name?.trim() || `Custom Feature #${index + 1}`;
+      return {
+        category: 'Custom Features',
+        description,
+        unitPrice: total,
+        quantity: 1,
+        total,
+        notes: feature.description,
+      };
+    });
+};
+
 export class MasterPricingEngine {
   /**
    * Main entry point - calculates complete proposal with full cost breakdown
@@ -111,7 +138,7 @@ export class MasterPricingEngine {
     const equipment = proposal.equipment!;
     const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0, customOptions: [] };
     const selectedEquipmentPackage = getSelectedEquipmentPackage(equipment);
-    const customFeatures = proposal.customFeatures!;
+    const customFeatures = normalizeCustomFeatures(proposal.customFeatures);
     const interiorFinish = proposal.interiorFinish!;
     const county = proposal.customerInfo?.county;
     const isFiberglass = CalculationModules.Pool.isFiberglassPool(poolSpecs);
@@ -136,7 +163,7 @@ export class MasterPricingEngine {
       normalizedExcavation,
       waterFeatures
     );
-    const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
+    const gasItems = ElectricalCalculations.calculateGasCost(plumbing, waterFeatures);
     let steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);
     let electricalItems = ElectricalCalculations.calculateElectricalCost(poolSpecs, electrical, equipment, plumbing);
     excavationItems = excavationItems.concat(buildCustomOptionItems(excavation.customOptions, 'Excavation'));
@@ -354,21 +381,7 @@ export class MasterPricingEngine {
     }
 
     // Custom Features (convert to line items)
-    const customFeaturesItems: CostLineItem[] = (customFeatures?.features || []).map((feature, index) => {
-      const labor = Number(feature.laborCost) || 0;
-      const material = Number(feature.materialCost) || 0;
-      const hasExplicitCosts = labor !== 0 || material !== 0;
-      const total = hasExplicitCosts ? labor + material : (Number(feature.totalCost) || 0);
-      const description = feature.name?.trim() || `Custom Feature #${index + 1}`;
-      return {
-        category: 'Custom Features',
-        description,
-        unitPrice: total,
-        quantity: 1,
-        total,
-        notes: feature.description,
-      };
-    });
+    const customFeaturesItems: CostLineItem[] = buildCustomFeatureItems(customFeatures);
     const automaticCoverCost = poolSpecs.hasAutomaticCover
       ? Number(poolSpecs.automaticCoverManufacturerCost) || 0
       : 0;

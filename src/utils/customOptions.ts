@@ -1,11 +1,18 @@
-import { CustomOption, Proposal } from '../types/proposal-new';
+import { Proposal } from '../types/proposal-new';
+import {
+  getCustomFeatureTotal,
+  hasCustomFeatureContent,
+  isOffContractCustomFeature,
+  normalizeCustomFeature,
+  normalizeCustomFeatures,
+} from './customFeatures';
+import { CustomOption } from '../types/proposal-new';
 
 export interface OffContractItem {
   category: string;
   name: string;
   description: string;
   totalCost: number;
-  option: CustomOption;
 }
 
 export interface OffContractItemGroup {
@@ -117,7 +124,6 @@ export const getOffContractItems = (proposal?: Partial<Proposal>): OffContractIt
           name: normalized.name.trim() || `${category} Off Contract Item #${index + 1}`,
           description: normalized.description.trim(),
           totalCost: getCustomOptionTotal(normalized),
-          option: normalized,
         };
       })
   );
@@ -131,17 +137,23 @@ export const getOffContractItems = (proposal?: Partial<Proposal>): OffContractIt
             name: 'Decking',
             description: 'Decking marked as off contract',
             totalCost: deckingOffContractCost,
-            option: normalizeCustomOption({
-              name: 'Decking',
-              description: 'Decking marked as off contract',
-              totalCost: deckingOffContractCost,
-              isOffContract: true,
-            }),
           },
         ]
       : [];
 
-  return [...customOptionItems, ...deckingItems];
+  const customFeatureItems = normalizeCustomFeatures(proposal.customFeatures).features
+    .filter((feature) => isOffContractCustomFeature(feature) && hasCustomFeatureContent(feature))
+    .map((feature, index) => {
+      const normalized = normalizeCustomFeature(feature);
+      return {
+        category: 'Custom Features',
+        name: normalized.name.trim() || `Custom Feature #${index + 1}`,
+        description: normalized.description.trim(),
+        totalCost: getCustomFeatureTotal(normalized),
+      };
+    });
+
+  return [...customOptionItems, ...deckingItems, ...customFeatureItems];
 };
 
 export const getOffContractItemGroups = (proposal?: Partial<Proposal>): OffContractItemGroup[] => {

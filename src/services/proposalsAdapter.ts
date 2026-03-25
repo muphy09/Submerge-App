@@ -19,6 +19,14 @@ const OFFLINE_SAVE_MESSAGE = 'No internet connection. Connect to save this propo
 type SaveResult = Proposal & { lastModified: string };
 type SyncStatus = 'synced' | 'pending' | 'error';
 type Tombstone = { proposalNumber: string; removedAt: string };
+type StoredProposalRow = {
+  proposal_json?: Proposal;
+  franchise_id?: string | null;
+  designer_name?: string | null;
+  designer_role?: UserSession['role'] | null;
+  designer_code?: string | null;
+  status?: string | null;
+};
 
 const PENDING_MESSAGE = 'Awaiting cloud sync';
 const ONLINE_SYNC_MESSAGE = 'Synced with cloud';
@@ -40,9 +48,25 @@ function normalizeIdentity(value?: string | null) {
   return String(value || '').trim().toLowerCase();
 }
 
+function getCurrentUserIdentity(session?: UserSession | null) {
+  const currentSession = session ?? readSession();
+  return normalizeIdentity(currentSession?.userName || currentSession?.userEmail);
+}
+
 function getEffectiveRole(session?: UserSession | null) {
   const role = getSessionRole((session?.role || 'designer') as any);
   return String(role || session?.role || 'designer').trim().toLowerCase();
+}
+
+function isOwnProposal(proposal: Proposal, session?: UserSession | null) {
+  const proposalDesigner = normalizeIdentity((proposal as any).designerName);
+  const currentUserName = getCurrentUserIdentity(session);
+  return Boolean(proposalDesigner && currentUserName && proposalDesigner === currentUserName);
+}
+
+function isSubmittedStatus(status?: string | null) {
+  const normalized = normalizeIdentity(status);
+  return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
 }
 
 function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | null, franchiseId?: string) {
@@ -58,13 +82,22 @@ function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | nul
     return true;
   }
 
-  const proposalDesigner = normalizeIdentity((proposal as any).designerName);
-  if (!proposalDesigner) {
+  if (!normalizeIdentity((proposal as any).designerName)) {
     return true;
   }
 
-  const currentUserName = normalizeIdentity(session?.userName || getSessionUserName());
-  return !currentUserName || proposalDesigner === currentUserName;
+  const currentUserName = getCurrentUserIdentity(session) || normalizeIdentity(getSessionUserName());
+  return !currentUserName || isOwnProposal(proposal, session);
+}
+
+function canReadProposal(proposal: Proposal, session?: UserSession | null) {
+  const role = getEffectiveRole(session);
+  if (role === 'master') return true;
+  if (isOwnProposal(proposal, session)) return true;
+  if (role === 'owner' || role === 'admin') {
+    return isSubmittedStatus(proposal.status);
+  }
+  return false;
 }
 
 let pendingDeleteCache: PendingDelete[] | null = null;
@@ -94,13 +127,6 @@ function persistPendingDeletes(records: PendingDelete[]) {
   } catch (error) {
     console.warn('Unable to persist pending deletes to localStorage:', error);
   }
-}
-
-function addPendingDelete(proposalNumber: string, franchiseId?: string | null) {
-  const current = loadPendingDeletes().filter((r) => !!r?.proposalNumber);
-  const filtered = current.filter((r) => r.proposalNumber !== proposalNumber);
-  filtered.push({ proposalNumber, franchiseId: franchiseId || DEFAULT_FRANCHISE_ID });
-  persistPendingDeletes(filtered);
 }
 
 function clearPendingDelete(proposalNumber: string) {
@@ -172,10 +198,32 @@ function isDeletedTombstone(proposalNumber: string) {
   return getDeletedTombstoneSet().has(proposalNumber);
 }
 
-function ensureProposalMetadata(proposal: Proposal, session?: UserSession | null): Proposal {
+function ensureProposalReadMetadata(
+  proposal: Proposal,
+  session?: UserSession | null,
+  stored?: StoredProposalRow
+): Proposal {
+  const currentSession = session ?? readSession();
+  const franchiseId = proposal.franchiseId || stored?.franchise_id || currentSession?.franchiseId || DEFAULT_FRANCHISE_ID;
+  const status = proposal.status || stored?.status || 'draft';
+  const designerName = (proposal as any).designerName || stored?.designer_name || undefined;
+  const designerRole = (proposal as any).designerRole || stored?.designer_role || undefined;
+  const designerCode = (proposal as any).designerCode || stored?.designer_code || undefined;
+
+  return {
+    ...proposal,
+    franchiseId,
+    status,
+    ...(designerName ? { designerName } : {}),
+    ...(designerRole ? { designerRole } : {}),
+    ...(designerCode ? { designerCode } : {}),
+  };
+}
+
+function ensureProposalWriteMetadata(proposal: Proposal, session?: UserSession | null): Proposal {
   const currentSession = session ?? readSession();
   const franchiseId = proposal.franchiseId || currentSession?.franchiseId || DEFAULT_FRANCHISE_ID;
-  const designerName = (proposal as any).designerName || currentSession?.userName || 'Designer';
+  const designerName = (proposal as any).designerName || currentSession?.userName || currentSession?.userEmail || 'Designer';
   const designerRole = (proposal as any).designerRole || currentSession?.role || 'designer';
   const designerCode = (proposal as any).designerCode || currentSession?.franchiseCode;
 
@@ -188,12 +236,12 @@ function ensureProposalMetadata(proposal: Proposal, session?: UserSession | null
   };
 }
 
-function normalizeForConsumption(proposal: Proposal, session?: UserSession | null): Proposal {
-  const withMeta = ensureProposalMetadata(proposal, session);
+function normalizeForConsumption(proposal: Proposal, session?: UserSession | null, stored?: StoredProposalRow): Proposal {
+  const withMeta = ensureProposalReadMetadata(proposal, session, stored);
   const active = applyActiveVersion(withMeta);
-  const normalizedVersions = (active.versions || []).map((v) => ensureProposalMetadata(v, session));
+  const normalizedVersions = (active.versions || []).map((v) => ensureProposalReadMetadata(v, session, stored));
   return {
-    ...ensureProposalMetadata(active, session),
+    ...ensureProposalReadMetadata(active, session, stored),
     versions: normalizedVersions,
   };
 }
@@ -252,12 +300,12 @@ async function fetchSupabaseProposals(franchiseId: string, session: UserSession 
   if (!supabase) return [];
   const { data, error } = await supabase
     .from('franchise_proposals')
-    .select('proposal_json')
+    .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
     .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
     .order('updated_at', { ascending: false });
   if (error) throw error;
-  return (data || []).map((row: any) => withSyncStatus(
-    normalizeForConsumption((row?.proposal_json || {}) as Proposal, session),
+  return (data || []).map((row: StoredProposalRow) => withSyncStatus(
+    normalizeForConsumption((row?.proposal_json || {}) as Proposal, session, row),
     'synced',
     ONLINE_SYNC_MESSAGE
   ));
@@ -268,13 +316,13 @@ async function fetchSupabaseProposal(proposalNumber: string, session: UserSessio
   if (!supabase) return null;
   const { data, error } = await supabase
     .from('franchise_proposals')
-    .select('proposal_json')
+    .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
     .eq('proposal_number', proposalNumber)
     .maybeSingle();
   if (error) throw error;
-  if (!data?.proposal_json) return null;
+  if (!(data as StoredProposalRow | null)?.proposal_json) return null;
   return withSyncStatus(
-    normalizeForConsumption(data.proposal_json as Proposal, session),
+    normalizeForConsumption((data as StoredProposalRow).proposal_json as Proposal, session, data as StoredProposalRow),
     'synced',
     ONLINE_SYNC_MESSAGE
   );
@@ -300,7 +348,7 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase not configured');
 
-  const normalized = ensureProposalMetadata(applyActiveVersion(proposal));
+  const normalized = ensureProposalWriteMetadata(applyActiveVersion(proposal));
   const now = nowIso();
 
   const { error } = await supabase
@@ -551,6 +599,13 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   );
 }
 
+export async function listDashboardProposals(franchiseId?: string): Promise<Proposal[]> {
+  const session = readSession();
+  if (!session) return [];
+  const proposals = await listProposals(franchiseId);
+  return proposals.filter((proposal) => isOwnProposal(proposal, session));
+}
+
 export async function getProposal(proposalNumber: string): Promise<Proposal | null> {
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
@@ -581,6 +636,10 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
 
   const [cloud, local] = await Promise.all([supabasePromise, localPromise]);
 
+  const best = pickNewest(cloud, local);
+  if (!best) return null;
+  if (!canReadProposal(best, session)) return null;
+
   if (supabaseOnline && local && canAttemptProposalWrite(local, session) && shouldSyncLocal(local, cloud)) {
     try {
       const synced = await upsertToSupabase(local);
@@ -595,9 +654,6 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
     await persistLocalProposal(cloud);
   }
 
-  const best = pickNewest(cloud, local);
-  if (!best) return null;
-
   if (!supabaseOnline) {
     const status = (best as any).syncStatus || 'pending';
     const message = (best as any).syncMessage || (status === 'synced' ? ONLINE_SYNC_MESSAGE : PENDING_MESSAGE);
@@ -611,7 +667,7 @@ export async function saveProposal(proposal: Proposal): Promise<SaveResult> {
   const now = nowIso();
   const session = readSession();
   clearDeletedTombstone(proposal.proposalNumber);
-  const normalized = ensureProposalMetadata(
+  const normalized = ensureProposalWriteMetadata(
     applyActiveVersion({
       ...proposal,
       franchiseId: proposal.franchiseId || getSessionFranchiseId(),
@@ -624,7 +680,7 @@ export async function saveProposal(proposal: Proposal): Promise<SaveResult> {
   );
   const normalizedWithVersions: Proposal = {
     ...normalized,
-    versions: (normalized.versions || []).map((v) => ensureProposalMetadata(v, session)),
+    versions: (normalized.versions || []).map((v) => ensureProposalWriteMetadata(v, session)),
   };
   const franchiseId = normalizedWithVersions.franchiseId || DEFAULT_FRANCHISE_ID;
 

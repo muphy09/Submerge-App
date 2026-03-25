@@ -13,6 +13,26 @@ export type PricingModelRow = {
   updated_by?: string | null;
 };
 
+type PricingModelSummary = {
+  id: string;
+  name: string;
+  version: string;
+  isDefault: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type LoadedPricingModel = {
+  franchiseId: string;
+  pricingModelId?: string;
+  pricingModelName?: string;
+  isDefault?: boolean;
+  version: string;
+  pricing: any;
+  updatedAt?: string;
+  updatedBy?: string | null;
+};
+
 const DEFAULT_VERSION = 'v1';
 const DEFAULT_FRANCHISE_ID = 'default';
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
@@ -28,8 +48,8 @@ function withFallback<T>(supabaseFn: () => Promise<T>, fallbackFn: () => Promise
   return fallbackFn();
 }
 
-export async function listPricingModels(franchiseId: string) {
-  return withFallback(async () => {
+export async function listPricingModels(franchiseId: string): Promise<PricingModelSummary[]> {
+  return withFallback<PricingModelSummary[]>(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) return [];
     const { data, error } = await supabase
@@ -53,8 +73,11 @@ export async function listPricingModels(franchiseId: string) {
   });
 }
 
-export async function loadPricingModel(franchiseId: string, pricingModelId?: string | null) {
-  return withFallback(async () => {
+export async function loadPricingModel(
+  franchiseId: string,
+  pricingModelId?: string | null
+): Promise<LoadedPricingModel | null> {
+  return withFallback<LoadedPricingModel | null>(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) return null;
     let query = supabase

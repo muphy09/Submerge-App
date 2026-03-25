@@ -1326,11 +1326,6 @@ export class InteriorFinishCalculations {
 
     return { labor: laborItems, material: materialItems, waterTruck: waterTruckItems };
   }
-
-  private static getMaterialRate(finishType: string, prices: any): number {
-    return this.getFinish(prices, finishType)?.costPerSqft ?? 0;
-  }
-
   private static getFinish(prices: any, finishType: string | undefined) {
     if (!finishType) return undefined;
     return (prices.finishes || []).find((finish: any) => finish.id === finishType) ||

@@ -4,6 +4,7 @@ import { ContractTemplateId, getContractTemplate } from './contractTemplates';
 
 export type ContractPdfFieldLayout = {
   name: string;
+  label: string;
   pageIndex: number;
   x: number;
   y: number;
@@ -112,6 +113,7 @@ export async function buildContractPdf(
 
     pdfFields.push({
       name: field.id,
+      label: field.label,
       pageIndex,
       x: field.x,
       y: field.y,

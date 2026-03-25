@@ -196,16 +196,16 @@ const buildRowIndexMap = (rows: Row[]) => {
   return map;
 };
 
-const findClosestInRow = (row: Row, targetX: number) => {
+const findClosestInRow = (row: Row, targetX: number): PositionedElement | null => {
   let best: PositionedElement | null = null;
   let bestDelta = Number.POSITIVE_INFINITY;
-  row.elements.forEach((pos) => {
+  for (const pos of row.elements) {
     const delta = Math.abs(pos.centerX - targetX);
     if (delta < bestDelta) {
       bestDelta = delta;
       best = pos;
     }
-  });
+  }
   return best;
 };
 
@@ -213,22 +213,22 @@ const findViewportNeighbor = (
   current: HTMLElement,
   candidates: HTMLElement[],
   direction: 'up' | 'down'
-) => {
+): HTMLElement | null => {
   const currentRect = current.getBoundingClientRect();
   const currentCenterX = currentRect.left + currentRect.width / 2;
   const currentCenterY = currentRect.top + currentRect.height / 2;
 
   let best: { element: HTMLElement; primary: number; perpendicular: number; distance: number } | null = null;
-  candidates.forEach((candidate) => {
-    if (candidate === current) return;
+  for (const candidate of candidates) {
+    if (candidate === current) continue;
     const rect = candidate.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
     const dx = centerX - currentCenterX;
     const dy = centerY - currentCenterY;
 
-    if (direction === 'up' && dy >= 0) return;
-    if (direction === 'down' && dy <= 0) return;
+    if (direction === 'up' && dy >= 0) continue;
+    if (direction === 'down' && dy <= 0) continue;
 
     const primary = Math.abs(dy);
     const perpendicular = Math.abs(dx);
@@ -242,7 +242,7 @@ const findViewportNeighbor = (
     ) {
       best = { element: candidate, primary, perpendicular, distance };
     }
-  });
+  }
 
   return best?.element ?? null;
 };

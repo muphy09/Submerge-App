@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import submergeLogo from '../../Submerge Logo.png';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { useFranchiseLogo } from '../hooks/useFranchiseLogo';
@@ -21,12 +22,19 @@ import {
   readSession,
   updateSession,
 } from '../services/session';
+import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import './SettingsPage.css';
 
 const MAX_LOGO_BYTES = 1024 * 1024;
 const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
 
+type SettingsLocationState = {
+  autoOpenChangelog?: boolean;
+} | null;
+
 const SettingsPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
   const [showChangelog, setShowChangelog] = useState(false);
@@ -41,6 +49,7 @@ const SettingsPage: React.FC = () => {
   const franchiseId = getSessionFranchiseId();
   const { appName: savedAppName, displayName, isLoading: appNameLoading } = useFranchiseAppName(franchiseId);
   const { logoUrl: savedLogoUrl, isLoading: logoLoading } = useFranchiseLogo(franchiseId);
+  const { hideCogsFromProposalBuilder, setHideCogsFromProposalBuilder } = useAdminCogsView();
   const initialFranchiseCode = getSessionFranchiseCode() || '';
   const [currentFranchiseCode, setCurrentFranchiseCode] = useState(initialFranchiseCode);
   const [pendingFranchiseCode, setPendingFranchiseCode] = useState(initialFranchiseCode);
@@ -63,8 +72,12 @@ const SettingsPage: React.FC = () => {
   const [adminPinStatus, setAdminPinStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(
     null
   );
+  const [adminCogsViewStatus, setAdminCogsViewStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(
+    null
+  );
   const [showAdminPin, setShowAdminPin] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const autoOpenLocationKeyRef = useRef<string | null>(null);
   const previewLogoUrl = pendingLogoUrl || savedLogoUrl || submergeLogo;
   const hasCustomLogo = Boolean(savedLogoUrl);
   const hasPendingLogo = Boolean(pendingLogoUrl);
@@ -229,7 +242,7 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  const openChangelog = async () => {
+  const openChangelog = useCallback(async () => {
     if (!canViewChangelog) return;
 
     setShowChangelog(true);
@@ -252,7 +265,7 @@ const SettingsPage: React.FC = () => {
     } finally {
       setChangelogLoading(false);
     }
-  };
+  }, [canViewChangelog]);
 
   const closeChangelog = () => {
     setShowChangelog(false);
@@ -267,6 +280,16 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     setPendingAppName(savedAppName || '');
   }, [savedAppName]);
+
+  useEffect(() => {
+    const routeState = location.state as SettingsLocationState;
+    if (!routeState?.autoOpenChangelog || !canViewChangelog) return;
+    if (autoOpenLocationKeyRef.current === location.key) return;
+
+    autoOpenLocationKeyRef.current = location.key;
+    void openChangelog();
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+  }, [canViewChangelog, location.key, location.pathname, location.search, location.state, navigate, openChangelog]);
 
   useEffect(() => {
     setPendingAdminPin(getStoredAdminPanelPin(franchiseId));
@@ -503,6 +526,25 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleToggleAdminCogsView = () => {
+    try {
+      const nextValue = !hideCogsFromProposalBuilder;
+      setHideCogsFromProposalBuilder(nextValue);
+      setAdminCogsViewStatus({
+        type: 'success',
+        message: nextValue
+          ? 'COGS breakdown hidden from the proposal builder and proposal summary.'
+          : 'COGS breakdown visible in the proposal builder and proposal summary.',
+      });
+    } catch (error) {
+      console.error('Failed to update admin COGS view setting:', error);
+      setAdminCogsViewStatus({
+        type: 'error',
+        message: 'Unable to update the Admin COGS View setting.',
+      });
+    }
+  };
+
   return (
     <div className="settings-page">
       <div className="settings-page-header">
@@ -541,7 +583,40 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
 
-          {isAdmin && (
+        {isAdmin && (
+          <div className="settings-card">
+            <h2>Admin COGS View</h2>
+            <p className="settings-description">
+              Control whether COGS breakdowns are visible while you build and review proposals on this account.
+            </p>
+            <div className="admin-cogs-settings-panel">
+              <div className="section-row admin-cogs-settings-row">
+                <div>
+                  <h3>Hide COGS from Prop. Builder</h3>
+                  <p className="settings-description">
+                    When enabled, the COGS breakdown button is removed from the builder navigation and proposal summary.
+                  </p>
+                </div>
+                <button
+                  className={`settings-button admin-cogs-toggle-button ${hideCogsFromProposalBuilder ? 'is-active' : ''}`}
+                  onClick={handleToggleAdminCogsView}
+                  type="button"
+                >
+                  {`Hide COGS from Prop. Builder: ${hideCogsFromProposalBuilder ? 'On' : 'Off'}`}
+                </button>
+              </div>
+              <div className="admin-pin-settings-current">
+                Current setting:{' '}
+                <span className="franchise-name-value">{hideCogsFromProposalBuilder ? 'On' : 'Off'}</span>
+              </div>
+              {adminCogsViewStatus && (
+                <div className={`logo-status ${adminCogsViewStatus.type}`}>{adminCogsViewStatus.message}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isAdmin && (
             <div className="settings-card">
               <h2>Global Logo</h2>
               <p className="settings-description">

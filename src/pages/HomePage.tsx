@@ -4,11 +4,11 @@ import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
 import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
-import { listProposals, deleteProposal } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, getSessionUserName, isMasterImpersonating, type UserSession } from '../services/session';
+import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
+import { getSessionFranchiseId, isMasterImpersonating, type UserSession } from '../services/session';
 import syncGoodIcon from '../../docs/img/syncgood.png';
 import syncBadIcon from '../../docs/img/syncbad.png';
-import { initPricingDataStore } from '../services/pricingDataStore';
+import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import {
   getDefaultProposal,
@@ -20,12 +20,12 @@ import {
   getDefaultDrainage,
   getDefaultEquipment,
   getDefaultWaterFeatures,
-  getDefaultCustomFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
+import { normalizeCustomFeatures } from '../utils/customFeatures';
 
 type HomePageProps = {
   session?: UserSession | null;
@@ -38,7 +38,6 @@ function HomePage({ session }: HomePageProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; proposalNumber: string } | null>(null);
   const { showToast } = useToast();
   const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
-  const sessionUserName = session?.userName || getSessionUserName();
   const isMasterActingAsOwner = isMasterImpersonating();
   const canCreateProposal = !isMasterActingAsOwner;
   const createDisabledReason = isMasterActingAsOwner
@@ -48,10 +47,7 @@ function HomePage({ session }: HomePageProps) {
   const loadProposals = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listProposals(sessionFranchiseId);
-      const filtered = sessionUserName && !isMasterActingAsOwner
-        ? (data || []).filter((p) => (p.designerName || '').toLowerCase() === sessionUserName.toLowerCase())
-        : data || [];
+      const filtered = await listDashboardProposals(sessionFranchiseId);
 
       const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
         const base = getDefaultProposal();
@@ -64,7 +60,7 @@ function HomePage({ session }: HomePageProps) {
         return {
           ...(base as Proposal),
           ...input,
-          customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+          customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
           poolSpecs,
           excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
           plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
@@ -73,7 +69,7 @@ function HomePage({ session }: HomePageProps) {
           drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
           equipment: mergedEquipment,
           waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
-          customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+          customFeatures: normalizeCustomFeatures(input.customFeatures),
           interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
           manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
@@ -82,11 +78,23 @@ function HomePage({ session }: HomePageProps) {
       };
 
       const recalculated: Proposal[] = [];
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
       for (const raw of filtered) {
         try {
           const merged = mergeWithDefaults(raw);
-          await initPricingDataStore(merged.franchiseId || sessionFranchiseId, merged.pricingModelId || undefined);
-          const calculated = MasterPricingEngine.calculateCompleteProposal(merged, (merged as any).papDiscounts);
+          const targetFranchiseId = merged.franchiseId || sessionFranchiseId;
+          const pricingCacheKey = `${targetFranchiseId}::${merged.pricingModelId || 'default'}`;
+          let pricingSnapshot = pricingCache.get(pricingCacheKey);
+          if (!pricingSnapshot) {
+            pricingSnapshot = await loadPricingSnapshotForFranchise(
+              targetFranchiseId,
+              merged.pricingModelId || undefined
+            );
+            pricingCache.set(pricingCacheKey, pricingSnapshot);
+          }
+          const calculated = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
+            MasterPricingEngine.calculateCompleteProposal(merged, (merged as any).papDiscounts)
+          );
           recalculated.push({
             ...(merged as Proposal),
             pricing: calculated.pricing,
@@ -106,7 +114,7 @@ function HomePage({ session }: HomePageProps) {
     } finally {
       setLoading(false);
     }
-  }, [sessionFranchiseId, sessionUserName, isMasterActingAsOwner]);
+  }, [sessionFranchiseId]);
 
   useEffect(() => {
     void loadProposals();

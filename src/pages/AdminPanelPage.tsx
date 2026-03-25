@@ -4,7 +4,7 @@ import { Proposal } from '../types/proposal-new';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels, setDefaultPricingModel } from '../services/pricingModelsAdapter';
 import { listProposals as listProposalsRemote } from '../services/proposalsAdapter';
-import { initPricingDataStore } from '../services/pricingDataStore';
+import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import './AdminPanelPage.css';
 import {
   createFranchiseUser,
@@ -24,12 +24,12 @@ import {
   getDefaultDrainage,
   getDefaultEquipment,
   getDefaultWaterFeatures,
-  getDefaultCustomFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
+import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { listAllVersions } from '../utils/proposalVersions';
 import TempPasswordModal from '../components/TempPasswordModal';
 
@@ -71,7 +71,7 @@ const formatDate = (value?: string) => {
   return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
 };
 
-const normalizeDesignerName = (value?: string) => (value ?? '').trim();
+const normalizeDesignerName = (value?: string | null) => (value ?? '').trim();
 const isSubmittedStatus = (status?: string) => {
   const normalized = (status || '').toLowerCase();
   return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
@@ -137,6 +137,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     try {
       const data = await listProposalsRemote(targetFranchiseId);
       const enriched: Proposal[] = [];
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
 
       const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
         const base = getDefaultProposal();
@@ -149,7 +150,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         return {
           ...(base as Proposal),
           ...input,
-          customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) },
+          customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
           poolSpecs,
           excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
           plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
@@ -158,7 +159,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
           equipment: mergedEquipment,
           waterFeatures: { ...getDefaultWaterFeatures(), ...(input.waterFeatures || {}) },
-          customFeatures: { ...getDefaultCustomFeatures(), ...(input.customFeatures || {}) },
+          customFeatures: normalizeCustomFeatures(input.customFeatures),
           interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
           manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
@@ -169,10 +170,23 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       for (const raw of data || []) {
         try {
           const merged = mergeWithDefaults(raw);
-          await initPricingDataStore(merged.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID, merged.pricingModelId || undefined);
-          const calculated = MasterPricingEngine.calculateCompleteProposal(
-            merged,
-            (merged as any).papDiscounts
+          const resolvedFranchiseId = merged.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID;
+          const pricingCacheKey = `${resolvedFranchiseId}::${merged.pricingModelId || 'default'}`;
+          let pricingSnapshot = pricingCache.get(pricingCacheKey);
+          if (!pricingSnapshot) {
+            pricingSnapshot = await loadPricingSnapshotForFranchise(
+              resolvedFranchiseId,
+              merged.pricingModelId || undefined
+            );
+            pricingCache.set(pricingCacheKey, pricingSnapshot);
+          }
+          const calculated = withTemporaryPricingSnapshot(
+            pricingSnapshot.pricing,
+            () =>
+              MasterPricingEngine.calculateCompleteProposal(
+                merged,
+                (merged as any).papDiscounts
+              )
           );
           enriched.push({
             ...(merged as Proposal),
@@ -712,7 +726,6 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                     modelId === defaultPricingModelId &&
                     availablePricingModelIds.has(modelId) &&
                     !explicitRemoved;
-                  const isInactive = Boolean(modelId) && !isActive && !isRemoved;
                   const modelClass = isActive
                     ? 'proposal-model-pill active'
                     : isRemoved

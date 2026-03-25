@@ -1,11 +1,37 @@
+[2.0.4] What's New
+## Requested Changes - 
+- Valve Actuator toggle per Water Feature zone
+    - Included a checkbox next to each added water feature to turn off the Valve Actuator cost
+- Wok Pot logic cleanup
+    - Water & Fire and Fire Wok Pots now ask for a gas run with the Water Feature run
+- Laminier Jet logic
+    - Laminier Jet requires conduit run
+    - Admin can select which Jets need conduit
+- Water Feature pipe size
+    - Aligned all Water Features and additionals use 2" pipe
+- Deposit Breakdown in Contract
+    - Properly autofills the payment schedule when a deposit amount is entered
+- Custom Features Off-Contract & Grouped Features
+    - Custom Features can now be marked Off-Contract
+    - Grouped Custom Features can be created by an admin (sod, fencing)
+
+## Quality of Life Changes
+- Zoom Toggle on contract preview
+    - Can zoom the contract in and out while previewing
+- Price Model in proposal builder
+    - Adjusted size and look of price model dropdown in the top of the builder
+- Admin setting to 'Hide' COGS in Proposal Builder
+    - Admins can now toggle On/Off the ability to view the COGS breakdown while building a proposal
+        - This includes the COGS button in the Prop builder and the COGS block in the summary screen
+- Changelog
+    - Admins and Owners are now greeted with the Changelog if the app was updated
+-----
 [2.0.3]
 ## Requested Changes - 
-- 
-
-
-
-
-
+- Equipment Package Options
+    - Added the ability to create Equipment Packages
+    - Can be customized in the admin menu
+    - Aligned initial package options
 -----
 [2.0.2]
 ## Requested Changes - 

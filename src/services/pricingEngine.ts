@@ -16,7 +16,13 @@ import {
 } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
-import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
+import {
+  countSelectedWaterFeatureZones,
+  getDerivedWaterFeatureGasRunTotal,
+  getTotalGasRunForBilling,
+  getWaterFeatureRunEntries,
+  waterFeatureNeedsConduitRun,
+} from '../utils/waterFeatureCost';
 import { getAdditionalPumpSelections } from '../utils/pumpSelections';
 
 /**
@@ -413,55 +419,21 @@ export class PlumbingCalculations {
     const exposedPoolWallTotalLnft = ExcavationCalculations.calculateWallLevelsLnft(
       excavation?.exposedPoolWallLevels ?? []
     );
-    const waterFeatureRunFields: Array<keyof Plumbing['runs']> = [
-      'waterFeature1Run',
-      'waterFeature2Run',
-      'waterFeature3Run',
-      'waterFeature4Run',
-    ];
-    const waterFeatureCatalog = flattenWaterFeatures(pricingData.waterFeatures);
-    const waterFeatureLookup = new Map(waterFeatureCatalog.map((entry) => [entry.id, entry]));
-    const resolveWaterFeature = (featureId?: string) => {
-      if (!featureId) return undefined;
-      return waterFeatureLookup.get(featureId) || waterFeatureCatalog.find((entry) => entry.name === featureId);
-    };
-    const orderedWaterFeatureSelections = (() => {
-      const grouped = {
-        sheer: [] as NonNullable<WaterFeatures['selections']>,
-        woks: [] as NonNullable<WaterFeatures['selections']>,
-        jets: [] as NonNullable<WaterFeatures['selections']>,
-        bubblers: [] as NonNullable<WaterFeatures['selections']>,
-      };
-
-      (waterFeatures?.selections || []).forEach((selection) => {
-        const category = resolveWaterFeature(selection.featureId)?.category;
-        if (category === 'Sheer Descent') {
-          grouped.sheer.push(selection);
-          return;
-        }
-        if (category?.startsWith('Wok Pots')) {
-          grouped.woks.push(selection);
-          return;
-        }
-        if (category === 'Jets') {
-          grouped.jets.push(selection);
-          return;
-        }
-        if (category === 'Bubbler') {
-          grouped.bubblers.push(selection);
-        }
-      });
-
-      return [...grouped.sheer, ...grouped.woks, ...grouped.jets, ...grouped.bubblers];
-    })();
-    const bubblerConduitRunQty = orderedWaterFeatureSelections.reduce((sum, selection, index) => {
-      if ((selection?.quantity ?? 0) <= 0) return sum;
-      const feature = resolveWaterFeature(selection.featureId);
-      if (!feature?.needsPoolLight) return sum;
-      const runField = waterFeatureRunFields[index];
-      if (!runField) return sum;
-      return sum + Math.max(0, plumbing.runs[runField] || 0);
+    const waterFeatureRunEntries = getWaterFeatureRunEntries(
+      waterFeatures?.selections || [],
+      plumbing.runs,
+      pricingData.waterFeatures
+    );
+    const waterFeatureConduitRunQty = waterFeatureRunEntries.reduce((sum, entry) => {
+      if ((entry.selection?.quantity ?? 0) <= 0) return sum;
+      if (!waterFeatureNeedsConduitRun(entry.feature)) return sum;
+      return sum + entry.run;
     }, 0);
+    const totalGasRunForBilling = getTotalGasRunForBilling(
+      plumbing.runs,
+      waterFeatures?.selections || [],
+      pricingData.waterFeatures
+    );
 
     if (!hasPoolDefinition(poolSpecs)) {
       return items;
@@ -556,8 +528,8 @@ export class PlumbingCalculations {
     }
 
     // 3.0" header if needed (only when long gas run)
-    if (plumbing.runs.gasRun > 0) {
-      const threeInchQty = Math.max(0, Math.ceil(plumbing.runs.gasRun - 100));
+    if (totalGasRunForBilling > 0) {
+      const threeInchQty = Math.max(0, Math.ceil(totalGasRunForBilling - 100));
       if (threeInchQty > 0) {
         items.push({
           category: 'Plumbing',
@@ -578,7 +550,7 @@ export class PlumbingCalculations {
     ];
     const baseFeatureAllowance = prices.waterFeatureRun.baseAllowanceFt;
     const featureSetup = prices.waterFeatureRun.setup;
-    const featureRate = prices.waterFeatureRun.perFt;
+    const featureRate = prices.twoInchPipe ?? prices.waterFeatureRun.perFt;
     waterFeatureRuns.forEach((run, idx) => {
       if (run > 0) {
         const cappedRun = Math.max(run, baseFeatureAllowance);
@@ -635,13 +607,13 @@ export class PlumbingCalculations {
         total: prices.conduitPerFt * conduitQty,
       });
     }
-    if (bubblerConduitRunQty > 0) {
+    if (waterFeatureConduitRunQty > 0) {
       items.push({
         category: 'Plumbing',
-        description: 'Bubbler Conduit Run',
+        description: 'Water Feature Conduit Run',
         unitPrice: prices.conduitPerFt,
-        quantity: Math.ceil(bubblerConduitRunQty),
-        total: prices.conduitPerFt * Math.ceil(bubblerConduitRunQty),
+        quantity: Math.ceil(waterFeatureConduitRunQty),
+        total: prices.conduitPerFt * Math.ceil(waterFeatureConduitRunQty),
       });
     }
 
@@ -953,20 +925,34 @@ export class ElectricalCalculations {
     return items;
   }
 
-  static calculateGasCost(plumbing: Plumbing): CostLineItem[] {
+  static calculateGasCost(plumbing: Plumbing, waterFeatures?: WaterFeatures): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.electrical;
+    const derivedWaterFeatureGasRun = getDerivedWaterFeatureGasRunTotal(
+      waterFeatures?.selections || [],
+      plumbing.runs,
+      pricingData.waterFeatures
+    );
+    const totalGasRun = getTotalGasRunForBilling(
+      plumbing.runs,
+      waterFeatures?.selections || [],
+      pricingData.waterFeatures
+    );
 
-    if (plumbing.runs.gasRun > 0) {
+    if (totalGasRun > 0) {
       items.push({
         category: 'Gas',
         description: 'Base Gas Set',
         unitPrice: prices.baseGas,
         quantity: 1,
         total: prices.baseGas,
+        notes:
+          derivedWaterFeatureGasRun > 0
+            ? `Includes ${derivedWaterFeatureGasRun} ft from fire Wok Pot run(s).`
+            : undefined,
       });
 
-      const overrun = Math.max(0, plumbing.runs.gasRun - pricingData.plumbing.gasOverrunThreshold);
+      const overrun = Math.max(0, totalGasRun - pricingData.plumbing.gasOverrunThreshold);
       if (overrun > 0) {
         items.push({
           category: 'Gas',
@@ -1396,7 +1382,7 @@ export class PricingEngine {
     );
 
     // Gas
-    const gasItems = ElectricalCalculations.calculateGasCost(plumbing);
+    const gasItems = ElectricalCalculations.calculateGasCost(plumbing, proposal.waterFeatures);
 
     // Steel
     const steelItems = SteelCalculations.calculateSteelCost(poolSpecs, excavation);

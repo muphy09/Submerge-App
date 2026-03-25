@@ -41,6 +41,8 @@ const PAYMENT_SCHEDULE_FIELD_IDS = [
   'p1_pay_decking',
   'p1_pay_interior_finish',
 ];
+const PAYMENT_SCHEDULE_FIELD_ID_SET = new Set(PAYMENT_SCHEDULE_FIELD_IDS);
+const PAYMENT_SCHEDULE_MIN_WIDTH = 32;
 
 const PAYMENT_SCHEDULE_OVERRIDES: Record<ContractTemplateId, FieldOverride[]> = {
   'nc-gunite': [],
@@ -161,6 +163,17 @@ const applyFieldOverrides = (fields: TemplateField[], overrides: FieldOverride[]
   });
 };
 
+const widenPaymentScheduleFields = (fields: TemplateField[]): TemplateField[] =>
+  fields.map((field) => {
+    if (!PAYMENT_SCHEDULE_FIELD_ID_SET.has(field.id)) return field;
+    const [x0, y0, x1, y1] = field.rect;
+    if (x1 - x0 >= PAYMENT_SCHEDULE_MIN_WIDTH) return field;
+    return {
+      ...field,
+      rect: [x1 - PAYMENT_SCHEDULE_MIN_WIDTH, y0, x1, y1],
+    };
+  });
+
 const buildTemplate = (
   id: ContractTemplateId,
   label: string,
@@ -171,7 +184,7 @@ const buildTemplate = (
   label,
   pdfUrl: url.href,
   pdfPath: url.pathname,
-  fields: applyFieldOverrides(DEFAULT_FIELDS, overrides),
+  fields: widenPaymentScheduleFields(applyFieldOverrides(DEFAULT_FIELDS, overrides)),
 });
 
 const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {

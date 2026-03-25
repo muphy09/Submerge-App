@@ -110,6 +110,7 @@ interface PricingDataModalProps {
 
 const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseId }) => {
   const [data, setData] = useState(getPricingDataSnapshot());
+  const [isInitializing, setIsInitializing] = useState(true);
   const [fieldLabelOverrides, setFieldLabelOverrides] = useState<PricingFieldLabelOverrides>({});
   const [activeListFieldRename, setActiveListFieldRename] = useState<ActiveListFieldRename | null>(null);
   const [activeListFieldRenameDraft, setActiveListFieldRenameDraft] = useState('');
@@ -168,19 +169,37 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   );
 
   useEffect(() => {
+    let cancelled = false;
     const targetFranchise = franchiseId || getActiveFranchiseId();
-    // Reset state when switching franchises to avoid leaking names/models between franchises
-    clearActivePricingModelMeta();
+    setIsInitializing(true);
     setModelName('');
     setSelectedModelId(null);
     setHasChanges(false);
     setFieldLabelOverrides(loadPricingFieldLabelOverrides(targetFranchise || 'default'));
     setActiveListFieldRename(null);
     setActiveListFieldRenameDraft('');
-    initPricingDataStore(targetFranchise);
-    const unsubscribe = subscribeToPricingData(setData);
-    void loadModels(targetFranchise);
-    return unsubscribe;
+    const unsubscribe = subscribeToPricingData((nextData) => {
+      if (!cancelled) {
+        setData(nextData);
+      }
+    });
+    const load = async () => {
+      try {
+        await initPricingDataStore(targetFranchise || undefined);
+        if (cancelled) return;
+        setData(getPricingDataSnapshot());
+        await loadModels(targetFranchise);
+      } finally {
+        if (!cancelled) {
+          setIsInitializing(false);
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [franchiseId]);
 
   useEffect(() => {
@@ -204,9 +223,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       if (rows?.length) {
         if (activeMeta.pricingModelId) {
           setSelectedModelId(activeMeta.pricingModelId);
-          if (activeMeta.pricingModelName && !modelName) {
-            setModelName(activeMeta.pricingModelName);
-          }
+          setModelName(
+            activeMeta.pricingModelName ||
+              rows.find((model) => model.id === activeMeta.pricingModelId)?.name ||
+              ''
+          );
         } else {
           const fallback = rows.find((m) => m.isDefault) || rows[0];
           setSelectedModelId(fallback?.id ?? null);
@@ -225,13 +246,18 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const handleLoadModel = async (modelId: string) => {
     setSelectedModelId(modelId);
-    await setActivePricingModel(modelId);
-    const meta = getActivePricingModelMeta();
-    setModelName(meta.pricingModelName || '');
-    setPricingModels((prev) =>
-      prev.map((m) => ({ ...m, isDefault: m.id === modelId ? m.isDefault : m.isDefault }))
-    );
-    setHasChanges(false);
+    setIsInitializing(true);
+    try {
+      await setActivePricingModel(modelId);
+      const meta = getActivePricingModelMeta();
+      setModelName(meta.pricingModelName || '');
+      setPricingModels((prev) =>
+        prev.map((m) => ({ ...m, isDefault: m.id === modelId ? m.isDefault : m.isDefault }))
+      );
+      setHasChanges(false);
+    } finally {
+      setIsInitializing(false);
+    }
   };
 
   const handleSelectModel = async (modelId: string) => {
@@ -269,6 +295,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const handleCreateNewModel = async () => {
+    setIsInitializing(true);
     try {
       const defaultModel = pricingModels.find((m) => m.isDefault) || pricingModels[0];
       if (defaultModel) {
@@ -283,6 +310,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setHasChanges(false);
     } catch (error) {
       console.warn('Unable to start new pricing model', error);
+    } finally {
+      setIsInitializing(false);
     }
   };
 
@@ -353,6 +382,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     }
     updatePricingValue(field.path, parsed);
     if (field.path.join('.') === 'plumbing.twoInchPipe') {
+      updatePricingValue(['plumbing', 'waterFeatureRun', 'perFt'], parsed);
       updatePricingValue(['plumbing', 'additionalWaterFeatureRunPerFt'], parsed);
     }
     if (field.path.join('.') === 'tileCoping.tile.labor.level1') {
@@ -434,6 +464,28 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       const existing = entries[index] || {};
       if (!existing.id) {
         const baseId = slugifyMasonryFacingId(String(parsed));
+        let nextId = baseId;
+        let suffix = 2;
+        while (
+          nextId &&
+          entries.some((entry, entryIndex) => entryIndex !== index && String(entry?.id || '').trim() === nextId)
+        ) {
+          nextId = `${baseId}-${suffix}`;
+          suffix += 1;
+        }
+        if (nextId) {
+          updatePricingListItem(list.path, index, 'id', nextId);
+        }
+      }
+    }
+
+    const isGroupedCustomFeatureName =
+      field.key === 'name' && list.path[0] === 'customFeatures' && list.path[1] === 'groupedOptions';
+    if (isGroupedCustomFeatureName) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const existing = entries[index] || {};
+      if (!existing.id) {
+        const baseId = slugify(String(parsed)) || `custom-feature-${index + 1}`;
         let nextId = baseId;
         let suffix = 2;
         while (
@@ -563,6 +615,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           <path d="M9 7h6" />
         </svg>
       ),
+      'Custom Features': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.4 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3z" />
+        </svg>
+      ),
     };
 
     return (
@@ -583,8 +640,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setHasChanges(false);
   };
 
-  const displayModelName = modelName || selectedModel?.name || 'New Pricing Model';
-  const showSetActiveButton = (Boolean(selectedModelId) && !selectedModelIsDefault) || activatedFlash;
+  const displayModelName = isInitializing ? 'Loading Pricing Model...' : modelName || selectedModel?.name || 'New Pricing Model';
+  const showSetActiveButton = !isInitializing && ((Boolean(selectedModelId) && !selectedModelIsDefault) || activatedFlash);
 
   useEffect(() => {
     return () => {
@@ -611,6 +668,18 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         label: 'Needs Pool Light',
         type: 'boolean',
         tooltip: 'Adds the default pool light cost to this bubbler in proposals.',
+      },
+    ],
+    [waterFeatureFields]
+  );
+  const jetFields: ListField[] = useMemo(
+    () => [
+      ...waterFeatureFields,
+      {
+        key: 'requiresConduit',
+        label: 'Requires Conduit',
+        type: 'boolean',
+        tooltip: 'Uses the Water Feature run as shared conduit footage for this jet in proposals.',
       },
     ],
     [waterFeatureFields]
@@ -1363,7 +1432,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: '2" pipe (per ft)',
                 path: ['plumbing', 'twoInchPipe'],
                 type: 'number',
-                tooltip: 'Used for core plumbing runs, cleaner line, and additional water feature run rate.',
+                tooltip: 'Used for core plumbing runs, cleaner line, water feature overage, and additional water feature run rate.',
                 prefix: '$',
               },
               {
@@ -1401,8 +1470,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               {
                 label: 'Per ft over allowance',
                 path: ['plumbing', 'waterFeatureRun', 'perFt'],
+                valuePath: ['plumbing', 'twoInchPipe'],
                 type: 'number',
-                tooltip: 'Applied to overage beyond the base allowance.',
+                disabled: true,
+                tooltip: 'Applied to overage beyond the base allowance; rate is linked to 2" pipe.',
                 prefix: '$',
               },
               {
@@ -1515,7 +1586,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 title: 'Jets',
                 path: ['waterFeatures', 'jets'],
                 addLabel: 'Add jet',
-                fields: waterFeatureFields,
+                fields: jetFields,
                 defaultItem: () => ({ id: `wf-jet-${Date.now()}` }),
               },
             ],
@@ -2852,6 +2923,52 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           },
         ],
       },
+      {
+        title: 'Custom Features',
+        groups: [
+          {
+            title: 'Grouped feature catalog',
+            lists: [
+              {
+                title: 'Grouped custom features',
+                path: ['customFeatures', 'groupedOptions'],
+                addLabel: 'Add grouped feature',
+                variant: 'table',
+                emptyMessage: 'No grouped custom features yet. Add one to show it on the proposal builder.',
+                defaultItem: () => ({
+                  id: `custom-feature-${Date.now()}`,
+                  name: '',
+                  description: '',
+                  totalPrice: 0,
+                }),
+                fields: [
+                  {
+                    key: 'name',
+                    label: 'Feature Name',
+                    type: 'text',
+                    placeholder: 'Sod Package',
+                    tooltip: 'Label shown on the selectable block in the Custom Features proposal page.',
+                  },
+                  {
+                    key: 'description',
+                    label: 'Description',
+                    type: 'text',
+                    placeholder: 'Prepared area with sod install around pool',
+                    tooltip: 'Visible to designers beneath the feature name.',
+                  },
+                  {
+                    key: 'totalPrice',
+                    label: 'Total Price',
+                    type: 'number',
+                    prefix: '$',
+                    tooltip: 'Preset total used when the designer selects this grouped feature.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
     ],
     [
       data,
@@ -2865,6 +2982,32 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       data.manualAdjustments,
     ],
   );
+
+  const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
+    `${count} ${count === 1 ? singular : plural}`;
+
+  const getGroupSummary = (group: Group) => {
+    const hasCustom = Boolean(group.render);
+    const hasScalars = Boolean(group.scalars?.length);
+    const hasLists = Boolean(group.lists?.length);
+
+    if (hasCustom && hasScalars && hasLists) {
+      return 'Use the builder below, then tune the related pricing inputs and catalog entries.';
+    }
+    if (hasCustom && hasScalars) {
+      return 'Use the builder below, then tune the related pricing inputs.';
+    }
+    if (hasCustom && hasLists) {
+      return 'Use the builder below, then manage the related catalog entries.';
+    }
+    if (hasCustom) {
+      return 'Use the builder below to manage this pricing area.';
+    }
+    if (hasScalars && hasLists) {
+      return 'Adjust the rates and manage the selectable items used in this subcategory.';
+    }
+    return null;
+  };
 
   const renderScalar = (field: ScalarField) => {
     const value = getValue(data, field.valuePath ?? field.path);
@@ -2939,16 +3082,24 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     const entries = (getValue(data, config.path) as any[]) || [];
     const isCleanerList = config.path[0] === 'equipment' && config.path[1] === 'cleaners';
     const defaultCleanerIndex = isCleanerList ? getDefaultCleanerIndex(entries) : -1;
+    const entryCountLabel = pluralize(entries.length, 'item');
+
+    const renderListHeader = () => (
+      <div className="pricing-list-card__header">
+        <div className="pricing-list-card__title-block">
+          <h5>{config.title}</h5>
+          <span className="pricing-list-card__meta">{entryCountLabel}</span>
+        </div>
+        <button type="button" className="pricing-chip-button" onClick={() => handleAddListItem(config)}>
+          {config.addLabel || 'Add'}
+        </button>
+      </div>
+    );
 
     if (config.variant === 'table') {
       return (
         <div className="pricing-list-card pricing-list-card--table">
-          <div className="pricing-list-card__header">
-            <h5>{config.title}</h5>
-            <button className="pricing-chip-button" onClick={() => handleAddListItem(config)}>
-              {config.addLabel}
-            </button>
-          </div>
+          {renderListHeader()}
           <div className="pricing-list-card__body pricing-list-card__body--table">
             <div className="pricing-table-wrapper">
               <table className="pricing-table">
@@ -3007,6 +3158,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       })}
                       <td className="pricing-table__actions">
                         <button
+                          type="button"
                           className="pricing-chip-button danger"
                           onClick={() => handleRemoveListItem(config, index)}
                           aria-label="Remove item"
@@ -3033,12 +3185,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
     return (
       <div className="pricing-list-card">
-        <div className="pricing-list-card__header">
-          <h5>{config.title}</h5>
-          <button className="pricing-chip-button" onClick={() => handleAddListItem(config)}>
-            {config.addLabel || 'Add'}
-          </button>
-        </div>
+        {renderListHeader()}
         <div className="pricing-list-card__body">
           {entries.map((entry, index) => (
             <div key={`${config.title}-${index}`} className="pricing-list-row">
@@ -3159,13 +3306,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   );
                 })}
               </div>
-              <button
-                className="pricing-chip-button danger"
-                onClick={() => handleRemoveListItem(config, index)}
-                aria-label="Remove item"
-              >
-                Remove
-              </button>
+              <div className="pricing-list-row__actions">
+                <button
+                  type="button"
+                  className="pricing-chip-button danger"
+                  onClick={() => handleRemoveListItem(config, index)}
+                  aria-label="Remove item"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
           {entries.length === 0 && (
@@ -3269,7 +3419,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             <label className="pricing-input-block grow">
               <span className="pricing-input-block__label">Select Existing Model</span>
               <div className="pricing-select">
-                <select value={selectedModelId || ''} onChange={(e) => void handleSelectModel(e.target.value)}>
+                <select
+                  value={selectedModelId || ''}
+                  onChange={(e) => void handleSelectModel(e.target.value)}
+                  disabled={isInitializing}
+                >
                   <option value="">Start a new pricing model</option>
                   {pricingModels.map((model) => (
                     <option key={model.id} value={model.id}>
@@ -3279,13 +3433,19 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 </select>
               </div>
             </label>
-            <button className="pricing-chip-button ghost" type="button" onClick={handleCreateNewModel}>
+            <button
+              className="pricing-chip-button ghost"
+              type="button"
+              onClick={handleCreateNewModel}
+              disabled={isInitializing}
+            >
               Create New Model
             </button>
             <button
               className="pricing-chip-button ghost align-right"
               onClick={() => setConfirmResetOpen(true)}
               type="button"
+              disabled={isInitializing}
             >
               Reset to Defaults
             </button>
@@ -3299,6 +3459,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 className="pricing-input"
                 value={modelName}
                 placeholder="'Black Friday', 'Summer Promo', etc."
+                disabled={isInitializing}
                 onChange={(e) => {
                   setModelName(e.target.value);
                   setHasChanges(true);
@@ -3311,9 +3472,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 data-tooltip={!hasChanges ? 'No changes made' : 'Save recently made changes'}
               >
                 <button
-                  className={`pricing-chip-button primary ${!hasChanges ? 'disabled' : ''}`}
+                  className={`pricing-chip-button primary ${!hasChanges || isInitializing ? 'disabled' : ''}`}
                   onClick={handleSaveModel}
-                  disabled={!hasChanges || savingModel}
+                  disabled={!hasChanges || savingModel || isInitializing}
                 >
                   {savingModel ? 'Saving...' : 'Save Model'}
                 </button>
@@ -3333,9 +3494,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 data-tooltip={!hasChanges ? 'No changes made' : 'Reset recently made changes'}
               >
                 <button
-                  className={`pricing-chip-button ${!hasChanges ? 'disabled' : ''}`}
+                  className={`pricing-chip-button ${!hasChanges || isInitializing ? 'disabled' : ''}`}
                   type="button"
-                  disabled={!selectedModelId || !hasChanges}
+                  disabled={!selectedModelId || !hasChanges || isInitializing}
                   onClick={() => selectedModelId && void handleLoadModel(selectedModelId)}
                 >
                   Reset Changes
@@ -3345,7 +3506,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 <button
                   className="pricing-chip-button"
                   type="button"
-                  disabled={!selectedModelId || activatedFlash}
+                  disabled={!selectedModelId || activatedFlash || isInitializing}
                   onClick={handleActivateSelected}
                 >
                   {activatedFlash ? 'Activated!' : 'Set Active'}
@@ -3356,9 +3517,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 data-tooltip={selectedModelIsDefault ? 'Cannot delete active model' : undefined}
               >
                 <button
-                  className={`pricing-chip-button danger ${selectedModelIsDefault ? 'disabled' : ''}`}
+                  className={`pricing-chip-button danger ${selectedModelIsDefault || isInitializing ? 'disabled' : ''}`}
                   type="button"
-                  disabled={!selectedModelId || selectedModelIsDefault}
+                  disabled={!selectedModelId || selectedModelIsDefault || isInitializing}
                   onClick={() => {
                     if (!selectedModelId || selectedModelIsDefault) return;
                     setConfirmDeleteModel({
@@ -3377,7 +3538,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
 
         <div className="pricing-modal__content">
-          {sections.map((section) => {
+          {isInitializing ? (
+            <div className="pricing-empty">Loading pricing model data...</div>
+          ) : sections.map((section) => {
             const open = openSections[section.title] ?? false;
             return (
               <section key={section.title} className={`pricing-section ${open ? 'open' : ''}`}>
@@ -3399,32 +3562,50 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   }`}
                 >
                   <div className="pricing-section__body-content">
-                    {section.groups.map((group) => (
-                      <div key={group.title} className="pricing-group">
-                      <div className="pricing-group__heading">
-                        <h4>{group.title}</h4>
-                      </div>
-                      {group.render && <div className="pricing-group__custom">{group.render()}</div>}
-                      {group.scalars && (
-                        <div className="pricing-fields-grid">
-                          {group.scalars.map((field) => (
-                            <React.Fragment key={`${section.title}-${group.title}-${field.label}`}>
-                              {renderScalar(field)}
-                              </React.Fragment>
-                            ))}
+                    {section.groups.map((group) => {
+                      const groupSummary = getGroupSummary(group);
+
+                      return (
+                        <div key={group.title} className="pricing-group">
+                          <div className="pricing-group__header">
+                            <div className="pricing-group__heading">
+                              <p className="pricing-group__eyebrow">Pricing Subcategory</p>
+                              <h4>{group.title}</h4>
+                              {groupSummary && <p className="pricing-group__summary">{groupSummary}</p>}
+                            </div>
                           </div>
-                        )}
-                        {group.lists && (
-                          <div className="pricing-lists">
-                            {group.lists.map((list) => (
-                              <React.Fragment key={`${group.title}-${list.title}`}>
-                                {renderList(list)}
-                              </React.Fragment>
-                            ))}
+
+                          <div className="pricing-group__content">
+                            {group.render && <div className="pricing-group__custom">{group.render()}</div>}
+                            {group.scalars && (
+                              <div className="pricing-group__surface">
+                                <div className="pricing-fields-grid">
+                                  {group.scalars.map((field) => (
+                                    <React.Fragment key={`${section.title}-${group.title}-${field.label}`}>
+                                      {renderScalar(field)}
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {group.lists && (
+                              <div className="pricing-group__surface">
+                                <div className="pricing-group__surface-header">
+                                  <h5>Catalog Editors</h5>
+                                </div>
+                                <div className="pricing-lists">
+                                  {group.lists.map((list) => (
+                                    <React.Fragment key={`${group.title}-${list.title}`}>
+                                      {renderList(list)}
+                                    </React.Fragment>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </section>

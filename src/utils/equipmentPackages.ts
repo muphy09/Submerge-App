@@ -4,6 +4,11 @@ import { getDefaultCleanerOption, getDefaultCleanerQuantity } from './cleanerDef
 import { normalizeEquipmentLighting } from './lighting';
 import { getNoPumpSelection } from './pumpDefaults';
 import {
+  buildIncludedSaltCellOption,
+  INCLUDED_SALT_CELL_OPTION_NAME,
+  isIncludedSaltCellOptionName,
+} from './saltCellCompatibility';
+import {
   Equipment,
   EquipmentAccessorySelection,
   EquipmentPackageOption,
@@ -74,8 +79,8 @@ const defaultPackageOptions: EquipmentPackageOption[] = [
     includedFilterQuantity: 1,
     includedAutomationName: 'HL Base',
     includedAutomationQuantity: 1,
-    includedSaltSystemName: '',
-    includedSaltSystemQuantity: 0,
+    includedSaltSystemName: INCLUDED_SALT_CELL_OPTION_NAME,
+    includedSaltSystemQuantity: 1,
     includedPoolLightName: 'Pool Light',
     includedPoolLightQuantity: 1,
     defaultCleanerName: '7240 Sport',
@@ -112,15 +117,38 @@ const hasName = (value?: string | null) => normalizeName(value).length > 0;
 const isOptionEnabled = (option?: EquipmentPackageOption | null) =>
   option?.mode === 'custom' ? true : option?.enabled !== false;
 
+const normalizeLegacyPackageOption = (option: EquipmentPackageOption): EquipmentPackageOption => {
+  const isPmf03Package =
+    option.id === 'pmf03-standard-automation' ||
+    normalizeName(option.name) === normalizeName('PMF03 Standard Automation Package');
+  if (!isPmf03Package) return option;
+
+  const normalizedSaltName = normalizeName(option.includedSaltSystemName);
+  const includedSaltQty = Math.max(Number(option.includedSaltSystemQuantity) || 0, 0);
+  const hasLegacyMissingSaltConfig =
+    !normalizedSaltName ||
+    normalizedSaltName === 'none' ||
+    normalizedSaltName.includes('no salt') ||
+    includedSaltQty === 0;
+
+  if (!hasLegacyMissingSaltConfig) return option;
+
+  return {
+    ...option,
+    includedSaltSystemName: INCLUDED_SALT_CELL_OPTION_NAME,
+    includedSaltSystemQuantity: 1,
+  };
+};
+
 const mergeDefaultPackageOption = (option: EquipmentPackageOption): EquipmentPackageOption => {
   const fallback =
     defaultPackageOptions.find((candidate) => candidate.id === option.id) ||
     (option.mode === 'custom' ? defaultPackageOptions.find((candidate) => candidate.id === CUSTOM_PACKAGE_ID) : null);
-  return {
+  return normalizeLegacyPackageOption({
     ...(fallback || {}),
     ...option,
     id: option.id || fallback?.id || CUSTOM_PACKAGE_ID,
-  };
+  });
 };
 
 const ensureCustomPackage = (options: EquipmentPackageOption[]) => {
@@ -231,6 +259,7 @@ const buildAutomationSelection = (name?: string | null, zones: number = 0): Auto
 
 const buildSaltSystemSelection = (name?: string | null): SaltSystemSelection | undefined => {
   if (!hasName(name)) return undefined;
+  if (isIncludedSaltCellOptionName(name)) return buildIncludedSaltCellOption();
   const entry = resolveCatalogItem(pricingData.equipment.saltSystem, name);
   return {
     name: name || '',
@@ -306,11 +335,26 @@ export const isCustomEquipmentPackage = (option?: EquipmentPackageOption | null)
 export const isFixedEquipmentPackage = (option?: EquipmentPackageOption | null) =>
   (option?.mode || 'fixed') === 'fixed';
 
+export const getEffectivePrimarySanitationSystemName = (equipment?: Partial<Equipment> | null): string | undefined => {
+  const selectedPackage = getSelectedEquipmentPackage(equipment);
+  if (selectedPackage && isFixedEquipmentPackage(selectedPackage)) {
+    return Math.max(selectedPackage.includedSaltSystemQuantity ?? 0, 0) > 0
+      ? selectedPackage.includedSaltSystemName || equipment?.saltSystem?.name
+      : undefined;
+  }
+
+  return equipment?.saltSystem?.name || selectedPackage?.includedSaltSystemName;
+};
+
 export const packageSupportsSpa = (option?: EquipmentPackageOption | null) =>
   option ? option.supportsSpa !== false : true;
 
 export const packageAllowsWaterFeatures = (option?: EquipmentPackageOption | null) =>
-  option ? option.allowWaterFeatureUpgrade !== false || isCustomEquipmentPackage(option) : true;
+  option
+    ? option.allowWaterFeatureUpgrade !== false ||
+      getPackageWaterFeaturesWithoutExtraPump(option) > 0 ||
+      isCustomEquipmentPackage(option)
+    : true;
 
 export const packageAllowsAdditionalPumps = (option?: EquipmentPackageOption | null) =>
   option ? option.allowAdditionalPumps !== false || isCustomEquipmentPackage(option) : true;

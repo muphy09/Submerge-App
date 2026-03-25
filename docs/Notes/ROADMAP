@@ -1,66 +1,11 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-- Default pool light (2) exposed in admin panel; Lighting and Automation subcategory
 
-- Equipment Package options:
-1. PFM01 Basic Chlorine Package: $1739 + In-line Chlorine Feeder ($) + Check Valve ($48.04)
-    - Includes: Chlorine Inline Feeder, 1 pool light, 150CV filter, 1.65hp Pump
-    - Option to add additonal light
-    - Can NOT do spa with this package
-    - Can NOT add additional pump(s)
-    - Option to add Hydrapure UV Ozone
-    - Option to add cleaner (default to 7240 selected, can select no cleaner)
-    - Option to add autofill (default to none)
-    - Can NOT add any water features
-    
-2. PMF03 Standard Automation Package: $3864 + Check valve ($48.04)
-    - Includes: Salt system (AQRS), CV3030 Filter, 1.65 HP Pump, 1 Pool light
-        - Option to add additonal pool light(s)
-        - Option to add Hydrapure UV Ozone
-        - Option to add Heater
-        - Option to add Pumps
-        - Option to add cleaner (default to 7240)
-        - Option to add autofill (default to none)
-        - Option to add 1 Water Feature without needing another pump (would still bill a Valve actuator). 2 Water features would require another pump
-        - Can NOT do a spa with this package
-    
-3. Custom Automation Package ($ depends on options chosen)
-    - Includes: Nothing, all options are chosen
-    - Options: 
-        Automation - HL+4, HL Base (can add 2) + (must have) salt cell ($1041.07) 2 salt cells not needed for 2 HL Base, only 1
-        Pumps - 1.65HP Pump, 1.85, 2.7HP, XL, Booster
-        Auxillary Pump - All options
-        Filters - All filter options
-        Heaters - All heater options
-        Pool & Spa Lights - All options
-        Cleaners - Default to 7240 sport, all options
-        Autofill - All options
-
-
---------------
-
-
-Valve actuator option to turn off per water feature zone
-
-Regular bubbler option - only WF run 
-
-Laminier Jet has Conduit run
-
-Wok pot: Fire only just gas. Water and Fire needs both. water only needs wf run
-
-All WF and additional use 2" pipe
-
-
-- Custom features needs On/Off Contract ability - Grouped Custom feature costs (Sod, fencing) with predermined options and prices (email)
-
-- Workflow for Addendum (contract changes after original) must show cost comparison of before and after 
-
-- Wireless autofill run - no conduit run
-
-- Deposit breakdown amounts do not populate in contract
+- Sod and Fencing grouped costs not included bcz of price discrepency
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-
+- Workflow for Addendum (contract changes after original) must show cost comparison of before and after 
+- Regular Bubbler option
 - Fiberglass Pricing models (email)
 - Booster pump is an add on pump
 - Ability to 'Search' for an input in the Admin Pricing Model
@@ -74,8 +19,9 @@ Mid Term -
 - Franchise Code and Admin Access settings need to be behind Admin Panel for security
 - Supporting Documents (measurments) included when submitting proposal
 - Adjust profit margin % per indiviudual designer *need more info
-- Lighted Sheer (needs electric run and price) * Is this lighted?*
-        - Will add pool light and housing cost, Have conduit run and match WF run.
+- Lighted Sheer (needs electric run and price) Is this lighted? checkbox (maybe)
+        - Will add pool light and housing cost, Has conduit run and match WF run.
+- Wireless autofill run. No conduit run needed (need price for this)
 
 ---------------------------------------------------------------------------------------------------------
 Long Term - 

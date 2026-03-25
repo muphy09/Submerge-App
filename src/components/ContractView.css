@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
   font-family: 'Calibri', 'Arial', sans-serif;
   color: #0c1424;
   font-size: 10pt;
@@ -18,13 +19,19 @@
   padding: 4px 0 12px;
 }
 
+.contract-page-shell {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .contract-page {
   background: #ffffff;
   border: 1px solid #d1d1d1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   width: auto;
   max-width: none;
-  position: relative;
+  position: absolute;
+  inset: 0 auto auto 0;
   transform: translateZ(0);
 }
 
@@ -64,7 +71,7 @@
   border-radius: 0;
   padding: 1px 3px;
   font-family: 'Calibri', 'Arial', sans-serif;
-  font-size: 10pt;
+  font-size: inherit;
   line-height: 1.2;
   background: #ffffff;
   box-sizing: border-box;
@@ -86,7 +93,7 @@
   height: 100%;
   padding: 1px 3px;
   font-family: 'Calibri', 'Arial', sans-serif;
-  font-size: 10pt;
+  font-size: inherit;
   line-height: 1.2;
   font-weight: 600;
   color: #0c1424;
@@ -122,6 +129,14 @@
   resize: none;
   padding: 4px 6px;
   line-height: 1.3;
+}
+
+.contract-input-wrapper.payment-schedule-field .contract-input,
+.contract-input-wrapper.payment-schedule-field .contract-readonly-value,
+.contract-input-wrapper.payment-schedule-field textarea,
+.contract-input-wrapper.payment-schedule-field .contract-select {
+  padding: 0 1px;
+  line-height: 1;
 }
 
 .contract-readonly-value {
@@ -160,7 +175,7 @@
   padding: 0;
   margin: 0;
   font-family: 'Calibri', 'Arial', sans-serif;
-  font-size: 10pt;
+  font-size: inherit;
   font-weight: 700;
   line-height: 1;
   background: #ffffff;
@@ -220,11 +235,73 @@
   border-radius: 12px;
 }
 
+.contract-zoom-controls {
+  position: sticky;
+  bottom: 16px;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -68px;
+  padding-right: 16px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.contract-zoom-controls-inner {
+  display: inline-flex;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.contract-zoom-button {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.contract-zoom-button:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.contract-zoom-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.contract-zoom-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.contract-zoom-icon {
+  width: 18px;
+  height: 18px;
+}
+
 @media print {
   .contract-toolbar,
   .btn,
   .contract-unmapped,
-  .contract-warnings {
+  .contract-warnings,
+  .contract-zoom-controls {
     display: none !important;
   }
 
@@ -245,12 +322,20 @@
   }
 
   .contract-page {
+    position: relative;
+    inset: auto;
     break-after: page;
     page-break-after: always;
     box-shadow: none;
     border: none;
     width: 8.5in;
     height: 11in;
+    transform: none !important;
+  }
+
+  .contract-page-shell {
+    width: 8.5in !important;
+    height: 11in !important;
   }
 
   .contract-field-layer {

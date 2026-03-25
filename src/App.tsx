@@ -9,7 +9,7 @@ import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
 import PricingDataModal from './components/PricingDataModal';
-import { initPricingDataStore, setActiveFranchiseId } from './services/pricingDataStore';
+import { setActiveFranchiseId } from './services/pricingDataStore';
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
@@ -29,6 +29,12 @@ import {
   saveMasterImpersonation,
   updateSession,
 } from './services/session';
+import {
+  acknowledgeChangelog,
+  getCurrentAppVersion,
+  hasPendingChangelog,
+  recordAppLaunch,
+} from './services/changelogPrompt';
 import MasterPage from './pages/MasterPage';
 import type { MasterFranchise } from './services/masterAdminAdapter';
 import AdminPinModal from './components/AdminPinModal';
@@ -68,15 +74,19 @@ function AppContent() {
   });
   const [adminPanelAccessFranchiseId, setAdminPanelAccessFranchiseId] = useState<string | null>(null);
   const [adminPanelLockoutUntil, setAdminPanelLockoutUntil] = useState<number | null>(null);
+  const appVersion = getCurrentAppVersion();
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
     try {
-      await initPricingDataStore(franchiseId);
       await setActiveFranchiseId(franchiseId);
     } catch (error) {
       console.warn('Unable to load pricing for franchise', franchiseId, error);
     }
   }, []);
+
+  useEffect(() => {
+    recordAppLaunch(appVersion);
+  }, [appVersion]);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -339,6 +349,15 @@ function AppContent() {
         masterImpersonation.franchiseCode ||
         masterImpersonation.franchiseId
     : null;
+
+  useEffect(() => {
+    if (!effectiveSession || showLogin || showPasswordReset) return;
+    if (effectiveRole !== 'admin' && effectiveRole !== 'owner') return;
+    if (!hasPendingChangelog(appVersion)) return;
+
+    acknowledgeChangelog(appVersion);
+    navigate('/settings', { state: { autoOpenChangelog: true } });
+  }, [appVersion, effectiveRole, effectiveSession, navigate, showLogin, showPasswordReset]);
 
   const openAdminPanelPrompt = useCallback(
     (options?: { targetPath?: string | null; cancelDestination?: string | null }) => {

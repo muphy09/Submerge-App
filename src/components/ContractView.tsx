@@ -12,8 +12,11 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Proposal } from '../types/proposal-new';
 import {
+  CONTRACT_DEPOSIT_SCHEDULE_FIELD_IDS,
+  CONTRACT_DEPOSIT_SOURCE_FIELD_IDS,
   ContractOverrides,
   ContractFieldRender,
+  getContractDepositFieldAutoValue,
   getEditableContractFields,
   validateContractInputs,
 } from '../services/contractGenerator';
@@ -24,7 +27,10 @@ import './ContractView.css';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const DISPLAY_SCALE = 1.75;
+const DEFAULT_DISPLAY_SCALE = 1.85;
+const MIN_DISPLAY_SCALE = 1;
+const MAX_DISPLAY_SCALE = 2.5;
+const DISPLAY_SCALE_STEP = 0.05;
 const MAX_RENDER_DPR = 3;
 const CONTRACT_DATE_FIELD_IDS = new Set(['p1_8', 'p1_9']);
 const ADDITIONAL_SPEC_FIELD_IDS = [
@@ -116,8 +122,28 @@ const BINARY_FIELD_MAP = new Map<string, { yesId: string; noId: string }>(
     [group.noId, group],
   ])
 );
+const CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET = new Set<string>(CONTRACT_DEPOSIT_SOURCE_FIELD_IDS);
+const CONTRACT_DEPOSIT_SCHEDULE_FIELD_ID_SET = new Set<string>(CONTRACT_DEPOSIT_SCHEDULE_FIELD_IDS);
 
 type DateParts = { year: number; month: number; day: number };
+
+function clampDisplayScale(value: number): number {
+  const rounded = Math.round(value * 100) / 100;
+  return Math.max(MIN_DISPLAY_SCALE, Math.min(MAX_DISPLAY_SCALE, rounded));
+}
+
+function ZoomIcon({ direction }: { direction: 'in' | 'out' }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="contract-zoom-icon">
+      <circle cx="10.5" cy="10.5" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15.2 15.2 20 20" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+      <path d="M7.5 10.5h6" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+      {direction === 'in' ? (
+        <path d="M10.5 7.5v6" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+      ) : null}
+    </svg>
+  );
+}
 
 function parseDateParts(raw?: string | null): DateParts | null {
   if (raw === null || raw === undefined) return null;
@@ -228,6 +254,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   const [pdfFields, setPdfFields] = useState<ContractPdfFieldLayout[]>([]);
   const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[]>([]);
   const [fields, setFields] = useState<ContractFieldRender[]>([]);
+  const [displayScale, setDisplayScale] = useState(DEFAULT_DISPLAY_SCALE);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
 
   useEffect(() => {
@@ -290,10 +317,10 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
         for (let i = 1; i <= pdfDoc.numPages; i += 1) {
           if (canceled) break;
           const page = await pdfDoc.getPage(i);
-          const viewport = page.getViewport({ scale: DISPLAY_SCALE });
+          const viewport = page.getViewport({ scale: DEFAULT_DISPLAY_SCALE });
           const dpr =
             typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR) : 1;
-          const renderViewport = page.getViewport({ scale: dpr * DISPLAY_SCALE });
+          const renderViewport = page.getViewport({ scale: dpr * displayScale });
           const canvas = canvasRefs.current[i - 1];
           if (!canvas) continue;
           const ctx = canvas.getContext('2d');
@@ -316,7 +343,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       canceled = true;
       loadingTask.destroy();
     };
-  }, [pdfBytes, pageSizes]);
+  }, [displayScale, pageSizes, pdfBytes]);
 
   const unmappedIds = useMemo(
     () => new Set(fields.filter((f) => !f.value && f.color === 'blue' && !OPTIONAL_FIELD_IDS.has(f.id)).map((f) => f.id)),
@@ -355,6 +382,55 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
 
   const handleCellChange = useCallback(
     (cellAddress: string, value: string) => {
+      const isDepositSourceField = CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(cellAddress);
+      if (isDepositSourceField) {
+        const normalizedValue = value;
+        const next = { ...overrides };
+        const hasDepositValue = normalizedValue.trim().length > 0;
+
+        CONTRACT_DEPOSIT_SOURCE_FIELD_IDS.forEach((fieldId) => {
+          if (hasDepositValue) {
+            next[fieldId] = normalizedValue;
+          } else {
+            delete next[fieldId];
+          }
+        });
+        CONTRACT_DEPOSIT_SCHEDULE_FIELD_IDS.forEach((fieldId) => {
+          delete next[fieldId];
+        });
+
+        setOverrides(next);
+        setFields((prev) =>
+          prev.map((field) => {
+            if (CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(field.id)) {
+              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue);
+              return {
+                ...field,
+                value: normalizedValue,
+                autoValue: nextAutoValue,
+                isAutoFilled: false,
+                isOverridden: hasDepositValue,
+              };
+            }
+
+            if (CONTRACT_DEPOSIT_SCHEDULE_FIELD_ID_SET.has(field.id)) {
+              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue);
+              return {
+                ...field,
+                value: nextAutoValue,
+                autoValue: nextAutoValue,
+                isAutoFilled: Boolean(nextAutoValue),
+                isOverridden: false,
+              };
+            }
+
+            return field;
+          })
+        );
+        onOverridesChange?.(next);
+        return;
+      }
+
       const fieldTemplate = fields.find((f) => f.id === cellAddress);
       const autoValue = fieldTemplate?.autoValue ?? '';
       const normalizedValue = value;
@@ -472,8 +548,18 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     window.print();
   }, [showToast, warnings]);
 
+  const handleZoomOut = useCallback(() => {
+    setDisplayScale((prev) => clampDisplayScale(prev - DISPLAY_SCALE_STEP));
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    setDisplayScale((prev) => clampDisplayScale(prev + DISPLAY_SCALE_STEP));
+  }, []);
+
   const pageCount = pageSizes.length || 0;
   const editableEnabled = !readOnly;
+  const canZoomOut = displayScale > MIN_DISPLAY_SCALE;
+  const canZoomIn = displayScale < MAX_DISPLAY_SCALE;
 
   useImperativeHandle(
     ref,
@@ -493,255 +579,294 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       {!fields.length ? (
         <div className="contract-view-empty">No contract data available.</div>
       ) : (
-        <div className="contract-pages">
-          {!pdfBytes || !pageCount ? (
-            <div className="contract-view-empty">Preparing contract PDF...</div>
-          ) : (
-            Array.from({ length: pageCount }).map((_, pageIdx) => {
-              const pageSize = pageSizes[pageIdx] || { width: 612, height: 792 };
-              const pdfFieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
-              const responsibilityFallbackFields = fields
-                .filter((f) => RESPONSIBILITY_FIELD_IDS.has(f.id) && f.page === pageIdx + 1)
-                .filter((f) => !pdfFieldsForPage.some((pf) => pf.name === f.id))
-                .map((f) => ({
-                  name: f.id,
-                  pageIndex: pageIdx,
-                  x: f.x,
-                  y: f.y,
-                  width: f.width,
-                  height: f.height,
-                  fontSize: Math.min(10, f.height || 10),
-                  color: f.color,
-                }));
-              const fieldsForPage = [...pdfFieldsForPage, ...responsibilityFallbackFields].sort((a, b) => {
-                const aResp = RESPONSIBILITY_FIELD_IDS.has(a.name);
-                const bResp = RESPONSIBILITY_FIELD_IDS.has(b.name);
-                if (aResp === bResp) return 0;
-                return aResp ? 1 : -1;
-              });
-              const pageWidth = pageSize.width * DISPLAY_SCALE;
-              const pageHeight = pageSize.height * DISPLAY_SCALE;
-              return (
-                <div
-                  className="contract-page"
-                  key={`contract-page-${pageIdx + 1}`}
-                  data-page={pageIdx + 1}
-                  style={{ width: `${pageWidth}px`, height: `${pageHeight}px` }}
-                >
-                  <canvas
-                    ref={(el) => {
-                      canvasRefs.current[pageIdx] = el;
-                    }}
-                    className="contract-page-canvas"
-                  />
-                  <div className={`contract-field-layer ${editableEnabled ? '' : 'read-only'}`}>
-                    {fieldsForPage.map((field) => {
-                      const fieldMeta = fieldMetaMap.get(field.name);
-                      const baseColor = fieldMeta?.color || field.color;
-                      const baseLeft = field.x * DISPLAY_SCALE;
-                      const baseTop = field.y * DISPLAY_SCALE;
-                      const baseWidth = field.width * DISPLAY_SCALE;
-                      const baseHeight = field.height * DISPLAY_SCALE;
-                      const value = fieldMeta?.value ?? valueMap.get(field.name);
-                      const isDateField = CONTRACT_DATE_FIELD_IDS.has(field.name);
-                      const parsedDateValue = isDateField ? toDateInputValue(value ?? '') : '';
-                      const displayValue = isDateField ? parsedDateValue : value ?? '';
-                      const placeholderValue = isDateField
-                        ? !parsedDateValue
-                          ? value
-                            ? String(value)
+        <>
+          <div className="contract-pages">
+            {!pdfBytes || !pageCount ? (
+              <div className="contract-view-empty">Preparing contract PDF...</div>
+            ) : (
+              Array.from({ length: pageCount }).map((_, pageIdx) => {
+                const pageSize = pageSizes[pageIdx] || { width: 612, height: 792 };
+                const pdfFieldsForPage = pdfFields.filter((f) => f.pageIndex === pageIdx);
+                const responsibilityFallbackFields = fields
+                  .filter((f) => RESPONSIBILITY_FIELD_IDS.has(f.id) && f.page === pageIdx + 1)
+                  .filter((f) => !pdfFieldsForPage.some((pf) => pf.name === f.id))
+                  .map((f) => ({
+                    name: f.id,
+                    label: f.label,
+                    pageIndex: pageIdx,
+                    x: f.x,
+                    y: f.y,
+                    width: f.width,
+                    height: f.height,
+                    fontSize: Math.min(10, f.height || 10),
+                    color: f.color,
+                  }));
+                const fieldsForPage = [...pdfFieldsForPage, ...responsibilityFallbackFields].sort((a, b) => {
+                  const aResp = RESPONSIBILITY_FIELD_IDS.has(a.name);
+                  const bResp = RESPONSIBILITY_FIELD_IDS.has(b.name);
+                  if (aResp === bResp) return 0;
+                  return aResp ? 1 : -1;
+                });
+                const pageWidth = pageSize.width * DEFAULT_DISPLAY_SCALE;
+                const pageHeight = pageSize.height * DEFAULT_DISPLAY_SCALE;
+                const zoomRatio = displayScale / DEFAULT_DISPLAY_SCALE;
+                const zoomedPageWidth = pageWidth * zoomRatio;
+                const zoomedPageHeight = pageHeight * zoomRatio;
+                return (
+                  <div
+                    className="contract-page-shell"
+                    key={`contract-page-${pageIdx + 1}`}
+                    style={{ width: `${zoomedPageWidth}px`, height: `${zoomedPageHeight}px` }}
+                  >
+                    <div
+                      className="contract-page"
+                      data-page={pageIdx + 1}
+                      style={{
+                        width: `${pageWidth}px`,
+                        height: `${pageHeight}px`,
+                        transform: `scale(${zoomRatio})`,
+                        transformOrigin: 'top left',
+                      }}
+                    >
+                      <canvas
+                        ref={(el) => {
+                          canvasRefs.current[pageIdx] = el;
+                        }}
+                        className="contract-page-canvas"
+                      />
+                      <div className={`contract-field-layer ${editableEnabled ? '' : 'read-only'}`}>
+                        {fieldsForPage.map((field) => {
+                        const fieldMeta = fieldMetaMap.get(field.name);
+                        const baseColor = fieldMeta?.color || field.color;
+                        const baseLeft = field.x * DEFAULT_DISPLAY_SCALE;
+                        const baseTop = field.y * DEFAULT_DISPLAY_SCALE;
+                        const baseWidth = field.width * DEFAULT_DISPLAY_SCALE;
+                        const baseHeight = field.height * DEFAULT_DISPLAY_SCALE;
+                        const value = fieldMeta?.value ?? valueMap.get(field.name);
+                        const isDateField = CONTRACT_DATE_FIELD_IDS.has(field.name);
+                        const parsedDateValue = isDateField ? toDateInputValue(value ?? '') : '';
+                        const displayValue = isDateField ? parsedDateValue : value ?? '';
+                        const placeholderValue = isDateField
+                          ? !parsedDateValue
+                            ? value
+                              ? String(value)
+                              : undefined
                             : undefined
-                          : undefined
-                        : FIELD_PLACEHOLDERS[field.name];
-                      const readOnlyValue = isDateField ? formatDateForDisplay(value ?? '') || value : value;
-                      const handleValueChange = (nextValue: string) =>
-                        handleCellChange(field.name, isDateField ? formatDateForDisplay(nextValue) : nextValue);
-                      const handleDateMouseDown = (event: React.MouseEvent<HTMLInputElement>) => {
-                        if (!isDateField) return;
-                        const input = event.currentTarget as HTMLInputElement & { showPicker?: () => void };
-                        if (typeof input.showPicker === 'function') {
-                          event.preventDefault();
-                          input.showPicker();
-                          return;
+                          : FIELD_PLACEHOLDERS[field.name];
+                        const readOnlyValue = isDateField ? formatDateForDisplay(value ?? '') || value : value;
+                        const handleValueChange = (nextValue: string) =>
+                          handleCellChange(field.name, isDateField ? formatDateForDisplay(nextValue) : nextValue);
+                        const handleDateMouseDown = (event: React.MouseEvent<HTMLInputElement>) => {
+                          if (!isDateField) return;
+                          const input = event.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                          if (typeof input.showPicker === 'function') {
+                            event.preventDefault();
+                            input.showPicker();
+                            return;
+                          }
+                          input.focus();
+                        };
+                        const isTextArea = (fieldMeta?.height ?? field.height) > 24;
+                        const isResponsibilitySelect = RESPONSIBILITY_FIELD_IDS.has(field.name);
+                        const isGeneralConstructionResponsibility =
+                          isResponsibilitySelect && GENERAL_CONSTRUCTION_RESPONSIBILITY_IDS.has(field.name);
+                        const isPaymentScheduleField = field.name.startsWith('p1_pay_');
+                        const customSelectOptions = CUSTOM_SELECT_FIELDS[field.name];
+                        const isCustomSelect = Boolean(customSelectOptions);
+                        const normalizedDisplayValue =
+                          displayValue === undefined || displayValue === null ? '' : String(displayValue);
+                        const displayMatchesCustomOption =
+                          isCustomSelect && Boolean(customSelectOptions?.includes(normalizedDisplayValue));
+                        const customSelectValue = isCustomSelect
+                          ? displayMatchesCustomOption || !normalizedDisplayValue
+                            ? normalizedDisplayValue || customSelectOptions?.[0] || ''
+                            : normalizedDisplayValue
+                          : '';
+                        const hasCustomSelectValue =
+                          isCustomSelect && Boolean(normalizedDisplayValue) && !displayMatchesCustomOption;
+                        const isAutoFilled = Boolean(fieldMeta?.isAutoFilled) && baseColor !== 'yellow';
+                        const showAutoFilledState = isResponsibilitySelect ? false : isAutoFilled;
+                        const colorClass =
+                          baseColor === 'yellow'
+                            ? 'contract-input-yellow'
+                            : showAutoFilledState
+                            ? 'contract-input-green'
+                            : 'contract-input-blue';
+                        let left = baseLeft;
+                        let top = baseTop;
+                        let width = baseWidth;
+                        let height = baseHeight;
+                        if (isGeneralConstructionResponsibility) {
+                          if (width < GENERAL_CONSTRUCTION_MIN_WIDTH) {
+                            const delta = GENERAL_CONSTRUCTION_MIN_WIDTH - width;
+                            left -= delta / 2;
+                            width = GENERAL_CONSTRUCTION_MIN_WIDTH;
+                          }
+                          if (height < GENERAL_CONSTRUCTION_MIN_HEIGHT) {
+                            const delta = GENERAL_CONSTRUCTION_MIN_HEIGHT - height;
+                            top -= delta / 2;
+                            height = GENERAL_CONSTRUCTION_MIN_HEIGHT;
+                          }
                         }
-                        input.focus();
-                      };
-                      const isTextArea = (fieldMeta?.height ?? field.height) > 24;
-                      const isResponsibilitySelect = RESPONSIBILITY_FIELD_IDS.has(field.name);
-                      const isGeneralConstructionResponsibility =
-                        isResponsibilitySelect && GENERAL_CONSTRUCTION_RESPONSIBILITY_IDS.has(field.name);
-                      const customSelectOptions = CUSTOM_SELECT_FIELDS[field.name];
-                      const isCustomSelect = Boolean(customSelectOptions);
-                      const normalizedDisplayValue =
-                        displayValue === undefined || displayValue === null ? '' : String(displayValue);
-                      const displayMatchesCustomOption =
-                        isCustomSelect && Boolean(customSelectOptions?.includes(normalizedDisplayValue));
-                      const customSelectValue = isCustomSelect
-                        ? displayMatchesCustomOption || !normalizedDisplayValue
-                          ? normalizedDisplayValue || customSelectOptions?.[0] || ''
-                          : normalizedDisplayValue
-                        : '';
-                      const hasCustomSelectValue = isCustomSelect && Boolean(normalizedDisplayValue) && !displayMatchesCustomOption;
-                      const isAutoFilled = Boolean(fieldMeta?.isAutoFilled) && baseColor !== 'yellow';
-                      const showAutoFilledState = isResponsibilitySelect ? false : isAutoFilled;
-                      const colorClass =
-                        baseColor === 'yellow'
-                          ? 'contract-input-yellow'
-                          : showAutoFilledState
-                          ? 'contract-input-green'
-                          : 'contract-input-blue';
-                      let left = baseLeft;
-                      let top = baseTop;
-                      let width = baseWidth;
-                      let height = baseHeight;
-                      if (isGeneralConstructionResponsibility) {
-                        if (width < GENERAL_CONSTRUCTION_MIN_WIDTH) {
-                          const delta = GENERAL_CONSTRUCTION_MIN_WIDTH - width;
-                          left -= delta / 2;
-                          width = GENERAL_CONSTRUCTION_MIN_WIDTH;
+                        const style: CSSProperties = {
+                          left: `${left}px`,
+                          top: `${top}px`,
+                          width: `${width}px`,
+                          height: `${height}px`,
+                          fontSize: `${field.fontSize || 10}pt`,
+                          textAlign: 'center',
+                        };
+                        const classNames = ['contract-input', colorClass];
+                        if (showAutoFilledState) classNames.push('autofilled');
+                        if (unmappedIds.has(field.name)) classNames.push('unmapped');
+                        if (isGeneralConstructionResponsibility) classNames.push('gc-responsibility');
+                        const binaryGroup = BINARY_FIELD_MAP.get(field.name);
+                        const isBinaryChoice = Boolean(binaryGroup);
+                        let binarySelectedId: string | null = null;
+                        if (binaryGroup) {
+                          const yesVal =
+                            (fieldMetaMap.get(binaryGroup.yesId)?.value ?? valueMap.get(binaryGroup.yesId) ?? '').trim();
+                          const noVal =
+                            (fieldMetaMap.get(binaryGroup.noId)?.value ?? valueMap.get(binaryGroup.noId) ?? '').trim();
+                          binarySelectedId = yesVal ? binaryGroup.yesId : noVal ? binaryGroup.noId : null;
                         }
-                        if (height < GENERAL_CONSTRUCTION_MIN_HEIGHT) {
-                          const delta = GENERAL_CONSTRUCTION_MIN_HEIGHT - height;
-                          top -= delta / 2;
-                          height = GENERAL_CONSTRUCTION_MIN_HEIGHT;
-                        }
-                      }
-                      const style: CSSProperties = {
-                        left: `${left}px`,
-                        top: `${top}px`,
-                        width: `${width}px`,
-                        height: `${height}px`,
-                        fontSize: `${field.fontSize || 10}pt`,
-                        textAlign: 'center',
-                      };
-                      const classNames = ['contract-input', colorClass];
-                      if (showAutoFilledState) classNames.push('autofilled');
-                      if (unmappedIds.has(field.name)) classNames.push('unmapped');
-                      if (isGeneralConstructionResponsibility) classNames.push('gc-responsibility');
-                      const binaryGroup = BINARY_FIELD_MAP.get(field.name);
-                      const isBinaryChoice = Boolean(binaryGroup);
-                      let binarySelectedId: string | null = null;
-                      if (binaryGroup) {
-                        const yesVal =
-                          (fieldMetaMap.get(binaryGroup.yesId)?.value ?? valueMap.get(binaryGroup.yesId) ?? '').trim();
-                        const noVal =
-                          (fieldMetaMap.get(binaryGroup.noId)?.value ?? valueMap.get(binaryGroup.noId) ?? '').trim();
-                        binarySelectedId = yesVal ? binaryGroup.yesId : noVal ? binaryGroup.noId : null;
-                      }
-                      const isBinarySelected = isBinaryChoice && field.name === binarySelectedId;
-                      const hasBinarySelection = Boolean(binarySelectedId);
-                      const binaryClasses = [
-                        'contract-choice',
-                        colorClass,
-                        isBinarySelected ? 'selected' : '',
-                        !hasBinarySelection ? 'unmapped' : '',
-                        editableEnabled ? '' : 'read-only',
-                      ]
-                        .filter(Boolean)
-                        .join(' ');
-                      const wrapperClassNames = ['contract-input-wrapper'];
-                      if (isResponsibilitySelect) wrapperClassNames.push('responsibility-wrapper');
-                      if (isGeneralConstructionResponsibility) wrapperClassNames.push('gc-responsibility');
-                      return (
-                        <div key={`${field.name}-${pageIdx}`} className={wrapperClassNames.join(' ')} style={style}>
-                          {isBinaryChoice ? (
-                            <button
-                              type="button"
-                              className={binaryClasses}
-                              onClick={() => {
-                                if (!editableEnabled) return;
-                                handleBinaryChoice(field.name);
-                              }}
-                              aria-pressed={isBinarySelected}
-                              aria-label={`${field.label || field.name} ${isBinarySelected ? 'selected' : 'not selected'}`}
-                            >
-                              {isBinarySelected ? 'X' : ''}
-                            </button>
-                          ) : isResponsibilitySelect ? (
-                            editableEnabled ? (
-                              <select
-                                className={[...classNames, 'contract-select'].join(' ')}
-                                value={displayValue}
-                                onChange={(e) => handleValueChange(e.target.value)}
+                        const isBinarySelected = isBinaryChoice && field.name === binarySelectedId;
+                        const hasBinarySelection = Boolean(binarySelectedId);
+                        const binaryClasses = [
+                          'contract-choice',
+                          colorClass,
+                          isBinarySelected ? 'selected' : '',
+                          !hasBinarySelection ? 'unmapped' : '',
+                          editableEnabled ? '' : 'read-only',
+                        ]
+                          .filter(Boolean)
+                          .join(' ');
+                        const wrapperClassNames = ['contract-input-wrapper'];
+                        if (isResponsibilitySelect) wrapperClassNames.push('responsibility-wrapper');
+                        if (isGeneralConstructionResponsibility) wrapperClassNames.push('gc-responsibility');
+                        if (isPaymentScheduleField) wrapperClassNames.push('payment-schedule-field');
+                        return (
+                          <div key={`${field.name}-${pageIdx}`} className={wrapperClassNames.join(' ')} style={style}>
+                            {isBinaryChoice ? (
+                              <button
+                                type="button"
+                                className={binaryClasses}
+                                onClick={() => {
+                                  if (!editableEnabled) return;
+                                  handleBinaryChoice(field.name);
+                                }}
+                                aria-pressed={isBinarySelected}
+                                aria-label={`${field.label || field.name} ${isBinarySelected ? 'selected' : 'not selected'}`}
                               >
-                                {RESPONSIBILITY_OPTIONS.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
+                                {isBinarySelected ? 'X' : ''}
+                              </button>
+                            ) : isResponsibilitySelect ? (
+                              editableEnabled ? (
+                                <select
+                                  className={[...classNames, 'contract-select'].join(' ')}
+                                  value={displayValue}
+                                  onChange={(e) => handleValueChange(e.target.value)}
+                                >
+                                  {RESPONSIBILITY_OPTIONS.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div
+                                  className={[
+                                    'contract-readonly-value',
+                                    colorClass,
+                                    isGeneralConstructionResponsibility ? 'gc-responsibility' : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' ')}
+                                  aria-label={field.name}
+                                >
+                                  {readOnlyValue}
+                                </div>
+                              )
+                            ) : isCustomSelect ? (
+                              editableEnabled ? (
+                                <select
+                                  className={[...classNames, 'contract-select'].join(' ')}
+                                  value={customSelectValue}
+                                  onChange={(e) => handleValueChange(e.target.value)}
+                                >
+                                  {hasCustomSelectValue ? (
+                                    <option value={normalizedDisplayValue}>{normalizedDisplayValue}</option>
+                                  ) : null}
+                                  {(customSelectOptions || []).map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div className={['contract-readonly-value', colorClass].join(' ')} aria-label={field.name}>
+                                  {readOnlyValue}
+                                </div>
+                              )
+                            ) : editableEnabled ? (
+                              isTextArea ? (
+                                <textarea
+                                  className={classNames.join(' ')}
+                                  value={displayValue}
+                                  onChange={(e) => handleValueChange(e.target.value)}
+                                />
+                              ) : (
+                                <input
+                                  className={classNames.join(' ')}
+                                  type={isDateField ? 'date' : 'text'}
+                                  value={displayValue}
+                                  placeholder={placeholderValue}
+                                  onMouseDown={handleDateMouseDown}
+                                  onChange={(e) => handleValueChange(e.target.value)}
+                                />
+                              )
                             ) : (
-                              <div
-                                className={[
-                                  'contract-readonly-value',
-                                  colorClass,
-                                  isGeneralConstructionResponsibility ? 'gc-responsibility' : '',
-                                ]
-                                  .filter(Boolean)
-                                  .join(' ')}
-                                aria-label={field.name}
-                              >
+                              <div className={['contract-readonly-value', colorClass].join(' ')} aria-label={field.name}>
                                 {readOnlyValue}
                               </div>
-                            )
-                          ) : isCustomSelect ? (
-                            editableEnabled ? (
-                              <select
-                                className={[...classNames, 'contract-select'].join(' ')}
-                                value={customSelectValue}
-                                onChange={(e) => handleValueChange(e.target.value)}
-                              >
-                                {hasCustomSelectValue ? (
-                                  <option value={normalizedDisplayValue}>{normalizedDisplayValue}</option>
-                                ) : null}
-                                {(customSelectOptions || []).map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <div
-                                className={['contract-readonly-value', colorClass].join(' ')}
-                                aria-label={field.name}
-                              >
-                                {readOnlyValue}
-                              </div>
-                            )
-                          ) : editableEnabled ? (
-                            isTextArea ? (
-                              <textarea
-                                className={classNames.join(' ')}
-                                value={displayValue}
-                                onChange={(e) => handleValueChange(e.target.value)}
-                              />
-                            ) : (
-                              <input
-                                className={classNames.join(' ')}
-                                type={isDateField ? 'date' : 'text'}
-                                value={displayValue}
-                                placeholder={placeholderValue}
-                                onMouseDown={handleDateMouseDown}
-                                onChange={(e) => handleValueChange(e.target.value)}
-                              />
-                            )
-                          ) : (
-                            <div
-                              className={['contract-readonly-value', colorClass].join(' ')}
-                              aria-label={field.name}
-                            >
-                              {readOnlyValue}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            )}
+                          </div>
+                        );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </div>
+          {pdfBytes && pageCount ? (
+            <div className="contract-zoom-controls" aria-label="Contract zoom controls">
+              <div className="contract-zoom-controls-inner">
+                <button
+                  type="button"
+                  className="contract-zoom-button"
+                  onClick={handleZoomOut}
+                  disabled={!canZoomOut}
+                  aria-label="Zoom out contract preview"
+                  title="Zoom out"
+                >
+                  <ZoomIcon direction="out" />
+                </button>
+                <button
+                  type="button"
+                  className="contract-zoom-button"
+                  onClick={handleZoomIn}
+                  disabled={!canZoomIn}
+                  aria-label="Zoom in contract preview"
+                  title="Zoom in"
+                >
+                  <ZoomIcon direction="in" />
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );
