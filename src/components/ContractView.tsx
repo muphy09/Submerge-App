@@ -47,6 +47,9 @@ const ADDITIONAL_SPEC_FIELD_IDS = [
 ];
 const OPTIONAL_FIELD_IDS = new Set([
   'p1_16', // optional: freeform depth note
+  'p1_37_size',
+  'p1_38_qty',
+  'p1_40_qty',
   'p1_rbb_6',
   'p1_rbb_12',
   'p1_rbb_18',

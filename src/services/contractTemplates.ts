@@ -34,6 +34,30 @@ type FieldOverride = {
   rect: [number, number, number, number];
 };
 
+const INLINE_CONTRACT_FIELDS: TemplateField[] = [
+  {
+    id: 'p1_37_size',
+    page: 1,
+    rect: [338.5, 597.3400268554688, 373.5, 606.8200073242188],
+    label: '37. Coping Size',
+    color: 'blue',
+  },
+  {
+    id: 'p1_38_qty',
+    page: 1,
+    rect: [338.5, 606.7000122070312, 373.5, 616.1799926757812],
+    label: '38. Decking SF',
+    color: 'blue',
+  },
+  {
+    id: 'p1_40_qty',
+    page: 1,
+    rect: [389.5, 625.4199829101562, 424.5, 634.9000244140625],
+    label: '40. Downspout Drainage Approx SF',
+    color: 'blue',
+  },
+];
+
 const PAYMENT_SCHEDULE_FIELD_IDS = [
   'p1_pay_deposit',
   'p1_pay_excavation',
@@ -174,6 +198,10 @@ const widenPaymentScheduleFields = (fields: TemplateField[]): TemplateField[] =>
     };
   });
 
+const applyInlineFieldAdjustments = (fields: TemplateField[]): TemplateField[] => {
+  return [...fields, ...INLINE_CONTRACT_FIELDS];
+};
+
 const buildTemplate = (
   id: ContractTemplateId,
   label: string,
@@ -184,7 +212,7 @@ const buildTemplate = (
   label,
   pdfUrl: url.href,
   pdfPath: url.pathname,
-  fields: widenPaymentScheduleFields(applyFieldOverrides(DEFAULT_FIELDS, overrides)),
+  fields: applyInlineFieldAdjustments(widenPaymentScheduleFields(applyFieldOverrides(DEFAULT_FIELDS, overrides))),
 });
 
 const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {

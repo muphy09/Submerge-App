@@ -659,9 +659,14 @@ const pricingData = {
       includedFt: 10,
       perFtOver: 12.5,
     },
+    waterTruck: {
+      base: 490,
+      loadSizeGallons: 7000,
+    },
     startup: {
       base: 700,
       automationAdd: 300,
+      fiveYearWarranty: 800,
       premium: 800,
       taxRate: 0.0725,
     },

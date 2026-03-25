@@ -615,6 +615,15 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           <path d="M9 7h6" />
         </svg>
       ),
+      Misc: (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 4v4" />
+          <path d="M12 16v4" />
+          <path d="M4 12h4" />
+          <path d="M16 12h4" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      ),
       'Custom Features': (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.4 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3z" />
@@ -2648,25 +2657,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               },
             ],
           },
-          {
-            title: 'Water truck',
-            scalars: [
-              {
-                label: 'Base load',
-                path: ['interiorFinish', 'waterTruck', 'base'],
-                type: 'number',
-                tooltip: 'Applied per water truck load.',
-                prefix: '$',
-              },
-              {
-                label: 'Load size',
-                path: ['interiorFinish', 'waterTruck', 'loadSizeGallons'],
-                type: 'number',
-                tooltip: 'Gallons per water truck load (used to calculate loads).',
-                prefix: 'Gal',
-              },
-            ],
-          },
         ],
       },
       {
@@ -2746,7 +2736,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         ],
       },
       {
-        title: 'Equipment Set & Drainage',
+        title: 'Misc',
         groups: [
           {
             title: 'Equipment Set',
@@ -2778,6 +2768,51 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 type: 'number',
                 prefix: '$',
                 tooltip: 'Applied to pool perimeter with 10% overhead (billed under Excavation).',
+              },
+            ],
+          },
+          {
+            title: 'Startup / Orientation',
+            scalars: [
+              {
+                label: 'Start-Up & 30 Days',
+                path: ['misc', 'startup', 'base'],
+                type: 'number',
+                tooltip: 'Added once when a pool is defined.',
+                prefix: '$',
+              },
+              {
+                label: 'Automation add-on',
+                path: ['misc', 'startup', 'automationAdd'],
+                type: 'number',
+                tooltip: 'Added once when automation is selected.',
+                prefix: '$',
+              },
+              {
+                label: '5 Year Warranty',
+                path: ['misc', 'startup', 'fiveYearWarranty'],
+                type: 'number',
+                tooltip: 'Added once to the Startup/Orientation COGS category.',
+                prefix: '$',
+              },
+            ],
+          },
+          {
+            title: 'Water truck',
+            scalars: [
+              {
+                label: 'Water truck cost',
+                path: ['misc', 'waterTruck', 'base'],
+                type: 'number',
+                tooltip: 'Applied per water truck load.',
+                prefix: '$',
+              },
+              {
+                label: 'Water truck size (gallons)',
+                path: ['misc', 'waterTruck', 'loadSizeGallons'],
+                type: 'number',
+                tooltip: 'Gallons per water truck load used to calculate total loads.',
+                prefix: 'Gal',
               },
             ],
           },

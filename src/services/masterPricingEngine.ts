@@ -750,6 +750,17 @@ export class MasterPricingEngine {
       total: prices.base,
     });
 
+    const warrantyCost = prices.fiveYearWarranty ?? prices.premium ?? 0;
+    if (warrantyCost > 0) {
+      items.push({
+        category: 'Start-Up / Orientation',
+        description: '5 Year Warranty',
+        unitPrice: warrantyCost,
+        quantity: 1,
+        total: warrantyCost,
+      });
+    }
+
     // Add automation fee if automation is present (mirrors MISC!Add Automation tied to NEW POOL!B131)
     const automationQty = Math.max(equipment?.automationQuantity ?? 0, 0);
     const hasAutomation = automationQty > 0 && !!equipment?.automation;

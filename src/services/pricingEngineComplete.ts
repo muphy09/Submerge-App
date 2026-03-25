@@ -1308,15 +1308,25 @@ export class InteriorFinishCalculations {
 
     // WATER TRUCK
     const gallons = PoolCalculations.calculateGallons(poolSpecs);
-    const loadSizeGallons = prices.waterTruck.loadSizeGallons;
+    const waterTruckPricing = pricingData.misc?.waterTruck ?? prices.waterTruck;
+    const configuredLoadSizeGallons = Number(waterTruckPricing?.loadSizeGallons);
+    const loadSizeGallons =
+      Number.isFinite(configuredLoadSizeGallons) && configuredLoadSizeGallons > 0
+        ? configuredLoadSizeGallons
+        : Number(prices.waterTruck?.loadSizeGallons) || 7000;
+    const configuredWaterTruckBase = Number(waterTruckPricing?.base);
+    const waterTruckBase =
+      Number.isFinite(configuredWaterTruckBase)
+        ? configuredWaterTruckBase
+        : Number(prices.waterTruck?.base) || 0;
     if (gallons > 0) {
       const loads = Math.max(1, Math.ceil(gallons / loadSizeGallons));
       waterTruckItems.push({
         category: 'Water Truck',
         description: 'Water Truck',
-        unitPrice: prices.waterTruck.base,
+        unitPrice: waterTruckBase,
         quantity: loads,
-        total: prices.waterTruck.base * loads,
+        total: waterTruckBase * loads,
         details: {
           totalGallons: gallons,
           truckTotalGallons: loads * loadSizeGallons,
@@ -1722,6 +1732,9 @@ export class MasonryCalculations {
         const sqft = level.length * (level.height / 12);
         const facingLabel = formatMasonryFacingLabel(level.facing, rbbFacingOptions);
         addFacing(`${level.height}" RBB ${facingLabel} Facing`, sqft, level.facing, 'rbb');
+        if (level.hasBacksideFacing) {
+          addFacing(`Backside ${facingLabel} Facing`, sqft, level.facing, 'rbb');
+        }
       }
     });
 
@@ -1731,9 +1744,6 @@ export class MasonryCalculations {
         const sqft = level.length * (level.height / 12);
         const facingLabel = formatMasonryFacingLabel(level.facing, rbbFacingOptions);
         addFacing(`Exposed Pool Wall ${facingLabel} Facing`, sqft, level.facing, 'rbb');
-        if (level.hasBacksideFacing) {
-          addFacing(`Backside ${facingLabel} Facing`, sqft, level.facing, 'rbb');
-        }
       }
     });
 

@@ -1,4 +1,17 @@
-[2.0.5] What's New
+[2.0.6] What's New
+## Requested Changes -
+- Swapped Backside Facing from Exposed Pool Wall to RBB
+- Fixed Edit Proposal crash
+- Parched Concrete changed to Parged Concrete
+- 5 Year Warranty cost inclusion
+- Contract Autofill
+    - Surface Returns
+    - Decking SQFT
+    - Downspout SQFT
+    - Coping Size
+    - Custom Features
+-----
+[2.0.5]
 ## Requested Changes - 
 - Valve Actuator toggle per Water Feature zone
     - Included a checkbox next to each added water feature to turn off the Valve Actuator cost

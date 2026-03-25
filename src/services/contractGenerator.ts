@@ -5,6 +5,7 @@ import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/maso
 import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
+import { hasCustomFeatureContent, isOffContractCustomFeature, normalizeCustomFeatures } from '../utils/customFeatures';
 
 export type ContractOverrides = Record<string, string | number | null>;
 
@@ -27,7 +28,7 @@ type ProposalWithPricing = Proposal & {
   pricing?: Proposal['pricing'] & { retailPrice?: number };
 };
 
-const ADDITIONAL_SPEC_FIELD_IDS = new Set([
+const ADDITIONAL_SPEC_FIELD_IDS = [
   'p2_additional_spec_73',
   'p2_additional_spec_74',
   'p2_additional_spec_75',
@@ -38,9 +39,13 @@ const ADDITIONAL_SPEC_FIELD_IDS = new Set([
   'p2_additional_spec_80',
   'p2_additional_spec_81',
   'p2_additional_spec_82',
-]);
+] as const;
+const ADDITIONAL_SPEC_FIELD_ID_SET = new Set<string>(ADDITIONAL_SPEC_FIELD_IDS);
 const OPTIONAL_UNMAPPED_FIELD_IDS = new Set([
   'p1_16',
+  'p1_37_size',
+  'p1_38_qty',
+  'p1_40_qty',
   'p1_rbb_6',
   'p1_rbb_12',
   'p1_rbb_18',
@@ -219,6 +224,18 @@ function groupLightSelections(lights?: Array<{ name?: string }>) {
   return groups;
 }
 
+function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
+  return normalizeCustomFeatures(proposal.customFeatures).features
+    .filter((feature) => hasCustomFeatureContent(feature))
+    .map((feature, index) => {
+      const name = feature.name?.trim() || '';
+      const description = feature.description?.trim() || '';
+      const base = name || description || `Custom Feature #${index + 1}`;
+      return isOffContractCustomFeature(feature) ? `${base} (OFF CONTRACT)` : base;
+    })
+    .slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);
+}
+
 function parseZipFromAddress(address?: string | null): string {
   if (!address) return '';
   const zip = address.match(/\b\d{5}(?:-\d{4})?\b/);
@@ -293,8 +310,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   const specs = proposal.poolSpecs || ({} as Proposal['poolSpecs']);
   const pricing = getRetailPrice(proposal);
   const waterFeatures = pickWaterFeatures(proposal.waterFeatures?.selections);
+  const additionalSpecificationLines = buildAdditionalSpecificationLines(proposal);
 
-  if (ADDITIONAL_SPEC_FIELD_IDS.has(field.id)) return '';
+  if (ADDITIONAL_SPEC_FIELD_ID_SET.has(field.id)) {
+    const fieldIndex = ADDITIONAL_SPEC_FIELD_IDS.indexOf(field.id as (typeof ADDITIONAL_SPEC_FIELD_IDS)[number]);
+    return fieldIndex >= 0 ? additionalSpecificationLines[fieldIndex] || '' : '';
+  }
 
   const overrideDefault = defaultFromLabel(field.label);
   const isPlumbingResponsibilityField = PLUMBING_RESPONSIBILITY_FIELD_IDS.has(field.id);
@@ -514,6 +535,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     const hasTile = (proposal.tileCopingDecking?.tileLevel ?? 1) > 0;
     return hasTile && proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Trim Tile' : 'None';
   }
+  if (field.id === 'p1_37_size') return proposal.tileCopingDecking?.copingSize || '';
   if (/coping/.test(label)) {
     const lookup: Record<string, string> = {
       none: 'None',
@@ -526,7 +548,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     };
     return lookup[proposal.tileCopingDecking?.copingType as string] || '';
   }
+  if (field.id === 'p1_38_qty') {
+    const deckingArea = Number(proposal.tileCopingDecking?.deckingArea || proposal.poolSpecs?.deckingArea || 0);
+    return formatNumberValue(deckingArea);
+  }
   if (/decking drainage/.test(label)) return proposal.drainage?.deckDrainTotalLF ? 'BY BUILDER' : overrideDefault;
+  if (field.id === 'p1_40_qty') return formatNumberValue(proposal.drainage?.downspoutTotalLF);
   if (/decking\b/i.test(label)) {
     if (proposal.tileCopingDecking?.isDeckingOffContract) return 'OFF CONTRACT';
     const lookup: Record<string, string> = {
@@ -544,10 +571,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     const additional = proposal.plumbing?.runs?.additionalSkimmers || 0;
     return String(1 + (Number.isFinite(additional) ? additional : 0));
   }
-  if (/surface returns/.test(label)) {
-    const returns = proposal.plumbing?.runs?.mainDrainRun;
-    return returns ? String(returns) : overrideDefault;
-  }
+  if (field.id === 'p1_36') return '4';
+  if (/surface returns/.test(label)) return '4';
   if (/auto-fill/.test(label)) return formatYesNo(proposal.plumbing?.runs?.autoFillRun, overrideDefault || 'NO');
   if (/circulation pump/.test(label)) {
     const legacyPrimaryPumpName =

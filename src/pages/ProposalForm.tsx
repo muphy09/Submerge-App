@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Proposal, WaterFeatures, WaterFeatureSelection, PAPDiscounts, ManualAdjustments } from '../types/proposal-new';
 import {
@@ -1455,10 +1455,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const formattedRetailPrice = formatCurrency(retailPrice);
   const proposalIndicator = buildProposalIndicator(currentCostBreakdown.pricing?.grossProfitMargin);
   const showCostSidebar = false;
-  const selectedPricingModel = useMemo(
-    () => pricingModels.find((model) => model.id === selectedPricingModelId) || null,
-    [pricingModels, selectedPricingModelId]
-  );
+  const selectedPricingModel =
+    pricingModels.find((model) => model.id === selectedPricingModelId) || null;
   const showRemovedPricingModelIndicator = Boolean(selectedPricingModelId && selectedPricingModel?.removed);
   const showStalePricingModelIndicator =
     Boolean(selectedPricingModelId) &&
@@ -1491,10 +1489,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     : selectedPricingModelId
     ? 'form-header-pricing--active'
     : 'form-header-pricing--empty';
-  const proposalFormStyle = useMemo(
-    () => ({ ['--form-header-height' as any]: `${formHeaderHeight}px` }),
-    [formHeaderHeight]
-  );
+  const proposalFormStyle = { ['--form-header-height' as any]: `${formHeaderHeight}px` };
   const pricingModelControl = (
     <label
       className={`form-header-pricing ${pricingModelHeaderStateClass}`}

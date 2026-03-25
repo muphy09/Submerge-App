@@ -32,7 +32,36 @@ const listeners = new Set<(data: PricingData) => void>();
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
   const normalized = deepClone(snapshot);
   ensureMasonryFacingCatalogs(normalized, source, defaultSnapshot);
+  syncLegacyMiscPricing(normalized, source);
   return normalized;
+}
+
+function syncLegacyMiscPricing(target: PricingData, source?: any) {
+  const configuredWaterTruck = source?.misc?.waterTruck;
+  const legacyWaterTruck = source?.interiorFinish?.waterTruck;
+  const resolvedWaterTruck = configuredWaterTruck ?? legacyWaterTruck;
+
+  if (resolvedWaterTruck && typeof resolvedWaterTruck === 'object') {
+    target.misc.waterTruck = mergeDeep(target.misc.waterTruck ?? {}, resolvedWaterTruck);
+  }
+
+  if (target.interiorFinish?.waterTruck && target.misc?.waterTruck) {
+    target.interiorFinish.waterTruck = deepClone(target.misc.waterTruck);
+  }
+
+  const configuredWarranty = source?.misc?.startup?.fiveYearWarranty;
+  const legacyWarranty = source?.misc?.startup?.premium;
+  const resolvedWarranty =
+    typeof configuredWarranty === 'number' && Number.isFinite(configuredWarranty)
+      ? configuredWarranty
+      : typeof legacyWarranty === 'number' && Number.isFinite(legacyWarranty)
+        ? legacyWarranty
+        : undefined;
+
+  if (resolvedWarranty !== undefined) {
+    target.misc.startup.fiveYearWarranty = resolvedWarranty;
+    target.misc.startup.premium = resolvedWarranty;
+  }
 }
 
 function getLocalStorageKey(franchiseId: string) {
@@ -317,6 +346,19 @@ export function getPricingDataSnapshot(): PricingData {
 export function updatePricingValue(path: (string | number)[], value: any) {
   setDeep(pricingState, path, value);
   setDeep(pricingData as any, path, deepClone(value));
+
+  const pathKey = path.join('.');
+  if (pathKey.startsWith('misc.waterTruck.')) {
+    const legacyPath = ['interiorFinish', 'waterTruck', path[path.length - 1] as string];
+    setDeep(pricingState, legacyPath, value);
+    setDeep(pricingData as any, legacyPath, deepClone(value));
+  }
+  if (pathKey === 'misc.startup.fiveYearWarranty') {
+    const legacyPath = ['misc', 'startup', 'premium'];
+    setDeep(pricingState, legacyPath, value);
+    setDeep(pricingData as any, legacyPath, deepClone(value));
+  }
+
   notify();
 }
 

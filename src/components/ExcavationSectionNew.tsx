@@ -110,10 +110,10 @@ const formatWallTitle = (
 };
 
 const formatRBBTitle = (level: RBBLevel, facingOptions: MasonryFacingOption[]) =>
-  formatWallTitle('RBB', level, facingOptions);
+  formatWallTitle('RBB', level, facingOptions, true);
 
 const formatExposedPoolWallTitle = (level: RBBLevel, facingOptions: MasonryFacingOption[]) =>
-  formatWallTitle('Exposed Pool Wall', level, facingOptions, true);
+  formatWallTitle('Exposed Pool Wall', level, facingOptions);
 
 const formatColumnsTitle = (columns: Excavation['columns'], facingOptions: MasonryFacingOption[]) => {
   const count = formatNumber(columns.count || 0);
@@ -452,6 +452,26 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                               </option>
                             ))}
                           </select>
+                          <label
+                            className="form-checkbox"
+                            style={{ opacity: (normalizeMasonryFacingId(level.facing) || 'none') === 'none' ? 0.6 : 1 }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(level.hasBacksideFacing)}
+                              disabled={(normalizeMasonryFacingId(level.facing) || 'none') === 'none'}
+                              onChange={(e) =>
+                                updateWallLevel(
+                                  'rbbLevels',
+                                  rbbLevels,
+                                  index,
+                                  'hasBacksideFacing',
+                                  e.target.checked
+                                )
+                              }
+                            />
+                            <span>Add Backside Facing</span>
+                          </label>
                         </div>
                       </div>
 
@@ -873,26 +893,6 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                               </option>
                             ))}
                           </select>
-                          <label
-                            className="form-checkbox"
-                            style={{ opacity: (normalizeMasonryFacingId(level.facing) || 'none') === 'none' ? 0.6 : 1 }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={Boolean(level.hasBacksideFacing)}
-                              disabled={(normalizeMasonryFacingId(level.facing) || 'none') === 'none'}
-                              onChange={(e) =>
-                                updateWallLevel(
-                                  'exposedPoolWallLevels',
-                                  exposedPoolWallLevels,
-                                  index,
-                                  'hasBacksideFacing',
-                                  e.target.checked
-                                )
-                              }
-                            />
-                            <span>Add Backside Facing</span>
-                          </label>
                         </div>
                       </div>
 
