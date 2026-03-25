@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
 import submergeLogo from '../../Submerge Logo.png';
+import ChangelogModal from '../components/ChangelogModal';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { useFranchiseLogo } from '../hooks/useFranchiseLogo';
 import {
@@ -28,19 +28,10 @@ import './SettingsPage.css';
 const MAX_LOGO_BYTES = 1024 * 1024;
 const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
 
-type SettingsLocationState = {
-  autoOpenChangelog?: boolean;
-} | null;
-
 const SettingsPage: React.FC = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
   const [showChangelog, setShowChangelog] = useState(false);
-  const [changelogContent, setChangelogContent] = useState('');
-  const [changelogError, setChangelogError] = useState('');
-  const [changelogLoading, setChangelogLoading] = useState(false);
   const sessionRole = getSessionRole();
   const canViewChangelog = sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'master';
   const isChangelogDisabled = !canViewChangelog;
@@ -77,7 +68,6 @@ const SettingsPage: React.FC = () => {
   );
   const [showAdminPin, setShowAdminPin] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const autoOpenLocationKeyRef = useRef<string | null>(null);
   const previewLogoUrl = pendingLogoUrl || savedLogoUrl || submergeLogo;
   const hasCustomLogo = Boolean(savedLogoUrl);
   const hasPendingLogo = Boolean(pendingLogoUrl);
@@ -94,130 +84,6 @@ const SettingsPage: React.FC = () => {
   const normalizedPendingAdminPin = sanitizeAdminPanelPinInput(pendingAdminPin);
   const currentAdminPin = getStoredAdminPanelPin(franchiseId);
   const hasPendingAdminPinChange = normalizedPendingAdminPin !== currentAdminPin;
-
-  const renderChangelog = (content: string) => {
-    const lines = content.split(/\r?\n/);
-    const elements: React.ReactNode[] = [];
-    let listItems: Array<{ text: string; level: number }> = [];
-    let hasContent = false;
-    let lastWasDivider = false;
-
-    const flushList = (index: number) => {
-      if (!listItems.length) return;
-
-      const renderNestedList = (items: Array<{ text: string; level: number }>, startIndex: number = 0): React.ReactNode => {
-        const result: React.ReactNode[] = [];
-        let i = startIndex;
-
-        while (i < items.length) {
-          const currentItem = items[i];
-          const currentLevel = currentItem.level;
-
-          const children: Array<{ text: string; level: number }> = [];
-          let j = i + 1;
-          while (j < items.length && items[j].level > currentLevel) {
-            children.push(items[j]);
-            j++;
-          }
-
-          result.push(
-            <li key={`item-${i}`}>
-              {currentItem.text}
-              {children.length > 0 && (
-                <ul className="changelog-list-nested">
-                  {renderNestedList(children, 0)}
-                </ul>
-              )}
-            </li>
-          );
-
-          i = j;
-        }
-
-        return result;
-      };
-
-      elements.push(
-        <ul key={`list-${index}`} className="changelog-list">
-          {renderNestedList(listItems)}
-        </ul>
-      );
-      hasContent = true;
-      lastWasDivider = false;
-      listItems = [];
-    };
-
-    lines.forEach((line, index) => {
-      const trimmed = line.trim();
-
-      if (!trimmed) {
-        flushList(index);
-        return;
-      }
-
-      if (/^-{3,}$/.test(trimmed)) {
-        flushList(index);
-        if (hasContent) {
-          elements.push(<div key={`divider-${index}`} className="changelog-divider" />);
-          lastWasDivider = true;
-        }
-        return;
-      }
-
-      if (trimmed.startsWith('## ')) {
-        flushList(index);
-        elements.push(
-          <h3 key={`heading-${index}`} className="changelog-heading">
-            {trimmed.replace(/^##\s*/, '')}
-          </h3>
-        );
-        hasContent = true;
-        lastWasDivider = false;
-        return;
-      }
-
-      if (trimmed.startsWith('### ')) {
-        flushList(index);
-        elements.push(
-          <h4 key={`subheading-${index}`} className="changelog-subheading">
-            {trimmed.replace(/^###\s*/, '')}
-          </h4>
-        );
-        hasContent = true;
-        lastWasDivider = false;
-        return;
-      }
-
-      if (trimmed.startsWith('- ')) {
-        const leadingSpaces = line.length - line.trimStart().length;
-        const level = Math.floor(leadingSpaces / 4);
-        listItems.push({
-          text: trimmed.replace(/^-\s*/, ''),
-          level: level
-        });
-        hasContent = true;
-        lastWasDivider = false;
-        return;
-      }
-
-      flushList(index);
-      elements.push(
-        <p key={`paragraph-${index}`} className="changelog-paragraph">
-          {trimmed}
-        </p>
-      );
-      hasContent = true;
-      lastWasDivider = false;
-    });
-
-    flushList(lines.length);
-
-    if (lastWasDivider) {
-      elements.pop();
-    }
-
-    return elements;
-  };
 
   const handleCheckForUpdates = async () => {
     setChecking(true);
@@ -242,54 +108,14 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  const openChangelog = useCallback(async () => {
+  const openChangelog = () => {
     if (!canViewChangelog) return;
-
     setShowChangelog(true);
-    setChangelogLoading(true);
-    setChangelogError('');
-
-    if (!window.electron?.readChangelog) {
-      setChangelogError('Changelog is unavailable in this environment.');
-      setChangelogLoading(false);
-      return;
-    }
-
-    try {
-      const content = await window.electron.readChangelog();
-      setChangelogContent(content);
-    } catch (error) {
-      console.error('Failed to load changelog:', error);
-      setChangelogError('Unable to load the changelog right now.');
-      setChangelogContent('');
-    } finally {
-      setChangelogLoading(false);
-    }
-  }, [canViewChangelog]);
-
-  const closeChangelog = () => {
-    setShowChangelog(false);
-  };
-
-  const handleChangelogBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      closeChangelog();
-    }
   };
 
   useEffect(() => {
     setPendingAppName(savedAppName || '');
   }, [savedAppName]);
-
-  useEffect(() => {
-    const routeState = location.state as SettingsLocationState;
-    if (!routeState?.autoOpenChangelog || !canViewChangelog) return;
-    if (autoOpenLocationKeyRef.current === location.key) return;
-
-    autoOpenLocationKeyRef.current = location.key;
-    void openChangelog();
-    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
-  }, [canViewChangelog, location.key, location.pathname, location.search, location.state, navigate, openChangelog]);
 
   useEffect(() => {
     setPendingAdminPin(getStoredAdminPanelPin(franchiseId));
@@ -576,9 +402,9 @@ const SettingsPage: React.FC = () => {
             <button
               className="settings-button view-changelog-button"
               onClick={openChangelog}
-              disabled={isChangelogDisabled || changelogLoading}
+              disabled={isChangelogDisabled}
             >
-              {changelogLoading ? 'Loading...' : 'View Changelog'}
+              View Changelog
             </button>
           </div>
         </div>
@@ -828,27 +654,7 @@ const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {showChangelog && (
-        <div className="changelog-modal-backdrop" onClick={handleChangelogBackdropClick}>
-          <div className="changelog-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="changelog-header">
-              <h3>Patch Notes</h3>
-              <button className="close-button" onClick={closeChangelog}>✕</button>
-            </div>
-            <div className="changelog-body">
-              {changelogLoading && <p className="changelog-status">Loading changelog...</p>}
-              {!changelogLoading && changelogError && (
-                <p className="changelog-error">{changelogError}</p>
-              )}
-              {!changelogLoading && !changelogError && (
-                <div className="changelog-content">
-                  {renderChangelog(changelogContent)}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <ChangelogModal isOpen={showChangelog} onClose={() => setShowChangelog(false)} />
     </div>
   );
 };

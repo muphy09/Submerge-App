@@ -1,4 +1,4 @@
-[2.0.4] What's New
+[2.0.5] What's New
 ## Requested Changes - 
 - Valve Actuator toggle per Water Feature zone
     - Included a checkbox next to each added water feature to turn off the Valve Actuator cost

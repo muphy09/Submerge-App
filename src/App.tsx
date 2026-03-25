@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
 import PricingDataModal from './components/PricingDataModal';
+import ChangelogModal from './components/ChangelogModal';
 import { setActiveFranchiseId } from './services/pricingDataStore';
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
@@ -59,6 +60,7 @@ function AppContent() {
   const [session, setSession] = useState<UserSession | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [showChangelogPrompt, setShowChangelogPrompt] = useState(false);
   const [cloudIssue, setCloudIssue] = useState<CloudConnectionIssue>(null);
   const [masterImpersonation, setMasterImpersonation] = useState<MasterImpersonation | null>(() => readMasterImpersonation());
   const [adminPanelPin, setAdminPanelPin] = useState('');
@@ -101,6 +103,7 @@ function AppContent() {
         setSession(null);
         setShowLogin(true);
         setShowPasswordReset(false);
+        setShowChangelogPrompt(false);
         setMasterImpersonation(null);
         setAdminPanelAccessFranchiseId(null);
         setAdminPanelLockoutUntil(null);
@@ -246,6 +249,7 @@ function AppContent() {
     setSession(null);
     setShowLogin(true);
     setShowPasswordReset(false);
+    setShowChangelogPrompt(false);
     setAdminPanelAccessFranchiseId(null);
     setAdminPanelLockoutUntil(null);
     setAdminPanelPin('');
@@ -356,8 +360,8 @@ function AppContent() {
     if (!hasPendingChangelog(appVersion)) return;
 
     acknowledgeChangelog(appVersion);
-    navigate('/settings', { state: { autoOpenChangelog: true } });
-  }, [appVersion, effectiveRole, effectiveSession, navigate, showLogin, showPasswordReset]);
+    setShowChangelogPrompt(true);
+  }, [appVersion, effectiveRole, effectiveSession, showLogin, showPasswordReset]);
 
   const openAdminPanelPrompt = useCallback(
     (options?: { targetPath?: string | null; cancelDestination?: string | null }) => {
@@ -587,6 +591,7 @@ function AppContent() {
         onSubmit={submitAdminPanelPin}
         onClose={closeAdminPanelPrompt}
       />
+      <ChangelogModal isOpen={showChangelogPrompt} onClose={() => setShowChangelogPrompt(false)} />
     </div>
   );
 }
