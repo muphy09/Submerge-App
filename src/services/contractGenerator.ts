@@ -485,6 +485,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
 
   if (['p1_17', 'p1_18', 'p1_19', 'p1_20'].includes(field.id)) return '';
 
+  if (/spa perimeter/.test(label)) return specs.spaPerimeter ? String(specs.spaPerimeter) : '';
   if (/perimeter/.test(label) && /surface area/.test(label)) return String(specs.surfaceArea || '');
   if (/perimeter/.test(label)) return String(specs.perimeter || specs.fiberglassPerimeter || '');
   if (/surface area/.test(label)) return String(specs.surfaceArea || '');
@@ -580,7 +581,6 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return proposal.equipment?.pump?.name || legacyPrimaryPumpName || overrideDefault;
   }
   if (/filter/.test(label) && !/interior/.test(label)) return proposal.equipment?.filter?.name || overrideDefault;
-  if (/spa perimeter/.test(label)) return proposal.poolSpecs?.spaPerimeter ? String(proposal.poolSpecs.spaPerimeter) : '';
   if (/spa light/.test(label)) return proposal.poolSpecs?.spaType !== 'none' ? '1' : '0';
   if (/blower/.test(label)) return proposal.poolSpecs?.spaType !== 'none' ? 'YES' : 'NO';
   if (/interior finish/.test(label)) {

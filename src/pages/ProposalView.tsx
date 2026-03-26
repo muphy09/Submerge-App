@@ -1735,7 +1735,7 @@ function ProposalView() {
                 <span>{vm.sanitationSummary}</span>
               </div>
               <div className="hero-line">
-                <span className="hero-label">Autofil:</span>
+                <span className="hero-label">Autofill:</span>
                 <span>{vm.autoFillSummary}</span>
               </div>
               <div className="hero-line">

@@ -1,5 +1,7 @@
-[2.0.7] What's New
+[2.0.8] What's New
 ## Requested Changeds
+- Spa Perimeter Autofill
+    - Contract now properly autofills the Spa Perimeter
 - Rough Grading
     - Option to enable or disable Rough Grading while Decking is 'Off-Contract"
 -----
