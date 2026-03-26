@@ -17,6 +17,7 @@ import {
   ContractOverrides,
   ContractFieldRender,
   getContractDepositFieldAutoValue,
+  getContractTotalCashPrice,
   getEditableContractFields,
   validateContractInputs,
 } from '../services/contractGenerator';
@@ -383,6 +384,8 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     return map;
   }, [fields]);
 
+  const totalCashPrice = useMemo(() => getContractTotalCashPrice(proposal), [proposal]);
+
   const handleCellChange = useCallback(
     (cellAddress: string, value: string) => {
       const isDepositSourceField = CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(cellAddress);
@@ -406,7 +409,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
         setFields((prev) =>
           prev.map((field) => {
             if (CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(field.id)) {
-              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue);
+              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue, totalCashPrice);
               return {
                 ...field,
                 value: normalizedValue,
@@ -417,7 +420,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
             }
 
             if (CONTRACT_DEPOSIT_SCHEDULE_FIELD_ID_SET.has(field.id)) {
-              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue);
+              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue, totalCashPrice);
               return {
                 ...field,
                 value: nextAutoValue,
@@ -460,7 +463,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       );
       onOverridesChange?.(next);
     },
-    [fields, onOverridesChange, overrides]
+    [fields, onOverridesChange, overrides, totalCashPrice]
   );
 
   const handleBinaryChoice = useCallback(

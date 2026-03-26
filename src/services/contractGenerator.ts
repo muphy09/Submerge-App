@@ -141,9 +141,23 @@ function parseContractMonetaryInput(value: string | number | null | undefined): 
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function getRemainingCashPriceForContractSchedule(
+  totalCashPrice: string | number | null | undefined,
+  depositValue: string | number | null | undefined
+): number | null {
+  const depositAmount = parseContractMonetaryInput(depositValue);
+  if (depositAmount === null) return null;
+
+  const totalAmount = parseContractMonetaryInput(totalCashPrice);
+  if (totalAmount === null) return null;
+
+  return Math.max(totalAmount - depositAmount, 0);
+}
+
 export function getContractDepositFieldAutoValue(
   fieldId: string,
-  depositValue: string | number | null | undefined
+  depositValue: string | number | null | undefined,
+  totalCashPrice?: string | number | null
 ): string {
   const normalizedDepositValue = normalizeContractMonetaryInput(depositValue);
 
@@ -154,10 +168,10 @@ export function getContractDepositFieldAutoValue(
   const percentage = CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES[fieldId];
   if (!percentage) return '';
 
-  const depositAmount = parseContractMonetaryInput(normalizedDepositValue);
-  if (depositAmount === null) return '';
+  const remainingCashPrice = getRemainingCashPriceForContractSchedule(totalCashPrice, normalizedDepositValue);
+  if (remainingCashPrice === null) return '';
 
-  return formatCurrency(depositAmount * percentage);
+  return formatCurrency(remainingCashPrice * percentage);
 }
 
 function resolveContractDepositSourceValue(overrides?: ContractOverrides): string {
@@ -293,6 +307,10 @@ function getRetailPrice(proposal: ProposalWithPricing): number {
     proposal.subtotal ??
     0
   );
+}
+
+export function getContractTotalCashPrice(proposal: Proposal): number {
+  return getRetailPrice(proposal);
 }
 
 function isMeaningfulAutoValue(value: string | number | null | undefined): boolean {
@@ -473,7 +491,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return formatCurrency(pricing);
   }
 
-  // Payment schedule values are derived from the entered deposit amount when present.
+  // Payment schedule values are derived from the remaining cash price after subtracting the entered deposit.
   if (field.id.startsWith('p1_pay_')) return '';
   if (/non-refundable deposit/.test(label)) return '';
   if (/prior to shotcete/.test(label) || /prior to excavation/.test(label)) return '';
@@ -622,6 +640,7 @@ export async function getEditableContractFields(
   const resolvedTemplateId = templateId || getContractTemplateIdForProposal(proposal);
   const templateFields = getContractTemplate(resolvedTemplateId).fields;
   const depositSourceValue = resolveContractDepositSourceValue(overrides);
+  const totalCashPrice = getRetailPrice(normalized);
   const fields: ContractFieldRender[] = templateFields
     .filter((field) => (field.label || '').trim().length > 0)
     .map((field) => {
@@ -649,7 +668,7 @@ export async function getEditableContractFields(
         CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(field.id) ||
         Object.prototype.hasOwnProperty.call(CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES, field.id)
       ) {
-        autoValue = getContractDepositFieldAutoValue(field.id, depositSourceValue);
+        autoValue = getContractDepositFieldAutoValue(field.id, depositSourceValue, totalCashPrice);
       }
       if (field.id === 'p1_30') autoValue = '1';
       const hasOverride = overrides ? Object.prototype.hasOwnProperty.call(overrides, field.id) : false;
