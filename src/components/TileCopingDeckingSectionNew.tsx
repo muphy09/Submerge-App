@@ -61,7 +61,6 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
       ...data,
       isDeckingOffContract: enabled,
       deckingOffContractCost: enabled ? data.deckingOffContractCost ?? 0 : data.deckingOffContractCost ?? 0,
-      hasRoughGrading: enabled ? false : data.hasRoughGrading,
     });
   };
 
@@ -320,16 +319,10 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
             type="button"
             className={`pool-type-btn ${data.hasRoughGrading ? 'active' : ''}`}
             onClick={() => handleChange('hasRoughGrading', !data.hasRoughGrading)}
-            disabled={isDeckingOffContract}
           >
             Rough Grading
           </button>
         </div>
-        {isDeckingOffContract && (
-          <div className="info-box" style={{ marginTop: '8px' }}>
-            Rough grading is not billed while decking is marked off contract.
-          </div>
-        )}
       </div>
 
       <CustomOptionsSection

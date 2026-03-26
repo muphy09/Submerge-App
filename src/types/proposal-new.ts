@@ -237,7 +237,7 @@ export interface TileCopingDecking {
   rockworkTileSqft?: number;
 
   // Options
-  hasRoughGrading: boolean; // Keep unless deck is off contract
+  hasRoughGrading: boolean;
 
   // Custom options
   customOptions?: CustomOption[];

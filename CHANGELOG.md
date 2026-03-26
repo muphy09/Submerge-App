@@ -1,4 +1,9 @@
-[2.0.6] What's New
+[2.0.7] What's New
+## Requested Changeds
+- Rough Grading
+    - Option to enable or disable Rough Grading while Decking is 'Off-Contract"
+-----
+[2.0.6]
 ## Requested Changes -
 - Swapped Backside Facing from Exposed Pool Wall to RBB
 - Fixed Edit Proposal crash

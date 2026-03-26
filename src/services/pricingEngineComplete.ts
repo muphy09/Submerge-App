@@ -1417,7 +1417,7 @@ export class CleanupCalculations {
       });
     }
 
-    if (tileCopingDecking?.hasRoughGrading && !tileCopingDecking?.isDeckingOffContract) {
+    if (tileCopingDecking?.hasRoughGrading) {
       items.push({
         category: 'Cleanup',
         description: 'Rough Grading',
