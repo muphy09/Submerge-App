@@ -115,7 +115,6 @@ const CUSTOM_SELECT_FIELDS: Record<string, string[]> = {
   p2_93: ['BY BUILDER', 'BY BUYER'], // Start-up responsibility
   p2_94: ['YES', 'NO'], // 30 days service
   p2_56: ['NONE', 'Tile', 'Travertine', 'Stone'], // Damwall
-  p2_58: ['NO', 'YES'], // Blower
   p2_62: ['NO', 'YES'], // Low water returns
   p2_65: ['NO', 'YES'], // Booster pump for spa jets
   p2_67: ['NO', 'YES'], // Raised spa
@@ -206,9 +205,9 @@ type ContractViewProps = {
 };
 
 export type ContractViewHandle = {
-  exportPdf: () => Promise<void>;
-  printContract: () => void;
-  saveOverrides: () => Promise<void> | void;
+  exportPdf: () => Promise<boolean>;
+  printContract: () => Promise<boolean>;
+  saveOverrides: () => Promise<boolean>;
   hasUnsavedChanges: boolean;
   isExporting: boolean;
   isSaving: boolean;
@@ -260,11 +259,23 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   const [fields, setFields] = useState<ContractFieldRender[]>([]);
   const [displayScale, setDisplayScale] = useState(DEFAULT_DISPLAY_SCALE);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const latestSavePromiseRef = useRef<Promise<boolean> | null>(null);
+  const previousIncomingOverridesRef = useRef<ContractOverrides>(incomingOverrides || {});
+  const previousProposalVersionIdRef = useRef(proposal.versionId || 'original');
 
   useEffect(() => {
-    setOverrides(incomingOverrides || {});
-    setBaselineOverrides(incomingOverrides || {});
-  }, [incomingOverrides]);
+    const nextIncomingOverrides = incomingOverrides || {};
+    const nextProposalVersionId = proposal.versionId || 'original';
+    const proposalVersionChanged = previousProposalVersionIdRef.current !== nextProposalVersionId;
+    const incomingOverridesChanged = !areOverridesEqual(previousIncomingOverridesRef.current, nextIncomingOverrides);
+
+    if (!proposalVersionChanged && !incomingOverridesChanged) return;
+
+    previousIncomingOverridesRef.current = nextIncomingOverrides;
+    previousProposalVersionIdRef.current = nextProposalVersionId;
+    setOverrides(nextIncomingOverrides);
+    setBaselineOverrides(nextIncomingOverrides);
+  }, [incomingOverrides, proposal.versionId]);
 
   useEffect(() => {
     let canceled = false;
@@ -492,22 +503,36 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     [overrides, onOverridesChange]
   );
 
-  const handleSave = useCallback(async () => {
-    if (!onSave || saving) return;
-    setSaving(true);
-    try {
-      await onSave(overrides);
-      setBaselineOverrides(overrides);
-    } catch (error) {
-      console.error('Failed to save contract overrides', error);
-      showToast({ type: 'error', message: 'Could not save contract overrides.' });
-    } finally {
-      setSaving(false);
-    }
-  }, [onSave, overrides, saving, showToast]);
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (!onSave || !hasUnsavedChanges) return true;
+    if (latestSavePromiseRef.current) return latestSavePromiseRef.current;
 
-  const exportPdf = useCallback(async () => {
-    if (!fields.length || exporting) return;
+    const overridesToSave = overrides;
+    const savePromise = (async () => {
+      setSaving(true);
+      try {
+        await onSave(overridesToSave);
+        setBaselineOverrides(overridesToSave);
+        previousIncomingOverridesRef.current = overridesToSave;
+        return true;
+      } catch (error) {
+        console.error('Failed to save contract overrides', error);
+        showToast({ type: 'error', message: 'Could not save contract overrides.' });
+        return false;
+      } finally {
+        latestSavePromiseRef.current = null;
+        setSaving(false);
+      }
+    })();
+
+    latestSavePromiseRef.current = savePromise;
+    return savePromise;
+  }, [hasUnsavedChanges, onSave, overrides, showToast]);
+
+  const exportPdf = useCallback(async (): Promise<boolean> => {
+    if (!fields.length || exporting) return false;
+    const saveSucceeded = await handleSave();
+    if (!saveSucceeded) return false;
     setExporting(true);
     try {
       if (warnings.length) {
@@ -536,15 +561,19 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       link.click();
       URL.revokeObjectURL(url);
       showToast({ type: 'success', message: 'Contract PDF generated.' });
+      return true;
     } catch (error) {
       console.error('Failed to export contract PDF', error);
       showToast({ type: 'error', message: 'Could not export contract PDF.' });
+      return false;
     } finally {
       setExporting(false);
     }
-  }, [exporting, fields, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
+  }, [exporting, fields, handleSave, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
 
-  const printContract = useCallback(() => {
+  const printContract = useCallback(async (): Promise<boolean> => {
+    const saveSucceeded = await handleSave();
+    if (!saveSucceeded) return false;
     if (warnings.length) {
       showToast({
         type: 'warning',
@@ -552,7 +581,8 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       });
     }
     window.print();
-  }, [showToast, warnings]);
+    return true;
+  }, [handleSave, showToast, warnings]);
 
   const handleZoomOut = useCallback(() => {
     setDisplayScale((prev) => clampDisplayScale(prev - DISPLAY_SCALE_STEP));

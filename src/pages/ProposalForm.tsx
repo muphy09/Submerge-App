@@ -550,17 +550,19 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
   useEffect(() => {
     const currentSpaType = proposal.poolSpecs?.spaType ?? 'none';
+    const hasSpa = currentSpaType !== 'none';
     const previousSpaType = previousSpaTypeRef.current ?? 'none';
     const spaJustAdded = previousSpaType === 'none' && currentSpaType !== 'none';
     const spaRemoved = previousSpaType !== 'none' && currentSpaType === 'none';
     const hasSpaLightSelection = (proposal.equipment?.spaLights?.length ?? 0) > 0;
-    const hasAuxPumpSelection =
-      (proposal.equipment?.auxiliaryPumps?.length ?? 0) > 0 || !!proposal.equipment?.auxiliaryPump;
     const auxiliarySelections = proposal.equipment?.auxiliaryPumps?.length
       ? proposal.equipment.auxiliaryPumps
       : proposal.equipment?.auxiliaryPump
       ? [proposal.equipment.auxiliaryPump]
       : [];
+    const hasSpaSupportingAuxPump = auxiliarySelections.some(
+      (pump) => pump && pump.autoAddedReason !== 'waterFeature'
+    );
     const hasAutoAddedAuxPump = auxiliarySelections.some(pump => pump?.autoAddedForSpa);
 
     const auxiliaryPumpCatalog =
@@ -586,11 +588,12 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             addCost2: (pump as any).addCost2,
             price: getEquipmentItemCost(pump as any, pumpOverhead),
             autoAddedForSpa: true,
+            autoAddedReason: 'spa' as const,
           }
         : null;
 
     const shouldAddSpaLight = spaJustAdded && !hasSpaLightSelection;
-    const shouldAddAuxPump = spaJustAdded && !hasAuxPumpSelection && Boolean(defaultAuxiliaryPump);
+    const shouldAddAuxPump = hasSpa && !hasSpaSupportingAuxPump && Boolean(defaultAuxiliaryPump);
 
     if (shouldAddSpaLight || shouldAddAuxPump) {
       setProposal(prev => {

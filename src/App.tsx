@@ -8,12 +8,12 @@ import TemplatesPage from './pages/TemplatesPage';
 import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
-import PricingDataModal from './components/PricingDataModal';
 import ChangelogModal from './components/ChangelogModal';
 import { setActiveFranchiseId } from './services/pricingDataStore';
 import { ToastProvider } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
+import AdminPricingPage from './pages/AdminPricingPage';
 import { getSupabaseClient, getSupabaseReachability, isSupabaseEnabled } from './services/supabaseClient';
 import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
 import useKeyboardNavigation from './hooks/useKeyboardNavigation';
@@ -56,7 +56,6 @@ function AppContent() {
   useKeyboardNavigation();
   const [updateStatus, setUpdateStatus] = useState<'downloading' | 'ready' | 'error' | null>(null);
   const [updateError, setUpdateError] = useState<string>('');
-  const [showPricingData, setShowPricingData] = useState(false);
   const [session, setSession] = useState<UserSession | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
@@ -346,6 +345,7 @@ function AppContent() {
   const isAdminPanelUnlocked = adminPanelAccessFranchiseId === (effectiveSession?.franchiseId || null);
   const canRenderAdminPanel = !adminPanelRequiresPin || isAdminPanelUnlocked;
   const isAdminPanelLocked = Boolean(adminPanelLockoutUntil && adminPanelLockoutUntil > Date.now());
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const actingLabel = isMaster && masterImpersonation
     ? masterImpersonation.franchiseName && masterImpersonation.franchiseCode
       ? `${masterImpersonation.franchiseName} (${masterImpersonation.franchiseCode})`
@@ -465,10 +465,10 @@ function AppContent() {
   }, [adminPanelLockoutUntil]);
 
   useEffect(() => {
-    if (location.pathname !== '/admin') {
+    if (!isAdminRoute) {
       setAdminPanelAccessFranchiseId(null);
     }
-  }, [location.pathname]);
+  }, [isAdminRoute]);
 
   useEffect(() => {
     if (!adminPanelPinPrompt.isOpen || isAdminPanelLocked) return;
@@ -477,10 +477,10 @@ function AppContent() {
   }, [adminPanelPin, adminPanelPinPrompt.isOpen, isAdminPanelLocked, submitAdminPanelPin]);
 
   useEffect(() => {
-    if (location.pathname !== '/admin') return;
+    if (!isAdminRoute) return;
     if (!adminPanelRequiresPin || isAdminPanelUnlocked || adminPanelPinPrompt.isOpen) return;
     openAdminPanelPrompt({ targetPath: null, cancelDestination: '/' });
-  }, [adminPanelPinPrompt.isOpen, adminPanelRequiresPin, isAdminPanelUnlocked, location.pathname, openAdminPanelPrompt]);
+  }, [adminPanelPinPrompt.isOpen, adminPanelRequiresPin, isAdminPanelUnlocked, isAdminRoute, openAdminPanelPrompt]);
 
   return (
     <div className="app">
@@ -506,11 +506,15 @@ function AppContent() {
           element={
             canRenderAdminPanel ? (
               <AdminPanelPage
-                onOpenPricingData={() => setShowPricingData(true)}
+                onOpenPricingData={() => navigate('/admin/pricing')}
                 session={effectiveSession}
               />
             ) : null
           }
+        />
+        <Route
+          path="/admin/pricing"
+          element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
         />
         <Route path="/proposals" element={<ProposalsListPage />} />
         <Route path="/templates" element={<TemplatesPage />} />
@@ -564,12 +568,6 @@ function AppContent() {
             {effectiveSession.franchiseName || effectiveSession.franchiseCode || effectiveSession.franchiseId || 'Unknown'}
           </div>
         </div>
-      )}
-      {showPricingData && (
-        <PricingDataModal
-          onClose={() => setShowPricingData(false)}
-          franchiseId={effectiveSession?.franchiseId}
-        />
       )}
       {showLogin && (
         <LoginModal onSubmit={handleLogin} existingEmail={session?.userEmail} />

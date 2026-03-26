@@ -36,6 +36,8 @@ Ideas -
 
 - Potential pictures for interior finish styles (out and in pool), equipment selected.
 
+- Hide the COGS cost block and buttons until a key is held? Or a button is pushed on the main menu?
+
 ----------------------------------------------------------------------------------------------------------
 Help Needed - 
 - Permitting and County associated costs tied to City / State field
@@ -48,6 +50,7 @@ Help Needed -
 - Wireless autofill run. No conduit run needed
     - Need price for this
 - Regular Bubbler option
+** - Booster Pump for Spa Jets logic
 ----------------------------------------------------------------------------------------------------------
 Confusion -
 - There is a $1250 kicker always present in retail cost (E309)

@@ -82,6 +82,20 @@ type ActiveListFieldRename = {
   defaultLabel: string;
 };
 
+type SelectedListItem = {
+  sectionTitle: string;
+  groupTitle: string;
+  listPathKey: string;
+  index: number;
+};
+
+type ContextHelp = {
+  title: string;
+  description: string;
+  sectionTitle?: string;
+  groupTitle?: string;
+};
+
 const getValue = (target: any, path: Path) =>
   path.reduce((acc, key) => (acc ? acc[key] : undefined), target);
 
@@ -103,6 +117,8 @@ const emptyFromFields = (fields: ListField[]) =>
     return acc;
   }, {});
 
+const getPathKey = (path: Path) => path.join('.');
+
 interface PricingDataModalProps {
   onClose: () => void;
   franchiseId?: string | null;
@@ -114,7 +130,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [fieldLabelOverrides, setFieldLabelOverrides] = useState<PricingFieldLabelOverrides>({});
   const [activeListFieldRename, setActiveListFieldRename] = useState<ActiveListFieldRename | null>(null);
   const [activeListFieldRenameDraft, setActiveListFieldRenameDraft] = useState('');
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [pricingModels, setPricingModels] = useState<any[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() => {
     const meta = getActivePricingModelMeta();
@@ -125,9 +140,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingAsNew, setSavingAsNew] = useState(false);
   const [activatedFlash, setActivatedFlash] = useState(false);
+  const [activeSectionTitle, setActiveSectionTitle] = useState<string>('');
+  const [selectedListItem, setSelectedListItem] = useState<SelectedListItem | null>(null);
+  const [contextHelp, setContextHelp] = useState<ContextHelp | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const activateTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const backdropMouseDownRef = useRef(false);
-  const currentFranchiseId = franchiseId || getActiveFranchiseId() || 'N/A';
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<{ id: string; name: string } | null>(null);
@@ -175,6 +192,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setModelName('');
     setSelectedModelId(null);
     setHasChanges(false);
+    setSelectedListItem(null);
+    setContextHelp(null);
     setFieldLabelOverrides(loadPricingFieldLabelOverrides(targetFranchise || 'default'));
     setActiveListFieldRename(null);
     setActiveListFieldRenameDraft('');
@@ -251,6 +270,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       await setActivePricingModel(modelId);
       const meta = getActivePricingModelMeta();
       setModelName(meta.pricingModelName || '');
+      setSelectedListItem(null);
+      setContextHelp(null);
       setPricingModels((prev) =>
         prev.map((m) => ({ ...m, isDefault: m.id === modelId ? m.isDefault : m.isDefault }))
       );
@@ -306,6 +327,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       clearActivePricingModelMeta();
       setSelectedModelId(null);
       setModelName('');
+      setSelectedListItem(null);
+      setContextHelp(null);
       setSavingAsNew(true);
       setHasChanges(false);
     } catch (error) {
@@ -353,23 +376,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     }
   };
 
-  const toggleSection = (title: string) => {
-    setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
-  };
-
-  const handleBackdropMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    backdropMouseDownRef.current = event.target === event.currentTarget;
-  };
-
-  const handleBackdropMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (backdropMouseDownRef.current && event.target === event.currentTarget) {
-      onClose();
-    }
-    backdropMouseDownRef.current = false;
-  };
-
-  const handleBackdropMouseLeave = () => {
-    backdropMouseDownRef.current = false;
+  const setCenterFieldHelp = (sectionTitle: string, groupTitle: string, label: string, description?: string) => {
+    setContextHelp({
+      title: label,
+      description: description || 'No additional guidance is configured for this field yet.',
+      sectionTitle,
+      groupTitle,
+    });
   };
 
   const handleScalarChange = (field: ScalarField, value: string | boolean) => {
@@ -3018,6 +3031,43 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
   );
 
+  useEffect(() => {
+    if (!sections.length) {
+      setActiveSectionTitle('');
+      return;
+    }
+
+    setActiveSectionTitle((current) =>
+      current && sections.some((section) => section.title === current) ? current : sections[0].title
+    );
+  }, [sections]);
+
+  const activeSection = useMemo(
+    () => sections.find((section) => section.title === activeSectionTitle) || sections[0] || null,
+    [activeSectionTitle, sections]
+  );
+
+  useEffect(() => {
+    if (!selectedListItem || !activeSection || selectedListItem.sectionTitle !== activeSection.title) {
+      return;
+    }
+
+    const selectedGroup = activeSection.groups.find((group) => group.title === selectedListItem.groupTitle);
+    const selectedList = selectedGroup?.lists?.find((list) => getPathKey(list.path) === selectedListItem.listPathKey);
+    const entries = selectedList ? ((getValue(data, selectedList.path) as any[]) || []) : [];
+
+    if (!selectedList || selectedListItem.index >= entries.length) {
+      setSelectedListItem(null);
+    }
+  }, [activeSection, data, selectedListItem]);
+
+  useEffect(() => {
+    if (!activeSection || !selectedListItem || selectedListItem.sectionTitle === activeSection.title) {
+      return;
+    }
+    setSelectedListItem(null);
+  }, [activeSection, selectedListItem]);
+
   const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
     `${count} ${count === 1 ? singular : plural}`;
 
@@ -3044,7 +3094,87 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     return null;
   };
 
-  const renderScalar = (field: ScalarField) => {
+  const formatNumericValue = (value: number) => {
+    if (!Number.isFinite(value)) {
+      return '0';
+    }
+    if (Number.isInteger(value)) {
+      return value.toString();
+    }
+    return value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  };
+
+  const formatPrefixedValue = (prefix: string | undefined, value: string) => {
+    if (!prefix) {
+      return value;
+    }
+    if (prefix === '$' || prefix === '%' || prefix === '-$') {
+      return `${prefix}${value}`;
+    }
+    return `${prefix} ${value}`;
+  };
+
+  const getListFieldValue = (list: ListConfig, entry: any, field: ListField, index: number) => {
+    let fieldValue = entry ? entry[field.key] : '';
+    if (field.key === 'colors' && Array.isArray(fieldValue)) {
+      fieldValue = fieldValue.join(', ');
+    }
+    if (field.key === 'overheadMultiplier' && (fieldValue === undefined || fieldValue === null)) {
+      fieldValue = 1.1;
+    }
+    if (
+      field.key === 'defaultCleaner' &&
+      list.path[0] === 'equipment' &&
+      list.path[1] === 'cleaners'
+    ) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      fieldValue = index === getDefaultCleanerIndex(entries);
+    }
+    return fieldValue;
+  };
+
+  const formatListFieldValue = (list: ListConfig, entry: any, field: ListField, index: number) => {
+    const fieldValue = getListFieldValue(list, entry, field, index);
+    if (field.type === 'boolean') {
+      return fieldValue ? 'Yes' : 'No';
+    }
+    if (field.type === 'number') {
+      return formatPrefixedValue(field.prefix, formatNumericValue(Number(fieldValue) || 0));
+    }
+    const normalized = String(fieldValue ?? '').trim();
+    return normalized || '—';
+  };
+
+  const getListEntryLabel = (list: ListConfig, entry: any, index: number) => {
+    const nameLikeField = list.fields.find((field) => field.key === 'name' || field.key === 'description');
+    const nameLikeValue = nameLikeField ? getListFieldValue(list, entry, nameLikeField, index) : '';
+    return String(nameLikeValue || entry?.name || entry?.id || `${list.title} ${index + 1}`);
+  };
+
+  const getPreviewFields = (list: ListConfig) => list.fields;
+
+  const selectedListEditor = useMemo(() => {
+    if (!selectedListItem || !activeSection || selectedListItem.sectionTitle !== activeSection.title) {
+      return null;
+    }
+
+    const group = activeSection.groups.find((candidate) => candidate.title === selectedListItem.groupTitle);
+    const list = group?.lists?.find((candidate) => getPathKey(candidate.path) === selectedListItem.listPathKey);
+    const entry = list ? (((getValue(data, list.path) as any[]) || [])[selectedListItem.index] ?? null) : null;
+
+    if (!group || !list || !entry) {
+      return null;
+    }
+
+    return {
+      group,
+      list,
+      entry,
+      index: selectedListItem.index,
+    };
+  }, [activeSection, data, selectedListItem]);
+
+  const renderScalar = (field: ScalarField, sectionTitle: string, groupTitle: string) => {
     const value = getValue(data, field.valuePath ?? field.path);
     const displayValue =
       field.type === 'number' && field.isPercent && typeof value === 'number'
@@ -3061,6 +3191,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               checked={Boolean(value)}
               disabled={isDisabled}
               aria-disabled={isDisabled}
+              onFocus={() => setCenterFieldHelp(sectionTitle, groupTitle, field.label, field.tooltip || field.note)}
               onChange={(e) => handleScalarChange(field, e.target.checked)}
             />
             {renderLabelText(field.label)}
@@ -3105,6 +3236,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             value={typeof displayValue === 'number' ? displayValue : displayValue ?? ''}
             disabled={isDisabled}
             aria-disabled={isDisabled}
+            onFocus={() => setCenterFieldHelp(sectionTitle, groupTitle, field.label, field.tooltip || field.note)}
             onChange={(e) => handleScalarChange(field, e.target.value)}
           />
         </div>
@@ -3113,253 +3245,299 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     );
   };
 
-  const renderList = (config: ListConfig) => {
+  const renderList = (config: ListConfig, sectionTitle: string, groupTitle: string) => {
     const entries = (getValue(data, config.path) as any[]) || [];
-    const isCleanerList = config.path[0] === 'equipment' && config.path[1] === 'cleaners';
-    const defaultCleanerIndex = isCleanerList ? getDefaultCleanerIndex(entries) : -1;
     const entryCountLabel = pluralize(entries.length, 'item');
-
-    const renderListHeader = () => (
-      <div className="pricing-list-card__header">
-        <div className="pricing-list-card__title-block">
-          <h5>{config.title}</h5>
-          <span className="pricing-list-card__meta">{entryCountLabel}</span>
-        </div>
-        <button type="button" className="pricing-chip-button" onClick={() => handleAddListItem(config)}>
-          {config.addLabel || 'Add'}
-        </button>
-      </div>
-    );
-
-    if (config.variant === 'table') {
-      return (
-        <div className="pricing-list-card pricing-list-card--table">
-          {renderListHeader()}
-          <div className="pricing-list-card__body pricing-list-card__body--table">
-            <div className="pricing-table-wrapper">
-              <table className="pricing-table">
-                <thead>
-                  <tr>
-                    {config.fields.map((field) => (
-                      <th key={`${config.title}-${field.key}`} scope="col">
-                        <span>{field.label}</span>
-                        {field.tooltip && (
-                          <span
-                            className="pricing-field__info"
-                            data-tooltip={field.tooltip}
-                            aria-label={field.tooltip}
-                            role="img"
-                            onMouseEnter={updateTooltipAlign}
-                          >
-                            i
-                          </span>
-                        )}
-                      </th>
-                    ))}
-                    <th scope="col" className="pricing-table__actions-header">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry, index) => (
-                    <tr key={`${config.title}-${index}`}>
-                      {config.fields.map((field) => {
-                        const fieldValue = entry ? entry[field.key] : '';
-                        return (
-                          <td key={field.key}>
-                            {field.type === 'boolean' ? (
-                              <label className="pricing-table__checkbox-cell">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(fieldValue)}
-                                  onChange={(e) => handleListChange(config, index, field, e.target.checked)}
-                                />
-                              </label>
-                            ) : (
-                              <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
-                                {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
-                                <input
-                                  type={field.type === 'number' ? 'number' : 'text'}
-                                  className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
-                                  value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
-                                  placeholder={field.placeholder}
-                                  onChange={(e) => handleListChange(config, index, field, e.target.value)}
-                                />
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="pricing-table__actions">
-                        <button
-                          type="button"
-                          className="pricing-chip-button danger"
-                          onClick={() => handleRemoveListItem(config, index)}
-                          aria-label="Remove item"
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {entries.length === 0 && (
-                    <tr>
-                      <td colSpan={config.fields.length + 1} className="pricing-table__empty">
-                        {config.emptyMessage || 'No items yet. Add one to get started.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div className="pricing-list-card">
-        {renderListHeader()}
-        <div className="pricing-list-card__body">
-          {entries.map((entry, index) => (
-            <div key={`${config.title}-${index}`} className="pricing-list-row">
-              <div className="pricing-list-row__fields">
-                {config.fields.map((field) => {
-                  const cellKey = `${config.path.join('.')}.${index}.${field.key}`;
-                  let fieldValue = entry ? entry[field.key] : '';
-                  if (field.key === 'colors' && Array.isArray(fieldValue)) {
-                    fieldValue = fieldValue.join(', ');
-                  }
-                  if (field.key === 'overheadMultiplier' && (fieldValue === undefined || fieldValue === null)) {
-                    fieldValue = 1.1;
-                  }
-                  if (isCleanerList && field.key === 'defaultCleaner') {
-                    fieldValue = index === defaultCleanerIndex;
-                  }
-                  if (field.type === 'boolean') {
-                    return (
-                      <label key={field.key} className="pricing-field inline">
-                        <div className={getListFieldLabelClassName(field)}>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(fieldValue)}
-                            onChange={(e) => handleListChange(config, index, field, e.target.checked)}
-                          />
-                          {renderListFieldLabelText(config, field, cellKey)}
-                          {isRenamableAddCostField(field) && (
-                            <button
-                              type="button"
-                              className="pricing-field__rename-btn"
-                              aria-label={`Rename ${field.label} for ${config.title}`}
-                              title={`Rename ${field.label}`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleStartRenameListField(config, field, cellKey);
-                              }}
-                            >
-                              <svg viewBox="0 0 16 16" aria-hidden="true">
-                                <path
-                                  d="M11.7 2.3a1 1 0 011.4 0l.6.6a1 1 0 010 1.4l-7.9 7.9-2.6.6.6-2.6 7.9-7.9zM9.9 4.1l2 2"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.3"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            </button>
-                          )}
-                          {field.tooltip && (
-                            <span
-                              className="pricing-field__info"
-                              data-tooltip={field.tooltip}
-                              aria-label={field.tooltip}
-                              role="img"
-                              onMouseEnter={updateTooltipAlign}
-                            >
-                              i
-                            </span>
-                          )}
-                        </div>
-                      </label>
-                    );
-                  }
+      <div className="pricing-browser-card">
+        <div className="pricing-browser-card__header">
+          <div className="pricing-browser-card__title-block">
+            <h5>{config.title}</h5>
+            <span className="pricing-browser-card__meta">{entryCountLabel}</span>
+          </div>
+          <button
+            type="button"
+            className="pricing-chip-button"
+            onClick={() => {
+              const nextIndex = entries.length;
+              handleAddListItem(config);
+              setSelectedListItem({
+                sectionTitle,
+                groupTitle,
+                listPathKey: getPathKey(config.path),
+                index: nextIndex,
+              });
+            }}
+          >
+            {config.addLabel || 'Add'}
+          </button>
+        </div>
+        <div className="pricing-browser-card__body">
+          <div className="pricing-table-wrapper">
+            <table className="pricing-table pricing-table--browser">
+              <thead>
+                <tr>
+                  <th scope="col" className="pricing-table__select-col" />
+                  {getPreviewFields(config).map((field) => (
+                    <th key={`${config.title}-${field.key}`} scope="col">
+                      <span>{getListFieldLabel(config, field)}</span>
+                      {field.tooltip && (
+                        <span
+                          className="pricing-field__info"
+                          data-tooltip={field.tooltip}
+                          aria-label={field.tooltip}
+                          role="img"
+                          onMouseEnter={updateTooltipAlign}
+                        >
+                          i
+                        </span>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry, index) => {
+                  const isSelected =
+                    selectedListItem?.sectionTitle === sectionTitle &&
+                    selectedListItem?.groupTitle === groupTitle &&
+                    selectedListItem?.listPathKey === getPathKey(config.path) &&
+                    selectedListItem?.index === index;
 
                   return (
-                    <label key={field.key} className="pricing-field inline">
-                      <div className={getListFieldLabelClassName(field)}>
-                        {renderListFieldLabelText(config, field, cellKey)}
-                        {isRenamableAddCostField(field) && (
-                          <button
-                            type="button"
-                            className="pricing-field__rename-btn"
-                            aria-label={`Rename ${field.label} for ${config.title}`}
-                            title={`Rename ${field.label}`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleStartRenameListField(config, field, cellKey);
-                            }}
-                          >
-                            <svg viewBox="0 0 16 16" aria-hidden="true">
-                              <path
-                                d="M11.7 2.3a1 1 0 011.4 0l.6.6a1 1 0 010 1.4l-7.9 7.9-2.6.6.6-2.6 7.9-7.9zM9.9 4.1l2 2"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                        )}
-                        {field.tooltip && (
-                          <span
-                            className="pricing-field__info"
-                            data-tooltip={field.tooltip}
-                            aria-label={field.tooltip}
-                            role="img"
-                            onMouseEnter={updateTooltipAlign}
-                          >
-                            i
-                          </span>
-                        )}
-                      </div>
-                      <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
-                        {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
-                        <input
-                          type={field.type === 'number' ? 'number' : 'text'}
-                          className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
-                          value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
-                          placeholder={field.placeholder}
-                          onChange={(e) => handleListChange(config, index, field, e.target.value)}
-                        />
-                      </div>
-                    </label>
+                    <tr
+                      key={`${config.title}-${index}`}
+                      className={isSelected ? 'is-selected' : ''}
+                      tabIndex={0}
+                      onClick={() =>
+                        setSelectedListItem({
+                          sectionTitle,
+                          groupTitle,
+                          listPathKey: getPathKey(config.path),
+                          index,
+                        })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedListItem({
+                            sectionTitle,
+                            groupTitle,
+                            listPathKey: getPathKey(config.path),
+                            index,
+                          });
+                        }
+                      }}
+                    >
+                      <td className="pricing-table__select-col">
+                        <span className={`pricing-table__row-indicator${isSelected ? ' is-selected' : ''}`}>
+                          {isSelected ? '>' : ''}
+                        </span>
+                      </td>
+                      {getPreviewFields(config).map((field) => (
+                        <td key={field.key}>{formatListFieldValue(config, entry, field, index)}</td>
+                      ))}
+                    </tr>
                   );
                 })}
-              </div>
-              <div className="pricing-list-row__actions">
-                <button
-                  type="button"
-                  className="pricing-chip-button danger"
-                  onClick={() => handleRemoveListItem(config, index)}
-                  aria-label="Remove item"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          ))}
-          {entries.length === 0 && (
-            <div className="pricing-empty">{config.emptyMessage || 'No items yet. Add one to get started.'}</div>
-          )}
+                {entries.length === 0 && (
+                  <tr>
+                    <td colSpan={getPreviewFields(config).length + 1} className="pricing-table__empty">
+                      {config.emptyMessage || 'No items yet. Add one to get started.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="pricing-browser-card__hint">
+            Select a row to edit its values in the details panel.
+          </div>
         </div>
       </div>
     );
   };
+
+  const renderSelectedListEditor = () => {
+    if (!selectedListEditor) {
+      return (
+        <div className="pricing-rail-card pricing-rail-card--empty">
+          <div className="pricing-rail-card__header">
+            <h3>Item Details</h3>
+          </div>
+          <p>Select a catalog row from the center workspace to edit its values here.</p>
+        </div>
+      );
+    }
+
+    const { list, entry, index } = selectedListEditor;
+    const itemLabel = getListEntryLabel(list, entry, index);
+    const editTitle = list.title.endsWith('s') ? list.title.slice(0, -1) : list.title;
+
+    return (
+      <div className="pricing-rail-card">
+        <div className="pricing-rail-card__header">
+          <div>
+            <p className="pricing-rail-card__eyebrow">{selectedListEditor.group.title}</p>
+            <h3>{`Edit ${editTitle}`}</h3>
+            <p className="pricing-rail-card__summary">{itemLabel}</p>
+          </div>
+          <button
+            type="button"
+            className="pricing-rail-card__close"
+            aria-label="Close item editor"
+            onClick={() => setSelectedListItem(null)}
+          >
+            ×
+          </button>
+        </div>
+        <div className="pricing-rail-card__body">
+          {list.fields.map((field) => {
+            const cellKey = `${list.path.join('.')}.${index}.${field.key}`;
+            const fieldValue = getListFieldValue(list, entry, field, index);
+
+            if (field.type === 'boolean') {
+              return (
+                <label key={field.key} className="pricing-field">
+                  <div className={getListFieldLabelClassName(field)}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(fieldValue)}
+                      onChange={(e) => handleListChange(list, index, field, e.target.checked)}
+                    />
+                    {renderListFieldLabelText(list, field, cellKey)}
+                    {isRenamableAddCostField(field) && (
+                      <button
+                        type="button"
+                        className="pricing-field__rename-btn"
+                        aria-label={`Rename ${field.label} for ${list.title}`}
+                        title={`Rename ${field.label}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleStartRenameListField(list, field, cellKey);
+                        }}
+                      >
+                        <svg viewBox="0 0 16 16" aria-hidden="true">
+                          <path
+                            d="M11.7 2.3a1 1 0 011.4 0l.6.6a1 1 0 010 1.4l-7.9 7.9-2.6.6.6-2.6 7.9-7.9zM9.9 4.1l2 2"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                    {field.tooltip && (
+                      <span
+                        className="pricing-field__info"
+                        data-tooltip={field.tooltip}
+                        aria-label={field.tooltip}
+                        role="img"
+                        onMouseEnter={updateTooltipAlign}
+                      >
+                        i
+                      </span>
+                    )}
+                  </div>
+                </label>
+              );
+            }
+
+            return (
+              <label key={field.key} className="pricing-field">
+                <div className={getListFieldLabelClassName(field)}>
+                  {renderListFieldLabelText(list, field, cellKey)}
+                  {isRenamableAddCostField(field) && (
+                    <button
+                      type="button"
+                      className="pricing-field__rename-btn"
+                      aria-label={`Rename ${field.label} for ${list.title}`}
+                      title={`Rename ${field.label}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleStartRenameListField(list, field, cellKey);
+                      }}
+                    >
+                      <svg viewBox="0 0 16 16" aria-hidden="true">
+                        <path
+                          d="M11.7 2.3a1 1 0 011.4 0l.6.6a1 1 0 010 1.4l-7.9 7.9-2.6.6.6-2.6 7.9-7.9zM9.9 4.1l2 2"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  )}
+                  {field.tooltip && (
+                    <span
+                      className="pricing-field__info"
+                      data-tooltip={field.tooltip}
+                      aria-label={field.tooltip}
+                      role="img"
+                      onMouseEnter={updateTooltipAlign}
+                    >
+                      i
+                    </span>
+                  )}
+                </div>
+                <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
+                  {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
+                  <input
+                    type={field.type === 'number' ? 'number' : 'text'}
+                    className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
+                    value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
+                    placeholder={field.placeholder}
+                    onChange={(e) => handleListChange(list, index, field, e.target.value)}
+                  />
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        <div className="pricing-rail-card__footer">
+          <button
+            type="button"
+            className="pricing-chip-button danger"
+            onClick={() => {
+              handleRemoveListItem(list, index);
+              setSelectedListItem(null);
+            }}
+          >
+            Delete Item
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderContextHelpPanel = () => (
+    <div className="pricing-rail-card pricing-rail-card--help">
+      <div className="pricing-rail-card__header">
+        <h3>Field Help</h3>
+      </div>
+      {contextHelp ? (
+        <div className="pricing-help">
+          {(contextHelp.sectionTitle || contextHelp.groupTitle) && (
+            <p className="pricing-help__eyebrow">
+              {[contextHelp.sectionTitle, contextHelp.groupTitle].filter(Boolean).join(' / ')}
+            </p>
+          )}
+          <h4>{contextHelp.title}</h4>
+          <p>{contextHelp.description}</p>
+        </div>
+      ) : (
+        <p className="pricing-help__empty">
+          Focus an input in the center workspace to pin its tooltip and guidance here.
+        </p>
+      )}
+    </div>
+  );
 
   function renderBaseRanges() {
     const baseRanges = ((getValue(data, ['excavation', 'baseRanges']) as any[]) || []).sort(
@@ -3386,6 +3564,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       type="number"
                       className="pricing-field__input pricing-field__input--bare"
                       value={price}
+                      onFocus={() =>
+                        setCenterFieldHelp(
+                          'Excavation',
+                          'Base excavation (surface area breakpoints)',
+                          label,
+                          'Sets the excavation base price for this surface-area breakpoint.'
+                        )
+                      }
                       onChange={(e) =>
                         handleListChange(
                           {
@@ -3412,6 +3598,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   type="number"
                   className="pricing-field__input pricing-field__input--bare"
                   value={getValue(data, ['excavation', 'over1000Sqft']) ?? ''}
+                  onFocus={() =>
+                    setCenterFieldHelp(
+                      'Excavation',
+                      'Base excavation (surface area breakpoints)',
+                      '1000+ LNFT',
+                      'Applies once the excavation surface area exceeds the configured breakpoint range.'
+                    )
+                  }
                   onChange={(e) =>
                     handleScalarChange(
                       { label: 'over1000', path: ['excavation', 'over1000Sqft'], type: 'number' },
@@ -3429,223 +3623,259 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
 
   return (
-    <div
-      className="pricing-modal-backdrop"
-      onMouseDown={handleBackdropMouseDown}
-      onMouseUp={handleBackdropMouseUp}
-      onMouseLeave={handleBackdropMouseLeave}
-    >
-      <div className="pricing-modal">
-        <div className="pricing-hero">
-          <div>
-            <p className="pricing-hero__eyebrow">{currentFranchiseId}</p>
-            <h2>Admin Pricing Model Editor</h2>
-            <p className="pricing-modal__lede">
-              Adjust labor, material, equipment costs, and discounts for each Pricing Model. Select an existing model to edit or create a new one.
-            </p>
-          </div>
-          <button className="pricing-close" onClick={onClose} aria-label="Close pricing data">
-            Close
-          </button>
-        </div>
-
-        <div className="pricing-card pricing-model-panel">
-          <div className="pricing-model-panel__header">
-            <label className="pricing-input-block grow">
-              <span className="pricing-input-block__label">Select Existing Model</span>
-              <div className="pricing-select">
-                <select
-                  value={selectedModelId || ''}
-                  onChange={(e) => void handleSelectModel(e.target.value)}
-                  disabled={isInitializing}
-                >
-                  <option value="">Start a new pricing model</option>
-                  {pricingModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} {model.isDefault ? '(Active)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </label>
-            <button
-              className="pricing-chip-button ghost"
-              type="button"
-              onClick={handleCreateNewModel}
-              disabled={isInitializing}
-            >
-              Create New Model
-            </button>
-            <button
-              className="pricing-chip-button ghost align-right"
-              onClick={() => setConfirmResetOpen(true)}
-              type="button"
-              disabled={isInitializing}
-            >
-              Reset to Defaults
-            </button>
-          </div>
-
-          <div className="pricing-model-panel__row">
-            <label className="pricing-input-block grow">
-              <span className="pricing-input-block__label">Model Name</span>
+    <div className="pricing-page-shell">
+      <div className="pricing-page">
+        <aside className="pricing-page__sidebar">
+          <div className="pricing-page__sidebar-top">
+            <label className="pricing-page__search">
+              <span className="pricing-page__search-icon" aria-hidden="true">
+                ○
+              </span>
               <input
                 type="text"
-                className="pricing-input"
-                value={modelName}
-                placeholder="'Black Friday', 'Summer Promo', etc."
-                disabled={isInitializing}
-                onChange={(e) => {
-                  setModelName(e.target.value);
-                  setHasChanges(true);
-                }}
+                value={searchQuery}
+                placeholder="Search settings..."
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search settings"
               />
             </label>
-            <div className="pricing-model-panel__actions">
-              <div
-                className="pricing-tooltip"
-                data-tooltip={!hasChanges ? 'No changes made' : 'Save recently made changes'}
-              >
-                <button
-                  className={`pricing-chip-button primary ${!hasChanges || isInitializing ? 'disabled' : ''}`}
-                  onClick={handleSaveModel}
-                  disabled={!hasChanges || savingModel || isInitializing}
-                >
-                  {savingModel ? 'Saving...' : 'Save Model'}
-                </button>
+
+            <div className="pricing-page__nav-block">
+              <p className="pricing-page__nav-title">Pricing Models</p>
+              <div className="pricing-page__nav">
+                {sections.map((section) => {
+                  const isActive = section.title === activeSection?.title;
+                  return (
+                    <button
+                      key={section.title}
+                      type="button"
+                      className={`pricing-page__nav-item${isActive ? ' is-active' : ''}`}
+                      onClick={() => {
+                        setActiveSectionTitle(section.title);
+                        setContextHelp(null);
+                      }}
+                    >
+                      <span className="pricing-page__nav-icon">{renderSectionIcon(section.title)}</span>
+                      <span>{section.title}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
 
-          <div className="pricing-model-panel__info-bar">
-            <div className="pricing-model-panel__info-text">
-              <span className="pricing-label muted">Editing Pricing Model:</span>{' '}
+          <div className="pricing-page__sidebar-bottom">
+            <button className="pricing-close pricing-close--page" onClick={onClose} aria-label="Back to admin panel">
+              Back to Admin
+            </button>
+          </div>
+        </aside>
+
+        <div className="pricing-page__main">
+          <div className="pricing-hero pricing-hero--page">
+            <div className="pricing-hero__content">
+              <h2>Admin Pricing Model Editor</h2>
+              <div className="pricing-hero__controls">
+                <label className="pricing-input-block pricing-hero__control">
+                  <span className="pricing-input-block__label">Select Pricing Model</span>
+                  <div className="pricing-select">
+                    <select
+                      value={selectedModelId || ''}
+                      onChange={(e) => void handleSelectModel(e.target.value)}
+                      disabled={isInitializing}
+                    >
+                      <option value="">Start a new pricing model</option>
+                      {pricingModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} {model.isDefault ? '(Active)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+                <label className="pricing-input-block pricing-hero__control">
+                  <span className="pricing-input-block__label">Model Name</span>
+                  <input
+                    type="text"
+                    className="pricing-input"
+                    value={modelName}
+                    placeholder="'Black Friday', 'Summer Promo', etc."
+                    disabled={isInitializing}
+                    onChange={(e) => {
+                      setModelName(e.target.value);
+                      setHasChanges(true);
+                    }}
+                  />
+                </label>
+                <div className="pricing-hero__actions">
+                  <button
+                    className="pricing-chip-button ghost"
+                    type="button"
+                    onClick={handleCreateNewModel}
+                    disabled={isInitializing}
+                  >
+                    Create New Model
+                  </button>
+                  <button
+                    className="pricing-chip-button ghost"
+                    onClick={() => setConfirmResetOpen(true)}
+                    type="button"
+                    disabled={isInitializing}
+                  >
+                    Reset to Defaults
+                  </button>
+                  {showSetActiveButton && (
+                    <button
+                      className="pricing-chip-button"
+                      type="button"
+                      disabled={!selectedModelId || activatedFlash || isInitializing}
+                      onClick={handleActivateSelected}
+                    >
+                      {activatedFlash ? 'Activated!' : 'Set Active'}
+                    </button>
+                  )}
+                  <div
+                    className="pricing-tooltip"
+                    data-tooltip={selectedModelIsDefault ? 'Cannot delete active model' : undefined}
+                  >
+                    <button
+                      className={`pricing-chip-button danger ${selectedModelIsDefault || isInitializing ? 'disabled' : ''}`}
+                      type="button"
+                      disabled={!selectedModelId || selectedModelIsDefault || isInitializing}
+                      onClick={() => {
+                        if (!selectedModelId || selectedModelIsDefault) return;
+                        setConfirmDeleteModel({
+                          id: selectedModelId,
+                          name: selectedModel?.name || displayModelName,
+                        });
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {false && <label className="pricing-page__search pricing-page__search--header">
+              <span className="pricing-page__search-icon" aria-hidden="true">
+                ○
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                placeholder="Search settings..."
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search settings"
+              />
+            </label>}
+          </div>
+
+          <div className="pricing-card pricing-model-summary-card">
+            <div className="pricing-model-summary-card__content">
+              <span className="pricing-label muted">Current Model:</span>
               <span className="pricing-model-panel__name">{displayModelName}</span>
               {selectedModelIsDefault && <span className="pricing-pill success">Active</span>}
             </div>
-            <div className="pricing-model-panel__meta-actions">
-              <div
-                className="pricing-tooltip"
-                data-tooltip={!hasChanges ? 'No changes made' : 'Reset recently made changes'}
-              >
-                <button
-                  className={`pricing-chip-button ${!hasChanges || isInitializing ? 'disabled' : ''}`}
-                  type="button"
-                  disabled={!selectedModelId || !hasChanges || isInitializing}
-                  onClick={() => selectedModelId && void handleLoadModel(selectedModelId)}
-                >
-                  Reset Changes
-                </button>
-              </div>
-              {showSetActiveButton && (
-                <button
-                  className="pricing-chip-button"
-                  type="button"
-                  disabled={!selectedModelId || activatedFlash || isInitializing}
-                  onClick={handleActivateSelected}
-                >
-                  {activatedFlash ? 'Activated!' : 'Set Active'}
-                </button>
-              )}
-              <div
-                className="pricing-tooltip"
-                data-tooltip={selectedModelIsDefault ? 'Cannot delete active model' : undefined}
-              >
-                <button
-                  className={`pricing-chip-button danger ${selectedModelIsDefault || isInitializing ? 'disabled' : ''}`}
-                  type="button"
-                  disabled={!selectedModelId || selectedModelIsDefault || isInitializing}
-                  onClick={() => {
-                    if (!selectedModelId || selectedModelIsDefault) return;
-                    setConfirmDeleteModel({
-                      id: selectedModelId,
-                      name: selectedModel?.name || displayModelName,
-                    });
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-        </div>
-        {saveError && <div className="pricing-model-error">{saveError}</div>}
-        </div>
+          </div>
 
+          {saveError && <div className="pricing-model-error">{saveError}</div>}
 
-        <div className="pricing-modal__content">
-          {isInitializing ? (
-            <div className="pricing-empty">Loading pricing model data...</div>
-          ) : sections.map((section) => {
-            const open = openSections[section.title] ?? false;
-            return (
-              <section key={section.title} className={`pricing-section ${open ? 'open' : ''}`}>
-                <button
-                  type="button"
-                  className="pricing-section__header"
-                  aria-expanded={open}
-                  onClick={() => toggleSection(section.title)}
-                >
-                  <div className="pricing-section__header-left">
-                    {renderSectionIcon(section.title)}
-                    <span className="pricing-section__title">{section.title}</span>
-                  </div>
-                  <span className={`chevron ${open ? 'open' : ''}`}>{'>'}</span>
-                </button>
-                <div
-                  className={`pricing-section__body ${
-                    open ? 'pricing-section__body--open' : 'pricing-section__body--closed'
-                  }`}
-                >
-                  <div className="pricing-section__body-content">
-                    {section.groups.map((group) => {
-                      const groupSummary = getGroupSummary(group);
+          <div className="pricing-workspace">
+            <div className="pricing-workspace__center">
+              {isInitializing ? (
+                <div className="pricing-empty">Loading pricing model data...</div>
+              ) : !activeSection ? (
+                <div className="pricing-empty">No pricing sections are available.</div>
+              ) : (
+                <>
+                  <section className="pricing-section pricing-section--page">
+                    <div className="pricing-section__header pricing-section__header--static">
+                      <div className="pricing-section__header-left">
+                        {renderSectionIcon(activeSection.title)}
+                        <span className="pricing-section__title">{activeSection.title}</span>
+                      </div>
+                    </div>
+                    <div className="pricing-section__body pricing-section__body--open">
+                      <div className="pricing-section__body-content">
+                        {activeSection.groups.map((group) => {
+                          const groupSummary = getGroupSummary(group);
 
-                      return (
-                        <div key={group.title} className="pricing-group">
-                          <div className="pricing-group__header">
-                            <div className="pricing-group__heading">
-                              <p className="pricing-group__eyebrow">Pricing Subcategory</p>
-                              <h4>{group.title}</h4>
-                              {groupSummary && <p className="pricing-group__summary">{groupSummary}</p>}
+                          return (
+                            <div key={group.title} className="pricing-group">
+                              <div className="pricing-group__header">
+                                <div className="pricing-group__heading">
+                                  <p className="pricing-group__eyebrow">Pricing Subcategory</p>
+                                  <h4>{group.title}</h4>
+                                  {groupSummary && <p className="pricing-group__summary">{groupSummary}</p>}
+                                </div>
+                              </div>
+
+                              <div className="pricing-group__content">
+                                {group.render && <div className="pricing-group__custom">{group.render()}</div>}
+                                {group.scalars && (
+                                  <div className="pricing-group__surface">
+                                    <div className="pricing-fields-grid">
+                                      {group.scalars.map((field) => (
+                                        <React.Fragment key={`${activeSection.title}-${group.title}-${field.label}`}>
+                                          {renderScalar(field, activeSection.title, group.title)}
+                                        </React.Fragment>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {group.lists && (
+                                  <div className="pricing-group__surface">
+                                    <div className="pricing-group__surface-header">
+                                      <h5>Catalog Editors</h5>
+                                    </div>
+                                    <div className="pricing-lists">
+                                      {group.lists.map((list) => (
+                                        <React.Fragment key={`${group.title}-${list.title}`}>
+                                          {renderList(list, activeSection.title, group.title)}
+                                        </React.Fragment>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
 
-                          <div className="pricing-group__content">
-                            {group.render && <div className="pricing-group__custom">{group.render()}</div>}
-                            {group.scalars && (
-                              <div className="pricing-group__surface">
-                                <div className="pricing-fields-grid">
-                                  {group.scalars.map((field) => (
-                                    <React.Fragment key={`${section.title}-${group.title}-${field.label}`}>
-                                      {renderScalar(field)}
-                                    </React.Fragment>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {group.lists && (
-                              <div className="pricing-group__surface">
-                                <div className="pricing-group__surface-header">
-                                  <h5>Catalog Editors</h5>
-                                </div>
-                                <div className="pricing-lists">
-                                  {group.lists.map((list) => (
-                                    <React.Fragment key={`${group.title}-${list.title}`}>
-                                      {renderList(list)}
-                                    </React.Fragment>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+            <aside className="pricing-workspace__rail">
+              {renderSelectedListEditor()}
+              {renderContextHelpPanel()}
+              <div className="pricing-rail-card pricing-rail-card--actions">
+                <div className="pricing-rail-card__header">
+                  <h3>Model Actions</h3>
                 </div>
-              </section>
-            );
-          })}
+                <div className="pricing-rail-actions">
+                  <button
+                    className={`pricing-chip-button ${!hasChanges || isInitializing ? 'disabled' : ''}`}
+                    type="button"
+                    disabled={!selectedModelId || !hasChanges || isInitializing}
+                    onClick={() => selectedModelId && void handleLoadModel(selectedModelId)}
+                  >
+                    Reset Changes
+                  </button>
+                  <button
+                    className={`pricing-chip-button primary ${!hasChanges || isInitializing ? 'disabled' : ''}`}
+                    onClick={handleSaveModel}
+                    disabled={!hasChanges || savingModel || isInitializing}
+                  >
+                    {savingModel ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
       {(confirmDeleteModel || confirmResetOpen) && (

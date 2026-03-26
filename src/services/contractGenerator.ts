@@ -1,4 +1,4 @@
-import { Proposal, WaterFeatureSelection } from '../types/proposal-new';
+import { Proposal, PumpSelection, WaterFeatureSelection } from '../types/proposal-new';
 import MasterPricingEngine from './masterPricingEngine';
 import pricingData from './pricingData';
 import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/masonryFacing';
@@ -208,6 +208,54 @@ function formatRaisedSpaFacing(value?: string | null): string {
 function stripParenSuffix(value: string): string {
   const idx = value.indexOf('(');
   return (idx >= 0 ? value.slice(0, idx) : value).trim();
+}
+
+function isPlaceholderPumpName(value?: string | null): boolean {
+  const normalized = (value ?? '').trim().toLowerCase();
+  return !normalized || normalized.includes('no pump') || normalized.includes('no aux') || normalized.includes('no auxiliary');
+}
+
+function getPrimaryPumpContractName(proposal: Proposal, fallback = 'None'): string {
+  const selectedPumpName = proposal.equipment?.pump?.name;
+  if (!isPlaceholderPumpName(selectedPumpName)) {
+    return selectedPumpName!;
+  }
+
+  const legacyPrimaryPumpName =
+    (proposal.equipment as (Proposal['equipment'] & { primaryPump?: { name?: string } }) | undefined)?.primaryPump?.name;
+  if (!isPlaceholderPumpName(legacyPrimaryPumpName)) {
+    return legacyPrimaryPumpName!;
+  }
+
+  return fallback;
+}
+
+function getAuxiliaryPumpSelections(proposal: Proposal): PumpSelection[] {
+  const auxPumps = (proposal.equipment?.auxiliaryPumps || []).filter(
+    (pump) => pump && !isPlaceholderPumpName(pump.name)
+  );
+
+  if (auxPumps.length > 0) {
+    return auxPumps;
+  }
+
+  const legacyAuxPump = proposal.equipment?.auxiliaryPump;
+  return legacyAuxPump && !isPlaceholderPumpName(legacyAuxPump.name) ? [legacyAuxPump] : [];
+}
+
+function isSpaAutoAddedAuxiliaryPump(pump: Pick<PumpSelection, 'autoAddedForSpa' | 'autoAddedReason'> | undefined): boolean {
+  return Boolean(pump?.autoAddedForSpa || pump?.autoAddedReason === 'spa');
+}
+
+function getContractBlowerValue(proposal: Proposal): string {
+  const spaAutoPump = getAuxiliaryPumpSelections(proposal).find((pump) => isSpaAutoAddedAuxiliaryPump(pump));
+  return spaAutoPump?.name || 'NO';
+}
+
+function getAuxiliaryPumpContractNames(proposal: Proposal): string[] {
+  return getAuxiliaryPumpSelections(proposal)
+    .filter((pump) => !isSpaAutoAddedAuxiliaryPump(pump))
+    .map((pump) => pump.name || '');
 }
 
 function getWaterFeatureName(featureId?: string): string {
@@ -454,7 +502,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   }
 
   if (field.id === 'p2_56') return 'NONE';
-  if (field.id === 'p2_58') return 'NO';
+  if (field.id === 'p2_58') return getContractBlowerValue(proposal);
   if (field.id === 'p2_62') return 'NO';
   if (field.id === 'p2_65') return 'NO';
   if (field.id === 'p2_67') return proposal.poolSpecs?.isRaisedSpa ? 'YES' : 'NO';
@@ -516,17 +564,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/hoa approval/.test(label)) return 'YES';
   if (/financing required/.test(label)) return 'NO';
 
-  if (/auxiliary pump i/.test(label)) {
-    const auxPumps = proposal.equipment?.auxiliaryPumps?.filter(Boolean) || [];
-    const legacyAux = !auxPumps.length && proposal.equipment?.auxiliaryPump ? [proposal.equipment.auxiliaryPump] : [];
-    const pumps = [...auxPumps, ...legacyAux];
-    return pumps[0]?.name || 'None';
+  if (field.id === 'p1_22' || /\bauxiliary pump ii\b/.test(label)) {
+    return getAuxiliaryPumpContractNames(proposal)[0] || 'None';
   }
-  if (/auxiliary pump ii/.test(label)) {
-    const auxPumps = proposal.equipment?.auxiliaryPumps?.filter(Boolean) || [];
-    const legacyAux = !auxPumps.length && proposal.equipment?.auxiliaryPump ? [proposal.equipment.auxiliaryPump] : [];
-    const pumps = [...auxPumps, ...legacyAux];
-    return pumps[1]?.name || 'None';
+  if (field.id === 'p1_21' || /\bauxiliary pump i\b/.test(label)) {
+    return getPrimaryPumpContractName(proposal, 'None');
   }
   if (/sanitation i/.test(label)) {
     const sanitationSelections = [
@@ -594,13 +636,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/surface returns/.test(label)) return '4';
   if (/auto-fill/.test(label)) return formatYesNo(proposal.plumbing?.runs?.autoFillRun, overrideDefault || 'NO');
   if (/circulation pump/.test(label)) {
-    const legacyPrimaryPumpName =
-      (proposal.equipment as (Proposal['equipment'] & { primaryPump?: { name?: string } }) | undefined)?.primaryPump?.name;
-    return proposal.equipment?.pump?.name || legacyPrimaryPumpName || overrideDefault;
+    return getPrimaryPumpContractName(proposal, overrideDefault || 'None');
   }
   if (/filter/.test(label) && !/interior/.test(label)) return proposal.equipment?.filter?.name || overrideDefault;
   if (/spa light/.test(label)) return proposal.poolSpecs?.spaType !== 'none' ? '1' : '0';
-  if (/blower/.test(label)) return proposal.poolSpecs?.spaType !== 'none' ? 'YES' : 'NO';
+  if (/blower/.test(label)) return getContractBlowerValue(proposal);
   if (/interior finish/.test(label)) {
     const finishType = proposal.interiorFinish?.finishType;
     const finishLabel = finishType

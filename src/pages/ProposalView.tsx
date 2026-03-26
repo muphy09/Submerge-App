@@ -33,7 +33,6 @@ import {
   getDefaultManualAdjustments,
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
-import { getAdditionalPumpSelections } from '../utils/pumpSelections';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
 import { hasRetiredEquipment } from '../utils/retiredEquipment';
@@ -84,19 +83,7 @@ const summarizeSelectionWithQuantity = (
 };
 
 const summarizePumpSelection = (equipment: Proposal['equipment']): string => {
-  const primaryPump = hasNamedSelection(equipment.pump?.name, 'no pump') ? [equipment.pump.name] : [];
-  const additionalPrimaryPumps = getAdditionalPumpSelections(equipment)
-    .map((pump) => pump?.name)
-    .filter((name): name is string => hasNamedSelection(name, 'no pump'));
-  const auxiliarySelections = equipment.auxiliaryPumps?.length
-    ? equipment.auxiliaryPumps
-    : equipment.auxiliaryPump
-    ? [equipment.auxiliaryPump]
-    : [];
-  const auxiliaryPumps = auxiliarySelections
-    .map((pump) => pump?.name)
-    .filter((name): name is string => hasNamedSelection(name, 'no pump'));
-  return summarizeNamedSelections([...primaryPump, ...additionalPrimaryPumps, ...auxiliaryPumps]);
+  return hasNamedSelection(equipment.pump?.name, 'no pump') ? normalizeSummaryName(equipment.pump.name) : 'None';
 };
 
 const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefined): string => {
@@ -107,6 +94,27 @@ const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefine
       return Boolean(normalized) && normalized !== 'none';
     });
   return summarizeNamedSelections(names);
+};
+
+const getEquipmentPackageLabel = (equipment: Proposal['equipment']): string | null => {
+  const selectedPackage = getSelectedEquipmentPackage(equipment as any);
+  if (!selectedPackage) return null;
+
+  const packageName = normalizeSummaryName(selectedPackage.name);
+  if (!packageName) {
+    return selectedPackage.mode === 'custom' ? 'Custom Equipment Package' : null;
+  }
+
+  if (selectedPackage.mode !== 'custom') {
+    return packageName;
+  }
+
+  const normalizedPackageName = packageName.toLowerCase();
+  if (normalizedPackageName === 'custom') {
+    return 'Custom Equipment Package';
+  }
+
+  return normalizedPackageName.includes('package') ? packageName : `${packageName} Equipment Package`;
 };
 
 const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
@@ -137,6 +145,7 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
   );
 
   return {
+    equipmentPackageLabel: getEquipmentPackageLabel(equipment),
     pumpSummary: summarizePumpSelection(equipment),
     filterSummary: summarizeSelectionWithQuantity(equipment.filter?.name, filterQuantity, 'no filter'),
     heaterSummary: summarizeSelectionWithQuantity(equipment.heater?.name, heaterQuantity, 'no heater'),
@@ -738,23 +747,24 @@ function ProposalView() {
 
   const handleContractSaveClick = () => {
     if (contractSaving) return;
-    contractViewRef.current?.saveOverrides();
+    void contractViewRef.current?.saveOverrides();
   };
 
   const handleContractExportToggle = () => {
+    if (contractExporting || contractSaving) return;
     setContractExportOpen((prev) => !prev);
   };
 
   const handleContractPrint = () => {
     setContractExportOpen(false);
     if (!contractViewRef.current) return;
-    contractViewRef.current.printContract();
+    void contractViewRef.current.printContract();
   };
 
   const handleContractPdf = () => {
     setContractExportOpen(false);
     if (!contractViewRef.current) return;
-    contractViewRef.current.exportPdf();
+    void contractViewRef.current.exportPdf();
   };
 
   const persistStatusChange = async (nextStatus: 'draft' | 'submitted') => {
@@ -1670,7 +1680,12 @@ function ProposalView() {
 
           <div className="hero-grid">
             <p className="hero-section-title hero-section-title-specs">Pool Specifications</p>
-            <p className="hero-section-title hero-section-title-equipment">Pool Equipment</p>
+            <p className="hero-section-title hero-section-title-equipment">
+              <span>Pool Equipment</span>
+              {vm.equipmentPackageLabel && (
+                <span className="hero-equipment-package-pill">{vm.equipmentPackageLabel}</span>
+              )}
+            </p>
             <div className="hero-column">
               <div className="hero-line">
                 <span className="hero-label">Pool Type:</span>
@@ -1924,7 +1939,7 @@ function ProposalView() {
                     className={`action-button export-button ${contractExportOpen ? 'open' : ''}`}
                     type="button"
                     onClick={handleContractExportToggle}
-                    disabled={contractExporting}
+                    disabled={contractExporting || contractSaving}
                     aria-expanded={contractExportOpen}
                     aria-haspopup="listbox"
                   >
@@ -1941,7 +1956,7 @@ function ProposalView() {
                         className="export-option"
                         role="option"
                         onClick={handleContractPrint}
-                        disabled={contractExporting}
+                        disabled={contractExporting || contractSaving}
                       >
                         Print
                       </button>
@@ -1950,7 +1965,7 @@ function ProposalView() {
                         className="export-option"
                         role="option"
                         onClick={handleContractPdf}
-                        disabled={contractExporting}
+                        disabled={contractExporting || contractSaving}
                       >
                         PDF
                       </button>

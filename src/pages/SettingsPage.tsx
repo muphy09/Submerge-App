@@ -412,15 +412,12 @@ const SettingsPage: React.FC = () => {
         {isAdmin && (
           <div className="settings-card">
             <h2>Admin COGS View</h2>
-            <p className="settings-description">
-              Control whether COGS breakdowns are visible while you build and review proposals on this account.
-            </p>
             <div className="admin-cogs-settings-panel">
               <div className="section-row admin-cogs-settings-row">
                 <div>
                   <h3>Hide COGS from Prop. Builder</h3>
                   <p className="settings-description">
-                    When enabled, the COGS breakdown button is removed from the builder navigation and proposal summary.
+                    Control whether COGS breakdowns are visible while you build and review proposals.
                   </p>
                 </div>
                 <button
@@ -428,12 +425,8 @@ const SettingsPage: React.FC = () => {
                   onClick={handleToggleAdminCogsView}
                   type="button"
                 >
-                  {`Hide COGS from Prop. Builder: ${hideCogsFromProposalBuilder ? 'On' : 'Off'}`}
+                  {hideCogsFromProposalBuilder ? 'Enabled' : 'Disabled'}
                 </button>
-              </div>
-              <div className="admin-pin-settings-current">
-                Current setting:{' '}
-                <span className="franchise-name-value">{hideCogsFromProposalBuilder ? 'On' : 'Off'}</span>
               </div>
               {adminCogsViewStatus && (
                 <div className={`logo-status ${adminCogsViewStatus.type}`}>{adminCogsViewStatus.message}</div>

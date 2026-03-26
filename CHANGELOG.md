@@ -1,3 +1,18 @@
+[2.0.10] What's New
+## Improvements
+- Auxillary Pump logic with Spa
+    - Automatically adds Aux Pump with spa (default set by admin)
+    - Populates in 'Blower' input of contract (page 2)
+        - Auxillary Pumps not added by a spa populate in 'Auxillary Pump II'
+- Proposal Summary
+    - Chosen Equipment Package now displays in the summary
+    - Pump no longer populates with Auxillary Pump
+- Contract Exporting
+    - Recent changes are saved after clicking 'Export'
+        - No need to 'Save' before clicking Export anymore
+- Admin Pricing Menu Redesign
+    - Redesigned the UI of the Admin Pricing Model
+-----
 [2.0.9] What's New
 ## Requested Changeds
 - Spa Perimeter Autofill

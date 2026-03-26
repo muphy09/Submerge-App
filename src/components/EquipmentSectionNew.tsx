@@ -206,6 +206,12 @@ function EquipmentSectionNew({
   const hasPumpSelection = hasRealSelection(data?.pump?.name, 'no pump');
   const normalizedAdditionalPumps = getAdditionalPumpSelections(data);
   const normalizedBasePumpQuantity = Math.max(getBasePumpQuantity(data), 0);
+  const normalizedAuxiliaryPumps =
+    Array.isArray(data?.auxiliaryPumps) && data.auxiliaryPumps.length > 0
+      ? data.auxiliaryPumps.filter(Boolean)
+      : data?.auxiliaryPump
+      ? [data.auxiliaryPump]
+      : [];
 
   const baseSafeData: Equipment = {
     pump: data?.pump || {
@@ -218,10 +224,8 @@ function EquipmentSectionNew({
     },
     pumpQuantity: normalizedBasePumpQuantity || Math.max(data?.pumpQuantity ?? (hasPumpSelection ? 1 : 0), 0),
     additionalPumps: normalizedAdditionalPumps,
-    auxiliaryPumps:
-      data?.auxiliaryPumps ||
-      (data?.auxiliaryPump ? [data.auxiliaryPump] : []),
-    auxiliaryPump: data?.auxiliaryPump ?? data?.auxiliaryPumps?.[0],
+    auxiliaryPumps: normalizedAuxiliaryPumps,
+    auxiliaryPump: data?.auxiliaryPump ?? normalizedAuxiliaryPumps[0],
     filter: data?.filter || {
       name: defaults.filter.name,
       sqft: (defaults.filter as any).sqft,
@@ -415,6 +419,7 @@ function EquipmentSectionNew({
   const pumpQuantity = Math.max(safeData.pumpQuantity ?? (includePump ? 1 : 0), 0);
   const includedPumpQuantity = packageIncludesPump ? Math.max(selectedPackage?.includedPumpQuantity ?? 0, 0) : 0;
   const primaryPumpSummaryQuantity = hasRealSelection(safeData.pump?.name, 'no pump') && pumpQuantity > 0 ? pumpQuantity : 0;
+  const showPrimaryPumpControls = includePump || packageIncludesPump;
   const cleanerQuantity = Math.max(safeData.cleanerQuantity ?? (includeCleaner ? 1 : 0), 0);
   const filterQuantity = Math.max(safeData.filterQuantity ?? (includeFilter ? 1 : 0), 0);
   const heaterQuantity = Math.max(safeData.heaterQuantity ?? (includeHeater ? 1 : 0), 0);
@@ -482,12 +487,11 @@ function EquipmentSectionNew({
     );
     pushRow('Additional Pump', additionalPumpSummary);
 
-    const auxiliaryPumpSummary = summarizeSelectionNames(
-      auxiliaryPumps
-        .map((pump) => pump?.name)
-        .filter((name) => hasRealSelection(name, 'no pump'))
-    );
-    pushRow('Auxiliary Pumps', auxiliaryPumpSummary);
+    const auxiliaryPumpNames = auxiliaryPumps
+      .map((pump) => pump?.name)
+      .filter((name) => hasRealSelection(name, 'no pump'));
+    const auxiliaryPumpSummary = summarizeSelectionNames(auxiliaryPumpNames);
+    pushRow(auxiliaryPumpNames.length === 1 ? 'Auxiliary Pump' : 'Auxiliary Pumps', auxiliaryPumpSummary);
 
     if ((packageIncludesFilter || includeFilter) && hasRealSelection(safeData.filter?.name, 'no filter') && filterQuantity > 0) {
       pushRow('Filter', summarizeQuantity(safeData.filter?.name || 'Filter', filterQuantity));
@@ -680,8 +684,8 @@ function EquipmentSectionNew({
         },
         pumpQuantity: 0,
         additionalPumps: [],
-        auxiliaryPumps: [],
-        auxiliaryPump: undefined,
+        auxiliaryPumps,
+        auxiliaryPump: auxiliaryPumps[0],
       });
     }
   };
@@ -1427,78 +1431,76 @@ function EquipmentSectionNew({
               : includePump && (
                 renderReadOnlyQuantity('Pump Quantity', pumpQuantity)
               )}
-          </div>
-        {(includePump || packageIncludesPump) && (
-          <>
-              {additionalPumps.map((pump, idx) => (
-                <div key={`additional-pump-${idx}`} className="spec-field equipment-extra-field">
-                  <LabelWithRetired text={`Additional Pump ${idx + 1}`} showRetired={retiredFlags.additionalPumps[idx]} />
-                  <div className="equipment-inline-row">
-                    <select
-                      className="compact-input equipment-select"
-                      value={pump?.name || safeData.pump?.name || selectableDefaults.pump?.name || ''}
-                      onChange={(e) => handleAdditionalPumpChange(idx, e.target.value)}
-                    >
-                      {retiredFlags.additionalPumps[idx] && renderRetiredOption(pump?.name || safeData.pump?.name)}
-                      {pumpOptions.map((option) => (
-                        <option key={option.name} value={option.name}>
-                          {formatOptionLabel(option.name, costOf(option, true))}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="link-btn danger"
-                      onClick={() => removeAdditionalPump(idx)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {auxiliaryPumps.map((pump, idx) => (
-                <div key={idx} className="spec-field equipment-extra-field">
-                  <LabelWithRetired text={`Auxiliary Pump ${idx + 1}`} showRetired={retiredFlags.auxiliaryPumps[idx]} />
-                  <div className="equipment-inline-row">
-                    <select
-                      className="compact-input equipment-select"
-                      value={pump?.name || getDefaultAuxiliaryPump()?.name || ''}
-                      onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
-                    >
-                      {retiredFlags.auxiliaryPumps[idx] && renderRetiredOption(pump?.name || getDefaultAuxiliaryPump()?.name)}
-                      {auxiliaryPumpOptions.map((option: any) => (
-                        <option key={option.name} value={option.name}>
-                          {formatOptionLabel(option.name, costOf(option, true))}
-                        </option>
+            {showPrimaryPumpControls && additionalPumps.map((pump, idx) => (
+              <div key={`additional-pump-${idx}`} className="spec-field equipment-extra-field spec-full-width">
+                <LabelWithRetired text={`Additional Pump ${idx + 1}`} showRetired={retiredFlags.additionalPumps[idx]} />
+                <div className="equipment-inline-row">
+                  <select
+                    className="compact-input equipment-select"
+                    value={pump?.name || safeData.pump?.name || selectableDefaults.pump?.name || ''}
+                    onChange={(e) => handleAdditionalPumpChange(idx, e.target.value)}
+                  >
+                    {retiredFlags.additionalPumps[idx] && renderRetiredOption(pump?.name || safeData.pump?.name)}
+                    {pumpOptions.map((option) => (
+                      <option key={option.name} value={option.name}>
+                        {formatOptionLabel(option.name, costOf(option, true))}
+                      </option>
                     ))}
                   </select>
                   <button
                     type="button"
                     className="link-btn danger"
-                    onClick={() => removeAuxiliaryPump(idx)}
-                    title={
-                      pump?.autoAddedReason === 'waterFeature'
-                        ? 'This pump will be added again while the package still needs it for water features.'
-                        : undefined
-                    }
+                    onClick={() => removeAdditionalPump(idx)}
                   >
                     Remove
                   </button>
                 </div>
-                {pump?.autoAddedForSpa && (
-                  <small className="form-help">Auto-added for spa.</small>
-                )}
-                {pump?.autoAddedReason === 'waterFeature' && (
-                  <small className="form-help">Additional pump added for Water Feature</small>
-                )}
               </div>
             ))}
+            {auxiliaryPumps.map((pump, idx) => (
+              <div key={idx} className="spec-field equipment-extra-field spec-full-width">
+                <LabelWithRetired text={`Auxiliary Pump ${idx + 1}`} showRetired={retiredFlags.auxiliaryPumps[idx]} />
+                <div className="equipment-inline-row">
+                  <select
+                    className="compact-input equipment-select"
+                    value={pump?.name || getDefaultAuxiliaryPump()?.name || ''}
+                    onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
+                  >
+                    {retiredFlags.auxiliaryPumps[idx] && renderRetiredOption(pump?.name || getDefaultAuxiliaryPump()?.name)}
+                    {auxiliaryPumpOptions.map((option: any) => (
+                      <option key={option.name} value={option.name}>
+                        {formatOptionLabel(option.name, costOf(option, true))}
+                      </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="link-btn danger"
+                  onClick={() => removeAuxiliaryPump(idx)}
+                  title={
+                    pump?.autoAddedReason === 'waterFeature'
+                      ? 'This pump will be added again while the package still needs it for water features.'
+                      : undefined
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+              {pump?.autoAddedForSpa && (
+                <small className="form-help">Auto-added for spa.</small>
+              )}
+              {pump?.autoAddedReason === 'waterFeature' && (
+                <small className="form-help">Additional pump added for Water Feature</small>
+              )}
+            </div>
+          ))}
 
-            {packageAllowsPumpChanges && (
-              <div
-                className="action-row"
-                style={{ marginTop: additionalPumps.length || auxiliaryPumps.length ? '8px' : '12px' }}
-              >
+          {packageAllowsPumpChanges && (
+            <div
+              className="action-row spec-full-width"
+              style={{ marginTop: additionalPumps.length || auxiliaryPumps.length ? '8px' : '12px' }}
+            >
+              {showPrimaryPumpControls && (
                 <button
                   type="button"
                   className="action-btn secondary"
@@ -1506,19 +1508,19 @@ function EquipmentSectionNew({
                 >
                   Add Additional Pump
                 </button>
-                <button
-                  type="button"
-                  className="action-btn secondary"
-                  onClick={addAuxiliaryPump}
-                  disabled={auxiliaryPumps.length >= maxAuxiliaryPumps}
-                  title={auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum auxiliary pumps reached.' : undefined}
-                >
-                  Add Auxiliary Pump
-                </button>
-              </div>
-            )}
-          </>
-        )}
+              )}
+              <button
+                type="button"
+                className="action-btn secondary"
+                onClick={addAuxiliaryPump}
+                disabled={auxiliaryPumps.length >= maxAuxiliaryPumps}
+                title={auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum auxiliary pumps reached.' : undefined}
+              >
+                Add Auxiliary Pump
+              </button>
+            </div>
+          )}
+          </div>
       </div>
 
       {/* Filter */}
