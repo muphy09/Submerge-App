@@ -14,7 +14,7 @@
     - Redesigned the UI of the Admin Pricing Model
 -----
 [2.0.9] What's New
-## Requested Changeds
+## Requested Changes
 - Spa Perimeter Autofill
     - Contract now properly autofills the Spa Perimeter
 - Rough Grading

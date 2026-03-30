@@ -3641,7 +3641,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             </label>
 
             <div className="pricing-page__nav-block">
-              <p className="pricing-page__nav-title">Pricing Models</p>
+              <p className="pricing-page__nav-title">Pricing Categories</p>
               <div className="pricing-page__nav">
                 {sections.map((section) => {
                   const isActive = section.title === activeSection?.title;

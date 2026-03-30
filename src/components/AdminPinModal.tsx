@@ -88,7 +88,6 @@ function AdminPinModal({
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={MAX_ADMIN_PANEL_PIN_LENGTH}
-              placeholder="Enter PIN"
               value={pin}
               onChange={(event) => onPinChange(sanitizeAdminPanelPinInput(event.target.value))}
               disabled={isDisabled}
