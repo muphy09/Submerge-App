@@ -4,6 +4,7 @@ import pricingData from './pricingData';
 import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/masonryFacing';
 import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
+import { getDeckingTypeFullLabel } from '../utils/decking';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
 import { hasCustomFeatureContent, isOffContractCustomFeature, normalizeCustomFeatures } from '../utils/customFeatures';
 
@@ -616,7 +617,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/decking drainage/.test(label)) return proposal.drainage?.deckDrainTotalLF ? 'BY BUILDER' : overrideDefault;
   if (field.id === 'p1_40_qty') return formatNumberValue(proposal.drainage?.downspoutTotalLF);
   if (/decking\b/i.test(label)) {
-    if (proposal.tileCopingDecking?.isDeckingOffContract) return 'OFF CONTRACT';
+    if (proposal.tileCopingDecking?.isDeckingOffContract) {
+      const selectedDeckingLabel = getDeckingTypeFullLabel(proposal.tileCopingDecking?.deckingType);
+      return proposal.tileCopingDecking?.deckingType === 'none'
+        ? 'OFF CONTRACT'
+        : `${selectedDeckingLabel} - OFF CONTRACT`;
+    }
     const lookup: Record<string, string> = {
       none: 'None',
       'travertine-level1': 'Travertine Lvl 1',

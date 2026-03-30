@@ -7,6 +7,7 @@ import {
   hasLineItemSubcategory,
   isCustomOptionItem,
 } from '../utils/costBreakdownSubcategories';
+import { isOffContractLineItem } from '../utils/offContractLineItems';
 import './LiveCostBreakdown.css';
 
 interface Props {
@@ -263,7 +264,8 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
   ];
 
   const computedGrandTotal = allItemGroups.reduce(
-    (sum, group) => sum + group.reduce((gSum, item) => gSum + (item.total ?? 0), 0),
+    (sum, group) =>
+      sum + group.reduce((gSum, item) => gSum + (isOffContractLineItem(item) ? 0 : (item.total ?? 0)), 0),
     0
   );
   const providedGrandTotal = costBreakdown.totals?.grandTotal ?? 0;
@@ -280,6 +282,12 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
     options?: { hideBaseItems?: boolean }
   ) => {
     const safeItems = items || [];
+    const numericItemTotal = (item: CostLineItem): number =>
+      isOffContractLineItem(item) ? 0 : (item.total ?? 0);
+    const renderItemTotal = (item: CostLineItem): string =>
+      isOffContractLineItem(item)
+        ? 'OFF CONTRACT'
+        : `$${(item.total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const visibleEntries = safeItems
       .map((item, index) => ({ item, index }))
       .filter(({ item }) => (item.quantity ?? 0) > 0 || (item.total ?? 0) !== 0);
@@ -287,7 +295,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
       ? visibleEntries.filter(({ item }) => !hasLineItemSubcategory(item))
       : visibleEntries;
     const isExpanded = expandedSections.has(categoryName);
-    const categoryTotal = safeItems.reduce((sum, item) => sum + (item.total ?? 0), 0);
+    const categoryTotal = safeItems.reduce((sum, item) => sum + numericItemTotal(item), 0);
     const categoryHasHighlight = isCategoryHighlighted(categoryName);
     const subcategoryDisplays =
       subcategories?.map((sub) => ({
@@ -331,7 +339,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
                     <tr key={index} className={isHighlighted ? 'highlighted' : ''}>
                       <td>{item.description}</td>
                       <td>{item.quantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-                      <td>${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td>{renderItemTotal(item)}</td>
                     </tr>
                   );
                 })}
@@ -362,7 +370,7 @@ function LiveCostBreakdown({ costBreakdown, totalCOGS, onToggle }: Props) {
                           <tr key={index} className={isHighlighted ? 'highlighted' : ''}>
                             <td>{item.description}</td>
                             <td>{item.quantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-                            <td>${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td>{renderItemTotal(item)}</td>
                           </tr>
                         );
                       })}

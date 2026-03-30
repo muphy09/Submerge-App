@@ -8,6 +8,7 @@ import {
   hasLineItemSubcategory,
   isCustomOptionItem,
 } from '../utils/costBreakdownSubcategories';
+import { isOffContractLineItem } from '../utils/offContractLineItems';
 import './CostBreakdownPage.css';
 
 interface CostBreakdownPageProps {
@@ -184,6 +185,19 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
     return getDisplayValue(item.unitPrice, item);
   };
 
+  const getRenderableItems = (items: CostLineItem[]): CostLineItem[] =>
+    viewMode === 'retail' ? items.filter((item) => !isOffContractLineItem(item)) : items;
+
+  const getNumericDisplayValue = (amount: number, item?: CostLineItem): number => {
+    if (viewMode === 'cogs' && isOffContractLineItem(item)) return 0;
+    return getDisplayValue(amount, item);
+  };
+
+  const renderDisplayTotal = (item: CostLineItem): string =>
+    viewMode === 'cogs' && isOffContractLineItem(item)
+      ? 'OFF CONTRACT'
+      : formatCurrency(getDisplayValue(item.total, item));
+
   const isMaterialItem = (item: CostLineItem): boolean => {
     if (isCustomOptionItem(item)) return false;
     const desc = (item.description || '').toLowerCase();
@@ -312,7 +326,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   ];
 
   // Filter out empty categories
-  const nonEmptyCategories = categories.filter(cat => cat.items.length > 0);
+  const nonEmptyCategories = categories.filter((cat) => getRenderableItems(cat.items).length > 0);
 
   const isAdjustmentItem = (item: CostLineItem) => {
     const desc = (item.description || '').toLowerCase();
@@ -379,11 +393,15 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
             <div className="cost-breakdown-categories">
               {nonEmptyCategories.map((category) => {
                 const isExpanded = expandedCategories.has(category.name);
-                const categoryTotal = category.items.reduce((sum, item) => sum + getDisplayValue(item.total, item), 0);
+                const displayCategoryItems = getRenderableItems(category.items);
+                const categoryTotal = displayCategoryItems.reduce(
+                  (sum, item) => sum + getNumericDisplayValue(item.total, item),
+                  0
+                );
 
                 // Calculate labor and material subtotals if applicable
-                const adjustments = category.items.filter(isAdjustmentItem);
-                const visibleItems = category.items.filter((item) => !isAdjustmentItem(item));
+                const adjustments = displayCategoryItems.filter(isAdjustmentItem);
+                const visibleItems = displayCategoryItems.filter((item) => !isAdjustmentItem(item));
                 const baseItems = category.subcategories?.length
                   ? visibleItems.filter((item) => !hasLineItemSubcategory(item))
                   : visibleItems;
@@ -391,10 +409,14 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                 const hasLabor = visibleItems.some(isLaborItem);
                 const hasMaterial = visibleItems.some(isMaterialItem);
                 const laborSubtotal = hasLabor
-                  ? visibleItems.filter(isLaborItem).reduce((sum, item) => sum + getDisplayValue(item.total, item), 0)
+                  ? visibleItems
+                      .filter(isLaborItem)
+                      .reduce((sum, item) => sum + getNumericDisplayValue(item.total, item), 0)
                   : 0;
                 const materialSubtotal = hasMaterial
-                  ? visibleItems.filter(isMaterialItem).reduce((sum, item) => sum + getDisplayValue(item.total, item), 0)
+                  ? visibleItems
+                      .filter(isMaterialItem)
+                      .reduce((sum, item) => sum + getNumericDisplayValue(item.total, item), 0)
                   : 0;
                 const isWaterTruck = category.name === 'Water Truck';
                 const hasLaborSubcategory = Boolean(
@@ -481,7 +503,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                             <td>{isTaxLine ? '' : quantityDisplay}</td>
                                           )}
                                           <td>{isTaxLine ? '' : unitPriceDisplay}</td>
-                                          <td>{formatCurrency(getDisplayValue(item.total, item))}</td>
+                                          <td>{renderDisplayTotal(item)}</td>
                                         </tr>
                                       );
                                     })}
@@ -490,7 +512,9 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                               </>
                             )}
                             {category.subcategories.map((subcategory) => {
-                              const visibleSubItems = subcategory.items.filter((item) => !isAdjustmentItem(item));
+                              const visibleSubItems = getRenderableItems(subcategory.items).filter(
+                                (item) => !isAdjustmentItem(item)
+                              );
                               if (visibleSubItems.length === 0) return null;
                               return (
                                 <div key={subcategory.name} className="cost-breakdown-subcategory">
@@ -521,7 +545,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                             <td>{item.description}</td>
                                             <td>{item.description.toLowerCase().includes('tax') ? '' : quantityDisplay}</td>
                                             <td>{item.description.toLowerCase().includes('tax') ? '' : unitPriceDisplay}</td>
-                                            <td>{formatCurrency(getDisplayValue(item.total, item))}</td>
+                                            <td>{renderDisplayTotal(item)}</td>
                                           </tr>
                                         );
                                       })}
@@ -578,7 +602,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                         <td>{isTaxLine ? '' : quantityDisplay}</td>
                                       )}
                                       <td>{isTaxLine ? '' : unitPriceDisplay}</td>
-                                      <td>{formatCurrency(getDisplayValue(item.total, item))}</td>
+                                      <td>{renderDisplayTotal(item)}</td>
                                     </tr>
                                   );
                                 })}
@@ -616,7 +640,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                     return desc;
                                   })()}
                                 </span>
-                                <span>{formatCurrency(getDisplayValue(item.total, item))}</span>
+                                <span>{formatCurrency(getNumericDisplayValue(item.total, item))}</span>
                               </div>
                             ))}
                           </div>

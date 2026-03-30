@@ -48,6 +48,7 @@ import { getOffContractItemGroups, getOffContractTotal } from '../utils/customOp
 import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } from '../utils/equipmentPackages';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { useAdminCogsView } from '../hooks/useAdminCogsView';
+import { isOffContractLineItem } from '../utils/offContractLineItems';
 
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
@@ -911,8 +912,16 @@ function ProposalView() {
     const subtotal = calculated?.subtotal ?? mergedProposal.subtotal ?? 0;
     const totalCost = calculated?.totalCost ?? mergedProposal.totalCost ?? 0;
     const pricing = calculated?.pricing ?? mergedProposal.pricing;
+    const offContractDeckingLineItems = costBreakdownForDisplay
+      ? [
+          ...(costBreakdownForDisplay.copingDeckingLabor || []),
+          ...(costBreakdownForDisplay.copingDeckingMaterial || []),
+        ]
+      : [];
     const retailPrice = pricing?.retailPrice ?? totalCost ?? subtotal ?? 0;
-    const offContractTotal = pricing?.offContractTotal ?? getOffContractTotal(mergedProposal);
+    const offContractTotal =
+      pricing?.offContractTotal ?? getOffContractTotal(mergedProposal, offContractDeckingLineItems);
+    const retailPriceForMargin = Math.max(0, retailPrice - offContractTotal);
     const digCommission = pricing?.digCommission ?? 0;
     const adminFee = pricing?.adminFee ?? 0;
     const closeoutCommission = pricing?.closeoutCommission ?? 0;
@@ -924,7 +933,7 @@ function ProposalView() {
       0;
     const grossMargin =
       pricing?.grossProfitMargin ??
-      (retailPrice > 0 ? ((retailPrice - totalCOGS) / retailPrice) * 100 : 0);
+      (retailPriceForMargin > 0 ? ((retailPriceForMargin - totalCOGS) / retailPriceForMargin) * 100 : 0);
     const papDiscountTotal = costBreakdownForDisplay
       ? Object.entries(costBreakdownForDisplay).reduce((sum, [key, value]) => {
           if (key === 'totals') return sum;
@@ -946,10 +955,11 @@ function ProposalView() {
     const totalCOGSWithoutOverhead = Math.max(totalCOGSBeforeOverhead, 0);
     const overheadReductionFactor =
       totalCOGS > 0 ? Math.min(Math.max(totalCOGSWithoutOverhead / totalCOGS, 0), 1) : 1;
-    const preOverheadGrossProfit = retailPrice - totalCOGSWithoutOverhead - digCommission - adminFee - closeoutCommission;
+    const preOverheadGrossProfit =
+      retailPriceForMargin - totalCOGSWithoutOverhead - digCommission - adminFee - closeoutCommission;
     const overheadDifferential = totalCOGS - totalCOGSWithoutOverhead;
     const preOverheadGrossMarginPercent =
-      retailPrice > 0 ? (preOverheadGrossProfit / retailPrice) * 100 : 0;
+      retailPriceForMargin > 0 ? (preOverheadGrossProfit / retailPriceForMargin) * 100 : 0;
     const targetMargin = pricing?.targetMargin ?? 0.7;
     const costsBeforePapDiscounts = (pricing?.totalCostsBeforeOverhead ?? subtotal ?? 0) - papDiscountTotal;
     const baseRetailPriceBeforePap =
@@ -1007,7 +1017,7 @@ function ProposalView() {
     const { baseItems: tileLaborBase, customOptions: tileCustomFromLabor } = splitCustomOptions(tileLaborItems);
     const { baseItems: tileMaterialBase, customOptions: tileCustomFromMaterial } = splitCustomOptions(tileMaterialItems);
     const tileCustomOptions = [...tileCustomFromLabor, ...tileCustomFromMaterial];
-    const offContractItemGroups = getOffContractItemGroups(mergedProposal);
+    const offContractItemGroups = getOffContractItemGroups(mergedProposal, offContractDeckingLineItems);
     const offContractItemCount = offContractItemGroups.reduce((sum, group) => sum + group.items.length, 0);
 
     const costLineItems: {
@@ -1241,7 +1251,7 @@ function ProposalView() {
   const hasMultipleVersions = viewModels.length > 1;
 
   const categoryTotal = (items: CostLineItem[] = []): number =>
-    items.reduce((sum, item) => sum + (item.total ?? 0), 0);
+    items.reduce((sum, item) => sum + (isOffContractLineItem(item) ? 0 : (item.total ?? 0)), 0);
 
   const isTaxLineItem = (item: CostLineItem): boolean =>
     (item.description || '').toLowerCase().includes('tax');
@@ -1258,6 +1268,9 @@ function ProposalView() {
     if (isTaxLineItem(item)) return '';
     return formatCurrency(item.unitPrice);
   };
+
+  const renderTotal = (item: CostLineItem): string =>
+    isOffContractLineItem(item) ? 'OFF CONTRACT' : formatCurrency(item.total);
 
   const getCategoryClassName = (categoryName: string): string => {
     const classMap: { [key: string]: string } = {
@@ -1551,7 +1564,7 @@ function ProposalView() {
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Retail Only Total:</p>
+                  <p className="metric-label">Off Contract Total:</p>
                   <p className="metric-value">{formatCurrency(vm.offContractTotal)}</p>
                 </div>
               </div>
@@ -2207,7 +2220,7 @@ function ProposalView() {
                                       <td>{item.description}</td>
                                       <td>{renderQuantity(item)}</td>
                                       <td>{renderUnitPrice(item)}</td>
-                                      <td>{formatCurrency(item.total)}</td>
+                                      <td>{renderTotal(item)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -2243,7 +2256,7 @@ function ProposalView() {
                                       <td>{item.description}</td>
                                       <td>{renderQuantity(item)}</td>
                                       <td>{renderUnitPrice(item)}</td>
-                                      <td>{formatCurrency(item.total)}</td>
+                                      <td>{renderTotal(item)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -2273,7 +2286,7 @@ function ProposalView() {
                                 <td>{item.description}</td>
                                 <td>{renderQuantity(item)}</td>
                                 <td>{renderUnitPrice(item)}</td>
-                                <td>{formatCurrency(item.total)}</td>
+                                <td>{renderTotal(item)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -2368,7 +2381,7 @@ function ProposalView() {
                                       <td>{item.description}</td>
                                       <td>{renderQuantity(item)}</td>
                                       <td>{renderUnitPrice(item)}</td>
-                                      <td>{formatCurrency(item.total)}</td>
+                                      <td>{renderTotal(item)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -2404,7 +2417,7 @@ function ProposalView() {
                                       <td>{item.description}</td>
                                       <td>{renderQuantity(item)}</td>
                                       <td>{renderUnitPrice(item)}</td>
-                                  <td>{formatCurrency(item.total)}</td>
+                                  <td>{renderTotal(item)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -2434,7 +2447,7 @@ function ProposalView() {
                                 <td>{item.description}</td>
                                 <td>{renderQuantity(item)}</td>
                                 <td>{renderUnitPrice(item)}</td>
-                                <td>{formatCurrency(item.total)}</td>
+                                <td>{renderTotal(item)}</td>
                               </tr>
                             ))}
                           </tbody>

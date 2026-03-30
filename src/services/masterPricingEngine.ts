@@ -21,6 +21,7 @@ import {
   isOffContractCustomFeature,
   normalizeCustomFeatures,
 } from '../utils/customFeatures';
+import { isOffContractLineItem } from '../utils/offContractLineItems';
 
 const hasPoolDefinition = (poolSpecs: any): boolean => {
   if (!poolSpecs) return false;
@@ -285,7 +286,10 @@ export class MasterPricingEngine {
 
       // Tile/Coping Labor
       if (appliedPapDiscounts.tileCopingLabor > 0) {
-        const laborSubtotal = tileCoping.labor.reduce((sum, item) => sum + item.total, 0);
+        const laborSubtotal = tileCoping.labor.reduce(
+          (sum, item) => sum + (isOffContractLineItem(item) ? 0 : item.total),
+          0
+        );
         tileCoping.labor.push({
           category: 'Tile & Coping Labor',
           description: 'PAP Discount',
@@ -388,7 +392,10 @@ export class MasterPricingEngine {
     const automaticCoverRetail = automaticCoverCost > 0
       ? Math.round(automaticCoverCost * 1.7 * 100) / 100
       : 0;
-    const offContractTotal = getOffContractTotal(proposal);
+    const offContractTotal = getOffContractTotal(proposal, [
+      ...tileCoping.labor,
+      ...tileCoping.material,
+    ]);
     if (automaticCoverCost > 0) {
       customFeaturesItems.push({
         category: 'Custom Features',
@@ -529,15 +536,17 @@ export class MasterPricingEngine {
 
     // Step 4: Add G3 upgrade and discount
     const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount + designerAdjustmentsTotal;
+    const retailPriceExcludingOffContract = Math.max(0, retailPrice - offContractTotal);
 
     // Step 5: Calculate commissions and fees
-    const digCommission = retailPrice * digCommissionRate;
-    const adminFee = retailPrice * adminFeeRate;
-    const closeoutCommission = retailPrice * closeoutCommissionRate;
+    const digCommission = retailPriceExcludingOffContract * digCommissionRate;
+    const adminFee = retailPriceExcludingOffContract * adminFeeRate;
+    const closeoutCommission = retailPriceExcludingOffContract * closeoutCommissionRate;
 
     // Step 6: Calculate gross profit
-    const grossProfit = retailPrice - totalCOGS - digCommission - adminFee - closeoutCommission;
-    const grossProfitMargin = retailPrice > 0 ? (grossProfit / retailPrice) * 100 : 0;
+    const grossProfit = retailPriceExcludingOffContract - totalCOGS - digCommission - adminFee - closeoutCommission;
+    const grossProfitMargin =
+      retailPriceExcludingOffContract > 0 ? (grossProfit / retailPriceExcludingOffContract) * 100 : 0;
 
     const pricing: import('../types/proposal-new').PricingCalculations = {
       totalCostsBeforeOverhead,
@@ -778,7 +787,7 @@ export class MasterPricingEngine {
   }
 
   private static sumItems(items: CostLineItem[]): number {
-    return items.reduce((sum, item) => sum + item.total, 0);
+    return items.reduce((sum, item) => sum + (isOffContractLineItem(item) ? 0 : item.total), 0);
   }
 
   /**

@@ -19,6 +19,12 @@ import {
   getMasonryFacingRate,
   normalizeMasonryFacingId,
 } from '../utils/masonryFacing';
+import { getDeckingTypeFullLabel } from '../utils/decking';
+import {
+  annotateOffContractLineItem,
+  isOffContractEligibleLineItem,
+  OFF_CONTRACT_GROUP_DECKING,
+} from '../utils/offContractLineItems';
 import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
@@ -125,6 +131,13 @@ export class TileCopingDeckingCalculations {
     const prices = pricingData.tileCoping;
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
     const isDeckingOffContract = Boolean(tileCopingDecking.isDeckingOffContract);
+    const deckingSelectionLabel = getDeckingTypeFullLabel(tileCopingDecking.deckingType);
+    const tagDeckingOffContractItem = (item: CostLineItem): CostLineItem =>
+      annotateOffContractLineItem(item, {
+        group: OFF_CONTRACT_GROUP_DECKING,
+        selectionLabel: deckingSelectionLabel,
+        applied: isDeckingOffContract,
+      });
     const perimeterWithExtras = poolSpecs.perimeter + tileCopingDecking.additionalTileLength;
     const spaPerimeter = poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs);
     const copingLnft =
@@ -271,88 +284,80 @@ export class TileCopingDeckingCalculations {
 
     // DECKING LABOR
     const deckingLaborRate = this.getDeckingLaborRate(tileCopingDecking.deckingType, prices);
-    if (isDeckingOffContract) {
-      laborItems.push({
-        category: 'Decking Labor',
-        description: 'Decking - Off Contract',
-        unitPrice: 0,
-        quantity: 1,
-        total: 0,
-      });
-    } else if (isConcreteDeck) {
+    if (isConcreteDeck) {
       // Excel only charges concrete deck labor when concrete coping (cantilever) is selected, per perimeter
       if (tileCopingDecking.copingType === 'concrete' && deckingLaborRate > 0) {
-        laborItems.push({
+        laborItems.push(tagDeckingOffContractItem({
           category: 'Decking Labor',
           description: 'Concrete Decking - Cantilever',
           unitPrice: deckingLaborRate,
           quantity: poolSpecs.perimeter,
           total: deckingLaborRate * poolSpecs.perimeter,
-        });
+        }));
       }
     } else if (deckingLaborRate > 0) {
-      laborItems.push({
+      laborItems.push(tagDeckingOffContractItem({
         category: 'Decking Labor',
         description: formatDeckingLabel(tileCopingDecking.deckingType, 'Decking Labor'),
         unitPrice: deckingLaborRate,
         quantity: deckingArea,
         total: deckingLaborRate * deckingArea,
-      });
+      }));
     }
 
     // Concrete steps
-    if (!isDeckingOffContract && tileCopingDecking.concreteStepsLength > 0) {
-      laborItems.push({
+    if (tileCopingDecking.concreteStepsLength > 0) {
+      const concreteStepsLaborItem: CostLineItem = {
         category: 'Decking Labor',
         description: 'Concrete Steps',
         unitPrice: prices.decking.labor.concreteSteps,
         quantity: tileCopingDecking.concreteStepsLength,
         total: prices.decking.labor.concreteSteps * tileCopingDecking.concreteStepsLength,
-      });
+      };
+      laborItems.push(isConcreteDeck ? tagDeckingOffContractItem(concreteStepsLaborItem) : concreteStepsLaborItem);
     }
 
     // DECKING MATERIAL
     const deckingMaterialRate = this.getDeckingMaterialRate(tileCopingDecking.deckingType, prices);
-    if (isDeckingOffContract) {
-      // No decking COGS when the entire decking scope is billed off contract.
-    } else if (isConcreteDeck && deckingMaterialRate > 0) {
+    if (isConcreteDeck && deckingMaterialRate > 0) {
       if (concreteBaseQty > 0) {
-        materialItems.push({
+        materialItems.push(tagDeckingOffContractItem({
           category: 'Decking Material',
           description: 'Concrete Decking - Base',
           unitPrice: deckingMaterialRate,
           quantity: concreteBaseQty,
           total: deckingMaterialRate * concreteBaseQty,
-        });
+        }));
       }
       if (concreteAddlQty !== 0) {
-        materialItems.push({
+        materialItems.push(tagDeckingOffContractItem({
           category: 'Decking Material',
           description: 'Concrete Decking - Addl',
           unitPrice: deckingMaterialRate,
           quantity: concreteAddlQty,
           total: deckingMaterialRate * concreteAddlQty,
-        });
+        }));
       }
     } else if (deckingMaterialRate > 0) {
-      materialItems.push({
+      materialItems.push(tagDeckingOffContractItem({
         category: 'Decking Material',
         description: formatDeckingLabel(tileCopingDecking.deckingType, 'Decking Material'),
         unitPrice: deckingMaterialRate,
         quantity: deckingArea,
         total: deckingMaterialRate * deckingArea,
-      });
+      }));
     }
 
     // Concrete steps material
-    if (!isDeckingOffContract && tileCopingDecking.concreteStepsLength > 0) {
-      materialItems.push({
+    if (tileCopingDecking.concreteStepsLength > 0) {
+      const concreteStepsMaterialItem: CostLineItem = {
         category: 'Decking Material',
         description: 'Concrete Steps Material',
         unitPrice: prices.decking.material.concreteSteps,
         quantity: tileCopingDecking.concreteStepsLength,
         total: prices.decking.material.concreteSteps * tileCopingDecking.concreteStepsLength,
-      });
+      };
+      materialItems.push(isConcreteDeck ? tagDeckingOffContractItem(concreteStepsMaterialItem) : concreteStepsMaterialItem);
     }
 
     // Bullnose (single + double bullnose share the same Excel rate/lines)
@@ -478,31 +483,35 @@ export class TileCopingDeckingCalculations {
     });
 
     // Concrete pump (if any concrete work)
-    if (!isDeckingOffContract && (tileCopingDecking.deckingType === 'concrete' || tileCopingDecking.concreteStepsLength > 0)) {
-      laborItems.push({
+    if (tileCopingDecking.deckingType === 'concrete' || tileCopingDecking.concreteStepsLength > 0) {
+      const concretePumpItem: CostLineItem = {
         category: 'Decking Labor',
         description: 'Concrete Pump',
         unitPrice: 600,
         quantity: 1,
         total: 600,
-      });
+      };
+      laborItems.push(isConcreteDeck ? tagDeckingOffContractItem(concretePumpItem) : concretePumpItem);
     }
 
     // Concrete band for fiberglass pools
-    if (!isDeckingOffContract && PoolCalculations.isFiberglassPool(poolSpecs) && tileCopingDecking.deckingType !== 'none') {
-      materialItems.push({
+    if (PoolCalculations.isFiberglassPool(poolSpecs) && tileCopingDecking.deckingType !== 'none') {
+      materialItems.push(tagDeckingOffContractItem({
         category: 'Decking Material',
         description: 'Concrete Band for Fiberglass',
         unitPrice: prices.decking.material.concrete,
         quantity: poolSpecs.perimeter * 1.25,
         total: prices.decking.material.concrete * poolSpecs.perimeter * 1.25,
-      });
+      }));
     }
 
     // Material tax (split between tile, coping/decking, and rockwork materials)
     const tileMaterialSubtotal = materialItems
       .filter(i => i.category.toLowerCase().includes('tile material'))
       .reduce((sum, i) => sum + i.total, 0);
+    const deckingMaterialSubtotal = materialItems
+      .filter((item) => isOffContractEligibleLineItem(item, OFF_CONTRACT_GROUP_DECKING))
+      .reduce((sum, item) => sum + item.total, 0);
     const rockworkMaterialSubtotal = materialItems
       .filter(i => {
         const cat = i.category.toLowerCase();
@@ -510,7 +519,10 @@ export class TileCopingDeckingCalculations {
       })
       .reduce((sum, i) => sum + i.total, 0);
     const totalMaterialSubtotal = materialItems.reduce((sum, i) => sum + i.total, 0);
-    const copingDeckMaterialSubtotal = totalMaterialSubtotal - tileMaterialSubtotal - rockworkMaterialSubtotal;
+    const copingMaterialSubtotal = Math.max(
+      0,
+      totalMaterialSubtotal - tileMaterialSubtotal - rockworkMaterialSubtotal - deckingMaterialSubtotal
+    );
 
     const tileTaxRate = prices.tileMaterialTaxRate ?? prices.materialTaxRate;
     const materialTaxRate = prices.materialTaxRate;
@@ -525,14 +537,24 @@ export class TileCopingDeckingCalculations {
       });
     }
 
-    if (copingDeckMaterialSubtotal > 0) {
+    if (copingMaterialSubtotal > 0) {
       materialItems.push({
         category: 'Coping Material',
-        description: 'Coping/Decking Material Tax',
+        description: 'Coping Material Tax',
         unitPrice: materialTaxRate,
-        quantity: copingDeckMaterialSubtotal,
-        total: copingDeckMaterialSubtotal * materialTaxRate,
+        quantity: copingMaterialSubtotal,
+        total: copingMaterialSubtotal * materialTaxRate,
       });
+    }
+
+    if (deckingMaterialSubtotal > 0) {
+      materialItems.push(tagDeckingOffContractItem({
+        category: 'Decking Material',
+        description: 'Decking Material Tax',
+        unitPrice: materialTaxRate,
+        quantity: deckingMaterialSubtotal,
+        total: deckingMaterialSubtotal * materialTaxRate,
+      }));
     }
 
     if (rockworkMaterialSubtotal > 0) {

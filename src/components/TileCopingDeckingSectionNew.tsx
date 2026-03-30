@@ -60,7 +60,6 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
     onChange({
       ...data,
       isDeckingOffContract: enabled,
-      deckingOffContractCost: enabled ? data.deckingOffContractCost ?? 0 : data.deckingOffContractCost ?? 0,
     });
   };
 
@@ -198,43 +197,25 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
           </label>
         </div>
 
-        {isDeckingOffContract ? (
-          <div className="spec-grid-3-fixed">
-            <div className="spec-field">
-              <label className="spec-label required">Decking Type</label>
-              <CompactInput type="text" value="Off Contract" readOnly />
-            </div>
-            <div className="spec-field">
-              <label className="spec-label required">Total Cost</label>
-              <CompactInput
-                value={data.deckingOffContractCost ?? 0}
-                onChange={(e) => handleChange('deckingOffContractCost', parseFloat(e.target.value) || 0)}
-                min="0"
-                step="0.01"
-              />
-            </div>
+        <div className="spec-grid-5-fixed">
+          <div className="spec-field">
+            <label className="spec-label required">Decking Type</label>
+            <select
+              className="compact-input"
+              value={data.deckingType}
+              onChange={(e) => handleChange('deckingType', e.target.value)}
+            >
+              <option value="none">No Decking</option>
+              <option value="travertine-level1">Travertine - Level 1</option>
+              <option value="travertine-level2">Travertine - Level 2</option>
+              <option value="travertine-level3">Travertine - Level 3</option>
+              <option value="paver">Paver</option>
+              <option value="concrete">Concrete</option>
+            </select>
           </div>
-        ) : (
-          <div className="spec-grid-5-fixed">
-            <div className="spec-field">
-              <label className="spec-label required">Decking Type</label>
-              <select
-                className="compact-input"
-                value={data.deckingType}
-                onChange={(e) => handleChange('deckingType', e.target.value)}
-              >
-                <option value="none">No Decking</option>
-                <option value="travertine-level1">Travertine - Level 1</option>
-                <option value="travertine-level2">Travertine - Level 2</option>
-                <option value="travertine-level3">Travertine - Level 3</option>
-                <option value="paver">Paver</option>
-                <option value="concrete">Concrete</option>
-              </select>
-            </div>
-          </div>
-        )}
+        </div>
 
-        {data.deckingType === 'concrete' && !isDeckingOffContract && (
+        {data.deckingType === 'concrete' && (
           <div className="spec-grid">
             <div className="spec-field">
               <label className="spec-label">Concrete Steps Length</label>

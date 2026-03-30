@@ -1,4 +1,4 @@
-import { Proposal } from '../types/proposal-new';
+import { CostLineItem, CustomOption, Proposal } from '../types/proposal-new';
 import {
   getCustomFeatureTotal,
   hasCustomFeatureContent,
@@ -6,7 +6,11 @@ import {
   normalizeCustomFeature,
   normalizeCustomFeatures,
 } from './customFeatures';
-import { CustomOption } from '../types/proposal-new';
+import {
+  getOffContractSelectionLabel,
+  isOffContractEligibleLineItem,
+  OFF_CONTRACT_GROUP_DECKING,
+} from './offContractLineItems';
 
 export interface OffContractItem {
   category: string;
@@ -73,9 +77,6 @@ export const normalizeCustomOptions = (options?: Array<Partial<CustomOption> | n
 export const isDeckingOffContract = (proposal?: Partial<Proposal>): boolean =>
   Boolean(proposal?.tileCopingDecking?.isDeckingOffContract);
 
-export const getDeckingOffContractCost = (proposal?: Partial<Proposal>): number =>
-  isDeckingOffContract(proposal) ? toNumber(proposal?.tileCopingDecking?.deckingOffContractCost) : 0;
-
 const OFF_CONTRACT_SECTION_DEFINITIONS = [
   {
     category: 'Excavation',
@@ -111,7 +112,47 @@ const OFF_CONTRACT_SECTION_DEFINITIONS = [
   },
 ];
 
-export const getOffContractItems = (proposal?: Partial<Proposal>): OffContractItem[] => {
+const getDeckingOffContractItems = (
+  proposal?: Partial<Proposal>,
+  deckingLineItems?: CostLineItem[]
+): OffContractItem[] => {
+  if (!proposal || !isDeckingOffContract(proposal) || !Array.isArray(deckingLineItems)) {
+    return [];
+  }
+
+  const eligibleDeckingItems = deckingLineItems
+    .filter((item) => isOffContractEligibleLineItem(item, OFF_CONTRACT_GROUP_DECKING))
+    .filter((item) => Number.isFinite(item.total) && item.total !== 0);
+
+  if (!eligibleDeckingItems.length) return [];
+
+  const selectionLabel =
+    eligibleDeckingItems.map((item) => getOffContractSelectionLabel(item)).find(Boolean) || 'Selected Decking';
+
+  const getDeckingLineTypeLabel = (item: CostLineItem): string => {
+    const description = (item.description || '').toLowerCase();
+    const category = (item.category || '').toLowerCase();
+
+    if (description.includes('tax')) return 'Material Tax';
+    if (category.includes('labor')) return 'Labor';
+    if (category.includes('material')) return 'Material';
+    return 'Cost';
+  };
+
+  return eligibleDeckingItems.map((item) => ({
+    category: OFF_CONTRACT_GROUP_DECKING,
+    name: item.description.toLowerCase().includes(getDeckingLineTypeLabel(item).toLowerCase())
+      ? item.description
+      : `${item.description} - ${getDeckingLineTypeLabel(item)}`,
+    description: `${getDeckingLineTypeLabel(item)} | Decking Selection: ${selectionLabel}`,
+    totalCost: toNumber(item.total),
+  }));
+};
+
+export const getOffContractItems = (
+  proposal?: Partial<Proposal>,
+  deckingLineItems?: CostLineItem[]
+): OffContractItem[] => {
   if (!proposal) return [];
 
   const customOptionItems = OFF_CONTRACT_SECTION_DEFINITIONS.flatMap(({ category, getOptions }) =>
@@ -128,18 +169,7 @@ export const getOffContractItems = (proposal?: Partial<Proposal>): OffContractIt
       })
   );
 
-  const deckingOffContractCost = getDeckingOffContractCost(proposal);
-  const deckingItems: OffContractItem[] =
-    isDeckingOffContract(proposal) && deckingOffContractCost >= 0
-      ? [
-          {
-            category: 'Tile / Coping / Decking',
-            name: 'Decking',
-            description: 'Decking marked as off contract',
-            totalCost: deckingOffContractCost,
-          },
-        ]
-      : [];
+  const deckingItems = getDeckingOffContractItems(proposal, deckingLineItems);
 
   const customFeatureItems = normalizeCustomFeatures(proposal.customFeatures).features
     .filter((feature) => isOffContractCustomFeature(feature) && hasCustomFeatureContent(feature))
@@ -156,10 +186,13 @@ export const getOffContractItems = (proposal?: Partial<Proposal>): OffContractIt
   return [...customOptionItems, ...deckingItems, ...customFeatureItems];
 };
 
-export const getOffContractItemGroups = (proposal?: Partial<Proposal>): OffContractItemGroup[] => {
+export const getOffContractItemGroups = (
+  proposal?: Partial<Proposal>,
+  deckingLineItems?: CostLineItem[]
+): OffContractItemGroup[] => {
   const groups = new Map<string, OffContractItem[]>();
 
-  getOffContractItems(proposal).forEach((item) => {
+  getOffContractItems(proposal, deckingLineItems).forEach((item) => {
     const bucket = groups.get(item.category);
     if (bucket) {
       bucket.push(item);
@@ -175,5 +208,8 @@ export const getOffContractItemGroups = (proposal?: Partial<Proposal>): OffContr
   }));
 };
 
-export const getOffContractTotal = (proposal?: Partial<Proposal>): number =>
-  getOffContractItems(proposal).reduce((sum, item) => sum + item.totalCost, 0);
+export const getOffContractTotal = (
+  proposal?: Partial<Proposal>,
+  deckingLineItems?: CostLineItem[]
+): number =>
+  getOffContractItems(proposal, deckingLineItems).reduce((sum, item) => sum + item.totalCost, 0);

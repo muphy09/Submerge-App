@@ -564,7 +564,7 @@ export interface CostLineItem {
   quantity: number;
   total: number;
   notes?: string;
-  details?: Record<string, number | string>;
+  details?: Record<string, number | string | boolean>;
 }
 
 export interface CostBreakdown {
