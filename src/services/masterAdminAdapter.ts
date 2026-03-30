@@ -1,3 +1,5 @@
+import { saveFranchiseAppName, loadFranchiseAppName } from './franchiseBranding';
+import { saveFranchiseCode } from './franchisesAdapter';
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
 
 export type MasterFranchise = {
@@ -31,6 +33,14 @@ export type MasterPricingModel = {
   createdAt?: string;
   updatedAt?: string;
 };
+
+function normalizeText(value?: string | null) {
+  return String(value || '').trim();
+}
+
+function normalizeComparableText(value?: string | null) {
+  return normalizeText(value).toLowerCase();
+}
 
 async function extractFunctionErrorMessage(error: any): Promise<string | null> {
   const context = error?.context;
@@ -173,4 +183,59 @@ export async function softDeleteFranchise(franchiseId: string) {
   });
   if (error) throw error;
   return data as { success?: boolean };
+}
+
+export async function saveMasterFranchiseSettings(payload: {
+  franchiseId: string;
+  franchiseName: string;
+  franchiseCode: string;
+  previousName?: string | null;
+  previousCode?: string | null;
+  updatedBy?: string | null;
+}) {
+  const franchiseId = normalizeText(payload.franchiseId);
+  const franchiseName = normalizeText(payload.franchiseName);
+  const previousName = normalizeText(payload.previousName);
+
+  if (!franchiseId) {
+    throw new Error('Franchise ID is required.');
+  }
+  if (!franchiseName) {
+    throw new Error('Franchise name is required.');
+  }
+
+  const result = await saveFranchiseCode({
+    franchiseId,
+    franchiseName,
+    franchiseCode: payload.franchiseCode,
+    previousCode: payload.previousCode,
+  });
+
+  try {
+    const currentAppName = await loadFranchiseAppName(franchiseId, { force: true });
+    const normalizedRawCurrentAppName = normalizeText(currentAppName);
+    const normalizedCurrentAppName = normalizeComparableText(currentAppName);
+    const normalizedPreviousName = normalizeComparableText(previousName);
+
+    if (
+      normalizedCurrentAppName &&
+      normalizedPreviousName &&
+      normalizedCurrentAppName === normalizedPreviousName &&
+      normalizedRawCurrentAppName !== franchiseName
+    ) {
+      await saveFranchiseAppName({
+        franchiseId,
+        appName: franchiseName,
+        updatedBy: payload.updatedBy ?? null,
+      });
+    }
+  } catch (error) {
+    console.warn('Unable to synchronize franchise app name after updating franchise settings:', error);
+  }
+
+  return {
+    id: franchiseId,
+    name: franchiseName,
+    franchiseCode: result.franchiseCode,
+  } as MasterFranchise;
 }

@@ -1,0 +1,255 @@
+.master-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 42, 79, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1600;
+}
+
+.master-editor-modal {
+  width: min(980px, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid #dce5ef;
+  box-shadow: 0 24px 56px rgba(15, 42, 79, 0.18);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.master-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.master-editor-kicker {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6a8098;
+  font-weight: 700;
+}
+
+.master-editor-title {
+  margin: 0;
+  color: #0f2a4f;
+  font-size: 1.45rem;
+}
+
+.master-editor-close {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: #eef3f8;
+  color: #0f2a4f;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.master-editor-close:hover {
+  background: #dfe9f3;
+}
+
+.master-editor-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.master-editor-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.master-editor-section-header h3 {
+  margin: 0 0 4px;
+  color: #0f2a4f;
+  font-size: 1.05rem;
+}
+
+.master-editor-section-header p {
+  margin: 0;
+  color: #60738a;
+  font-size: 0.92rem;
+}
+
+.master-editor-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.master-editor-field {
+  display: grid;
+  gap: 6px;
+}
+
+.master-editor-field span {
+  color: #4b647f;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.master-editor-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #c9d7e3;
+  background: #ffffff;
+  font-size: 0.95rem;
+  color: #0f2a4f;
+}
+
+.master-editor-field input:focus {
+  outline: none;
+  border-color: #1e88e5;
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.14);
+}
+
+.master-editor-add-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #dde7f0;
+}
+
+.master-editor-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.master-editor-user-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #d9e4ee;
+  background: #ffffff;
+}
+
+.master-editor-user-row.role-owner {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.master-editor-user-row.role-admin {
+  border-color: #fde68a;
+  background: #fffdf3;
+}
+
+.master-editor-user-row.role-designer {
+  border-color: #bbf7d0;
+  background: #f4fff8;
+}
+
+.master-editor-user-meta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.master-editor-user-name {
+  color: #0f2a4f;
+  font-weight: 700;
+}
+
+.master-editor-user-email {
+  color: #60738a;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.master-editor-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.master-secondary-btn {
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #0f2a4f;
+  border: 1px solid #c7d5e4;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.master-secondary-btn:hover:not(:disabled) {
+  border-color: #1e88e5;
+  color: #0d47a1;
+}
+
+.master-primary-btn:disabled,
+.master-secondary-btn:disabled,
+.master-danger-btn:disabled,
+.master-editor-close:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .master-editor-modal {
+    padding: 18px;
+  }
+
+  .master-editor-field-grid,
+  .master-editor-add-card,
+  .master-editor-user-row {
+    grid-template-columns: 1fr;
+  }
+
+  .master-editor-user-actions {
+    justify-content: flex-start;
+  }
+
+  .master-editor-section-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  .master-editor-backdrop {
+    padding: 12px;
+  }
+
+  .master-editor-modal {
+    width: 100%;
+    max-height: 96vh;
+    border-radius: 14px;
+  }
+
+  .master-editor-user-actions .master-secondary-btn,
+  .master-editor-user-actions .master-danger-btn,
+  .master-editor-section-header .master-primary-btn,
+  .master-editor-add-card .master-primary-btn {
+    width: 100%;
+  }
+}

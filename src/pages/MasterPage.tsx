@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import MasterFranchiseEditorModal from '../components/MasterFranchiseEditorModal';
 import TempPasswordModal from '../components/TempPasswordModal';
 import {
   createFranchiseWithOwner,
@@ -19,6 +20,7 @@ type MasterPageProps = {
   session?: UserSession | null;
   onActAsFranchise?: (franchise: MasterFranchise) => void;
   actingFranchiseId?: string | null;
+  onFranchiseUpdated?: (franchise: MasterFranchise) => void;
 };
 
 const formatDate = (value?: string) => {
@@ -27,7 +29,12 @@ const formatDate = (value?: string) => {
   return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
 };
 
-function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPageProps) {
+const getUserNameLabel = (user: Pick<MasterUser, 'name'>) => {
+  const trimmedName = String(user.name || '').trim();
+  return trimmedName || 'Unnamed';
+};
+
+function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseUpdated }: MasterPageProps) {
   const navigate = useNavigate();
   const [franchises, setFranchises] = useState<MasterFranchise[]>([]);
   const [users, setUsers] = useState<MasterUser[]>([]);
@@ -43,10 +50,12 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
   const [pricingSearch, setPricingSearch] = useState('');
   const [pricingFranchiseFilter, setPricingFranchiseFilter] = useState('all');
   const [pricingSort, setPricingSort] = useState('updated-desc');
+  const [hideInactivePricingFranchises, setHideInactivePricingFranchises] = useState(true);
   const [copyTargets, setCopyTargets] = useState<Record<string, string>>({});
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [editingFranchise, setEditingFranchise] = useState<MasterFranchise | null>(null);
 
   const [franchiseName, setFranchiseName] = useState('');
   const [franchiseCode, setFranchiseCode] = useState('');
@@ -111,6 +120,16 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
     });
   }, [franchises]);
 
+  const pricingFranchiseOptions = useMemo(() => {
+    if (!hideInactivePricingFranchises) return franchiseOptions;
+    return franchiseOptions.filter((franchise) => !franchise.deletedAt && franchise.isActive !== false);
+  }, [franchiseOptions, hideInactivePricingFranchises]);
+
+  const pricingFranchiseOptionIds = useMemo(
+    () => new Set(pricingFranchiseOptions.map((franchise) => franchise.id)),
+    [pricingFranchiseOptions]
+  );
+
   const visibleFranchises = useMemo(() => {
     if (!hideInactive) return franchises;
     return franchises.filter((franchise) => !franchise.deletedAt && franchise.isActive !== false);
@@ -129,6 +148,12 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
   const filteredPricingModels = useMemo(() => {
     const normalizedSearch = pricingSearch.trim().toLowerCase();
     let rows = pricingModels;
+    if (hideInactivePricingFranchises) {
+      rows = rows.filter((model) => {
+        const franchise = franchiseLookup.get(model.franchiseId);
+        return !franchise || (!franchise.deletedAt && franchise.isActive !== false);
+      });
+    }
     if (pricingFranchiseFilter !== 'all') {
       rows = rows.filter((model) => model.franchiseId === pricingFranchiseFilter);
     }
@@ -161,7 +186,29 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
       return dateB - dateA;
     });
     return sorted;
-  }, [pricingModels, pricingFranchiseFilter, pricingSearch, pricingSort, franchiseLookup]);
+  }, [pricingModels, pricingFranchiseFilter, pricingSearch, pricingSort, franchiseLookup, hideInactivePricingFranchises]);
+
+  useEffect(() => {
+    if (pricingFranchiseFilter === 'all') return;
+    const selectedStillVisible = pricingFranchiseOptionIds.has(pricingFranchiseFilter);
+    if (!selectedStillVisible) {
+      setPricingFranchiseFilter('all');
+    }
+  }, [pricingFranchiseFilter, pricingFranchiseOptionIds]);
+
+  useEffect(() => {
+    setCopyTargets((prev) => {
+      let changed = false;
+      const next = Object.fromEntries(
+        Object.entries(prev).filter(([, franchiseId]) => {
+          const keep = pricingFranchiseOptionIds.has(franchiseId);
+          if (!keep) changed = true;
+          return keep;
+        })
+      );
+      return changed ? next : prev;
+    });
+  }, [pricingFranchiseOptionIds]);
 
   const pricingCountLabel = useMemo(() => {
     if (pricingModels.length === 0) return '0 total';
@@ -269,6 +316,12 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
     onActAsFranchise(franchise);
   };
 
+  const handleFranchiseUpdated = (franchise: MasterFranchise) => {
+    setEditingFranchise(franchise);
+    setFranchises((prev) => prev.map((row) => (row.id === franchise.id ? { ...row, ...franchise } : row)));
+    onFranchiseUpdated?.(franchise);
+  };
+
   if (!isMaster) {
     return (
       <div className="master-page">
@@ -287,7 +340,6 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
     <div className="master-page">
       <div className="master-header">
         <h1>Master Console</h1>
-        <p>Manage franchises, owners, admins, and designers.</p>
       </div>
 
       <div className="master-grid">
@@ -349,7 +401,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
           ) : (
             <div className="master-franchise-list">
               {visibleFranchises.map((franchise) => {
-                const franchiseUsers = usersByFranchise.get(franchise.id) || [];
+                const franchiseUsers = (usersByFranchise.get(franchise.id) || []).filter((user) => user.isActive !== false);
                 const owners = franchiseUsers.filter((u) => u.role === 'owner');
                 const admins = franchiseUsers.filter((u) => u.role === 'admin');
                 const designers = franchiseUsers.filter((u) => u.role === 'designer');
@@ -391,11 +443,11 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
                     <div className="master-franchise-users">
                       <div>
                         <strong>Owners:</strong>{' '}
-                        {owners.length ? owners.map((u) => u.email).join(', ') : 'None'}
+                        {owners.length ? owners.map((u) => getUserNameLabel(u)).join(', ') : 'None'}
                       </div>
                       <div>
                         <strong>Admins:</strong>{' '}
-                        {admins.length ? admins.map((u) => u.email).join(', ') : 'None'}
+                        {admins.length ? admins.map((u) => getUserNameLabel(u)).join(', ') : 'None'}
                       </div>
                       <div>
                         <strong>Designers:</strong>{' '}
@@ -403,6 +455,16 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
                       </div>
                     </div>
                     <div className="master-franchise-actions">
+                      <button
+                        className="master-secondary-btn"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setEditingFranchise(franchise);
+                        }}
+                      >
+                        Edit
+                      </button>
                       <button
                         className="master-danger-btn"
                         type="button"
@@ -448,7 +510,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
                 onChange={(e) => setPricingFranchiseFilter(e.target.value)}
               >
                 <option value="all">All franchises</option>
-                {franchiseOptions.map((franchise) => (
+                {pricingFranchiseOptions.map((franchise) => (
                   <option key={franchise.id} value={franchise.id}>
                     {franchise.name || franchise.franchiseCode || franchise.id}
                   </option>
@@ -468,6 +530,14 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
                 <option value="franchise-asc">Franchise name (A-Z)</option>
               </select>
             </div>
+            <label className="master-toggle master-toggle--table">
+              <input
+                type="checkbox"
+                checked={hideInactivePricingFranchises}
+                onChange={(e) => setHideInactivePricingFranchises(e.target.checked)}
+              />
+              Hide Inactive Franchises
+            </label>
             <div className="master-table-meta">{pricingCountLabel}</div>
           </div>
           {pricingError && <div className="master-error">{pricingError}</div>}
@@ -519,7 +589,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
                               onChange={(e) => handleCopyTargetChange(model.id, e.target.value)}
                             >
                               <option value="">Copy to franchise...</option>
-                              {franchiseOptions.map((franchiseOption) => (
+                              {pricingFranchiseOptions.map((franchiseOption) => (
                                 <option key={franchiseOption.id} value={franchiseOption.id}>
                                   {franchiseOption.name || franchiseOption.franchiseCode || franchiseOption.id}
                                 </option>
@@ -551,6 +621,17 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId }: MasterPage
           onClose={() => setTempPassword(null)}
           title="Owner Temporary Password"
           description="Copy this password for the owner. It will only be shown once."
+        />
+      )}
+
+      {editingFranchise && (
+        <MasterFranchiseEditorModal
+          franchise={editingFranchise}
+          users={usersByFranchise.get(editingFranchise.id) || []}
+          updatedBy={session?.userEmail || session?.userName || null}
+          onClose={() => setEditingFranchise(null)}
+          onRefresh={loadData}
+          onFranchiseUpdated={handleFranchiseUpdated}
         />
       )}
     </div>

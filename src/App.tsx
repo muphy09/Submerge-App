@@ -289,6 +289,20 @@ function AppContent() {
     navigate('/master', { replace: true });
   }, [loadPricingForFranchise, navigate, session?.franchiseId]);
 
+  const handleMasterFranchiseUpdated = useCallback((franchise: MasterFranchise) => {
+    if (!franchise?.id) return;
+    setMasterImpersonation((current) => {
+      if (!current || current.franchiseId !== franchise.id) return current;
+      const next: MasterImpersonation = {
+        ...current,
+        franchiseName: franchise.name || undefined,
+        franchiseCode: franchise.franchiseCode || undefined,
+      };
+      saveMasterImpersonation(next);
+      return next;
+    });
+  }, []);
+
   const handlePasswordReset = async (newPassword: string) => {
     await completePasswordReset(newPassword);
     const updated = updateSession({ passwordResetRequired: false });
@@ -526,6 +540,7 @@ function AppContent() {
               session={session}
               onActAsFranchise={handleActAsFranchise}
               actingFranchiseId={masterImpersonation?.franchiseId}
+              onFranchiseUpdated={handleMasterFranchiseUpdated}
             />
           }
         />
