@@ -1,10 +1,9 @@
-[2.0.11] What's New
+[2.0.12] What's New
 ## Fixed
 - Off Contract Decking
     - Takes original decking cost and moves it straight to Total Retail, no increase
     - Marks the Decking as 'Off Contract' in the COGS and Contract
     - Includes itself in the Off Contract Addendum
-
 -----
 [2.0.10] What's New
 ## Improvements
