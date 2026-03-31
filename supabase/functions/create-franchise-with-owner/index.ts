@@ -10,6 +10,9 @@ function generateTempPassword(length = 12) {
   return result;
 }
 
+const DEFAULT_DIG_COMMISSION_RATE = 0.0275;
+const DEFAULT_CLOSEOUT_COMMISSION_RATE = 0.0275;
+
 function isFranchiseCodeConflict(error: any) {
   const code = String(error?.code || '').trim();
   if (code === '23505') return true;
@@ -119,6 +122,8 @@ Deno.serve(async (req) => {
       role: 'owner',
       is_active: true,
       password_reset_required: true,
+      dig_commission_rate: DEFAULT_DIG_COMMISSION_RATE,
+      closeout_commission_rate: DEFAULT_CLOSEOUT_COMMISSION_RATE,
       created_at: now,
       updated_at: now,
     });

@@ -8,6 +8,7 @@ import {
   type UserRole,
   type UserSession,
 } from './session';
+import { normalizeUserCommissionRates } from './userCommissionRates';
 
 type FranchiseRow = {
   id: string;
@@ -24,6 +25,8 @@ type FranchiseUserRow = {
   role?: UserRole | null;
   is_active?: boolean | null;
   password_reset_required?: boolean | null;
+  dig_commission_rate?: number | null;
+  closeout_commission_rate?: number | null;
 };
 
 function normalizeCode(code?: string | null) {
@@ -75,7 +78,9 @@ async function getUserProfileByAuthId(authUserId: string, email?: string | null)
   const supabase = assertSupabaseReady();
   const { data, error } = await supabase
     .from('franchise_users')
-    .select('id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required')
+    .select(
+      'id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required,dig_commission_rate,closeout_commission_rate'
+    )
     .eq('auth_user_id', authUserId)
     .maybeSingle();
   if (error && error.code !== 'PGRST116') throw error;
@@ -86,7 +91,9 @@ async function getUserProfileByAuthId(authUserId: string, email?: string | null)
 
   const fallback = await supabase
     .from('franchise_users')
-    .select('id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required')
+    .select(
+      'id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required,dig_commission_rate,closeout_commission_rate'
+    )
     .eq('email', fallbackEmail)
     .maybeSingle();
   if (fallback.error && fallback.error.code !== 'PGRST116') throw fallback.error;
@@ -111,6 +118,10 @@ function buildSessionFromProfile(options: {
   const displayName = normalizeDisplayName(options.profile.name) || options.email || 'User';
   const role = (options.profile.role || 'designer') as UserRole;
   const franchise = options.franchise;
+  const commissionRates = normalizeUserCommissionRates({
+    digCommissionRate: options.profile.dig_commission_rate,
+    closeoutCommissionRate: options.profile.closeout_commission_rate,
+  });
   return {
     userId: options.authUserId,
     userEmail: options.email,
@@ -120,6 +131,7 @@ function buildSessionFromProfile(options: {
     franchiseCode: franchise?.franchise_code || undefined,
     role,
     passwordResetRequired: Boolean(options.profile.password_reset_required),
+    ...commissionRates,
   };
 }
 

@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS franchise_users (
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('admin','designer')),
     is_active INTEGER NOT NULL DEFAULT 1,
+    dig_commission_rate REAL NOT NULL DEFAULT 0.0275,
+    closeout_commission_rate REAL NOT NULL DEFAULT 0.0275,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(franchise_id, email),

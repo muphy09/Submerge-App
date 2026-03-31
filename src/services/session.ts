@@ -1,6 +1,8 @@
+import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
+
 export type UserRole = 'master' | 'owner' | 'admin' | 'designer';
 
-export type UserSession = {
+export type UserSession = Partial<UserCommissionRates> & {
   userId?: string;
   userEmail?: string;
   userName?: string;
@@ -128,4 +130,8 @@ export function getSessionFranchiseCode() {
 
 export function getSessionUserEmail(defaultEmail = '') {
   return readSession()?.userEmail || defaultEmail;
+}
+
+export function getSessionCommissionRates(): UserCommissionRates {
+  return normalizeUserCommissionRates(readSession());
 }

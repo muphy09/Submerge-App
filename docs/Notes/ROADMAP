@@ -1,8 +1,35 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
 - Sod and Fencing grouped costs not included bcz of price discrepency
+
+- Ability to select whether the pool is freeform or geometric pool 
+    - Checkbox in the Pool Specs 'Freeform Geometric'
+        - Add 5% more to the waste TO DECKING than we currently
+            - * Not Concrete Decking
+        
+- New decking option 'Cool Deck' ($4.75 SF)
+    - Add on to Conrete ONLY
+        - Ask to add on if conrete is selected
+    - OR select by itself
+
+- Decking 
+    - Ability to add seperate decking option to decking.
+        - Custom SF to be entered after this option is selected
+        - Adding additional decking option only
+             On/Off Contract option
+        - Ability to turn on/off waste
+
+- Warranty breakdown
+- Fiberglass pricing
+
+- Contract needs to autofill new parts
+
+- 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
+- Warranty 
+- ** Ability to select the indiviudual material instead of tiers
+    - Backburner
 - Workflow for Addendum (contract changes after original) must show cost comparison of before and after 
 - Fiberglass Pricing models (email)
 - Booster pump is an add on pump
@@ -20,6 +47,17 @@ Mid Term -
         - Will add pool light and housing cost, Has conduit run and match WF run.
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
+- Levels
+    - Bronze Pool
+        - Will change some formulas in the core pricing
+        - WIll always use PFM03 automation package (PFM01 option to price)
+        - Shotcrete formula would be less
+        - Would not have 5 year warranty (changes proposal page)
+        - No microglass
+        - Only NPT pool color options (ivory quartz)
+        - No comparison options, completely seperate
+    
+
 - Admin proposal large screen
 - Performance Data for Admin overhaul
 - Equipment logic for lights when selecting multiple can be cleaned up

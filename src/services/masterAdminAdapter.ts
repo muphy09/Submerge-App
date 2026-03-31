@@ -1,6 +1,7 @@
 import { saveFranchiseAppName, loadFranchiseAppName } from './franchiseBranding';
 import { saveFranchiseCode } from './franchisesAdapter';
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
+import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
 
 export type MasterFranchise = {
   id: string;
@@ -12,7 +13,7 @@ export type MasterFranchise = {
   updatedAt?: string;
 };
 
-export type MasterUser = {
+export type MasterUser = UserCommissionRates & {
   id: string;
   franchiseId?: string | null;
   email: string;
@@ -105,7 +106,9 @@ export async function listAllFranchiseUsers(): Promise<MasterUser[]> {
   }
   const { data, error } = await supabase
     .from('franchise_users')
-    .select('id,franchise_id,email,name,role,is_active,password_reset_required,created_at,updated_at')
+    .select(
+      'id,franchise_id,email,name,role,is_active,password_reset_required,created_at,updated_at,dig_commission_rate,closeout_commission_rate'
+    )
     .order('name', { ascending: true });
   if (error) throw error;
   return (data || []).map((row: any) => ({
@@ -118,6 +121,10 @@ export async function listAllFranchiseUsers(): Promise<MasterUser[]> {
     passwordResetRequired: Boolean(row.password_reset_required),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...normalizeUserCommissionRates({
+      digCommissionRate: row.dig_commission_rate,
+      closeoutCommissionRate: row.closeout_commission_rate,
+    }),
   }));
 }
 

@@ -9,6 +9,10 @@ import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { CUSTOM_OPTIONS_SUBCATEGORY } from '../utils/costBreakdownSubcategories';
 import { getSelectedEquipmentPackage, isFixedEquipmentPackage } from '../utils/equipmentPackages';
 import {
+  DEFAULT_CLOSEOUT_COMMISSION_RATE,
+  DEFAULT_DIG_COMMISSION_RATE,
+} from './userCommissionRates';
+import {
   getCustomOptionTotal,
   getOffContractTotal,
   hasCustomOptionContent,
@@ -491,9 +495,10 @@ export class MasterPricingEngine {
       proposal.pricing?.targetMargin ??
       0.7; // Excel target margin (COGS ~70% of retail)
     const discountAmount = proposal.pricing?.discountAmount ?? 0; // Manual discount
-    const digCommissionRate = proposal.pricing?.digCommissionRate ?? 0.0275; // 2.75%
+    const digCommissionRate = proposal.pricing?.digCommissionRate ?? DEFAULT_DIG_COMMISSION_RATE;
     const adminFeeRate = proposal.pricing?.adminFeeRate ?? 0.029; // 2.9%
-    const closeoutCommissionRate = proposal.pricing?.closeoutCommissionRate ?? 0.0275; // 2.75%
+    const closeoutCommissionRate =
+      proposal.pricing?.closeoutCommissionRate ?? DEFAULT_CLOSEOUT_COMMISSION_RATE;
     const manualAdjustments = proposal.manualAdjustments || (pricingData as any).manualAdjustments || {
       positive1: 0,
       positive2: 0,

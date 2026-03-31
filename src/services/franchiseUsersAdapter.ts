@@ -1,8 +1,9 @@
 import { getSupabaseClient } from './supabaseClient';
 import { Proposal } from '../types/proposal-new';
 import { isEnvFlagTrue } from './env';
+import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
 
-export type FranchiseUser = {
+export type FranchiseUser = UserCommissionRates & {
   id: string;
   franchiseId: string;
   email: string;
@@ -65,7 +66,9 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
   }
   const { data, error } = await supabase
     .from('franchise_users')
-    .select('id,franchise_id,name,email,role,is_active,password_reset_required,created_at,updated_at')
+    .select(
+      'id,franchise_id,name,email,role,is_active,password_reset_required,created_at,updated_at,dig_commission_rate,closeout_commission_rate'
+    )
     .eq('franchise_id', franchiseId)
     .order('name', { ascending: true });
   if (error) throw error;
@@ -79,6 +82,10 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
     passwordResetRequired: Boolean(row.password_reset_required),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...normalizeUserCommissionRates({
+      digCommissionRate: row.dig_commission_rate,
+      closeoutCommissionRate: row.closeout_commission_rate,
+    }),
   }));
   const activeRows = rows.filter((row) => row.isActive);
   const weight = { owner: 2, admin: 1, designer: 0 } as Record<string, number>;
@@ -135,6 +142,29 @@ export async function updateFranchiseUserRole(userId: string, role: 'owner' | 'a
     .eq('id', userId);
   if (error) throw error;
   return true;
+}
+
+export async function updateFranchiseUserCommissionRates(
+  userId: string,
+  rates: Partial<UserCommissionRates>
+) {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    requireSupabase();
+    return null;
+  }
+
+  const normalizedRates = normalizeUserCommissionRates(rates);
+  const { error } = await supabase
+    .from('franchise_users')
+    .update({
+      dig_commission_rate: normalizedRates.digCommissionRate,
+      closeout_commission_rate: normalizedRates.closeoutCommissionRate,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+  if (error) throw error;
+  return normalizedRates;
 }
 
 export async function deactivateFranchiseUser(userId: string) {

@@ -74,6 +74,7 @@ import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } 
 import { hasSupabaseConnection } from '../services/supabaseClient';
 import type { CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
+  getSessionCommissionRates,
   getSessionFranchiseCode,
   getSessionFranchiseId,
   getSessionRole,
@@ -318,6 +319,15 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const [versionList, setVersionList] = useState<Proposal[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
   const [editingVersionId, setEditingVersionId] = useState<string>('original');
+  const sessionCommissionRates = getSessionCommissionRates();
+  const applySessionCommissionRates = (input: Partial<Proposal>): Partial<Proposal> => ({
+    ...input,
+    pricing: {
+      ...(input.pricing || {}),
+      digCommissionRate: sessionCommissionRates.digCommissionRate,
+      closeoutCommissionRate: sessionCommissionRates.closeoutCommissionRate,
+    } as Proposal['pricing'],
+  });
 
   useEffect(() => {
     if (canOpenCogsBreakdown) return;
@@ -519,6 +529,11 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       designerName,
       designerRole,
       designerCode,
+      pricing: {
+        ...(base.pricing || {}),
+        digCommissionRate: sessionCommissionRates.digCommissionRate,
+        closeoutCommissionRate: sessionCommissionRates.closeoutCommissionRate,
+      } as Proposal['pricing'],
       pricingModelId: shouldUseActiveDefault ? modelMeta.pricingModelId || undefined : undefined,
       pricingModelName: shouldUseActiveDefault ? modelMeta.pricingModelName || undefined : undefined,
       pricingModelIsDefault: shouldUseActiveDefault ? modelMeta.isDefault : undefined,
@@ -1073,7 +1088,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   ]);
 
   const calculateTotals = (): Proposal => {
-    const normalized = mergeWithDefaults(proposal);
+    const normalized = mergeWithDefaults(applySessionCommissionRates(proposal));
     const result = MasterPricingEngine.calculateCompleteProposal(normalized, papDiscounts);
     const versionId = proposal.versionId || editingVersionId || 'original';
     const versionName =
@@ -1434,7 +1449,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     );
   }
 
-  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(mergeWithDefaults(proposal), papDiscounts);
+  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(
+    mergeWithDefaults(applySessionCommissionRates(proposal)),
+    papDiscounts
+  );
   const canSubmit = Boolean(proposal.customerInfo?.customerName?.trim());
   const saveDraftTooltip = isOffline
     ? 'No internet connection. Connect to save.'
@@ -1754,7 +1772,11 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
       {showCostBreakdownPage && canOpenCogsBreakdown && (
         <CostBreakdownPage
-          proposal={{ ...proposal, papDiscounts, manualAdjustments: proposal.manualAdjustments }}
+          proposal={applySessionCommissionRates({
+            ...proposal,
+            papDiscounts,
+            manualAdjustments: proposal.manualAdjustments,
+          }) as Proposal}
           onClose={() => setShowCostBreakdownPage(false)}
           onAdjustmentsChange={(adjustments) => {
             manualAdjustmentsSourceRef.current = 'proposal';

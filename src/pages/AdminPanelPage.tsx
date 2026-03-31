@@ -12,8 +12,14 @@ import {
   listFranchiseUsers,
   markDesignerProposalsDeleted,
   resetFranchiseUserPassword,
+  updateFranchiseUserCommissionRates,
   updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
+import { updateSession } from '../services/session';
+import {
+  formatCommissionRatePercent,
+  parseCommissionPercentInput,
+} from '../services/userCommissionRates';
 import {
   getDefaultProposal,
   getDefaultPoolSpecs,
@@ -38,11 +44,17 @@ const FRANCHISE_MARGIN_LIMIT = 18;
 
 type SessionInfo = {
   userName?: string;
+  userEmail?: string;
   franchiseId?: string;
   franchiseName?: string;
   franchiseCode?: string;
   role?: 'master' | 'owner' | 'admin' | 'designer';
 };
+
+type SelectedUserStatus = {
+  type: 'success' | 'error';
+  message: string;
+} | null;
 
 interface AdminPanelPageProps {
   onOpenPricingData?: () => void;
@@ -72,6 +84,7 @@ const formatDate = (value?: string) => {
 };
 
 const normalizeDesignerName = (value?: string | null) => (value ?? '').trim();
+const normalizeUserEmail = (value?: string | null) => String(value || '').trim().toLowerCase();
 const isSubmittedStatus = (status?: string) => {
   const normalized = (status || '').toLowerCase();
   return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
@@ -92,7 +105,15 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [loadingModels, setLoadingModels] = useState(true);
   const [activatingModelId, setActivatingModelId] = useState<string | null>(null);
   const [franchiseUsers, setFranchiseUsers] = useState<
-    { id: string; name?: string | null; email: string; role: 'owner' | 'admin' | 'designer'; isActive: boolean }[]
+    {
+      id: string;
+      name?: string | null;
+      email: string;
+      role: 'owner' | 'admin' | 'designer';
+      isActive: boolean;
+      digCommissionRate: number;
+      closeoutCommissionRate: number;
+    }[]
   >([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [addingUser, setAddingUser] = useState(false);
@@ -104,6 +125,10 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserStatus, setSelectedUserStatus] = useState<SelectedUserStatus>(null);
+  const [selectedDigCommissionPercent, setSelectedDigCommissionPercent] = useState('');
+  const [selectedCloseoutCommissionPercent, setSelectedCloseoutCommissionPercent] = useState('');
+  const [savingCommissionUserId, setSavingCommissionUserId] = useState<string | null>(null);
   const [designerFilter, setDesignerFilter] = useState('all');
   const userListRef = useRef<HTMLDivElement | null>(null);
   const userWheelLockRef = useRef<number>(0);
@@ -234,6 +259,8 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           email: row.email,
           role: row.role,
           isActive: Boolean(row.isActive),
+          digCommissionRate: Number(row.digCommissionRate) || 0,
+          closeoutCommissionRate: Number(row.closeoutCommissionRate) || 0,
         }))
       );
     } catch (error) {
@@ -254,6 +281,19 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       setSelectedUserId(null);
     }
   }, [selectedUser, selectedUserId]);
+
+  useEffect(() => {
+    if (!selectedUser) {
+      setSelectedUserStatus(null);
+      setSelectedDigCommissionPercent('');
+      setSelectedCloseoutCommissionPercent('');
+      return;
+    }
+
+    setSelectedUserStatus(null);
+    setSelectedDigCommissionPercent(formatCommissionRatePercent(selectedUser.digCommissionRate));
+    setSelectedCloseoutCommissionPercent(formatCommissionRatePercent(selectedUser.closeoutCommissionRate));
+  }, [selectedUser?.id]);
 
   const handleSetActiveModel = async (modelId: string) => {
     if (!modelId) return;
@@ -348,6 +388,46 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     } finally {
       setResettingUserId(null);
     }
+  };
+
+  const handleSaveCommissionRates = async (userId: string) => {
+    setSelectedUserStatus(null);
+    setSavingCommissionUserId(userId);
+    try {
+      const digCommissionRate = parseCommissionPercentInput(
+        selectedDigCommissionPercent,
+        'Dig Commission'
+      );
+      const closeoutCommissionRate = parseCommissionPercentInput(
+        selectedCloseoutCommissionPercent,
+        'Closeout Commission'
+      );
+      const saved = await updateFranchiseUserCommissionRates(userId, {
+        digCommissionRate,
+        closeoutCommissionRate,
+      });
+      if (selectedUser && normalizeUserEmail(selectedUser.email) === normalizeUserEmail(session?.userEmail)) {
+        updateSession({
+          digCommissionRate: saved?.digCommissionRate ?? digCommissionRate,
+          closeoutCommissionRate: saved?.closeoutCommissionRate ?? closeoutCommissionRate,
+        });
+      }
+      await loadUsers(franchiseId);
+      setSelectedUserStatus({ type: 'success', message: 'Commission settings updated.' });
+    } catch (error: any) {
+      console.error('Failed to update commission settings:', error);
+      setSelectedUserStatus({
+        type: 'error',
+        message: error?.message || 'Unable to update commission settings.',
+      });
+    } finally {
+      setSavingCommissionUserId(null);
+    }
+  };
+
+  const handleCloseSelectedUser = () => {
+    setSelectedUserId(null);
+    setSelectedUserStatus(null);
   };
 
   const handleOpenAddUserForm = () => {
@@ -879,7 +959,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       )}
 
       {selectedUser && (
-        <div className="admin-user-modal-backdrop" onClick={() => setSelectedUserId(null)}>
+        <div className="admin-user-modal-backdrop" onClick={handleCloseSelectedUser}>
           <div
             className="admin-user-modal"
             role="dialog"
@@ -888,14 +968,14 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           >
             <div className="admin-user-modal-header">
               <div>
-                <p className="admin-user-modal-kicker">Designer Details</p>
+                <p className="admin-user-modal-kicker">User Details</p>
                 <h3 className="admin-user-modal-title">{selectedUser.name || selectedUser.email}</h3>
               </div>
               <button
                 className="admin-user-modal-close"
                 type="button"
-                onClick={() => setSelectedUserId(null)}
-                aria-label="Close designer details"
+                onClick={handleCloseSelectedUser}
+                aria-label="Close user details"
               >
                 ×
               </button>
@@ -909,6 +989,62 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                 <span className="admin-user-detail-label">Email</span>
                 <span className="admin-user-detail-value">{selectedUser.email}</span>
               </div>
+            </div>
+            <div className="admin-user-commission-section">
+              <div className="admin-user-commission-header">
+                <div className="admin-user-commission-title">Commission Settings</div>
+                <div className="admin-user-commission-subtitle">Percent of retail price</div>
+              </div>
+              <div className="admin-user-commission-grid">
+                <label className="admin-user-commission-field" htmlFor="closeout-commission-input">
+                  <span>Closeout Commission</span>
+                  <div className="admin-user-commission-input">
+                    <input
+                      id="closeout-commission-input"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={selectedCloseoutCommissionPercent}
+                      onChange={(event) => setSelectedCloseoutCommissionPercent(event.target.value)}
+                      disabled={savingCommissionUserId === selectedUser.id}
+                    />
+                    <span>%</span>
+                  </div>
+                </label>
+                <label className="admin-user-commission-field" htmlFor="dig-commission-input">
+                  <span>Dig Commission</span>
+                  <div className="admin-user-commission-input">
+                    <input
+                      id="dig-commission-input"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={selectedDigCommissionPercent}
+                      onChange={(event) => setSelectedDigCommissionPercent(event.target.value)}
+                      disabled={savingCommissionUserId === selectedUser.id}
+                    />
+                    <span>%</span>
+                  </div>
+                </label>
+              </div>
+              <button
+                className="admin-primary-btn"
+                type="button"
+                onClick={() => handleSaveCommissionRates(selectedUser.id)}
+                disabled={savingCommissionUserId === selectedUser.id}
+              >
+                {savingCommissionUserId === selectedUser.id ? 'Saving...' : 'Save Commission Settings'}
+              </button>
+              {selectedUserStatus?.type === 'error' && (
+                <div className="admin-error">{selectedUserStatus.message}</div>
+              )}
+              {selectedUserStatus?.type === 'success' && (
+                <div className="admin-success">{selectedUserStatus.message}</div>
+              )}
             </div>
             <div className="admin-user-modal-actions">
               {selectedUser.role === 'designer' && (
