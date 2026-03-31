@@ -781,19 +781,9 @@ ipcMain.handle('read-changelog', () => {
   throw new Error('CHANGELOG.md not found');
 });
 
-function resolveUniqueDownloadPath(downloadsDir, filename) {
-  const parsed = path.parse(filename);
-  const baseName = parsed.name || 'job-cost-summary-warranty';
-  const extension = parsed.ext || '.pdf';
-  let candidatePath = path.join(downloadsDir, `${baseName}${extension}`);
-  let counter = 1;
-
-  while (fs.existsSync(candidatePath)) {
-    candidatePath = path.join(downloadsDir, `${baseName} (${counter})${extension}`);
-    counter += 1;
-  }
-
-  return candidatePath;
+function ensurePdfExtension(filePath) {
+  if (!filePath) return filePath;
+  return path.extname(filePath) ? filePath : `${filePath}.pdf`;
 }
 
 ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
@@ -803,6 +793,16 @@ ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   const filename =
     (payload && typeof payload.filename === 'string' && payload.filename.trim()) ||
     'job-cost-summary-warranty.pdf';
+  const { canceled, filePath: selectedPath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export Breakdown PDF',
+    defaultPath: path.join(app.getPath('downloads'), filename),
+    buttonLabel: 'Export PDF',
+    filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+  });
+
+  if (canceled || !selectedPath) {
+    return { canceled: true };
+  }
 
   await mainWindow.webContents.executeJavaScript(
     "document.fonts ? document.fonts.ready.then(() => true) : Promise.resolve(true)"
@@ -821,7 +821,7 @@ ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
     preferCSSPageSize: false,
     landscape: false,
   });
-  const filePath = resolveUniqueDownloadPath(app.getPath('downloads'), filename);
+  const filePath = ensurePdfExtension(selectedPath);
   fs.writeFileSync(filePath, pdfData);
   return { filePath };
 });

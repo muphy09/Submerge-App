@@ -4,7 +4,7 @@ import jsPDF from 'jspdf';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CostLineItem, Proposal, RetailAdjustment } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
-import { BreakdownCostExportPage, BreakdownWarrantyExportPage } from '../components/BreakdownExportPages';
+import { BreakdownCostExportPage, BreakdownWarrantyExportPages } from '../components/BreakdownExportPages';
 import ContractView, { ContractViewHandle } from '../components/ContractView';
 import FranchiseLogo from '../components/FranchiseLogo';
 import OffContractItemsView from '../components/OffContractItemsView';
@@ -196,10 +196,6 @@ function ProposalView() {
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
   const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
-  const breakdownCostPageWrapperRef = useRef<HTMLDivElement>(null);
-  const breakdownWarrantyPageWrapperRef = useRef<HTMLDivElement>(null);
-  const breakdownCostPageRef = useRef<HTMLDivElement>(null);
-  const breakdownWarrantyPageRef = useRef<HTMLDivElement>(null);
   const contractExportControlRef = useRef<HTMLDivElement>(null);
   const contractViewRef = useRef<ContractViewHandle | null>(null);
   const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -784,6 +780,7 @@ function ProposalView() {
 
       if (window.electron?.exportBreakdownPdf) {
         const result = await window.electron.exportBreakdownPdf({ filename });
+        if (result?.canceled) return;
         if (!result?.filePath) throw new Error('No breakdown PDF file was saved.');
       } else {
         await exportBreakdownPdfFallback(filename);
@@ -1311,6 +1308,7 @@ function ProposalView() {
     : null;
   const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
   const hasMultipleVersions = viewModels.length > 1;
+  const shouldRenderBreakdownExport = breakdownExportActive || breakdownExporting;
 
   const categoryTotal = (items: CostLineItem[] = []): number =>
     items.reduce((sum, item) => sum + (isOffContractLineItem(item) ? 0 : (item.total ?? 0)), 0);
@@ -2151,15 +2149,13 @@ function ProposalView() {
               </div>
             </div>
           </div>
-          <div
-            className={`export-print-area ${breakdownExportActive ? 'print-mode' : ''}`}
-            ref={breakdownExportAreaRef}
-          >
+          {shouldRenderBreakdownExport && (
             <div
-              className="export-breakdown-page export-breakdown-page--cost"
-              ref={breakdownCostPageWrapperRef}
+              className={`export-print-area ${breakdownExportActive ? 'print-mode' : ''}`}
+              ref={breakdownExportAreaRef}
+              aria-hidden="true"
             >
-              <div ref={breakdownCostPageRef}>
+              <div className="export-breakdown-page export-breakdown-page--cost">
                 <BreakdownCostExportPage
                   costBreakdown={customerModalView.costBreakdownForDisplay}
                   customerName={customerModalView.proposal.customerInfo.customerName}
@@ -2167,16 +2163,9 @@ function ProposalView() {
                   pricing={customerModalView.pricing}
                 />
               </div>
+              <BreakdownWarrantyExportPages proposal={customerModalView.proposal} />
             </div>
-            <div
-              className="export-breakdown-page export-breakdown-page--warranty"
-              ref={breakdownWarrantyPageWrapperRef}
-            >
-              <div ref={breakdownWarrantyPageRef}>
-                <BreakdownWarrantyExportPage proposal={customerModalView.proposal} />
-              </div>
-            </div>
-          </div>
+          )}
         </>
       )}
       {canViewCogsBreakdown && cogsBreakdownVersionId && cogsModalView && (

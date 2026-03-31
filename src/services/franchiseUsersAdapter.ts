@@ -136,12 +136,17 @@ export async function updateFranchiseUserRole(userId: string, role: 'owner' | 'a
     requireSupabase();
     return null;
   }
-  const { error } = await supabase
-    .from('franchise_users')
-    .update({ role, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-  if (error) throw error;
-  return true;
+  const { data, error } = await supabase.functions.invoke('update-franchise-user-role', {
+    body: { userId, role },
+  });
+  if (error) {
+    const message = await extractFunctionErrorMessage(error);
+    if (message) {
+      throw new Error(message);
+    }
+    throw error;
+  }
+  return data as { success?: boolean; user?: Pick<FranchiseUser, 'id' | 'franchiseId' | 'role' | 'isActive'> };
 }
 
 export async function updateFranchiseUserCommissionRates(

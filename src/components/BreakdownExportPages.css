@@ -20,8 +20,11 @@
   border: 1px solid #d7e0ee;
   border-radius: 12px;
   background: #ffffff;
-  padding: 0.24in 0.26in;
+  padding: 0.3in 0.26in 0.24in;
   box-sizing: border-box;
+  min-height: 9.95in;
+  display: flex;
+  flex-direction: column;
 }
 
 .breakdown-export-cost-header,
@@ -138,6 +141,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.11in;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .breakdown-export-warranty-card {
@@ -238,6 +243,20 @@
   background: #f3f4f6;
   border-color: #d8dce3;
   color: #6b7280;
+}
+
+.breakdown-export-warranty-measure {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 7.7in;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.breakdown-export-warranty-measure .breakdown-export-warranty-sheet {
+  min-height: 0;
 }
 
 @media print {

@@ -279,12 +279,36 @@ function MasterFranchiseEditorModal({
     }
   };
 
+  const handleDemoteAdmin = async (user: MasterUser) => {
+    const confirmDemote = window.confirm(
+      `Demote ${getDisplayName(user)} to designer? They will lose admin access for this franchise until promoted again.`
+    );
+    if (!confirmDemote) return;
+
+    setDemotingUserId(user.id);
+    setStatus(null);
+    try {
+      await updateFranchiseUserRole(user.id, 'designer');
+      await onRefresh();
+      setStatus({ type: 'success', message: `${getDisplayName(user)} is now a designer.` });
+    } catch (error: any) {
+      console.error('Failed to demote admin:', error);
+      setStatus({
+        type: 'error',
+        message: error?.message || 'Unable to demote this admin.',
+      });
+    } finally {
+      setDemotingUserId(null);
+    }
+  };
+
   const renderUserRow = (
     user: MasterUser,
     options: {
       canMakeOwner?: boolean;
       canPromoteDesigner?: boolean;
       canDemoteOwner?: boolean;
+      canDemoteAdmin?: boolean;
       canRemoveDesigner?: boolean;
     }
   ) => (
@@ -330,6 +354,16 @@ function MasterFranchiseEditorModal({
             disabled={demotingUserId === user.id || isInactive}
           >
             {demotingUserId === user.id ? 'Saving...' : 'Demote to Admin'}
+          </button>
+        )}
+        {options.canDemoteAdmin && (
+          <button
+            className="master-secondary-btn"
+            type="button"
+            onClick={() => handleDemoteAdmin(user)}
+            disabled={demotingUserId === user.id || isInactive}
+          >
+            {demotingUserId === user.id ? 'Saving...' : 'Demote to Designer'}
           </button>
         )}
         {options.canRemoveDesigner && (
@@ -433,7 +467,7 @@ function MasterFranchiseEditorModal({
                 <p>
                   {isInactive
                     ? 'This franchise is inactive. User management actions are disabled.'
-                    : 'Reset admin passwords. If no owner exists, an admin can be promoted to owner.'}
+                    : 'Reset admin passwords, demote admins to designers, or promote an admin to owner if no owner exists.'}
                 </p>
               </div>
             </div>
@@ -441,7 +475,12 @@ function MasterFranchiseEditorModal({
               <div className="master-empty">No active admins found.</div>
             ) : (
               <div className="master-editor-user-list">
-                {admins.map((user) => renderUserRow(user, { canMakeOwner: owners.length === 0 }))}
+                {admins.map((user) =>
+                  renderUserRow(user, {
+                    canMakeOwner: owners.length === 0,
+                    canDemoteAdmin: true,
+                  })
+                )}
               </div>
             )}
           </div>

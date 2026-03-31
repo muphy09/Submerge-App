@@ -242,8 +242,6 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
   useEffect(() => {
     if (!contextMenu) return;
     const handleClose = (event: Event) => {
-      const mouseEvent = event as MouseEvent;
-      if (mouseEvent.ctrlKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest('.warranty-context-menu')) return;
       setContextMenu(null);
@@ -251,11 +249,13 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setContextMenu(null);
     };
-    window.addEventListener('click', handleClose);
+    window.addEventListener('pointerdown', handleClose, true);
+    window.addEventListener('contextmenu', handleClose, true);
     window.addEventListener('scroll', handleClose, true);
     window.addEventListener('keydown', handleEscape);
     return () => {
-      window.removeEventListener('click', handleClose);
+      window.removeEventListener('pointerdown', handleClose, true);
+      window.removeEventListener('contextmenu', handleClose, true);
       window.removeEventListener('scroll', handleClose, true);
       window.removeEventListener('keydown', handleEscape);
     };

@@ -459,11 +459,11 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         'Designer';
       counts[name] = (counts[name] || 0) + 1;
     });
-    const designerNames = franchiseUsers
-      .filter((user) => user.role === 'designer')
-      .map((user) => normalizeDesignerName(user.name))
+    const performanceUserNames = franchiseUsers
+      .filter((user) => user.role === 'designer' || user.role === 'admin')
+      .map((user) => normalizeDesignerName(user.name) || normalizeDesignerName(user.email))
       .filter((name) => name.length > 0);
-    const allNames = new Set<string>(designerNames);
+    const allNames = new Set<string>(performanceUserNames);
 
     Object.keys(counts).forEach((name) => {
       if (name) {

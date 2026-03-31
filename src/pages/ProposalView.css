@@ -1611,11 +1611,15 @@
 .export-breakdown-page--cost {
   break-after: page;
   page-break-after: always;
+  padding-top: 0.55in;
+  box-sizing: border-box;
 }
 
 .export-breakdown-page--warranty {
   height: auto;
   overflow: visible;
+  padding-top: 0.5in;
+  box-sizing: border-box;
 }
 
 .export-breakdown-page:not(:last-child) {

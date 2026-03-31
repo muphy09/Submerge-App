@@ -355,7 +355,14 @@ function AppContent() {
   const showNavigation = !location.pathname.startsWith('/proposal/');
   const effectiveRole = (effectiveSession?.role || '').toLowerCase();
   const isAdmin = effectiveRole === 'admin' || effectiveRole === 'owner';
-  const adminPanelRequiresPin = isAdmin && Boolean(effectiveSession?.franchiseId);
+  const isMasterActingAsOwner =
+    isMaster &&
+    Boolean(masterImpersonation?.franchiseId) &&
+    (masterImpersonation?.actingRole || 'owner') === 'owner';
+  const adminPanelRequiresPin =
+    isAdmin &&
+    Boolean(effectiveSession?.franchiseId) &&
+    !isMasterActingAsOwner;
   const isAdminPanelUnlocked = adminPanelAccessFranchiseId === (effectiveSession?.franchiseId || null);
   const canRenderAdminPanel = !adminPanelRequiresPin || isAdminPanelUnlocked;
   const isAdminPanelLocked = Boolean(adminPanelLockoutUntil && adminPanelLockoutUntil > Date.now());

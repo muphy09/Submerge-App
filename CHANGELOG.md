@@ -1,3 +1,6 @@
+## [2.0.17] What's New
+- Exporting Contract & Warranty PDF fixed
+-----
 ## [2.0.16] What's New
 - Warranty Customization
     - Added ability to customize the Warranty section of the Job Cost Summary
@@ -5,10 +8,12 @@
     - Right click a category or line item to Add / Remove items to the category
 - Exporting Options
     - Job Cost Summary & Warranty export logic now matches the Contract export logic
+-----
 ## [2.0.15] What's New
 -  Aligned Additional Decking with intended use case
     - Ability to add multiple decking options
     - Changed Concrete Waste overhead to 0%
+-----
 ## [2.0.14] What's New
 - Additional Decking Options
     - Ability to add Additional Decking options

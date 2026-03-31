@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { resolveWarrantySections } from '../utils/warranty';
 import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjustment } from '../types/proposal-new';
+import type { WarrantySection } from '../types/warranty';
 import './BreakdownExportPages.css';
 
 interface CostExportProps {
@@ -21,6 +22,11 @@ interface ExportRow {
   value: number;
 }
 
+const PX_PER_INCH = 96;
+const WARRANTY_PAGE_HEIGHT_IN = 10.2;
+const WARRANTY_PAGE_HEIGHT_PX = WARRANTY_PAGE_HEIGHT_IN * PX_PER_INCH;
+const WARRANTY_PAGE_SAFETY_BUFFER_PX = 14;
+
 const roundToTwo = (value: number): number =>
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 
@@ -35,6 +41,18 @@ const normalizedRetailAdjustments = (input?: RetailAdjustment[]): RetailAdjustme
     name: typeof adjustment?.name === 'string' ? adjustment.name : '',
     amount: Number.isFinite(Number(adjustment?.amount)) ? Number(adjustment.amount) : 0,
   }));
+
+const getWarrantySectionKey = (section: WarrantySection, index: number): string =>
+  section.id || `${section.title}-${index}`;
+
+const getWarrantyPageSignature = (pages: WarrantySection[][]): string =>
+  pages
+    .map((page) =>
+      page
+        .map((section, index) => getWarrantySectionKey(section, index))
+        .join('|')
+    )
+    .join('||');
 
 const getRetailOverride = (item?: CostLineItem): number | null => {
   if (!item) return null;
@@ -228,29 +246,83 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
   );
 }
 
-export function BreakdownWarrantyExportPage({ proposal }: WarrantyExportProps) {
-  const franchiseId = proposal?.franchiseId;
-  const customerName = (proposal?.customerInfo?.customerName || '').trim();
-  const { displayName } = useFranchiseAppName(franchiseId);
-  const sections = useMemo(
-    () => resolveWarrantySections(proposal, displayName),
-    [displayName, proposal]
+function BreakdownWarrantyHeader({
+  customerName,
+  franchiseId,
+}: {
+  customerName: string;
+  franchiseId?: string;
+}) {
+  return (
+    <header className="breakdown-export-warranty-header">
+      <div>
+        <p className="breakdown-export-eyebrow">Warranty &amp; Inclusions Overview</p>
+        <h2 className="breakdown-export-title">Warranty &amp; Inclusions</h2>
+        <p className="breakdown-export-subtitle">
+          Prepared for: <span>{customerName || 'N/A'}</span>
+        </p>
+      </div>
+      <div className="breakdown-export-logo">
+        <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseId} />
+      </div>
+    </header>
   );
+}
 
+function BreakdownWarrantySectionCard({
+  section,
+  displayName,
+  sectionKey,
+}: {
+  section: WarrantySection;
+  displayName: string;
+  sectionKey: string;
+}) {
+  return (
+    <section className="breakdown-export-warranty-card" data-warranty-section-key={sectionKey}>
+      <div className="breakdown-export-warranty-card-header">
+        <h3>{section.title}</h3>
+        <span>Warranty Advantage</span>
+      </div>
+      <div className="breakdown-export-warranty-card-body">
+        <ul className="breakdown-export-feature-list">
+          {section.featureItems.map((item, index) => (
+            <li key={item.id || `${section.title}-${index}`}>
+              <div className="breakdown-export-feature-label">{item.label}</div>
+              {item.detail && <div className="breakdown-export-feature-detail">{item.detail}</div>}
+            </li>
+          ))}
+        </ul>
+        <div className="breakdown-export-advantage-list">
+          {section.advantageItems.length > 0 ? (
+            section.advantageItems.map((item, index) => (
+              <div className="breakdown-export-advantage-chip" key={item.id || `${section.title}-adv-${index}`}>
+                {item.text}
+              </div>
+            ))
+          ) : (
+            <div className="breakdown-export-advantage-chip muted">No {displayName} advantages listed.</div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BreakdownWarrantySheet({
+  customerName,
+  franchiseId,
+  displayName,
+  sections,
+}: {
+  customerName: string;
+  franchiseId?: string;
+  displayName: string;
+  sections: WarrantySection[];
+}) {
   return (
     <div className="breakdown-export-warranty-sheet">
-      <header className="breakdown-export-warranty-header">
-        <div>
-          <p className="breakdown-export-eyebrow">Warranty &amp; Inclusions Overview</p>
-          <h2 className="breakdown-export-title">Warranty &amp; Inclusions</h2>
-          <p className="breakdown-export-subtitle">
-            Prepared for: <span>{customerName || 'N/A'}</span>
-          </p>
-        </div>
-        <div className="breakdown-export-logo">
-          <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseId} />
-        </div>
-      </header>
+      <BreakdownWarrantyHeader customerName={customerName} franchiseId={franchiseId} />
 
       <div className="breakdown-export-warranty-list">
         {!sections.length && (
@@ -260,40 +332,180 @@ export function BreakdownWarrantyExportPage({ proposal }: WarrantyExportProps) {
             </div>
           </section>
         )}
-        {sections.map((section) => {
+        {sections.map((section, index) => {
+          const sectionKey = getWarrantySectionKey(section, index);
           return (
-            <section className="breakdown-export-warranty-card" key={section.id || section.title}>
-              <div className="breakdown-export-warranty-card-header">
-                <h3>{section.title}</h3>
-                <span>Warranty Advantage</span>
-              </div>
-              <div className="breakdown-export-warranty-card-body">
-                <ul className="breakdown-export-feature-list">
-                  {section.featureItems.map((item, index) => (
-                    <li key={item.id || `${section.title}-${index}`}>
-                      <div className="breakdown-export-feature-label">{item.label}</div>
-                      {item.detail && <div className="breakdown-export-feature-detail">{item.detail}</div>}
-                    </li>
-                  ))}
-                </ul>
-                <div className="breakdown-export-advantage-list">
-                  {section.advantageItems.length > 0 ? (
-                    section.advantageItems.map((item, index) => (
-                      <div className="breakdown-export-advantage-chip" key={item.id || `${section.title}-adv-${index}`}>
-                        {item.text}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="breakdown-export-advantage-chip muted">
-                      No {displayName} advantages listed.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
+            <BreakdownWarrantySectionCard
+              key={sectionKey}
+              section={section}
+              displayName={displayName}
+              sectionKey={sectionKey}
+            />
           );
         })}
       </div>
     </div>
   );
 }
+
+export function BreakdownWarrantyExportPages({ proposal }: WarrantyExportProps) {
+  const franchiseId = proposal?.franchiseId ?? undefined;
+  const customerName = (proposal?.customerInfo?.customerName || '').trim();
+  const { displayName } = useFranchiseAppName(franchiseId);
+  const sections = useMemo(
+    () => resolveWarrantySections(proposal, displayName),
+    [displayName, proposal]
+  );
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [pages, setPages] = useState<WarrantySection[][]>(() => (sections.length ? [sections] : [[]]));
+
+  useEffect(() => {
+    setPages(sections.length ? [sections] : [[]]);
+  }, [sections]);
+
+  useLayoutEffect(() => {
+    const measureNode = measureRef.current;
+    if (!measureNode) return;
+
+    let frameId = 0;
+    let followupFrameId = 0;
+    let disposed = false;
+
+    const updatePages = () => {
+      if (disposed) return;
+      cancelAnimationFrame(frameId);
+      cancelAnimationFrame(followupFrameId);
+      frameId = window.requestAnimationFrame(() => {
+        followupFrameId = window.requestAnimationFrame(() => {
+          if (disposed || !measureRef.current) return;
+
+          const sheet = measureRef.current.querySelector('.breakdown-export-warranty-sheet') as HTMLDivElement | null;
+          const header = measureRef.current.querySelector('.breakdown-export-warranty-header') as HTMLElement | null;
+          const list = measureRef.current.querySelector('.breakdown-export-warranty-list') as HTMLElement | null;
+
+          if (!sheet || !header || !list) {
+            setPages(sections.length ? [sections] : [[]]);
+            return;
+          }
+
+          const sheetStyles = window.getComputedStyle(sheet);
+          const headerStyles = window.getComputedStyle(header);
+          const listStyles = window.getComputedStyle(list);
+          const paddingTop = parseFloat(sheetStyles.paddingTop) || 0;
+          const paddingBottom = parseFloat(sheetStyles.paddingBottom) || 0;
+          const headerMarginBottom = parseFloat(headerStyles.marginBottom) || 0;
+          const cardGap =
+            parseFloat(listStyles.rowGap || '') ||
+            parseFloat(listStyles.gap || '') ||
+            0;
+          const headerHeight = header.getBoundingClientRect().height + headerMarginBottom;
+          const availableHeight =
+            WARRANTY_PAGE_HEIGHT_PX - paddingTop - paddingBottom - headerHeight - WARRANTY_PAGE_SAFETY_BUFFER_PX;
+
+          if (!Number.isFinite(availableHeight) || availableHeight <= 0) {
+            setPages(sections.length ? [sections] : [[]]);
+            return;
+          }
+
+          const cardHeights = new Map<string, number>();
+          measureRef.current
+            .querySelectorAll<HTMLElement>('[data-warranty-section-key]')
+            .forEach((card) => {
+              const key = card.dataset.warrantySectionKey;
+              if (!key) return;
+              cardHeights.set(key, card.getBoundingClientRect().height);
+            });
+
+          const nextPages: WarrantySection[][] = [];
+          let currentPage: WarrantySection[] = [];
+          let currentHeight = 0;
+
+          sections.forEach((section, index) => {
+            const sectionKey = getWarrantySectionKey(section, index);
+            const cardHeight = cardHeights.get(sectionKey) ?? 0;
+
+            if (!cardHeight) {
+              currentPage.push(section);
+              return;
+            }
+
+            const nextHeight = currentPage.length ? currentHeight + cardGap + cardHeight : cardHeight;
+            if (currentPage.length && nextHeight > availableHeight) {
+              nextPages.push(currentPage);
+              currentPage = [section];
+              currentHeight = cardHeight;
+              return;
+            }
+
+            currentPage.push(section);
+            currentHeight = nextHeight;
+          });
+
+          if (currentPage.length) {
+            nextPages.push(currentPage);
+          }
+
+          const resolvedPages = nextPages.length ? nextPages : [[]];
+          const nextSignature = getWarrantyPageSignature(resolvedPages);
+          setPages((prevPages) =>
+            getWarrantyPageSignature(prevPages) === nextSignature ? prevPages : resolvedPages
+          );
+        });
+      });
+    };
+
+    updatePages();
+    void document.fonts?.ready.then(updatePages);
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            updatePages();
+          });
+
+    if (resizeObserver) {
+      resizeObserver.observe(measureNode);
+      measureNode
+        .querySelectorAll<HTMLElement>('.breakdown-export-warranty-sheet, .breakdown-export-warranty-card')
+        .forEach((node) => {
+          resizeObserver.observe(node);
+        });
+    }
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frameId);
+      cancelAnimationFrame(followupFrameId);
+      resizeObserver?.disconnect();
+    };
+  }, [sections]);
+
+  return (
+    <>
+      <div className="breakdown-export-warranty-measure" aria-hidden="true">
+        <div ref={measureRef}>
+          <BreakdownWarrantySheet
+            customerName={customerName}
+            franchiseId={franchiseId}
+            displayName={displayName}
+            sections={sections}
+          />
+        </div>
+      </div>
+
+      {pages.map((pageSections, index) => (
+        <div className="export-breakdown-page export-breakdown-page--warranty" key={`warranty-export-page-${index}`}>
+          <BreakdownWarrantySheet
+            customerName={customerName}
+            franchiseId={franchiseId}
+            displayName={displayName}
+            sections={pageSections}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+export const BreakdownWarrantyExportPage = BreakdownWarrantyExportPages;

@@ -18,11 +18,12 @@
 }
 
 .update-message {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0c2243 0%, #1d4ed8 100%);
+  border: 1px solid rgba(191, 219, 254, 0.32);
   color: white;
   padding: 16px 24px;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 10px 26px rgba(12, 34, 67, 0.28);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -32,11 +33,13 @@
 }
 
 .update-message.update-ready {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  background: linear-gradient(135deg, #123873 0%, #2563eb 100%);
+  border-color: rgba(191, 219, 254, 0.4);
 }
 
 .update-message.update-error {
-  background: linear-gradient(135deg, #f2709c 0%, #ff9472 100%);
+  background: linear-gradient(135deg, #082556 0%, #1e40af 100%);
+  border-color: rgba(148, 163, 184, 0.45);
 }
 
 .update-spinner {
@@ -53,9 +56,9 @@
 }
 
 .install-button {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.16);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(191, 219, 254, 0.45);
   padding: 6px 12px;
   border-radius: 4px;
   font-size: 13px;
@@ -66,8 +69,8 @@
 }
 
 .install-button:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(219, 234, 254, 0.72);
   transform: translateY(-1px);
 }
 
