@@ -781,22 +781,28 @@ ipcMain.handle('read-changelog', () => {
   throw new Error('CHANGELOG.md not found');
 });
 
+function resolveUniqueDownloadPath(downloadsDir, filename) {
+  const parsed = path.parse(filename);
+  const baseName = parsed.name || 'job-cost-summary-warranty';
+  const extension = parsed.ext || '.pdf';
+  let candidatePath = path.join(downloadsDir, `${baseName}${extension}`);
+  let counter = 1;
+
+  while (fs.existsSync(candidatePath)) {
+    candidatePath = path.join(downloadsDir, `${baseName} (${counter})${extension}`);
+    counter += 1;
+  }
+
+  return candidatePath;
+}
+
 ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   if (!mainWindow || !mainWindow.webContents) {
     throw new Error('Main window is not available.');
   }
   const filename =
     (payload && typeof payload.filename === 'string' && payload.filename.trim()) ||
-    'customer-cost-warranty-breakdown.pdf';
-  const defaultPath = path.join(app.getPath('downloads'), filename);
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Breakdown PDF',
-    defaultPath,
-    filters: [{ name: 'PDF', extensions: ['pdf'] }],
-  });
-  if (result.canceled || !result.filePath) {
-    return { canceled: true };
-  }
+    'job-cost-summary-warranty.pdf';
 
   await mainWindow.webContents.executeJavaScript(
     "document.fonts ? document.fonts.ready.then(() => true) : Promise.resolve(true)"
@@ -815,8 +821,9 @@ ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
     preferCSSPageSize: false,
     landscape: false,
   });
-  fs.writeFileSync(result.filePath, pdfData);
-  return { canceled: false, filePath: result.filePath };
+  const filePath = resolveUniqueDownloadPath(app.getPath('downloads'), filename);
+  fs.writeFileSync(filePath, pdfData);
+  return { filePath };
 });
 
 // Reference data handlers

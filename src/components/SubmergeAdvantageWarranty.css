@@ -47,6 +47,12 @@
   box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
 }
 
+.warranty-edit-hint {
+  margin: 0.55rem 0 0;
+  color: #52627a;
+  font-size: 0.9rem;
+}
+
 .warranty-customer {
   font-weight: 700;
   color: #0f172a;
@@ -94,8 +100,14 @@
   padding: 0.95rem 1.25rem;
 }
 
+.warranty-sheet.is-editable .warranty-title-wrap {
+  cursor: context-menu;
+}
+
 .warranty-section-title {
   font-weight: 800;
+  width: 100%;
+  text-align: left;
 }
 
 .warranty-title-icon {
@@ -191,16 +203,21 @@
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  width: 100%;
 }
 
 .feature-label {
   font-weight: 700;
   color: #0f172a;
+  width: 100%;
+  text-align: left;
 }
 
 .feature-detail {
   color: #475569;
   font-size: 0.95rem;
+  width: 100%;
+  text-align: left;
 }
 
 .warranty-advantage-column {
@@ -228,6 +245,105 @@
   color: #9ca3af;
   border-color: #e5e7eb;
   font-weight: 600;
+}
+
+.warranty-editable {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 10px;
+  color: inherit;
+  cursor: text;
+  font: inherit;
+  padding: 0.18rem 0.3rem;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.warranty-sheet.is-editable .warranty-editable:hover {
+  background: rgba(12, 34, 67, 0.07);
+  border-color: rgba(12, 34, 67, 0.2);
+}
+
+.warranty-editable.is-placeholder {
+  color: #8a97ab;
+  font-weight: 500;
+}
+
+.warranty-inline-input {
+  width: 100%;
+  border: 1px solid #84a3c3;
+  border-radius: 10px;
+  background: #ffffff;
+  color: inherit;
+  font: inherit;
+  padding: 0.22rem 0.38rem;
+  resize: none;
+  box-shadow: 0 0 0 3px rgba(80, 124, 170, 0.14);
+}
+
+.warranty-section-title.warranty-inline-input {
+  min-height: 2.2rem;
+}
+
+.feature-label.warranty-inline-input,
+.feature-detail.warranty-inline-input {
+  text-align: left;
+}
+
+.warranty-advantage-card.warranty-editable,
+.warranty-advantage-card.warranty-inline-input {
+  display: block;
+}
+
+.warranty-advantage-card.warranty-editable:hover,
+.warranty-sheet.is-editable .warranty-advantage-card.warranty-editable:hover {
+  background: #ead475;
+  border-color: #ddc161;
+}
+
+.warranty-empty-column {
+  padding: 0.8rem 0.9rem;
+  border: 1px dashed #d2d9e7;
+  border-radius: 12px;
+  color: #7a879a;
+  background: #f8fafc;
+  font-size: 0.94rem;
+}
+
+.warranty-context-menu {
+  position: fixed;
+  z-index: 2200;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem;
+  background: #ffffff;
+  border: 1px solid #d4dcea;
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+}
+
+.warranty-context-menu button {
+  border: none;
+  background: transparent;
+  color: #17304d;
+  text-align: left;
+  padding: 0.7rem 0.8rem;
+  border-radius: 9px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.warranty-context-menu button:hover {
+  background: #edf3fb;
+}
+
+.warranty-context-menu button.danger {
+  color: #b42318;
+}
+
+.warranty-context-menu button.danger:hover {
+  background: #fff1f1;
 }
 
 @media (max-width: 900px) {

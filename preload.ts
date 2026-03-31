@@ -55,7 +55,7 @@ declare global {
       getWaterFeaturesCatalog: () => Promise<any[]>;
       getFinishRates: () => Promise<any[]>;
       getDrainageRates: () => Promise<any[]>;
-      exportBreakdownPdf: (payload: { filename: string }) => Promise<{ canceled?: boolean; filePath?: string }>;
+      exportBreakdownPdf: (payload: { filename: string }) => Promise<{ filePath?: string }>;
       checkForUpdates: () => Promise<any>;
       installUpdate: () => Promise<void>;
       onUpdateAvailable: (callback: (info: any) => void) => void;

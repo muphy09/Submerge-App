@@ -38,6 +38,7 @@ import { normalizeEquipmentLighting } from '../utils/lighting';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { listAllVersions } from '../utils/proposalVersions';
 import TempPasswordModal from '../components/TempPasswordModal';
+import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 const FRANCHISE_MARGIN_LIMIT = 18;
@@ -189,6 +190,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
           papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+          warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
         };
       };
 

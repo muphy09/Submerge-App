@@ -26,6 +26,7 @@ import {
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
+import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 
 type HomePageProps = {
   session?: UserSession | null;
@@ -74,6 +75,7 @@ function HomePage({ session }: HomePageProps) {
           manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
           papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+          warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
         };
       };
 

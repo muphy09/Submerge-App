@@ -84,6 +84,7 @@ import {
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { useAdminCogsView } from '../hooks/useAdminCogsView';
+import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 
 const normalizeWaterFeatureSelections = (selections: any): WaterFeatureSelection[] => {
   if (!Array.isArray(selections)) return [];
@@ -249,6 +250,7 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
     papDiscounts: input.papDiscounts || base.papDiscounts,
     costBreakdown: input.costBreakdown || base.costBreakdown,
+    warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
   };
 };
 
@@ -1761,9 +1763,15 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               showWarranty
               showZoomControl={canViewCostBreakdown}
               allowRetailAdjustments={!isMasterActingAsOwner}
+              editableWarranty={!isMasterActingAsOwner}
               onRetailAdjustmentsChange={
                 !isMasterActingAsOwner
                   ? (adjustments) => updateProposal('retailAdjustments', adjustments)
+                  : undefined
+              }
+              onWarrantySectionsChange={
+                !isMasterActingAsOwner
+                  ? (sections) => updateProposal('warrantySections', sections)
                   : undefined
               }
             />

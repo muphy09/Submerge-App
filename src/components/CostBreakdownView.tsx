@@ -14,6 +14,8 @@ interface Props {
   exportLayout?: boolean;
   allowRetailAdjustments?: boolean;
   onRetailAdjustmentsChange?: (adjustments: RetailAdjustment[]) => void;
+  editableWarranty?: boolean;
+  onWarrantySectionsChange?: (sections: Proposal['warrantySections']) => void;
 }
 
 const isPapDiscount = (item: CostLineItem): boolean =>
@@ -48,6 +50,8 @@ function CostBreakdownView({
   exportLayout = false,
   allowRetailAdjustments = false,
   onRetailAdjustmentsChange,
+  editableWarranty = false,
+  onWarrantySectionsChange,
 }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [zoomLevel, setZoomLevel] = useState(showZoomControl ? 0.5 : 1); // Start at 50% (0.5 scale) when slider is shown
@@ -513,7 +517,11 @@ function CostBreakdownView({
 
         {showWarranty && proposal && (
           <div className="warranty-shell">
-            <SubmergeAdvantageWarranty proposal={proposal} />
+            <SubmergeAdvantageWarranty
+              proposal={proposal}
+              editable={editableWarranty}
+              onWarrantySectionsChange={onWarrantySectionsChange}
+            />
           </div>
         )}
       </div>

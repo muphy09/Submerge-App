@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
-import { buildWarrantySections } from './SubmergeAdvantageWarranty';
+import { resolveWarrantySections } from '../utils/warranty';
 import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjustment } from '../types/proposal-new';
 import './BreakdownExportPages.css';
 
@@ -233,7 +233,7 @@ export function BreakdownWarrantyExportPage({ proposal }: WarrantyExportProps) {
   const customerName = (proposal?.customerInfo?.customerName || '').trim();
   const { displayName } = useFranchiseAppName(franchiseId);
   const sections = useMemo(
-    () => buildWarrantySections(proposal, displayName),
+    () => resolveWarrantySections(proposal, displayName),
     [displayName, proposal]
   );
 
@@ -253,28 +253,34 @@ export function BreakdownWarrantyExportPage({ proposal }: WarrantyExportProps) {
       </header>
 
       <div className="breakdown-export-warranty-list">
+        {!sections.length && (
+          <section className="breakdown-export-warranty-card">
+            <div className="breakdown-export-warranty-card-body">
+              <div className="breakdown-export-advantage-chip muted">No warranty categories configured.</div>
+            </div>
+          </section>
+        )}
         {sections.map((section) => {
-          const advantages = section.items.filter((item) => item.advantage);
           return (
-            <section className="breakdown-export-warranty-card" key={section.title}>
+            <section className="breakdown-export-warranty-card" key={section.id || section.title}>
               <div className="breakdown-export-warranty-card-header">
                 <h3>{section.title}</h3>
                 <span>Warranty Advantage</span>
               </div>
               <div className="breakdown-export-warranty-card-body">
                 <ul className="breakdown-export-feature-list">
-                  {section.items.map((item, index) => (
-                    <li key={`${section.title}-${index}`}>
+                  {section.featureItems.map((item, index) => (
+                    <li key={item.id || `${section.title}-${index}`}>
                       <div className="breakdown-export-feature-label">{item.label}</div>
                       {item.detail && <div className="breakdown-export-feature-detail">{item.detail}</div>}
                     </li>
                   ))}
                 </ul>
                 <div className="breakdown-export-advantage-list">
-                  {advantages.length > 0 ? (
-                    advantages.map((item, index) => (
-                      <div className="breakdown-export-advantage-chip" key={`${section.title}-adv-${index}`}>
-                        {item.advantage}
+                  {section.advantageItems.length > 0 ? (
+                    section.advantageItems.map((item, index) => (
+                      <div className="breakdown-export-advantage-chip" key={item.id || `${section.title}-adv-${index}`}>
+                        {item.text}
                       </div>
                     ))
                   ) : (

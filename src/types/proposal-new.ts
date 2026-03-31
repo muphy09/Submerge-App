@@ -2,6 +2,8 @@
 // ENHANCED PROPOSAL TYPES - Matching Excel Functionality
 // ============================================================================
 
+import type { WarrantySection } from './warranty';
+
 // Customer Information
 export interface CustomerInfo {
   customerName: string;
@@ -796,4 +798,5 @@ export interface Proposal {
 
   // Designer overrides for contract cells (cell address -> value)
   contractOverrides?: Record<string, string | number | null>;
+  warrantySections?: WarrantySection[] | null;
 }

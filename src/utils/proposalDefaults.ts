@@ -423,5 +423,6 @@ export function getDefaultProposal(): Partial<Proposal> {
     taxAmount: 0,
     totalCost: 0,
     contractOverrides: {},
+    warrantySections: null,
   };
 }

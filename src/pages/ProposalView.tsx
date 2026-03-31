@@ -49,6 +49,7 @@ import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } 
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
+import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
@@ -186,9 +187,6 @@ function ProposalView() {
   const [breakdownExportOpen, setBreakdownExportOpen] = useState(false);
   const [breakdownExporting, setBreakdownExporting] = useState(false);
   const [breakdownExportActive, setBreakdownExportActive] = useState(false);
-  const [breakdownSaveDialogOpen, setBreakdownSaveDialogOpen] = useState(false);
-  const [breakdownSaveName, setBreakdownSaveName] = useState('');
-  const [breakdownSaveError, setBreakdownSaveError] = useState<string | null>(null);
   const [contractExportOpen, setContractExportOpen] = useState(false);
   const [contractDirty, setContractDirty] = useState(false);
   const [contractExporting, setContractExporting] = useState(false);
@@ -205,6 +203,7 @@ function ProposalView() {
   const contractExportControlRef = useRef<HTMLDivElement>(null);
   const contractViewRef = useRef<ContractViewHandle | null>(null);
   const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
   const canViewFullSummary = sessionRole === 'admin' || sessionRole === 'owner';
@@ -243,6 +242,7 @@ function ProposalView() {
       retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
       papDiscounts: input.papDiscounts || (base as any).papDiscounts,
       contractOverrides: (input as Proposal).contractOverrides || (base as Proposal).contractOverrides || {},
+      warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
     };
   };
 
@@ -312,9 +312,6 @@ function ProposalView() {
       setBreakdownExportOpen(false);
       setBreakdownExporting(false);
       setBreakdownExportActive(false);
-      setBreakdownSaveDialogOpen(false);
-      setBreakdownSaveName('');
-      setBreakdownSaveError(null);
     }
   }, [customerBreakdownVersionId]);
 
@@ -342,6 +339,9 @@ function ProposalView() {
     return () => {
       if (retailAdjustmentsSaveRef.current) {
         clearTimeout(retailAdjustmentsSaveRef.current);
+      }
+      if (warrantySectionsSaveRef.current) {
+        clearTimeout(warrantySectionsSaveRef.current);
       }
     };
   }, []);
@@ -537,6 +537,15 @@ function ProposalView() {
     }, 600);
   };
 
+  const scheduleWarrantySectionsSave = (updatedVersions: Proposal[]) => {
+    if (warrantySectionsSaveRef.current) {
+      clearTimeout(warrantySectionsSaveRef.current);
+    }
+    warrantySectionsSaveRef.current = setTimeout(() => {
+      void persistWarrantySections(updatedVersions);
+    }, 600);
+  };
+
   const persistRetailAdjustments = async (updatedVersions: Proposal[]) => {
     if (!proposal) return;
     try {
@@ -581,6 +590,50 @@ function ProposalView() {
     }
   };
 
+  const persistWarrantySections = async (updatedVersions: Proposal[]) => {
+    if (!proposal) return;
+    try {
+      const normalizedVersions = updatedVersions.map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versions: [],
+      }));
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const active =
+        normalizedVersions.find((version) => (version.versionId || 'original') === desiredActiveId) ||
+        normalizedVersions[0];
+      if (!active) return;
+      const others = normalizedVersions.filter(
+        (version) => (version.versionId || 'original') !== (active.versionId || 'original')
+      );
+      const container: Proposal = {
+        ...(active as Proposal),
+        activeVersionId: desiredActiveId,
+        versions: others,
+      };
+      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      const saved = await saveProposalRemote(container);
+      const updated = listAllVersions(saved as Proposal).map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versionId: version.versionId || 'original',
+        versionName: version.versionName || (version.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: version.isOriginalVersion,
+        activeVersionId: version.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = applyActiveVersion(saved as Proposal);
+      setVersions(updated);
+      setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
+      setProposal(activeApplied as Proposal);
+    } catch (error) {
+      console.error('Failed to save warranty content', error);
+      showToast({ type: 'error', message: 'Could not save warranty content.' });
+    }
+  };
+
   const handleRetailAdjustmentsChange = (versionId: string, nextAdjustments: RetailAdjustment[]) => {
     if (!proposal) return;
     const normalizedAdjustments = mergeRetailAdjustments(nextAdjustments);
@@ -610,28 +663,51 @@ function ProposalView() {
     scheduleRetailAdjustmentsSave(updatedVersions);
   };
 
+  const handleWarrantySectionsChange = (
+    versionId: string,
+    nextSections: Proposal['warrantySections']
+  ) => {
+    if (!proposal) return;
+    const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+    const updatedVersions = all.map((version) => {
+      const id = version.versionId || 'original';
+      if (id !== versionId) return version;
+      return {
+        ...(version as Proposal),
+        warrantySections: nextSections,
+        lastModified: new Date().toISOString(),
+      };
+    });
+
+    setVersions(updatedVersions);
+    setProposal((prev) => {
+      if (!prev) return prev;
+      const id = prev.versionId || 'original';
+      if (id !== versionId) return prev;
+      return {
+        ...prev,
+        warrantySections: nextSections,
+        lastModified: new Date().toISOString(),
+      };
+    });
+
+    scheduleWarrantySectionsSave(updatedVersions);
+  };
+
   const handleBreakdownExportToggle = () => {
     setBreakdownExportOpen((prev) => !prev);
   };
 
   const getBreakdownExportFilename = () => {
-    const rawName =
+    const customerName =
       customerModalView?.proposal?.customerInfo?.customerName ||
       proposal?.customerInfo?.customerName ||
-      'customer';
-    const normalized = rawName.trim() || 'customer';
-    const safeName = normalized
-      .replace(/[^a-z0-9]+/gi, '-')
-      .replace(/^-+|-+$/g, '')
-      .toLowerCase();
-    const dateStamp = new Date().toISOString().slice(0, 10);
-    return `${safeName || 'customer'}-customer-cost-warranty-breakdown-${dateStamp}.pdf`;
-  };
-
-  const normalizeBreakdownFilename = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`;
+      'Proposal';
+    const today = new Date();
+    const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+      today.getDate()
+    ).padStart(2, '0')}`;
+    return `${customerName}-job-cost-summary-warranty-${formattedDate}.pdf`;
   };
 
   const prepareBreakdownExport = async () => {
@@ -669,15 +745,7 @@ function ProposalView() {
     setTimeout(cleanup, 1200);
   };
 
-  const openBreakdownSaveDialog = () => {
-    if (breakdownExporting) return;
-    setBreakdownExportOpen(false);
-    setBreakdownSaveName(getBreakdownExportFilename());
-    setBreakdownSaveError(null);
-    setBreakdownSaveDialogOpen(true);
-  };
-
-  const exportBreakdownPdfFallback = async (finalName: string) => {
+  const exportBreakdownPdfFallback = async (filename: string) => {
     const exportArea = breakdownExportAreaRef.current;
     const pages = exportArea
       ? Array.from(exportArea.querySelectorAll('.export-breakdown-page'))
@@ -703,10 +771,11 @@ function ProposalView() {
       pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight);
     }
 
-    pdf.save(finalName);
+    pdf.save(filename);
   };
 
-  const exportBreakdownPdf = async (finalName: string) => {
+  const exportBreakdownPdf = async () => {
+    const filename = getBreakdownExportFilename();
     setBreakdownExporting(true);
     try {
       await prepareBreakdownExport();
@@ -714,12 +783,10 @@ function ProposalView() {
       await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
       if (window.electron?.exportBreakdownPdf) {
-        const result = await window.electron.exportBreakdownPdf({ filename: finalName });
-        if (result?.canceled) {
-          return;
-        }
+        const result = await window.electron.exportBreakdownPdf({ filename });
+        if (!result?.filePath) throw new Error('No breakdown PDF file was saved.');
       } else {
-        await exportBreakdownPdfFallback(finalName);
+        await exportBreakdownPdfFallback(filename);
       }
 
       showToast({ type: 'success', message: 'Breakdown PDF generated.' });
@@ -735,15 +802,10 @@ function ProposalView() {
     }
   };
 
-  const handleBreakdownSaveConfirm = async () => {
+  const handleBreakdownPdf = () => {
     if (breakdownExporting) return;
-    const normalized = normalizeBreakdownFilename(breakdownSaveName);
-    if (!normalized) {
-      setBreakdownSaveError('Please enter a file name.');
-      return;
-    }
-    setBreakdownSaveDialogOpen(false);
-    await exportBreakdownPdf(normalized);
+    setBreakdownExportOpen(false);
+    void exportBreakdownPdf();
   };
 
   const handleContractSaveClick = () => {
@@ -1899,43 +1961,6 @@ function ProposalView() {
           </div>
         </div>
       )}
-      {breakdownSaveDialogOpen && (
-        <div className="modal-overlay modal-overlay-top" onClick={() => setBreakdownSaveDialogOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <p className="modal-eyebrow">Export Breakdown</p>
-                <h2>Save breakdown PDF</h2>
-              </div>
-              <button className="modal-close" onClick={() => setBreakdownSaveDialogOpen(false)} aria-label="Close export dialog">
-                x
-              </button>
-            </div>
-            <div className="modal-body-scroll">
-              <label className="version-name-label">
-                File name
-                <input
-                  type="text"
-                  value={breakdownSaveName}
-                  onChange={(e) => {
-                    setBreakdownSaveName(e.target.value);
-                    setBreakdownSaveError(null);
-                  }}
-                  className="version-name-input"
-                  autoFocus
-                />
-              </label>
-              {breakdownSaveError && <div className="version-name-error">{breakdownSaveError}</div>}
-              <div className="version-name-actions">
-                <button className="action-button" onClick={() => setBreakdownSaveDialogOpen(false)}>Cancel</button>
-                <button className="action-button primary" onClick={handleBreakdownSaveConfirm} disabled={breakdownExporting}>
-                  {breakdownExporting ? 'Saving...' : 'Save PDF'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       {contractVersionId && contractModalView && (
         <div className="modal-overlay contract-printable" onClick={() => setContractVersionId(null)}>
           <div className="modal-content contract-modal" onClick={(e) => e.stopPropagation()}>
@@ -2072,19 +2097,19 @@ function ProposalView() {
                           type="button"
                           className="export-option"
                           role="option"
-                          onClick={openBreakdownSaveDialog}
+                          onClick={handleBreakdownPrint}
                           disabled={breakdownExporting}
                         >
-                          Save
+                          Print
                         </button>
                         <button
                           type="button"
                           className="export-option"
                           role="option"
-                          onClick={handleBreakdownPrint}
+                          onClick={handleBreakdownPdf}
                           disabled={breakdownExporting}
                         >
-                          Print
+                          PDF
                         </button>
                       </div>
                     )}
@@ -2101,12 +2126,22 @@ function ProposalView() {
                   proposal={customerModalView.proposal}
                   pricing={customerModalView.pricing}
                   allowRetailAdjustments={canEditProposal}
+                  editableWarranty={canEditProposal}
                   onRetailAdjustmentsChange={
                     canEditProposal
                       ? (adjustments) =>
                           handleRetailAdjustmentsChange(
                             customerModalView.proposal.versionId || 'original',
                             adjustments
+                          )
+                      : undefined
+                  }
+                  onWarrantySectionsChange={
+                    canEditProposal
+                      ? (sections) =>
+                          handleWarrantySectionsChange(
+                            customerModalView.proposal.versionId || 'original',
+                            sections
                           )
                       : undefined
                   }
@@ -2144,7 +2179,6 @@ function ProposalView() {
           </div>
         </>
       )}
-
       {canViewCogsBreakdown && cogsBreakdownVersionId && cogsModalView && (
         <div className="modal-overlay" onClick={() => setCogsBreakdownVersionId(null)}>
           <div className="modal-content cogs-breakdown-modal" onClick={(e) => e.stopPropagation()}>

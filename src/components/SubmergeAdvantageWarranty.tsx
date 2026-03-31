@@ -1,38 +1,45 @@
-import { Proposal } from '../types/proposal-new';
-import pricingData from '../services/pricingData';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
+import type { Proposal } from '../types/proposal-new';
+import type { WarrantySection, WarrantySectionIcon } from '../types/warranty';
 import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import './SubmergeAdvantageWarranty.css';
-import { getLightCounts } from '../utils/lighting';
-import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
+import {
+  createEmptyWarrantyAdvantageItem,
+  createEmptyWarrantyFeatureItem,
+  createEmptyWarrantySection,
+  normalizeWarrantySections,
+  resolveWarrantySections,
+} from '../utils/warranty';
 
-export interface WarrantyItem {
-  label: string;
-  detail?: string;
-  advantage?: string;
+type FocusTarget =
+  | { type: 'section-title'; sectionId: string }
+  | { type: 'feature-label'; sectionId: string; itemId: string }
+  | { type: 'advantage'; sectionId: string; itemId: string };
+
+type ContextMenuState =
+  | { x: number; y: number; type: 'sheet' }
+  | { x: number; y: number; type: 'section'; sectionId: string }
+  | { x: number; y: number; type: 'feature'; sectionId: string; itemId: string }
+  | { x: number; y: number; type: 'advantage'; sectionId: string; itemId: string };
+
+interface InlineEditableTextProps {
+  value: string | undefined;
+  placeholder: string;
+  editable: boolean;
+  multiline?: boolean;
+  className: string;
+  inputClassName?: string;
+  autoEdit?: boolean;
+  onAutoEditHandled?: () => void;
+  onChange: (value: string) => void;
+  onContextMenu?: (event: ReactMouseEvent<HTMLElement>) => void;
+  onMouseDown?: (event: ReactMouseEvent<HTMLElement>) => void;
 }
 
-export interface WarrantySection {
-  title: string;
-  icon: SectionIconKey;
-  items: WarrantyItem[];
-}
-
-type SectionIconKey =
-  | 'dimensions'
-  | 'steps'
-  | 'plans'
-  | 'excavation'
-  | 'steel'
-  | 'plumbing'
-  | 'electric'
-  | 'shotcrete'
-  | 'tile'
-  | 'equipment'
-  | 'cleanup'
-  | 'startup';
-
-const sectionIconMap: Record<SectionIconKey, JSX.Element> = {
+const sectionIconMap: Record<WarrantySectionIcon, JSX.Element> = {
   dimensions: (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="5" y="7" width="14" height="10" rx="2" ry="2" fill="none" strokeWidth="1.8" />
@@ -110,306 +117,395 @@ const sectionIconMap: Record<SectionIconKey, JSX.Element> = {
   ),
 };
 
-const SectionIcon = ({ name }: { name: SectionIconKey }) => (
+function InlineEditableText({
+  value,
+  placeholder,
+  editable,
+  multiline = false,
+  className,
+  inputClassName,
+  autoEdit = false,
+  onAutoEditHandled,
+  onChange,
+  onContextMenu,
+  onMouseDown,
+}: InlineEditableTextProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const displayValue = value ?? '';
+
+  useEffect(() => {
+    if (!autoEdit) return;
+    setIsEditing(true);
+    onAutoEditHandled?.();
+  }, [autoEdit, onAutoEditHandled]);
+
+  useEffect(() => {
+    if (!isEditing || !inputRef.current) return;
+    inputRef.current.focus();
+    const length = inputRef.current.value.length;
+    inputRef.current.setSelectionRange?.(length, length);
+  }, [isEditing]);
+
+  if (!editable) {
+    return <div className={className}>{displayValue}</div>;
+  }
+
+  if (isEditing) {
+    if (multiline) {
+      return (
+        <textarea
+          ref={inputRef as any}
+          className={`warranty-inline-input ${className} ${inputClassName || ''}`}
+          rows={1}
+          value={displayValue}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={() => setIsEditing(false)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              setIsEditing(false);
+            }
+          }}
+          onMouseDownCapture={onMouseDown}
+          onContextMenuCapture={onContextMenu}
+          onContextMenu={onContextMenu}
+        />
+      );
+    }
+
+    return (
+      <input
+        ref={inputRef as any}
+        className={`warranty-inline-input ${className} ${inputClassName || ''}`}
+        type="text"
+        value={displayValue}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={() => setIsEditing(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            setIsEditing(false);
+          }
+        }}
+        onMouseDownCapture={onMouseDown}
+        onContextMenuCapture={onContextMenu}
+        onContextMenu={onContextMenu}
+      />
+    );
+  }
+
+    return (
+      <button
+        type="button"
+        className={`warranty-editable ${className} ${displayValue ? '' : 'is-placeholder'}`}
+        onClick={(event) => {
+          if (event.ctrlKey) return;
+          setIsEditing(true);
+        }}
+        onMouseDownCapture={onMouseDown}
+        onMouseDown={onMouseDown}
+        onContextMenuCapture={onContextMenu}
+        onContextMenu={onContextMenu}
+      >
+        {displayValue || placeholder}
+      </button>
+    );
+}
+
+const SectionIcon = ({ name }: { name: WarrantySectionIcon }) => (
   <span className="warranty-title-icon">{sectionIconMap[name]}</span>
 );
 
-const getInteriorFinishLabel = (finishType?: string) =>
-  pricingData.interiorFinish.finishes?.find((f) => f.id === finishType)?.name ||
-  finishType ||
-  'Interior finish';
-
-const formatNumber = (value?: number, digits = 1) =>
-  value !== undefined && value !== null && !Number.isNaN(value)
-    ? Number(value).toFixed(digits).replace(/\.0+$/, '')
-    : '0';
-
-const buildPoolDetail = (proposal?: Partial<Proposal>) => {
-  const poolSpecs = proposal?.poolSpecs;
-  if (!poolSpecs) return 'Pool details not set';
-
-  const isFiberglass = poolSpecs.poolType === 'fiberglass';
-
-  if (isFiberglass) {
-    if (poolSpecs.fiberglassModelName) return poolSpecs.fiberglassModelName;
-    if (poolSpecs.fiberglassSize) return `Fiberglass (${poolSpecs.fiberglassSize})`;
-    return 'Fiberglass pool';
-  }
-
-  const width = formatNumber(poolSpecs.maxWidth);
-  const length = formatNumber(poolSpecs.maxLength);
-  const shallow = formatNumber(poolSpecs.shallowDepth);
-  const deep = formatNumber(poolSpecs.endDepth);
-
-  return `Width ${width}ft x Length ${length}ft (Shallow ${shallow}ft / Deep ${deep}ft)`;
-};
-
-const buildSpaDetail = (proposal?: Partial<Proposal>) => {
-  const poolSpecs = proposal?.poolSpecs;
-  if (!poolSpecs || poolSpecs.spaType === 'none') {
-    return { detail: 'No spa', advantage: 'No spa' };
-  }
-
-  const width = formatNumber(poolSpecs.spaWidth);
-  const length = formatNumber(poolSpecs.spaLength);
-  const shape = poolSpecs.spaShape ? ` ${poolSpecs.spaShape} spa` : ' spa';
-
-  return {
-    detail: `${width}ft x ${length}ft${shape}`,
-    advantage: 'Split bench for customized therapy',
-  };
-};
-
-const buildInteriorFinishDetail = (proposal?: Partial<Proposal>) => {
-  const poolSpecs = proposal?.poolSpecs;
-  const interior = proposal?.interiorFinish;
-  if (!poolSpecs || poolSpecs.poolType === 'fiberglass' || !interior) return undefined;
-
-  const label = getInteriorFinishLabel(interior.finishType);
-  const color = interior.color ? ` - ${interior.color}` : '';
-  return `${label}${color}`;
-};
-
-const buildEquipmentItems = (proposal?: Partial<Proposal>): WarrantyItem[] => {
-  const equipment = proposal?.equipment;
-  const items: WarrantyItem[] = [];
-
-  if (!equipment) {
-    return [
-      { label: 'Equipment selections not set yet', advantage: '3-Year NO-FAULT Warranty on all Jandy equipment' },
-    ];
-  }
-
-  const lightCounts = getLightCounts(equipment as any);
-  const lightsText = (lightCounts.poolLights + lightCounts.spaLights) > 0
-    ? [
-        lightCounts.poolLights > 0
-          ? `${lightCounts.poolLights} pool light${lightCounts.poolLights === 1 ? '' : 's'}`
-          : null,
-        lightCounts.spaLights > 0
-          ? `${lightCounts.spaLights} spa light${lightCounts.spaLights === 1 ? '' : 's'}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(' + ')
-    : 'No lights specified yet';
-
-  items.push({
-    label: equipment.pump?.name || 'Primary pump not selected',
-    advantage: '3-Year NO-FAULT Warranty on all Jandy equipment',
-  });
-
-  const auxiliaryPumps =
-    equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
-      ? equipment.auxiliaryPumps
-      : equipment.auxiliaryPump
-        ? [equipment.auxiliaryPump]
-        : [];
-  auxiliaryPumps.forEach((pump) => {
-    if (pump?.name) {
-      items.push({ label: pump.name });
-    }
-  });
-
-  items.push(
-    { label: equipment.filter?.name || 'Filter not selected' },
-    {
-      label: equipment.heater?.name || 'Heater not selected',
-    },
-    { label: equipment.cleaner?.name || 'Cleaner not selected' },
-    { label: equipment.automation?.name || 'Automation not selected' },
-  );
-
-  const sanitationSelections = [
-    getEffectivePrimarySanitationSystemName(equipment as any),
-    equipment.additionalSaltSystem?.name,
-  ].filter((label): label is string => Boolean(label));
-  if (sanitationSelections.length > 0) {
-    sanitationSelections.forEach((label) => items.push({ label }));
-  } else {
-    items.push({ label: 'Sanitation system not selected' });
-  }
-
-  items.push({ label: lightsText });
-
-  return items;
-};
-
-export const buildWarrantySections = (
-  proposal?: Partial<Proposal>,
-  brandName: string = 'Submerge'
-): WarrantySection[] => {
-  const poolSpecs = proposal?.poolSpecs;
-  const excavation = proposal?.excavation;
-  const isFiberglass = poolSpecs?.poolType === 'fiberglass';
-  const replaceBrand = (value?: string) =>
-    value ? value.replace(/\bSubmerge\b/g, brandName) : value;
-
-  const spa = buildSpaDetail(proposal);
-  const interiorFinishDetail = buildInteriorFinishDetail(proposal);
-  const dirtHaulText = excavation?.hasDirtHaul ? 'Dirt haul off included' : 'Dirt to remain at property';
-
-  const sections: WarrantySection[] = [
-    {
-      title: 'Dimensions',
-      icon: 'dimensions',
-      items: [
-        { label: 'Pool Dimensions (Feet)', detail: buildPoolDetail(proposal) },
-        { label: 'Spa Dimensions (Feet)', detail: spa.detail, advantage: spa.advantage },
-      ],
-    },
-    {
-      title: 'Steps & Benches',
-      icon: 'steps',
-      items: [
-        { label: 'One set of shallow-end access steps' },
-        { label: 'Deep-end loveseat bench', advantage: 'For safety and relaxing' },
-      ],
-    },
-    {
-      title: 'Plans, Permits & Insurance',
-      icon: 'plans',
-      items: [
-        {
-          label: 'Detailed construction plans in advance for approval prior to excavation',
-          advantage: 'Ensures clear understanding of project details',
-        },
-        { label: 'Engineered structural plans', advantage: 'Certificates available upon request' },
-        { label: 'All required building permits' },
-        { label: 'Underground services alert called prior to excavation' },
-        { label: 'Commercial liability and auto insurance on all work' },
-        { label: 'Employees covered by Workers Compensation Insurance' },
-        { label: 'Taxes on all materials and equipment included in contract price' },
-        { label: 'Lien releases available throughout construction' },
-        { label: 'Submerge is licensed and bonded in accordance with State Contractors Board Regulations' },
-      ],
-    },
-    {
-      title: 'Excavation',
-      icon: 'excavation',
-      items: [
-        { label: 'Pool layout prior to excavation', advantage: 'Pool is painted on ground for visual approval by homeowner' },
-        { label: 'Pool hand contoured', advantage: 'Hand trimming assures uniform wall and floor thickness with proper cove radius' },
-      ],
-    },
-    {
-      title: 'Steel',
-      icon: 'steel',
-      items: isFiberglass
-        ? [{ label: 'Fiberglass shell', detail: 'No steel required' }]
-        : [
-            {
-              label: '4 bar bond beam with 1/2 inch steel; 3/8 inch rebar on 10 inch centers through pool',
-              advantage: 'Our bond beam and wall steel schedules are beyond code for protection against expansive soils',
-            },
-            {
-              label: '10 inch on center in transition slope by 20 feet length',
-              advantage: 'Strongest steel schedule in the industry!',
-            },
-            { label: '8" on center in the deep end and coves' },
-          ],
-    },
-    {
-      title: 'Plumbing',
-      icon: 'plumbing',
-      items: [
-        { label: '2 1/2 inch suction line', advantage: 'Submerge Stealth Series pump' },
-        { label: '2 1/2 inch suction line for all pump motors larger than 1.0 HP', advantage: 'Submerge High-Performance circulation pump' },
-        { label: '2 inch return line (to 1st tee)', advantage: 'Submerge booster pump' },
-        { label: 'When possible 45-degree elbows are used rather than 90-degree to improve efficiency and performance' },
-        { label: 'Separate skimmer and main drain suction - allows for maximum performance' },
-        { label: 'Heavy duty surface skimmer' },
-        { label: 'Jandy Ball Valves' },
-        { label: 'Hose bib at pad for draining pool' },
-        { label: 'All circulation lines are pressure tested throughout construction' },
-      ],
-    },
-    {
-      title: 'Electric',
-      icon: 'electric',
-      items: [
-        { label: 'Breakers at pad included', advantage: 'Protected outlet for homeowner convenience' },
-        { label: '110 volt GFI protected light circuit with outlet' },
-        { label: '220 volt pump circuit' },
-        { label: 'Jandy IQ20 pump controller', advantage: 'Control your pump from your phone' },
-        { label: 'Bonding as per N.E.C. Code' },
-        { label: '(2) Low-voltage Submerge colored LED lights' },
-      ],
-    },
-    {
-      title: 'Shotcrete',
-      icon: 'shotcrete',
-      items: isFiberglass
-        ? [{ label: 'No shotcrete required', detail: 'Fiberglass shell install' }]
-        : [
-            { label: '4,000 PSI pneumatically applied shotcrete', advantage: 'Lifetime structural warranty' },
-            { label: 'All shotcrete is measured by a certified weighmaster' },
-            { label: 'All nozzlemen are certified for State and Municipal work' },
-            { label: 'Lifetime structural warranty' },
-          ],
-    },
-    {
-      title: 'Tile & Masonry',
-      icon: 'tile',
-      items: isFiberglass
-        ? [{ label: 'Fiberglass shell - no tile required' }]
-        : [
-            { label: 'All pool and spa waterline tile including the skimmer throat', advantage: 'Frost-proof tiles in a variety of patterns and colors' },
-            { label: 'Trim tile available on steps and benches', advantage: 'By request at extra cost for safety and beauty' },
-          ],
-    },
-    {
-      title: 'Equipment',
-      icon: 'equipment',
-      items: buildEquipmentItems(proposal),
-    },
-    {
-      title: 'Clean Up & Interior',
-      icon: 'cleanup',
-      items: [
-        { label: 'All trenches filled and yard rough graded' },
-        { label: 'All construction debris hauled away' },
-        ...(interiorFinishDetail ? [{ label: interiorFinishDetail, advantage: 'Combines durability and functionality' }] : []),
-        { label: 'VGB compliant main drain covers' },
-        { label: dirtHaulText },
-        { label: 'Pool filled with water', advantage: 'Water trucks included' },
-      ],
-    },
-    {
-      title: 'Start Up & Orientation',
-      icon: 'startup',
-      items: [
-        { label: 'Equipment turned on and started-up', advantage: 'Pool maintenance and equipment fully explained' },
-        { label: 'Initial chemical balance', advantage: 'Program cycles set for ideal run times' },
-        { label: '"Pool School" / Orientation', advantage: 'Report card allows you to provide feedback' },
-      ],
-    },
-  ];
-
-    return sections.map((section) => ({
-      ...section,
-      title: replaceBrand(section.title) || section.title,
-      items: section.items.map((item) => ({
-        ...item,
-        label: replaceBrand(item.label) || item.label,
-        detail: replaceBrand(item.detail),
-        advantage: replaceBrand(item.advantage),
-      })),
-    }));
-  };
-
 interface Props {
   proposal?: Partial<Proposal>;
+  editable?: boolean;
+  onWarrantySectionsChange?: (sections: Proposal['warrantySections']) => void;
 }
 
-function SubmergeAdvantageWarranty({ proposal }: Props) {
+function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySectionsChange }: Props) {
   const customerName = (proposal?.customerInfo?.customerName || '').trim();
   const franchiseId = proposal?.franchiseId;
   const { displayName } = useFranchiseAppName(franchiseId);
-  const sections = buildWarrantySections(proposal, displayName);
+  const resolvedSections = useMemo(
+    () => resolveWarrantySections(proposal, displayName),
+    [displayName, proposal]
+  );
+  const [draftSections, setDraftSections] = useState<WarrantySection[]>(resolvedSections);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
+
+  useEffect(() => {
+    setDraftSections(resolvedSections);
+  }, [resolvedSections]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClose = (event: Event) => {
+      const mouseEvent = event as MouseEvent;
+      if (mouseEvent.ctrlKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.warranty-context-menu')) return;
+      setContextMenu(null);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [contextMenu]);
+
+  const sections = editable ? draftSections : resolvedSections;
+
+  const applySections = (updater: (sections: WarrantySection[]) => WarrantySection[]) => {
+    if (!editable || !onWarrantySectionsChange) return;
+    setDraftSections((prev) => {
+      const next = normalizeWarrantySections(updater(prev));
+      onWarrantySectionsChange(next);
+      return next;
+    });
+  };
+
+  const clearFocusTarget = () => setFocusTarget(null);
+
+  const updateSectionTitle = (sectionId: string, title: string) => {
+    applySections((prev) =>
+      prev.map((section) => (section.id === sectionId ? { ...section, title } : section))
+    );
+  };
+
+  const updateFeatureLabel = (sectionId: string, itemId: string, label: string) => {
+    applySections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              featureItems: section.featureItems.map((item) =>
+                item.id === itemId ? { ...item, label } : item
+              ),
+            }
+          : section
+      )
+    );
+  };
+
+  const updateFeatureDetail = (sectionId: string, itemId: string, detail: string) => {
+    applySections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              featureItems: section.featureItems.map((item) =>
+                item.id === itemId ? { ...item, detail } : item
+              ),
+            }
+          : section
+      )
+    );
+  };
+
+  const updateAdvantageText = (sectionId: string, itemId: string, text: string) => {
+    applySections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              advantageItems: section.advantageItems.map((item) =>
+                item.id === itemId ? { ...item, text } : item
+              ),
+            }
+          : section
+      )
+    );
+  };
+
+  const getInsertIndex = (
+    section: WarrantySection,
+    target: Extract<ContextMenuState, { sectionId: string }>
+  ) => {
+    if (target.type === 'feature') {
+      const index = section.featureItems.findIndex((item) => item.id === target.itemId);
+      return index >= 0 ? index + 1 : section.featureItems.length;
+    }
+    if (target.type === 'advantage') {
+      const index = section.advantageItems.findIndex((item) => item.id === target.itemId);
+      return index >= 0 ? index + 1 : section.advantageItems.length;
+    }
+    return Math.max(section.featureItems.length, section.advantageItems.length);
+  };
+
+  const handleAddLineItem = (target: Extract<ContextMenuState, { sectionId: string }>) => {
+    let nextFocus: FocusTarget | null = null;
+    applySections((prev) =>
+      prev.map((section) => {
+        if (section.id !== target.sectionId) return section;
+        const insertIndex = getInsertIndex(section, target);
+        const newFeature = createEmptyWarrantyFeatureItem();
+        const newAdvantage = createEmptyWarrantyAdvantageItem();
+        nextFocus =
+          target.type === 'advantage'
+            ? { type: 'advantage', sectionId: section.id || '', itemId: newAdvantage.id || '' }
+            : { type: 'feature-label', sectionId: section.id || '', itemId: newFeature.id || '' };
+        return {
+          ...section,
+          featureItems: [
+            ...section.featureItems.slice(0, insertIndex),
+            newFeature,
+            ...section.featureItems.slice(insertIndex),
+          ],
+          advantageItems: [
+            ...section.advantageItems.slice(0, insertIndex),
+            newAdvantage,
+            ...section.advantageItems.slice(insertIndex),
+          ],
+        };
+      })
+    );
+    setContextMenu(null);
+    if (nextFocus) setFocusTarget(nextFocus);
+  };
+
+  const handleRemoveFeatureItem = (sectionId: string, itemId: string) => {
+    applySections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              featureItems: section.featureItems.filter((item) => item.id !== itemId),
+            }
+          : section
+      )
+    );
+    setContextMenu(null);
+  };
+
+  const handleRemoveAdvantageItem = (sectionId: string, itemId: string) => {
+    applySections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              advantageItems: section.advantageItems.filter((item) => item.id !== itemId),
+            }
+          : section
+      )
+    );
+    setContextMenu(null);
+  };
+
+  const handleAddCategoryBelow = (sectionId: string) => {
+    const nextSection = createEmptyWarrantySection();
+    applySections((prev) => {
+      const currentIndex = prev.findIndex((section) => section.id === sectionId);
+      if (currentIndex < 0) return [...prev, nextSection];
+      return [...prev.slice(0, currentIndex + 1), nextSection, ...prev.slice(currentIndex + 1)];
+    });
+    setContextMenu(null);
+    setFocusTarget({ type: 'section-title', sectionId: nextSection.id || '' });
+  };
+
+  const handleAddCategoryToEnd = () => {
+    const nextSection = createEmptyWarrantySection();
+    applySections((prev) => [...prev, nextSection]);
+    setContextMenu(null);
+    setFocusTarget({ type: 'section-title', sectionId: nextSection.id || '' });
+  };
+
+  const handleRemoveCategory = (sectionId: string) => {
+    applySections((prev) => prev.filter((section) => section.id !== sectionId));
+    setContextMenu(null);
+  };
+
+  const openContextMenu = (event: ReactMouseEvent<HTMLElement>, nextMenu: ContextMenuState) => {
+    if (!editable) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu(nextMenu);
+  };
+
+  const openContextMenuOnMouseDown = (
+    event: ReactMouseEvent<HTMLElement>,
+    nextMenu: ContextMenuState
+  ) => {
+    if (!editable) return;
+    if (event.button !== 2 && !event.ctrlKey) return;
+    openContextMenu(event, nextMenu);
+  };
+
+  const renderContextMenu = () => {
+    if (!contextMenu) return null;
+
+    if (contextMenu.type === 'sheet') {
+      return createPortal(
+        <div className="warranty-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button type="button" onClick={handleAddCategoryToEnd}>
+            Add Category
+          </button>
+        </div>,
+        document.body
+      );
+    }
+
+    if (contextMenu.type === 'section') {
+      return createPortal(
+        <div className="warranty-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button type="button" onClick={() => handleAddLineItem(contextMenu)}>
+            Add Line Item
+          </button>
+          <button type="button" onClick={() => handleAddCategoryBelow(contextMenu.sectionId)}>
+            Add Category Below
+          </button>
+          <button type="button" className="danger" onClick={() => handleRemoveCategory(contextMenu.sectionId)}>
+            Remove Category
+          </button>
+        </div>,
+        document.body
+      );
+    }
+
+    if (contextMenu.type === 'feature') {
+      return createPortal(
+        <div className="warranty-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button type="button" onClick={() => handleAddLineItem(contextMenu)}>
+            Add Line Item Below
+          </button>
+          <button
+            type="button"
+            className="danger"
+            onClick={() => handleRemoveFeatureItem(contextMenu.sectionId, contextMenu.itemId)}
+          >
+            Remove Category Line Item
+          </button>
+        </div>,
+        document.body
+      );
+    }
+
+    return createPortal(
+      <div className="warranty-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+        <button type="button" onClick={() => handleAddLineItem(contextMenu)}>
+          Add Line Item Below
+        </button>
+        <button
+          type="button"
+          className="danger"
+          onClick={() => handleRemoveAdvantageItem(contextMenu.sectionId, contextMenu.itemId)}
+        >
+          Remove Warranty Advantage
+        </button>
+      </div>,
+      document.body
+    );
+  };
 
   return (
-    <div className="warranty-sheet">
+    <div className={`warranty-sheet ${editable ? 'is-editable' : ''}`}>
       <div className="warranty-header">
         <div>
           <p className="warranty-eyebrow">Warranty & Inclusions Overview</p>
@@ -417,78 +513,241 @@ function SubmergeAdvantageWarranty({ proposal }: Props) {
           <p className="warranty-subtitle">
             Prepared for: <span className="warranty-customer">{customerName || 'N/A'}</span>
           </p>
-          </div>
-          <div className="warranty-logo">
-            <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseId} />
-          </div>
+          {editable && (
+            <p className="warranty-edit-hint">
+              Click text to edit. Right-click category titles or line items to add or remove entries.
+            </p>
+          )}
         </div>
+        <div className="warranty-logo">
+          <FranchiseLogo alt="Franchise Logo" franchiseId={franchiseId} />
+        </div>
+      </div>
 
       <div className="warranty-section-stack">
-        {sections.map((section) => {
-          const advantages = section.items.filter((item) => item.advantage);
+        {!sections.length && (
+          <div
+            className="warranty-section"
+            onContextMenu={(event) =>
+              openContextMenu(event, {
+                x: event.clientX,
+                y: event.clientY,
+                type: 'sheet',
+              })
+            }
+          >
+            <div className="warranty-section-card">
+              <div className="warranty-advantage-card muted">
+                No warranty categories configured.
+                {editable ? ' Right-click here to add one.' : ''}
+              </div>
+            </div>
+          </div>
+        )}
+        {sections.map((section) => (
+          <div key={section.id || section.title} className="warranty-section">
+            <div className="warranty-section-card">
+              <div className="warranty-section-heading">
+                <div
+                  className="warranty-title-wrap"
+                  onMouseDown={(event) =>
+                    openContextMenuOnMouseDown(event, {
+                      x: event.clientX,
+                      y: event.clientY,
+                      type: 'section',
+                      sectionId: section.id || '',
+                    })
+                  }
+                  onContextMenu={(event) =>
+                    openContextMenu(event, {
+                      x: event.clientX,
+                      y: event.clientY,
+                      type: 'section',
+                      sectionId: section.id || '',
+                    })
+                  }
+                >
+                  <SectionIcon name={section.icon} />
+                  <InlineEditableText
+                    value={section.title}
+                    placeholder="New category"
+                    editable={editable}
+                    className="warranty-section-title"
+                    onChange={(value) => updateSectionTitle(section.id || '', value)}
+                    autoEdit={
+                      focusTarget?.type === 'section-title' && focusTarget.sectionId === (section.id || '')
+                    }
+                    onAutoEditHandled={clearFocusTarget}
+                    onMouseDown={(event) =>
+                      openContextMenuOnMouseDown(event, {
+                        x: event.clientX,
+                        y: event.clientY,
+                        type: 'section',
+                        sectionId: section.id || '',
+                      })
+                    }
+                  />
+                </div>
+                <div className="submerge-chip">
+                  <span className="submerge-chip-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        d="M9 3h6l4 4v6l-4 4H9l-4-4V7z"
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="2"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="m9.75 12.25 1.75 1.75 3.75-3.75"
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="2.1"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  Warranty Advantage
+                </div>
+              </div>
 
-          return (
-            <div key={section.title} className="warranty-section">
-              <div className="warranty-section-card">
-                <div className="warranty-section-heading">
-                  <div className="warranty-title-wrap">
-                    <SectionIcon name={section.icon} />
-                    <span className="warranty-section-title">{section.title}</span>
-                  </div>
-                  <div className="submerge-chip">
-                    <span className="submerge-chip-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          d="M9 3h6l4 4v6l-4 4H9l-4-4V7z"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="2"
-                          strokeLinejoin="round"
+              <div className="warranty-section-body">
+                <div className="warranty-feature-list">
+                  {!section.featureItems.length && (
+                    <div className="warranty-empty-column">No category line items. Right-click the category title to add one.</div>
+                  )}
+                  {section.featureItems.map((item) => (
+                    <div
+                      key={item.id || item.label}
+                      className="warranty-feature"
+                      onMouseDown={(event) =>
+                        openContextMenuOnMouseDown(event, {
+                          x: event.clientX,
+                          y: event.clientY,
+                          type: 'feature',
+                          sectionId: section.id || '',
+                          itemId: item.id || '',
+                        })
+                      }
+                      onContextMenu={(event) =>
+                        openContextMenu(event, {
+                          x: event.clientX,
+                          y: event.clientY,
+                          type: 'feature',
+                          sectionId: section.id || '',
+                          itemId: item.id || '',
+                        })
+                      }
+                    >
+                      <span className="feature-check" aria-hidden="true" />
+                      <div className="feature-copy">
+                        <InlineEditableText
+                          value={item.label}
+                          placeholder="Click to add category line item"
+                          editable={editable}
+                          multiline
+                          className="feature-label"
+                          onChange={(value) => updateFeatureLabel(section.id || '', item.id || '', value)}
+                          autoEdit={
+                            focusTarget?.type === 'feature-label' &&
+                            focusTarget.sectionId === (section.id || '') &&
+                            focusTarget.itemId === (item.id || '')
+                          }
+                          onAutoEditHandled={clearFocusTarget}
+                          onMouseDown={(event) =>
+                            openContextMenuOnMouseDown(event, {
+                              x: event.clientX,
+                              y: event.clientY,
+                              type: 'feature',
+                              sectionId: section.id || '',
+                              itemId: item.id || '',
+                            })
+                          }
+                          onContextMenu={(event) =>
+                            openContextMenu(event, {
+                              x: event.clientX,
+                              y: event.clientY,
+                              type: 'feature',
+                              sectionId: section.id || '',
+                              itemId: item.id || '',
+                            })
+                          }
                         />
-                        <path
-                          d="m9.75 12.25 1.75 1.75 3.75-3.75"
-                          fill="none"
-                          stroke="white"
-                          strokeWidth="2.1"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                    Warranty Advantage
-                  </div>
+                        {item.detail && (
+                          <InlineEditableText
+                            value={item.detail}
+                            placeholder="Optional detail"
+                            editable={editable}
+                            multiline
+                            className="feature-detail"
+                            inputClassName="feature-detail"
+                            onChange={(value) => updateFeatureDetail(section.id || '', item.id || '', value)}
+                            onContextMenu={(event) =>
+                              openContextMenu(event, {
+                                x: event.clientX,
+                                y: event.clientY,
+                                type: 'feature',
+                                sectionId: section.id || '',
+                                itemId: item.id || '',
+                              })
+                            }
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="warranty-section-body">
-                  <div className="warranty-feature-list">
-                    {section.items.map((item, idx) => (
-                      <div key={`${section.title}-${idx}`} className="warranty-feature">
-                        <span className="feature-check" aria-hidden="true" />
-                        <div className="feature-copy">
-                          <div className="feature-label">{item.label}</div>
-                          {item.detail && <div className="feature-detail">{item.detail}</div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="warranty-advantage-column">
-                    {advantages.length > 0 ? (
-                      advantages.map((item, idx) => (
-                        <div key={`${section.title}-adv-${idx}`} className="warranty-advantage-card">
-                          {item.advantage}
-                        </div>
-                      ))
-                    ) : (
-                    <div className="warranty-advantage-card muted">No {displayName} advantages listed.</div>
-                    )}
-                  </div>
+                <div className="warranty-advantage-column">
+                  {!section.advantageItems.length && (
+                    <div className="warranty-advantage-card muted">
+                      No warranty advantages listed. Right-click the category title to add one.
+                    </div>
+                  )}
+                  {section.advantageItems.map((item) => (
+                    <InlineEditableText
+                      key={item.id || item.text}
+                      value={item.text}
+                      placeholder="Click to add warranty advantage"
+                      editable={editable}
+                      multiline
+                      className="warranty-advantage-card"
+                      inputClassName="warranty-advantage-card"
+                      onChange={(value) => updateAdvantageText(section.id || '', item.id || '', value)}
+                      autoEdit={
+                        focusTarget?.type === 'advantage' &&
+                        focusTarget.sectionId === (section.id || '') &&
+                        focusTarget.itemId === (item.id || '')
+                      }
+                      onAutoEditHandled={clearFocusTarget}
+                      onMouseDown={(event) =>
+                        openContextMenuOnMouseDown(event, {
+                          x: event.clientX,
+                          y: event.clientY,
+                          type: 'advantage',
+                          sectionId: section.id || '',
+                          itemId: item.id || '',
+                        })
+                      }
+                      onContextMenu={(event) =>
+                        openContextMenu(event, {
+                          x: event.clientX,
+                          y: event.clientY,
+                          type: 'advantage',
+                          sectionId: section.id || '',
+                          itemId: item.id || '',
+                        })
+                      }
+                    />
+                  ))}
                 </div>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
+      {renderContextMenu()}
     </div>
   );
 }
