@@ -10,8 +10,6 @@ interface NavigationBarProps {
   isAdmin?: boolean;
   isMaster?: boolean;
   franchiseId?: string;
-  actingAsLabel?: string;
-  onStopActing?: () => void;
   onAdminPanelClick?: (event: ReactMouseEvent<HTMLAnchorElement>) => void;
 }
 
@@ -21,8 +19,6 @@ function NavigationBar({
   isAdmin = false,
   isMaster = false,
   franchiseId,
-  actingAsLabel,
-  onStopActing,
   onAdminPanelClick,
 }: NavigationBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,16 +45,6 @@ function NavigationBar({
           <div className="nav-brand">{displayName}</div>
           <div className="nav-title-row">
             <div className="nav-title">Proposal Builder</div>
-            {actingAsLabel && (
-              <div className="nav-acting">
-                <span className="nav-acting-text">Acting as Owner for Franchise {actingAsLabel}</span>
-                {onStopActing && (
-                  <button className="nav-acting-btn" type="button" onClick={onStopActing}>
-                    Sign Out
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>

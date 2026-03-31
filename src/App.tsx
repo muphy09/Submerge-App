@@ -505,8 +505,6 @@ function AppContent() {
           isAdmin={isAdmin}
           isMaster={isMaster}
           franchiseId={effectiveSession?.franchiseId}
-          actingAsLabel={actingLabel || undefined}
-          onStopActing={actingLabel ? handleStopActing : undefined}
           onAdminPanelClick={handleAdminPanelTabClick}
         />
       )}
@@ -551,8 +549,20 @@ function AppContent() {
         />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
       </Routes>
-      {location.pathname === '/' && (
-        <div className="app-version">v{window.electron?.appVersion || '1.0.5'}</div>
+      {(actingLabel || location.pathname === '/') && (
+        <div className="app-bottom-left-meta">
+          {actingLabel && (
+            <div className="app-acting">
+              <span className="app-acting-text">Acting as Owner for Franchise {actingLabel}</span>
+              <button className="app-acting-btn" type="button" onClick={handleStopActing}>
+                Sign Out
+              </button>
+            </div>
+          )}
+          {location.pathname === '/' && (
+            <div className="app-version">v{window.electron?.appVersion || '1.0.5'}</div>
+          )}
+        </div>
       )}
       <UpdateNotification
         status={updateStatus}
