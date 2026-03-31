@@ -1,26 +1,12 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-- Sod and Fencing grouped costs not included bcz of price discrepency
-    - Fencing, ability to add gate (minimum 1), display gate size
-    - Sod, each group per SQFT
-        
-- New decking option 'Cool Deck' ($4.75 SF)
-    - Add on to Conrete ONLY
-        - Ask to add on if concrete is selected
-    - OR select by itself
-
-- Decking 
-    - Ability to add seperate decking option to decking.
-        - Custom SF to be entered after this option is selected
-        - Adding additional decking option only
-             On/Off Contract option
-        - Ability to turn on/off waste
 
 - Warranty Breakdown
 - Fiberglass pricing
 - Contract needs to autofill new parts
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
+
 - Warranty 
 - ** Ability to select the indiviudual material instead of tiers
     - Backburner

@@ -211,6 +211,12 @@ export type DeckingType =
   | 'concrete';
 export type CopingSize = '12x12' | '12x24' | '16x16';
 
+export interface AdditionalDeckingSelection {
+  deckingType: string;
+  area: number; // SQFT
+  isOffContract?: boolean;
+}
+
 export interface TileCopingDecking {
   // Tile
   tileLevel: TileLevel;
@@ -225,6 +231,7 @@ export interface TileCopingDecking {
   // Decking
   deckingType: DeckingType;
   deckingArea: number; // SQFT
+  additionalDeckingSelections?: AdditionalDeckingSelection[];
   additionalDeckingType?: string;
   additionalDeckingArea?: number; // SQFT
   concreteStepsLength: number; // LNFT

@@ -1,4 +1,5 @@
 import pricingData from '../services/pricingData';
+import type { AdditionalDeckingSelection, TileCopingDecking } from '../types/proposal-new';
 
 const DECKING_TYPE_FULL_LABELS: Record<string, string> = {
   none: 'No Decking',
@@ -14,6 +15,7 @@ export interface AdditionalDeckingOption {
   label: string;
   laborRate: number;
   materialRate: number;
+  wasteNotIncluded: boolean;
 }
 
 const slugify = (value: string): string =>
@@ -27,6 +29,14 @@ const toNumber = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const normalizeAdditionalDeckingSelection = (
+  selection?: Partial<AdditionalDeckingSelection> | null
+): AdditionalDeckingSelection => ({
+  deckingType: String(selection?.deckingType || '').trim(),
+  area: toNumber(selection?.area),
+  isOffContract: Boolean(selection?.isOffContract),
+});
 
 export const getDeckingTypeFullLabel = (deckingType?: string | null): string => {
   const normalized = String(deckingType || '').trim();
@@ -56,6 +66,7 @@ export const getAdditionalDeckingOptions = (): AdditionalDeckingOption[] => {
       label,
       laborRate: toNumber(rawOption?.laborRate),
       materialRate: toNumber(rawOption?.materialRate),
+      wasteNotIncluded: Boolean(rawOption?.wasteNotIncluded),
     });
     return options;
   }, []);
@@ -67,4 +78,43 @@ export const getAdditionalDeckingOption = (
   const normalizedId = String(optionId || '').trim();
   if (!normalizedId) return null;
   return getAdditionalDeckingOptions().find((option) => option.id === normalizedId) || null;
+};
+
+export const getAdditionalDeckingSelections = (
+  decking?: Partial<TileCopingDecking> | null
+): AdditionalDeckingSelection[] => {
+  const selectionList = Array.isArray(decking?.additionalDeckingSelections)
+    ? decking.additionalDeckingSelections.map(normalizeAdditionalDeckingSelection)
+    : [];
+
+  if (selectionList.length > 0) {
+    return selectionList;
+  }
+
+  const legacySelection = normalizeAdditionalDeckingSelection({
+    deckingType: decking?.additionalDeckingType,
+    area: decking?.additionalDeckingArea,
+    isOffContract: decking?.isAdditionalDeckingOffContract,
+  });
+
+  return legacySelection.deckingType || legacySelection.area > 0 || legacySelection.isOffContract
+    ? [legacySelection]
+    : [];
+};
+
+export const withAdditionalDeckingSelections = (
+  decking: TileCopingDecking,
+  selections: Array<Partial<AdditionalDeckingSelection> | null>
+): TileCopingDecking => {
+  const normalizedSelections = selections.map(normalizeAdditionalDeckingSelection);
+  const firstSelection = normalizedSelections[0];
+
+  return {
+    ...decking,
+    additionalDeckingSelections: normalizedSelections,
+    additionalDeckingType: firstSelection?.deckingType ?? '',
+    additionalDeckingArea: firstSelection?.area ?? 0,
+    isAdditionalDeckingOffContract: Boolean(firstSelection?.isOffContract),
+    isAdditionalDeckingWasteRemoved: false,
+  };
 };

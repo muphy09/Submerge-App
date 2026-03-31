@@ -1,3 +1,7 @@
+## [2.0.15] What's New
+-  Aligned Additional Decking with intended use case
+    - Ability to add multiple decking options
+    - Changed Concrete Waste overhead to 0%
 ## [2.0.14] What's New
 - Additional Decking Options
     - Ability to add Additional Decking options
@@ -162,4 +166,3 @@
 -  Facing Options for RBB and Exposed Pool Wall
     - Can now add/remove facing options for RBB and EPW
     - Material Costs and labor can be changed in the same table
-

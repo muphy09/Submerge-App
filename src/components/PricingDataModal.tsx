@@ -806,6 +806,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         prefix: '$',
         tooltip: 'Applied per sqft when this additional decking option is selected.',
       },
+      {
+        key: 'wasteNotIncluded',
+        label: 'Waste not Included',
+        type: 'boolean',
+        tooltip: 'When enabled, this option skips the standard 5% additional decking waste and freeform waste overhead.',
+      },
     ],
     []
   );

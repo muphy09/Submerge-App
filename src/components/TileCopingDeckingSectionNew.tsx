@@ -1,9 +1,11 @@
-import { useEffect, useMemo } from 'react';
-import { TileCopingDecking } from '../types/proposal-new';
+import { useEffect } from 'react';
+import { AdditionalDeckingSelection, TileCopingDecking } from '../types/proposal-new';
 import {
   getAdditionalDeckingOption,
+  getAdditionalDeckingSelections,
   getAdditionalDeckingOptions,
   getDeckingTypeFullLabel,
+  withAdditionalDeckingSelections,
 } from '../utils/decking';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
@@ -55,28 +57,47 @@ const CompactInput = ({
   );
 };
 
+const createEmptyAdditionalDeckingSelection = (): AdditionalDeckingSelection => ({
+  deckingType: '',
+  area: 0,
+  isOffContract: false,
+});
+
 function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDeckingArea }: Props) {
   const showStoneRockwork = false;
   const isDeckingOffContract = Boolean(data.isDeckingOffContract);
-  const isDeckingWasteRemoved = Boolean(data.isDeckingWasteRemoved);
-  const isAdditionalDeckingOffContract = Boolean(data.isAdditionalDeckingOffContract);
-  const isAdditionalDeckingWasteRemoved = Boolean(data.isAdditionalDeckingWasteRemoved);
-  const additionalDeckingType = data.additionalDeckingType ?? '';
-  const additionalDeckingOptions = useMemo(() => {
+  const additionalDeckingSelections = getAdditionalDeckingSelections(data);
+  const displayedAdditionalDeckingSelections =
+    additionalDeckingSelections.length > 0
+      ? additionalDeckingSelections
+      : [createEmptyAdditionalDeckingSelection()];
+  const primaryAdditionalDeckingSelection = displayedAdditionalDeckingSelections[0];
+  const canAddMoreDecking =
+    additionalDeckingSelections.length > 0 &&
+    additionalDeckingSelections.every((selection) => Boolean(selection.deckingType));
+  const additionalDeckingOptions = (() => {
     const options = getAdditionalDeckingOptions();
-    if (additionalDeckingType && !options.some((option) => option.id === additionalDeckingType)) {
+    const selectedTypes = Array.from(
+      new Set(displayedAdditionalDeckingSelections.map((selection) => selection.deckingType).filter(Boolean))
+    );
+
+    return selectedTypes.reduce((allOptions, deckingType) => {
+      if (allOptions.some((option) => option.id === deckingType)) {
+        return allOptions;
+      }
+
       return [
-        ...options,
+        ...allOptions,
         {
-          id: additionalDeckingType,
-          label: getDeckingTypeFullLabel(additionalDeckingType),
-          laborRate: getAdditionalDeckingOption(additionalDeckingType)?.laborRate ?? 0,
-          materialRate: getAdditionalDeckingOption(additionalDeckingType)?.materialRate ?? 0,
+          id: deckingType,
+          label: getDeckingTypeFullLabel(deckingType),
+          laborRate: getAdditionalDeckingOption(deckingType)?.laborRate ?? 0,
+          materialRate: getAdditionalDeckingOption(deckingType)?.materialRate ?? 0,
+          wasteNotIncluded: getAdditionalDeckingOption(deckingType)?.wasteNotIncluded ?? false,
         },
       ];
-    }
-    return options;
-  }, [additionalDeckingType]);
+    }, options);
+  })();
   const handleChange = (field: keyof TileCopingDecking, value: any) => {
     onChange({ ...data, [field]: value });
   };
@@ -86,40 +107,54 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
       isDeckingOffContract: enabled,
     });
   };
-  const handleDeckingWasteRemovedChange = (enabled: boolean) => {
-    onChange({
-      ...data,
-      isDeckingWasteRemoved: enabled,
-    });
+  const handleAdditionalDeckingSelectionsChange = (
+    selections: Array<Partial<AdditionalDeckingSelection> | null>
+  ) => {
+    onChange(withAdditionalDeckingSelections(data, selections));
   };
-  const handleAdditionalDeckingTypeChange = (value: string) => {
-    if (!value) {
-      onChange({
-        ...data,
-        additionalDeckingType: '',
-        additionalDeckingArea: 0,
-        isAdditionalDeckingOffContract: false,
-        isAdditionalDeckingWasteRemoved: false,
-      });
+  const handleAdditionalDeckingSelectionChange = (
+    index: number,
+    updates: Partial<AdditionalDeckingSelection>
+  ) => {
+    const nextSelections =
+      additionalDeckingSelections.length > 0
+        ? [...additionalDeckingSelections]
+        : [createEmptyAdditionalDeckingSelection()];
+
+    while (nextSelections.length <= index) {
+      nextSelections.push(createEmptyAdditionalDeckingSelection());
+    }
+
+    const currentSelection = nextSelections[index] || createEmptyAdditionalDeckingSelection();
+    const nextSelection = {
+      ...currentSelection,
+      ...updates,
+    };
+
+    if (!nextSelection.deckingType) {
+      if (nextSelections.length === 1) {
+        handleAdditionalDeckingSelectionsChange([]);
+        return;
+      }
+
+      nextSelections.splice(index, 1);
+      handleAdditionalDeckingSelectionsChange(nextSelections);
       return;
     }
 
-    onChange({
-      ...data,
-      additionalDeckingType: value,
-    });
+    nextSelections[index] = nextSelection;
+    handleAdditionalDeckingSelectionsChange(nextSelections);
   };
-  const handleAdditionalDeckingOffContractChange = (enabled: boolean) => {
-    onChange({
-      ...data,
-      isAdditionalDeckingOffContract: enabled,
-    });
+  const handleAddMoreDecking = () => {
+    handleAdditionalDeckingSelectionsChange([
+      ...additionalDeckingSelections,
+      createEmptyAdditionalDeckingSelection(),
+    ]);
   };
-  const handleAdditionalDeckingWasteRemovedChange = (enabled: boolean) => {
-    onChange({
-      ...data,
-      isAdditionalDeckingWasteRemoved: enabled,
-    });
+  const handleRemoveAdditionalDecking = (index: number) => {
+    handleAdditionalDeckingSelectionsChange(
+      additionalDeckingSelections.filter((_, selectionIndex) => selectionIndex !== index)
+    );
   };
 
   // Prefill decking area from Pool Specifications when available and not set here yet
@@ -255,18 +290,15 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
               />
               <span>Mark as Off-Contract</span>
             </label>
-            <label className="form-checkbox">
-              <input
-                type="checkbox"
-                checked={isDeckingWasteRemoved}
-                onChange={(e) => handleDeckingWasteRemovedChange(e.target.checked)}
-              />
-              <span>Remove Waste</span>
-            </label>
+            {canAddMoreDecking && (
+              <button type="button" className="action-btn secondary" onClick={handleAddMoreDecking}>
+                Add More Decking
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="spec-grid-5-fixed">
+        <div className="spec-grid-4-fixed">
           <div className="spec-field">
             <label className="spec-label required">Decking Type</label>
             <select
@@ -286,8 +318,14 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
             <label className="spec-label">Additional Decking</label>
             <select
               className="compact-input"
-              value={additionalDeckingType}
-              onChange={(e) => handleAdditionalDeckingTypeChange(e.target.value)}
+              value={primaryAdditionalDeckingSelection.deckingType}
+              onChange={(e) =>
+                handleAdditionalDeckingSelectionChange(0, {
+                  deckingType: e.target.value,
+                  area: e.target.value ? primaryAdditionalDeckingSelection.area : 0,
+                  isOffContract: e.target.value ? primaryAdditionalDeckingSelection.isOffContract : false,
+                })
+              }
             >
               <option value="">No Additional Decking</option>
               {additionalDeckingOptions.map((option) => (
@@ -297,13 +335,17 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
               ))}
             </select>
           </div>
-          {additionalDeckingType && (
+          {primaryAdditionalDeckingSelection.deckingType && (
             <>
               <div className="spec-field">
                 <label className="spec-label">Additional Decking SQFT</label>
                 <CompactInput
-                  value={data.additionalDeckingArea ?? 0}
-                  onChange={(e) => handleChange('additionalDeckingArea', parseFloat(e.target.value) || 0)}
+                  value={primaryAdditionalDeckingSelection.area ?? 0}
+                  onChange={(e) =>
+                    handleAdditionalDeckingSelectionChange(0, {
+                      area: parseFloat(e.target.value) || 0,
+                    })
+                  }
                   unit="SQFT"
                   min="0"
                   step="1"
@@ -314,26 +356,93 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
                 <label className="form-checkbox">
                   <input
                     type="checkbox"
-                    checked={isAdditionalDeckingOffContract}
-                    onChange={(e) => handleAdditionalDeckingOffContractChange(e.target.checked)}
+                    checked={Boolean(primaryAdditionalDeckingSelection.isOffContract)}
+                    onChange={(e) =>
+                      handleAdditionalDeckingSelectionChange(0, {
+                        isOffContract: e.target.checked,
+                      })
+                    }
                   />
                   <span>Mark as Off-Contract</span>
-                </label>
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Additional Remove Waste</label>
-                <label className="form-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={isAdditionalDeckingWasteRemoved}
-                    onChange={(e) => handleAdditionalDeckingWasteRemovedChange(e.target.checked)}
-                  />
-                  <span>Remove Waste</span>
                 </label>
               </div>
             </>
           )}
         </div>
+
+        {displayedAdditionalDeckingSelections.slice(1).map((selection, index) => {
+          const selectionIndex = index + 1;
+          return (
+            <div
+              key={`additional-decking-${selectionIndex}`}
+              className="spec-grid-4-fixed"
+              style={{ marginTop: '12px' }}
+            >
+              <div className="spec-field">
+                <label className="spec-label">{`Additional Decking ${selectionIndex + 1}`}</label>
+                <select
+                  className="compact-input"
+                  value={selection.deckingType}
+                  onChange={(e) =>
+                    handleAdditionalDeckingSelectionChange(selectionIndex, {
+                      deckingType: e.target.value,
+                      area: e.target.value ? selection.area : 0,
+                      isOffContract: e.target.value ? selection.isOffContract : false,
+                    })
+                  }
+                >
+                  <option value="">No Additional Decking</option>
+                  {additionalDeckingOptions.map((option) => (
+                    <option key={`${selectionIndex}-${option.id}`} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="spec-field">
+                <label className="spec-label">Additional Decking SQFT</label>
+                <CompactInput
+                  value={selection.area ?? 0}
+                  onChange={(e) =>
+                    handleAdditionalDeckingSelectionChange(selectionIndex, {
+                      area: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  unit="SQFT"
+                  min="0"
+                  step="1"
+                  readOnly={!selection.deckingType}
+                />
+              </div>
+              <div className="spec-field">
+                <label className="spec-label">Additional Off-Contract</label>
+                <label className="form-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selection.isOffContract)}
+                    disabled={!selection.deckingType}
+                    onChange={(e) =>
+                      handleAdditionalDeckingSelectionChange(selectionIndex, {
+                        isOffContract: e.target.checked,
+                      })
+                    }
+                  />
+                  <span>Mark as Off-Contract</span>
+                </label>
+              </div>
+              <div className="spec-field">
+                <label className="spec-label">Remove Additional Decking</label>
+                <button
+                  type="button"
+                  className="action-btn danger"
+                  onClick={() => handleRemoveAdditionalDecking(selectionIndex)}
+                >
+                  Remove Row
+                </button>
+              </div>
+            </div>
+          );
+        })}
 
         {data.deckingType === 'concrete' && (
           <div className="spec-grid">

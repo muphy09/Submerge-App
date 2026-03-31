@@ -19,7 +19,11 @@ import {
   getMasonryFacingRate,
   normalizeMasonryFacingId,
 } from '../utils/masonryFacing';
-import { getAdditionalDeckingOption, getDeckingTypeFullLabel } from '../utils/decking';
+import {
+  getAdditionalDeckingOption,
+  getAdditionalDeckingSelections,
+  getDeckingTypeFullLabel,
+} from '../utils/decking';
 import {
   annotateOffContractLineItem,
   isOffContractEligibleLineItem,
@@ -53,6 +57,9 @@ type DeckingSource = 'primary' | 'additional';
 
 const getDeckingSource = (item?: CostLineItem | null): DeckingSource =>
   String(item?.details?.deckingSource || 'primary') === 'additional' ? 'additional' : 'primary';
+
+const getDeckingSelectionKey = (item?: CostLineItem | null): string =>
+  String(item?.details?.deckingSelectionKey || '').trim();
 
 // ============================================================================
 // HELPER CALCULATIONS
@@ -139,18 +146,30 @@ export class TileCopingDeckingCalculations {
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
     const primaryDeckingSelectionLabel = getDeckingTypeFullLabel(tileCopingDecking.deckingType);
     const isPrimaryDeckingOffContract = Boolean(tileCopingDecking.isDeckingOffContract);
-    const isPrimaryDeckingWasteRemoved = Boolean(tileCopingDecking.isDeckingWasteRemoved);
-    const additionalDeckingOption = getAdditionalDeckingOption(tileCopingDecking.additionalDeckingType);
-    const additionalDeckingSelectionLabel = additionalDeckingOption?.label ||
-      (tileCopingDecking.additionalDeckingType
-        ? getDeckingTypeFullLabel(tileCopingDecking.additionalDeckingType)
-        : '');
-    const isAdditionalDeckingOffContract = Boolean(tileCopingDecking.isAdditionalDeckingOffContract);
-    const isAdditionalDeckingWasteRemoved = Boolean(tileCopingDecking.isAdditionalDeckingWasteRemoved);
+    const additionalDeckingSelections = getAdditionalDeckingSelections(tileCopingDecking).map((selection, index) => {
+      const additionalDeckingOption = getAdditionalDeckingOption(selection.deckingType);
+      const selectionLabel = additionalDeckingOption?.label ||
+        (selection.deckingType ? getDeckingTypeFullLabel(selection.deckingType) : '');
+      const area = Math.max(0, selection.area ?? 0);
+      const wasteMultiplier =
+        selection.deckingType === 'concrete' || additionalDeckingOption?.wasteNotIncluded ? 1 : 1.05;
+
+      return {
+        key: `additional-${index}`,
+        deckingType: selection.deckingType,
+        option: additionalDeckingOption,
+        selectionLabel,
+        area,
+        quantity: area * wasteMultiplier,
+        isOffContract: Boolean(selection.isOffContract),
+        wasteNotIncluded: Boolean(additionalDeckingOption?.wasteNotIncluded),
+      };
+    });
     const tagDeckingItem = (
       item: CostLineItem,
       options: {
         source: DeckingSource;
+        selectionKey: string;
         selectionLabel: string;
         applied: boolean;
       }
@@ -159,22 +178,30 @@ export class TileCopingDeckingCalculations {
         group: OFF_CONTRACT_GROUP_DECKING,
         selectionLabel: options.selectionLabel,
         applied: options.applied,
-        details: { deckingSource: options.source },
+        details: {
+          deckingSource: options.source,
+          deckingSelectionKey: options.selectionKey,
+        },
       });
     const tagPrimaryDeckingItem = (item: CostLineItem): CostLineItem =>
       tagDeckingItem(item, {
         source: 'primary',
+        selectionKey: 'primary',
         selectionLabel: primaryDeckingSelectionLabel,
         applied: isPrimaryDeckingOffContract,
       });
-    const tagAdditionalDeckingItem = (item: CostLineItem): CostLineItem =>
+    const tagAdditionalDeckingItem = (
+      item: CostLineItem,
+      selection: (typeof additionalDeckingSelections)[number]
+    ): CostLineItem =>
       tagDeckingItem(item, {
         source: 'additional',
-        selectionLabel: additionalDeckingSelectionLabel,
-        applied: isAdditionalDeckingOffContract,
+        selectionKey: selection.key,
+        selectionLabel: selection.selectionLabel,
+        applied: selection.isOffContract,
       });
-    const formatAdditionalDeckingLabel = (suffix: string) =>
-      `Additional Decking - ${additionalDeckingSelectionLabel}${suffix ? ` - ${suffix}` : ''}`;
+    const formatAdditionalDeckingLabel = (selectionLabel: string, suffix: string) =>
+      `Additional Decking - ${selectionLabel}${suffix ? ` - ${suffix}` : ''}`;
     const perimeterWithExtras = poolSpecs.perimeter + tileCopingDecking.additionalTileLength;
     const spaPerimeter = poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs);
     const copingLnft =
@@ -182,10 +209,8 @@ export class TileCopingDeckingCalculations {
       Math.ceil(poolSpecs.perimeter * 1.1 + spaPerimeter * 2.15);
     const isConcreteDeck = tileCopingDecking.deckingType === 'concrete';
     const hasTile = !isFiberglass && tileCopingDecking.tileLevel > 0;
-    const concreteDeckWasteMultiplier = isPrimaryDeckingWasteRemoved ? 1 : 1.1;
-    const standardDeckingWasteMultiplier = isPrimaryDeckingWasteRemoved ? 1 : 1.05;
-    const additionalDeckingWasteMultiplier = isAdditionalDeckingWasteRemoved ? 1 : 1.05;
-    const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 * concreteDeckWasteMultiplier : 0;
+    const standardDeckingWasteMultiplier = isConcreteDeck ? 1 : 1.05;
+    const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 : 0;
     const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? ceilToStep(concreteBandAreaRaw, 10) : 0;
     // Excel (TILE COPING!J35/J42) lets the addl qty go negative when the 4' band exceeds the entered deck area.
     // Mirror that CEILING behavior instead of clamping to zero so we remove overcounted sqft.
@@ -195,8 +220,6 @@ export class TileCopingDeckingCalculations {
     const deckingArea = isConcreteDeck
       ? concreteBaseQty + concreteAddlQty
       : tileCopingDecking.deckingArea * standardDeckingWasteMultiplier;
-    const additionalDeckingArea = Math.max(0, tileCopingDecking.additionalDeckingArea ?? 0);
-    const additionalDeckingQty = additionalDeckingArea * additionalDeckingWasteMultiplier;
 
     // TILE LABOR
     if (hasTile) {
@@ -390,27 +413,31 @@ export class TileCopingDeckingCalculations {
       }));
     }
 
-    if (additionalDeckingOption && additionalDeckingArea > 0) {
-      if (additionalDeckingOption.laborRate > 0) {
-        laborItems.push(tagAdditionalDeckingItem({
-          category: 'Decking Labor',
-          description: formatAdditionalDeckingLabel('Labor'),
-          unitPrice: additionalDeckingOption.laborRate,
-          quantity: additionalDeckingQty,
-          total: additionalDeckingOption.laborRate * additionalDeckingQty,
-        }));
+    additionalDeckingSelections.forEach((selection) => {
+      if (!selection.option || !selection.selectionLabel || selection.area <= 0) {
+        return;
       }
 
-      if (additionalDeckingOption.materialRate > 0) {
+      if (selection.option.laborRate > 0) {
+        laborItems.push(tagAdditionalDeckingItem({
+          category: 'Decking Labor',
+          description: formatAdditionalDeckingLabel(selection.selectionLabel, 'Labor'),
+          unitPrice: selection.option.laborRate,
+          quantity: selection.quantity,
+          total: selection.option.laborRate * selection.quantity,
+        }, selection));
+      }
+
+      if (selection.option.materialRate > 0) {
         materialItems.push(tagAdditionalDeckingItem({
           category: 'Decking Material',
-          description: formatAdditionalDeckingLabel('Material'),
-          unitPrice: additionalDeckingOption.materialRate,
-          quantity: additionalDeckingQty,
-          total: additionalDeckingOption.materialRate * additionalDeckingQty,
-        }));
+          description: formatAdditionalDeckingLabel(selection.selectionLabel, 'Material'),
+          unitPrice: selection.option.materialRate,
+          quantity: selection.quantity,
+          total: selection.option.materialRate * selection.quantity,
+        }, selection));
       }
-    }
+    });
 
     // Concrete steps material
     if (tileCopingDecking.concreteStepsLength > 0) {
@@ -578,7 +605,19 @@ export class TileCopingDeckingCalculations {
         .filter((item) => getDeckingSource(item) === source)
         .reduce((sum, item) => sum + item.total, 0);
     const primaryDeckingMaterialSubtotal = sumDeckingMaterialSubtotal('primary');
-    const additionalDeckingMaterialSubtotal = sumDeckingMaterialSubtotal('additional');
+    const additionalDeckingMaterialSubtotals = materialItems
+      .filter((item) => isOffContractEligibleLineItem(item, OFF_CONTRACT_GROUP_DECKING))
+      .filter((item) => getDeckingSource(item) === 'additional')
+      .reduce((groups, item) => {
+        const key = getDeckingSelectionKey(item);
+        if (!key) return groups;
+        groups.set(key, (groups.get(key) || 0) + item.total);
+        return groups;
+      }, new Map<string, number>());
+    const additionalDeckingMaterialSubtotal = Array.from(additionalDeckingMaterialSubtotals.values()).reduce(
+      (sum, total) => sum + total,
+      0
+    );
     const deckingMaterialSubtotal = primaryDeckingMaterialSubtotal + additionalDeckingMaterialSubtotal;
     const rockworkMaterialSubtotal = materialItems
       .filter(i => {
@@ -625,15 +664,20 @@ export class TileCopingDeckingCalculations {
       }));
     }
 
-    if (additionalDeckingMaterialSubtotal > 0 && additionalDeckingSelectionLabel) {
+    additionalDeckingMaterialSubtotals.forEach((subtotal, key) => {
+      const selection = additionalDeckingSelections.find((entry) => entry.key === key);
+      if (!selection || subtotal <= 0 || !selection.selectionLabel) {
+        return;
+      }
+
       materialItems.push(tagAdditionalDeckingItem({
         category: 'Decking Material',
-        description: formatAdditionalDeckingLabel('Material Tax'),
+        description: formatAdditionalDeckingLabel(selection.selectionLabel, 'Material Tax'),
         unitPrice: materialTaxRate,
-        quantity: additionalDeckingMaterialSubtotal,
-        total: additionalDeckingMaterialSubtotal * materialTaxRate,
-      }));
-    }
+        quantity: subtotal,
+        total: subtotal * materialTaxRate,
+      }, selection));
+    });
 
     if (rockworkMaterialSubtotal > 0) {
       materialItems.push({
@@ -646,20 +690,24 @@ export class TileCopingDeckingCalculations {
     }
 
     if (poolSpecs.poolShape === 'freeform') {
-      const getDeckingCategoryTotal = (source: DeckingSource) =>
+      const getDeckingCategoryTotal = (source: DeckingSource, selectionKey?: string) =>
         [
-          ...laborItems.filter((item) => item.category === 'Decking Labor' && getDeckingSource(item) === source),
-          ...materialItems.filter((item) => item.category === 'Decking Material' && getDeckingSource(item) === source),
+          ...laborItems.filter(
+            (item) =>
+              item.category === 'Decking Labor' &&
+              getDeckingSource(item) === source &&
+              (!selectionKey || getDeckingSelectionKey(item) === selectionKey)
+          ),
+          ...materialItems.filter(
+            (item) =>
+              item.category === 'Decking Material' &&
+              getDeckingSource(item) === source &&
+              (!selectionKey || getDeckingSelectionKey(item) === selectionKey)
+          ),
         ].reduce((sum, item) => sum + item.total, 0);
 
-      const primaryDeckingCategoryTotal = getDeckingCategoryTotal('primary');
-      const additionalDeckingCategoryTotal = getDeckingCategoryTotal('additional');
-
-      if (
-        primaryDeckingCategoryTotal > 0 &&
-        tileCopingDecking.deckingType !== 'concrete' &&
-        !isPrimaryDeckingWasteRemoved
-      ) {
+      const primaryDeckingCategoryTotal = getDeckingCategoryTotal('primary', 'primary');
+      if (primaryDeckingCategoryTotal > 0 && !isConcreteDeck) {
         materialItems.push(tagPrimaryDeckingItem({
           category: 'Decking Material',
           description: 'Freeform Decking Waste',
@@ -669,19 +717,24 @@ export class TileCopingDeckingCalculations {
         }));
       }
 
-      if (
-        additionalDeckingCategoryTotal > 0 &&
-        additionalDeckingSelectionLabel &&
-        !isAdditionalDeckingWasteRemoved
-      ) {
+      additionalDeckingSelections.forEach((selection) => {
+        if (selection.deckingType === 'concrete' || selection.wasteNotIncluded || !selection.selectionLabel) {
+          return;
+        }
+
+        const additionalDeckingCategoryTotal = getDeckingCategoryTotal('additional', selection.key);
+        if (additionalDeckingCategoryTotal <= 0) {
+          return;
+        }
+
         materialItems.push(tagAdditionalDeckingItem({
           category: 'Decking Material',
-          description: formatAdditionalDeckingLabel('Freeform Waste'),
+          description: formatAdditionalDeckingLabel(selection.selectionLabel, 'Freeform Waste'),
           unitPrice: 0.05,
           quantity: additionalDeckingCategoryTotal,
           total: roundCurrency(additionalDeckingCategoryTotal * 0.05),
-        }));
-      }
+        }, selection));
+      });
     }
 
     return { labor: laborItems, material: materialItems };

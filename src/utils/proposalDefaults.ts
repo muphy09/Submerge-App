@@ -133,6 +133,7 @@ export function getDefaultTileCopingDecking(): TileCopingDecking {
     copingLength: 0,
     deckingType: 'travertine-level1',
     deckingArea: 0,
+    additionalDeckingSelections: [],
     additionalDeckingType: '',
     additionalDeckingArea: 0,
     concreteStepsLength: 0,

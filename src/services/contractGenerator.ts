@@ -4,7 +4,7 @@ import pricingData from './pricingData';
 import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/masonryFacing';
 import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
-import { getDeckingTypeFullLabel } from '../utils/decking';
+import { getAdditionalDeckingSelections, getDeckingTypeFullLabel } from '../utils/decking';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
 import {
   getGroupedCustomFeatureSubcategory,
@@ -610,9 +610,14 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   }
   if (field.id === 'p1_37_size') return proposal.tileCopingDecking?.copingSize || '';
   const primaryDeckingType = proposal.tileCopingDecking?.deckingType || 'none';
-  const additionalDeckingType = String(proposal.tileCopingDecking?.additionalDeckingType || '').trim();
   const primaryDeckingArea = Number(proposal.tileCopingDecking?.deckingArea || proposal.poolSpecs?.deckingArea || 0);
-  const additionalDeckingArea = Number(proposal.tileCopingDecking?.additionalDeckingArea || 0);
+  const additionalDeckingSelections = getAdditionalDeckingSelections(proposal.tileCopingDecking)
+    .map((selection) => ({
+      deckingType: String(selection.deckingType || '').trim(),
+      area: Number(selection.area || 0),
+      isOffContract: Boolean(selection.isOffContract),
+    }))
+    .filter((selection) => selection.deckingType);
   const formatDeckingContractLabel = (
     deckingType: string,
     isOffContract: boolean,
@@ -641,7 +646,9 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (field.id === 'p1_38_qty') {
     const quantities = [
       primaryDeckingType !== 'none' && primaryDeckingArea > 0 ? formatNumberValue(primaryDeckingArea) : '',
-      additionalDeckingType && additionalDeckingArea > 0 ? formatNumberValue(additionalDeckingArea) : '',
+      ...additionalDeckingSelections
+        .filter((selection) => selection.area > 0)
+        .map((selection) => formatNumberValue(selection.area)),
     ].filter(Boolean);
 
     if (quantities.length > 0) {
@@ -655,10 +662,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/decking\b/i.test(label)) {
     const selections = [
       formatDeckingContractLabel(primaryDeckingType, Boolean(proposal.tileCopingDecking?.isDeckingOffContract)),
-      formatDeckingContractLabel(
-        additionalDeckingType,
-        Boolean(proposal.tileCopingDecking?.isAdditionalDeckingOffContract),
-        'Additional Decking'
+      ...additionalDeckingSelections.map((selection) =>
+        formatDeckingContractLabel(selection.deckingType, selection.isOffContract, 'Additional Decking')
       ),
     ].filter(Boolean);
 
