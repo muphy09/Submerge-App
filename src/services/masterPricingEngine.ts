@@ -21,6 +21,13 @@ import {
 } from '../utils/customOptions';
 import {
   getCustomFeatureTotal,
+  getGroupedCustomFeatureAddonLabel,
+  getGroupedCustomFeatureAddonQuantity,
+  getGroupedCustomFeatureAddonUnitPrice,
+  getGroupedCustomFeatureBaseTotal,
+  getGroupedCustomFeaturePricePerSqft,
+  getGroupedCustomFeaturePricingMode,
+  getGroupedCustomFeatureSqft,
   hasCustomFeatureContent,
   isOffContractCustomFeature,
   normalizeCustomFeatures,
@@ -98,17 +105,51 @@ const buildCustomFeatureItems = (
 
   return normalizeCustomFeatures(customFeatures).features
     .filter((feature) => hasCustomFeatureContent(feature) && !isOffContractCustomFeature(feature))
-    .map((feature, index) => {
-      const total = getCustomFeatureTotal(feature);
+    .flatMap((feature, index) => {
       const description = feature.name?.trim() || `Custom Feature #${index + 1}`;
-      return {
-        category: 'Custom Features',
-        description,
-        unitPrice: total,
-        quantity: 1,
-        total,
-        notes: feature.description,
-      };
+      const baseTotal = getGroupedCustomFeatureBaseTotal(feature);
+      const pricingMode = getGroupedCustomFeaturePricingMode(feature);
+      const baseQuantity = pricingMode === 'sqft' ? getGroupedCustomFeatureSqft(feature) : 1;
+      const baseUnitPrice = pricingMode === 'sqft' ? getGroupedCustomFeaturePricePerSqft(feature) : baseTotal;
+      const addonLabel = getGroupedCustomFeatureAddonLabel(feature);
+      const addonUnitPrice = getGroupedCustomFeatureAddonUnitPrice(feature);
+      const addonQuantity = getGroupedCustomFeatureAddonQuantity(feature);
+      const items: CostLineItem[] = [];
+
+      if (baseTotal !== 0) {
+        items.push({
+          category: 'Custom Features',
+          description,
+          unitPrice: baseUnitPrice,
+          quantity: baseQuantity,
+          total: baseTotal,
+          notes: feature.description,
+        });
+      }
+
+      if (addonLabel && addonUnitPrice !== 0 && addonQuantity !== 0) {
+        items.push({
+          category: 'Custom Features',
+          description: `${description} - ${addonLabel}`,
+          unitPrice: addonUnitPrice,
+          quantity: addonQuantity,
+          total: Math.round(addonUnitPrice * addonQuantity * 100) / 100,
+          notes: feature.description,
+        });
+      }
+
+      if (items.length === 0) {
+        items.push({
+          category: 'Custom Features',
+          description,
+          unitPrice: getCustomFeatureTotal(feature),
+          quantity: 1,
+          total: getCustomFeatureTotal(feature),
+          notes: feature.description,
+        });
+      }
+
+      return items;
     });
 };
 

@@ -11,11 +11,13 @@ export const annotateOffContractLineItem = (
     group: string;
     selectionLabel?: string;
     applied?: boolean;
+    details?: Record<string, number | string | boolean>;
   }
 ): CostLineItem => ({
   ...item,
   details: {
     ...(item.details || {}),
+    ...(options.details || {}),
     offContractEligible: true,
     offContractGroup: options.group,
     ...(options.selectionLabel ? { offContractSelectionLabel: options.selectionLabel } : {}),

@@ -45,13 +45,28 @@ type ScalarField = {
   isUnused?: boolean;
 };
 
+type ListFieldOption = {
+  label: string;
+  value: string;
+};
+
+type ListFieldOptionsResolver = (context: {
+  data: any;
+  list: ListConfig;
+  entry?: any;
+  index?: number;
+}) => ListFieldOption[];
+
 type ListField = {
   key: string;
   label: string;
-  type: 'number' | 'boolean' | 'text';
+  type: 'number' | 'boolean' | 'text' | 'select';
   placeholder?: string;
   prefix?: string;
   tooltip?: string;
+  options?: ListFieldOption[] | ListFieldOptionsResolver;
+  defaultValue?: string | number | boolean;
+  hidden?: (entry: any) => boolean;
 };
 
 type ListConfig = {
@@ -113,7 +128,14 @@ const slugify = (value: string) =>
 
 const emptyFromFields = (fields: ListField[]) =>
   fields.reduce<Record<string, any>>((acc, field) => {
-    acc[field.key] = field.type === 'number' ? 0 : field.type === 'boolean' ? false : '';
+    acc[field.key] =
+      field.defaultValue !== undefined
+        ? field.defaultValue
+        : field.type === 'number'
+          ? 0
+          : field.type === 'boolean'
+            ? false
+            : '';
     return acc;
   }, {});
 
@@ -407,7 +429,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const handleListChange = (list: ListConfig, index: number, field: ListField, raw: any) => {
     const parsed =
-      field.type === 'number' ? toNumber(String(raw)) : field.type === 'boolean' ? Boolean(raw) : raw;
+      field.type === 'number' ? toNumber(String(raw)) : field.type === 'boolean' ? Boolean(raw) : String(raw);
     const isDefaultLightChoice =
       field.key === 'defaultLightChoice' &&
       list.path[0] === 'equipment' &&
@@ -499,6 +521,31 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       const existing = entries[index] || {};
       if (!existing.id) {
         const baseId = slugify(String(parsed)) || `custom-feature-${index + 1}`;
+        let nextId = baseId;
+        let suffix = 2;
+        while (
+          nextId &&
+          entries.some((entry, entryIndex) => entryIndex !== index && String(entry?.id || '').trim() === nextId)
+        ) {
+          nextId = `${baseId}-${suffix}`;
+          suffix += 1;
+        }
+        if (nextId) {
+          updatePricingListItem(list.path, index, 'id', nextId);
+        }
+      }
+    }
+
+    const isAdditionalDeckingOptionName =
+      field.key === 'name' &&
+      list.path[0] === 'tileCoping' &&
+      list.path[1] === 'decking' &&
+      list.path[2] === 'additionalOptions';
+    if (isAdditionalDeckingOptionName) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const existing = entries[index] || {};
+      if (!existing.id) {
+        const baseId = slugify(String(parsed)) || `additional-decking-${index + 1}`;
         let nextId = baseId;
         let suffix = 2;
         while (
@@ -734,12 +781,56 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     []
   );
+  const additionalDeckingFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Option Name',
+        type: 'text',
+        placeholder: 'Cool Deck',
+        tooltip: 'Label shown in the Additional Decking dropdown in the proposal builder.',
+      },
+      {
+        key: 'laborRate',
+        label: 'Labor Rate',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Applied per sqft when this additional decking option is selected.',
+      },
+      {
+        key: 'materialRate',
+        label: 'Material Rate',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Applied per sqft when this additional decking option is selected.',
+      },
+    ],
+    []
+  );
 
   const isRenamableAddCostField = (field: ListField) => /^addCost\d+$/.test(field.key);
   const getListFieldOverrideKey = (list: ListConfig, field: ListField) =>
     buildPricingFieldLabelOverrideKey(list.path, field.key);
   const getListFieldLabel = (list: ListConfig, field: ListField) =>
     fieldLabelOverrides[getListFieldOverrideKey(list, field)] || field.label;
+  const isListFieldHidden = (field: ListField, entry: any) => Boolean(field.hidden?.(entry));
+  const getListFieldOptions = (list: ListConfig, field: ListField, entry?: any, index?: number): ListFieldOption[] => {
+    const resolved =
+      typeof field.options === 'function' ? field.options({ data, list, entry, index }) : field.options || [];
+    const normalized = resolved
+      .map((option) => ({
+        label: String(option?.label ?? option?.value ?? '').trim(),
+        value: String(option?.value ?? '').trim(),
+      }))
+      .filter((option) => option.label || option.value);
+    const currentValue = String(entry?.[field.key] ?? '').trim();
+    if (currentValue && !normalized.some((option) => option.value === currentValue)) {
+      normalized.unshift({ label: currentValue, value: currentValue });
+    }
+    return normalized;
+  };
   const handleStartRenameListField = (list: ListConfig, field: ListField, cellKey: string) => {
     setActiveListFieldRename({
       cellKey,
@@ -2257,6 +2348,19 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
+            title: 'Additional decking catalog',
+            lists: [
+              {
+                title: 'Additional decking options',
+                path: ['tileCoping', 'decking', 'additionalOptions'],
+                addLabel: 'Add additional decking option',
+                fields: additionalDeckingFields,
+                defaultItem: () => ({ id: '' }),
+                emptyMessage: 'No additional decking options yet. Add one to expose it in the proposal builder.',
+              },
+            ],
+          },
+          {
             title: 'Bullnose & spillway',
             scalars: [
               {
@@ -2978,6 +3082,42 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             title: 'Grouped feature catalog',
             lists: [
               {
+                title: 'Additional Options',
+                path: ['customFeatures', 'groupedSubcategories'],
+                addLabel: 'Add additional option',
+                variant: 'table',
+                emptyMessage: 'No additional options yet. Add one to configure shared add-on costs like gates.',
+                defaultItem: () => ({
+                  id: `additional-option-${Date.now()}`,
+                  groupName: '',
+                  name: '',
+                  addonUnitPrice: 0,
+                }),
+                fields: [
+                  {
+                    key: 'groupName',
+                    label: 'Additional Options Group',
+                    type: 'text',
+                    placeholder: 'Gate Type',
+                    tooltip: 'Shown as the dropdown label for grouped features that use this option group.',
+                  },
+                  {
+                    key: 'name',
+                    label: 'Additional Option',
+                    type: 'text',
+                    placeholder: 'Single Gate',
+                    tooltip: 'One selectable option inside the additional options dropdown.',
+                  },
+                  {
+                    key: 'addonUnitPrice',
+                    label: 'Additional Option Cost',
+                    type: 'number',
+                    prefix: '$',
+                    tooltip: 'Per-item cost added when this additional option is attached to a grouped feature.',
+                  },
+                ],
+              },
+              {
                 title: 'Grouped custom features',
                 path: ['customFeatures', 'groupedOptions'],
                 addLabel: 'Add grouped feature',
@@ -2986,8 +3126,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 defaultItem: () => ({
                   id: `custom-feature-${Date.now()}`,
                   name: '',
+                  subcategory: '',
+                  additionalOptionCategory: '',
                   description: '',
+                  pricingMode: 'total',
                   totalPrice: 0,
+                  pricePerSqft: 0,
                 }),
                 fields: [
                   {
@@ -2998,6 +3142,33 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                     tooltip: 'Label shown on the selectable block in the Custom Features proposal page.',
                   },
                   {
+                    key: 'subcategory',
+                    label: 'Subcategory',
+                    type: 'text',
+                    placeholder: 'Sod',
+                    tooltip: 'Used to group this item inside the Grouped Features section in the proposal builder.',
+                  },
+                  {
+                    key: 'additionalOptionCategory',
+                    label: 'Additional Options Category',
+                    type: 'select',
+                    defaultValue: '',
+                    options: ({ data }) => {
+                      const additionalOptionNames = (
+                        ((data?.customFeatures?.groupedSubcategories as any[]) || []) as Array<{
+                          groupName?: string;
+                          name?: string;
+                          addonLabel?: string;
+                        }>
+                      )
+                        .map((option) => String(option?.groupName || option?.name || option?.addonLabel || '').trim())
+                        .filter(Boolean);
+                      const uniqueNames = Array.from(new Set(additionalOptionNames));
+                      return [{ label: 'None', value: '' }, ...uniqueNames.map((name) => ({ label: name, value: name }))];
+                    },
+                    tooltip: 'Optional add-on category for this grouped feature, such as Gate for fence items.',
+                  },
+                  {
                     key: 'description',
                     label: 'Description',
                     type: 'text',
@@ -3005,11 +3176,31 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                     tooltip: 'Visible to designers beneath the feature name.',
                   },
                   {
+                    key: 'pricingMode',
+                    label: 'Pricing Mode',
+                    type: 'select',
+                    defaultValue: 'total',
+                    options: [
+                      { label: 'Total', value: 'total' },
+                      { label: 'SQFT', value: 'sqft' },
+                    ],
+                    tooltip: 'Choose whether this grouped feature uses a flat total or a per-square-foot price.',
+                  },
+                  {
                     key: 'totalPrice',
                     label: 'Total Price',
                     type: 'number',
                     prefix: '$',
                     tooltip: 'Preset total used when the designer selects this grouped feature.',
+                    hidden: (entry) => String(entry?.pricingMode || 'total') === 'sqft',
+                  },
+                  {
+                    key: 'pricePerSqft',
+                    label: 'Price per SF',
+                    type: 'number',
+                    prefix: '$',
+                    tooltip: 'Per-square-foot price used when the designer enters square footage for this grouped feature.',
+                    hidden: (entry) => String(entry?.pricingMode || 'total') !== 'sqft',
                   },
                 ],
               },
@@ -3020,6 +3211,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     [
       data,
+      additionalDeckingFields,
       masonryFacingFields,
       data.electrical.overrunThreshold,
       data.electrical.heatPumpOverrunThreshold,
@@ -3119,6 +3311,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     if (field.key === 'colors' && Array.isArray(fieldValue)) {
       fieldValue = fieldValue.join(', ');
     }
+    if (field.type === 'select' && (fieldValue === undefined || fieldValue === null || fieldValue === '')) {
+      fieldValue = field.defaultValue ?? getListFieldOptions(list, field, entry, index)[0]?.value ?? '';
+    }
     if (field.key === 'overheadMultiplier' && (fieldValue === undefined || fieldValue === null)) {
       fieldValue = 1.1;
     }
@@ -3134,9 +3329,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const formatListFieldValue = (list: ListConfig, entry: any, field: ListField, index: number) => {
+    if (isListFieldHidden(field, entry)) {
+      return '—';
+    }
     const fieldValue = getListFieldValue(list, entry, field, index);
     if (field.type === 'boolean') {
       return fieldValue ? 'Yes' : 'No';
+    }
+    if (field.type === 'select') {
+      const selected = getListFieldOptions(list, field, entry, index).find((option) => option.value === fieldValue);
+      return selected?.label || String(fieldValue || '—');
     }
     if (field.type === 'number') {
       return formatPrefixedValue(field.prefix, formatNumericValue(Number(fieldValue) || 0));
@@ -3396,6 +3598,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             const cellKey = `${list.path.join('.')}.${index}.${field.key}`;
             const fieldValue = getListFieldValue(list, entry, field, index);
 
+            if (isListFieldHidden(field, entry)) {
+              return null;
+            }
+
             if (field.type === 'boolean') {
               return (
                 <label key={field.key} className="pricing-field">
@@ -3441,6 +3647,40 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                         i
                       </span>
                     )}
+                  </div>
+                </label>
+              );
+            }
+
+            if (field.type === 'select') {
+              const options = getListFieldOptions(list, field, entry, index);
+              return (
+                <label key={field.key} className="pricing-field">
+                  <div className={getListFieldLabelClassName(field)}>
+                    {renderListFieldLabelText(list, field, cellKey)}
+                    {field.tooltip && (
+                      <span
+                        className="pricing-field__info"
+                        data-tooltip={field.tooltip}
+                        aria-label={field.tooltip}
+                        role="img"
+                        onMouseEnter={updateTooltipAlign}
+                      >
+                        i
+                      </span>
+                    )}
+                  </div>
+                  <div className="pricing-choice-toggle" role="group" aria-label={getListFieldLabel(list, field)}>
+                    {options.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`pricing-choice-toggle__option${fieldValue === option.value ? ' is-active' : ''}`}
+                        onClick={() => handleListChange(list, index, field, option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 </label>
               );

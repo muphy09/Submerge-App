@@ -403,17 +403,41 @@ function PoolSpecsSectionNew({
 
         {/* Calculated Gallons - shown for both pool types */}
         {(isFiberglass || data.poolType === 'gunite') && (
-          <div className="spec-grid-2" style={{ marginTop: '0' }}>
-            <div className="spec-field">
-              <label className="spec-label">Approximate Gallons (Auto-calculated)</label>
-              <CompactInput
-                type="text"
-                value={data.approximateGallons.toLocaleString()}
-                unit="gal"
-                readOnly
-              />
+          <>
+            <div className="spec-grid-2" style={{ marginTop: '0' }}>
+              <div className="spec-field">
+                <label className="spec-label">Pool Shape</label>
+                <div className="pool-type-buttons" style={{ marginBottom: 0 }}>
+                  <button
+                    type="button"
+                    className={`pool-type-btn ${data.poolShape === 'geometric' ? 'active' : ''}`}
+                    onClick={() => handleChange('poolShape', 'geometric')}
+                  >
+                    Geometric
+                  </button>
+                  <button
+                    type="button"
+                    className={`pool-type-btn ${data.poolShape === 'freeform' ? 'active' : ''}`}
+                    onClick={() => handleChange('poolShape', 'freeform')}
+                  >
+                    Freeform
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
+              <div className="spec-field">
+                <label className="spec-label">Approximate Gallons (Auto-calculated)</label>
+                <CompactInput
+                  type="text"
+                  value={data.approximateGallons.toLocaleString()}
+                  unit="gal"
+                  readOnly
+                />
+              </div>
+            </div>
+          </>
         )}
       </div>
 

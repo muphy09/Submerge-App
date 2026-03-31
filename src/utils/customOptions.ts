@@ -9,6 +9,7 @@ import {
 import {
   getOffContractSelectionLabel,
   isOffContractEligibleLineItem,
+  isOffContractLineItem,
   OFF_CONTRACT_GROUP_DECKING,
 } from './offContractLineItems';
 
@@ -74,9 +75,6 @@ export const normalizeCustomOption = (option?: Partial<CustomOption> | null): Cu
 export const normalizeCustomOptions = (options?: Array<Partial<CustomOption> | null>): CustomOption[] =>
   (options || []).map(normalizeCustomOption);
 
-export const isDeckingOffContract = (proposal?: Partial<Proposal>): boolean =>
-  Boolean(proposal?.tileCopingDecking?.isDeckingOffContract);
-
 const OFF_CONTRACT_SECTION_DEFINITIONS = [
   {
     category: 'Excavation',
@@ -116,18 +114,16 @@ const getDeckingOffContractItems = (
   proposal?: Partial<Proposal>,
   deckingLineItems?: CostLineItem[]
 ): OffContractItem[] => {
-  if (!proposal || !isDeckingOffContract(proposal) || !Array.isArray(deckingLineItems)) {
+  if (!proposal || !Array.isArray(deckingLineItems)) {
     return [];
   }
 
   const eligibleDeckingItems = deckingLineItems
     .filter((item) => isOffContractEligibleLineItem(item, OFF_CONTRACT_GROUP_DECKING))
+    .filter((item) => isOffContractLineItem(item))
     .filter((item) => Number.isFinite(item.total) && item.total !== 0);
 
   if (!eligibleDeckingItems.length) return [];
-
-  const selectionLabel =
-    eligibleDeckingItems.map((item) => getOffContractSelectionLabel(item)).find(Boolean) || 'Selected Decking';
 
   const getDeckingLineTypeLabel = (item: CostLineItem): string => {
     const description = (item.description || '').toLowerCase();
@@ -144,7 +140,7 @@ const getDeckingOffContractItems = (
     name: item.description.toLowerCase().includes(getDeckingLineTypeLabel(item).toLowerCase())
       ? item.description
       : `${item.description} - ${getDeckingLineTypeLabel(item)}`,
-    description: `${getDeckingLineTypeLabel(item)} | Decking Selection: ${selectionLabel}`,
+    description: `${getDeckingLineTypeLabel(item)} | Decking Selection: ${getOffContractSelectionLabel(item) || 'Selected Decking'}`,
     totalCost: toNumber(item.total),
   }));
 };

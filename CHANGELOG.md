@@ -1,17 +1,29 @@
-[2.0.13] What's New
-## Changed
-- Master Tab Update
-- 
+## [2.0.14] What's New
+- Additional Decking Options
+    - Ability to add Additional Decking options
+    - Independant 'Off Contract' & 'Remove Waste' logic
+    - Custom SQFT input field for selected option
+- Freeform or Geometric Pool
+    - Option to select if pool is Freeform or Geometric
+        - Freeform: Adds 5% overhead to the Decking category (Not for Concrete selection)
+        - Bills as line item 'Freeform Decking Overhead'
+- Grouped Custom Pricing
+    - Sod and Fencing included as Subcategories in Grouped Pricing
+    - Configurable with Set Price or Price Per SQFT
+        - Ability to include extra costs (Gates) per Subcategory
 -----
-[2.0.12] What's New
-## Fixed
+## [2.0.13] What's New
+- Master Tab Update
+- Commission Amount adjustable per user
+    - Admins can configure default Commission Amount
+-----
+## [2.0.12] What's New
 - Off Contract Decking
     - Takes original decking cost and moves it straight to Total Retail, no increase
     - Marks the Decking as 'Off Contract' in the COGS and Contract
     - Includes itself in the Off Contract Addendum
 -----
-[2.0.10] What's New
-## Improvements
+## [2.0.10] What's New
 - Auxillary Pump logic with Spa
     - Automatically adds Aux Pump with spa (default set by admin)
     - Populates in 'Blower' input of contract (page 2)
@@ -25,8 +37,7 @@
 - Admin Pricing Menu Redesign
     - Redesigned the UI of the Admin Pricing Model
 -----
-[2.0.9] What's New
-## Requested Changeds
+## [2.0.9] What's New
 - Spa Perimeter Autofill
     - Contract now properly autofills the Spa Perimeter
 - Rough Grading
@@ -34,8 +45,7 @@
 - Contract Payment Schedule
     - Math for Deposit Amount fixed to reflect correct logic
 -----
-[2.0.6]
-## Requested Changes -
+## [2.0.6] What's New
 - Swapped Backside Facing from Exposed Pool Wall to RBB
 - Fixed Edit Proposal crash
 - Parched Concrete changed to Parged Concrete
@@ -47,8 +57,7 @@
     - Coping Size
     - Custom Features
 -----
-[2.0.5]
-## Requested Changes - 
+## [2.0.5] What's New
 - Valve Actuator toggle per Water Feature zone
     - Included a checkbox next to each added water feature to turn off the Valve Actuator cost
 - Wok Pot logic cleanup
@@ -63,8 +72,8 @@
 - Custom Features Off-Contract & Grouped Features
     - Custom Features can now be marked Off-Contract
     - Grouped Custom Features can be created by an admin (sod, fencing)
-
-## Quality of Life Changes
+-----
+## [2.0.4] What's New
 - Zoom Toggle on contract preview
     - Can zoom the contract in and out while previewing
 - Price Model in proposal builder
@@ -75,15 +84,13 @@
 - Changelog
     - Admins and Owners are now greeted with the Changelog if the app was updated
 -----
-[2.0.3]
-## Requested Changes - 
+## [2.0.3] What's New
 - Equipment Package Options
     - Added the ability to create Equipment Packages
     - Can be customized in the admin menu
     - Aligned initial package options
 -----
-[2.0.2]
-## Requested Changes - 
+## [2.0.2] What's New
 - Plumbing Cost Update
     - Aligned with new prices and exposed options to edit in the Admin Panel
 - Exposed Pool Wall (Out of Ground Forming)
@@ -141,8 +148,8 @@
 - Retail Increase % adjustment option
     - Added input field to adjust retail price % increase in the Admin Panel
         - COGS vs Retail Price Increase
-
-## Quality of Life Changes
+-----
+## [2.0.0] What's New
 - Admin Price Menu Update
     - Every input has a label and tooltip describing what the input does
         - If an input appears in a Red background, it is not currently used

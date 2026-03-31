@@ -3,13 +3,25 @@ import {
   CustomFeature,
   CustomFeatures,
   GroupedCustomFeatureOption,
+  GroupedCustomFeatureSubcategoryConfig,
 } from '../types/proposal-new';
 import {
   getCustomFeatureTotal,
+  getGroupedCustomFeatureAdditionalOptionCategory,
+  getGroupedCustomFeatureAdditionalOptionName,
+  getGroupedCustomFeatureAddonLabel,
+  getGroupedCustomFeatureAddonOptionId,
+  getGroupedCustomFeatureAddonQuantity,
+  getGroupedCustomFeatureAddonUnitPrice,
+  getGroupedCustomFeaturePricePerSqft,
+  getGroupedCustomFeaturePricingMode,
+  getGroupedCustomFeatureSqft,
+  getGroupedCustomFeatureSubcategory,
   isGroupedCustomFeature,
   normalizeCustomFeature,
   normalizeCustomFeatures,
   normalizeGroupedCustomFeatureOptions,
+  normalizeGroupedCustomFeatureSubcategories,
 } from '../utils/customFeatures';
 import './SectionStyles.css';
 
@@ -17,6 +29,7 @@ interface Props {
   data: CustomFeatures;
   onChange: (data: CustomFeatures) => void;
   retailPrice?: number;
+  additionalOptions?: GroupedCustomFeatureSubcategoryConfig[];
   groupedOptions?: GroupedCustomFeatureOption[];
 }
 
@@ -24,14 +37,29 @@ type GroupedFeatureCard = GroupedCustomFeatureOption & {
   isRetired?: boolean;
 };
 
+type GroupedFeatureSection = {
+  key: string;
+  title: string;
+  isFallback: boolean;
+  options: GroupedFeatureCard[];
+};
+
 const getGroupedFeatureKey = (feature: Partial<CustomFeature>, fallbackIndex: number): string =>
   String(feature.groupedOptionId || '').trim() || `legacy-grouped-${fallbackIndex + 1}`;
 
-function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions = [] }: Props) {
+function CustomFeaturesSectionNew({
+  data,
+  onChange,
+  retailPrice,
+  additionalOptions = [],
+  groupedOptions = [],
+}: Props) {
   const [activeFeatureIndex, setActiveFeatureIndex] = useState<number | null>(null);
   const maxManualFeatures = 7;
 
   const toNumber = (value: any) => Number(value) || 0;
+  const formatNumber = (value?: number) =>
+    toNumber(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const formatCurrency = (value?: number) =>
     `$${toNumber(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
@@ -47,6 +75,22 @@ function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions 
   const normalizedGroupedOptions = useMemo(
     () => normalizeGroupedCustomFeatureOptions(groupedOptions),
     [groupedOptions]
+  );
+  const normalizedAdditionalOptions = useMemo(
+    () => normalizeGroupedCustomFeatureSubcategories(additionalOptions),
+    [additionalOptions]
+  );
+  const additionalOptionLookup = useMemo(
+    () =>
+      normalizedAdditionalOptions.reduce((map, option) => {
+        const groupName = getGroupedCustomFeatureAdditionalOptionCategory(option);
+        if (!groupName) return map;
+        const current = map.get(groupName) || [];
+        current.push(option);
+        map.set(groupName, current);
+        return map;
+      }, new Map<string, GroupedCustomFeatureSubcategoryConfig[]>()),
+    [normalizedAdditionalOptions]
   );
 
   const groupedSelectionMap = useMemo(
@@ -68,14 +112,42 @@ function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions 
       cards.push({
         id: featureId,
         name: feature.name?.trim() || `Grouped Feature #${index + 1}`,
+        subcategory: getGroupedCustomFeatureSubcategory(feature),
+        additionalOptionCategory: getGroupedCustomFeatureAdditionalOptionCategory(feature),
         description: feature.description?.trim() || '',
-        totalPrice: getCustomFeatureTotal(feature),
+        pricingMode: getGroupedCustomFeaturePricingMode(feature),
+        totalPrice: getGroupedCustomFeaturePricingMode(feature) === 'total' ? getCustomFeatureTotal(feature) : 0,
+        pricePerSqft: getGroupedCustomFeaturePricePerSqft(feature),
         isRetired: true,
       });
     });
 
     return cards;
   }, [groupedFeatures, normalizedGroupedOptions]);
+
+  const groupedFeatureSections = useMemo<GroupedFeatureSection[]>(() => {
+    const order: Array<{ key: string; title: string; isFallback: boolean }> = [];
+    const grouped = new Map<string, GroupedFeatureCard[]>();
+
+    groupedFeatureCards.forEach((option) => {
+      const subcategory = getGroupedCustomFeatureSubcategory(option);
+      const key = subcategory || '__uncategorized__';
+      const title = subcategory || 'Other';
+      const isFallback = !subcategory;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+        order.push({ key, title, isFallback });
+      }
+
+      grouped.get(key)?.push(option);
+    });
+
+    return order.map((entry) => ({
+      ...entry,
+      options: grouped.get(entry.key) || [],
+    }));
+  }, [groupedFeatureCards]);
 
   const syncFeatures = (
     nextManualFeatures: CustomFeature[],
@@ -142,14 +214,30 @@ function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions 
       return;
     }
 
+    const additionalOptionCategory = getGroupedCustomFeatureAdditionalOptionCategory(option);
+    const additionalOptionConfig = (additionalOptionLookup.get(additionalOptionCategory) || [])[0];
+    const groupedAddonOptionId = getGroupedCustomFeatureAddonOptionId(additionalOptionConfig);
+    const groupedAddonLabel = getGroupedCustomFeatureAdditionalOptionName(additionalOptionConfig);
+    const groupedAddonUnitPrice = getGroupedCustomFeatureAddonUnitPrice(additionalOptionConfig);
+    const hasGroupedAddon = Boolean(groupedAddonLabel);
+
     const nextGroupedFeatures = [
       ...groupedFeatures,
       normalizeCustomFeature({
         source: 'grouped',
         groupedOptionId: option.id,
+        groupedSubcategory: getGroupedCustomFeatureSubcategory(option),
+        groupedAdditionalOptionCategory: additionalOptionCategory,
+        groupedAddonOptionId,
+        groupedAddonLabel,
+        groupedAddonUnitPrice,
+        groupedAddonQuantity: hasGroupedAddon ? 1 : 0,
         name: option.name,
         description: option.description,
-        totalCost: option.totalPrice,
+        groupedPricingMode: getGroupedCustomFeaturePricingMode(option),
+        groupedPricePerSqft: getGroupedCustomFeaturePricePerSqft(option),
+        groupedSqft: 0,
+        totalCost: getGroupedCustomFeaturePricingMode(option) === 'total' ? option.totalPrice : 0,
         laborCost: 0,
         materialCost: 0,
         isOffContract: false,
@@ -164,6 +252,56 @@ function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions 
         ? normalizeCustomFeature({ ...feature, isOffContract, source: 'grouped' })
         : feature
     );
+    syncFeatures(manualFeatures, nextGroupedFeatures);
+  };
+
+  const updateGroupedFeatureSqft = (optionId: string, groupedSqft: any) => {
+    const nextGroupedFeatures = groupedFeatures.map((feature, index) =>
+      getGroupedFeatureKey(feature, index) === optionId
+        ? normalizeCustomFeature({ ...feature, groupedSqft, source: 'grouped' })
+        : feature
+    );
+    syncFeatures(manualFeatures, nextGroupedFeatures);
+  };
+
+  const updateGroupedFeatureAddonQuantity = (optionId: string, groupedAddonQuantity: any) => {
+    const nextGroupedFeatures = groupedFeatures.map((feature, index) =>
+      getGroupedFeatureKey(feature, index) === optionId
+        ? normalizeCustomFeature({ ...feature, groupedAddonQuantity, source: 'grouped' })
+        : feature
+    );
+    syncFeatures(manualFeatures, nextGroupedFeatures);
+  };
+
+  const updateGroupedFeatureAddonSelection = (optionId: string, groupedAddonOptionId: string) => {
+    const nextGroupedFeatures = groupedFeatures.map((feature, index) => {
+      if (getGroupedFeatureKey(feature, index) !== optionId) {
+        return feature;
+      }
+
+      const additionalOptionCategory = getGroupedCustomFeatureAdditionalOptionCategory(feature);
+      const additionalOptionsForGroup = additionalOptionLookup.get(additionalOptionCategory) || [];
+      const selectedAdditionalOption = additionalOptionsForGroup.find(
+        (additionalOption) => getGroupedCustomFeatureAddonOptionId(additionalOption) === groupedAddonOptionId
+      );
+      const hasGroupedAddon = Boolean(selectedAdditionalOption);
+
+      return normalizeCustomFeature({
+        ...feature,
+        groupedAddonOptionId: selectedAdditionalOption
+          ? getGroupedCustomFeatureAddonOptionId(selectedAdditionalOption)
+          : undefined,
+        groupedAddonLabel: selectedAdditionalOption
+          ? getGroupedCustomFeatureAdditionalOptionName(selectedAdditionalOption)
+          : '',
+        groupedAddonUnitPrice: selectedAdditionalOption
+          ? getGroupedCustomFeatureAddonUnitPrice(selectedAdditionalOption)
+          : 0,
+        groupedAddonQuantity: hasGroupedAddon ? Math.max(1, getGroupedCustomFeatureAddonQuantity(feature)) : 0,
+        source: 'grouped',
+      });
+    });
+
     syncFeatures(manualFeatures, nextGroupedFeatures);
   };
 
@@ -186,57 +324,175 @@ function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions 
         {groupedFeatureCards.length === 0 ? (
           <div className="empty-message">No grouped custom features are configured in the active pricing model.</div>
         ) : (
-          <div className="custom-feature-group-grid">
-            {groupedFeatureCards.map((option) => {
-              const selectedFeature = groupedSelectionMap.get(option.id);
-              const isSelected = Boolean(selectedFeature);
-              const isOffContract = Boolean(selectedFeature?.isOffContract);
+          <div className="custom-feature-group-sections">
+            {groupedFeatureSections.map((section) => (
+              <div key={section.key} className="custom-feature-group-section">
+                {(!section.isFallback || groupedFeatureSections.length > 1) && (
+                  <div className="custom-feature-group-section__header">
+                    <h3 className="custom-feature-group-section__title">{section.title}</h3>
+                  </div>
+                )}
+                <div className="custom-feature-group-grid">
+                  {section.options.map((option) => {
+                    const selectedFeature = groupedSelectionMap.get(option.id);
+                    const isSelected = Boolean(selectedFeature);
+                    const isOffContract = Boolean(selectedFeature?.isOffContract);
+                    const pricingSource = selectedFeature || option;
+                    const pricingMode = getGroupedCustomFeaturePricingMode(pricingSource);
+                    const groupedSqft = selectedFeature ? getGroupedCustomFeatureSqft(selectedFeature) : 0;
+                    const additionalOptionCategory = getGroupedCustomFeatureAdditionalOptionCategory(pricingSource);
+                    const groupedAddonLabel = selectedFeature
+                      ? getGroupedCustomFeatureAddonLabel(selectedFeature)
+                      : '';
+                    const groupedAddonOptionId = selectedFeature
+                      ? getGroupedCustomFeatureAddonOptionId(selectedFeature)
+                      : '';
+                    const groupedAddonQuantity = selectedFeature ? getGroupedCustomFeatureAddonQuantity(selectedFeature) : 0;
+                    const additionalOptionsForGroup = additionalOptionCategory
+                      ? additionalOptionLookup.get(additionalOptionCategory) || []
+                      : [];
+                    const matchedAdditionalOption =
+                      additionalOptionsForGroup.find(
+                        (additionalOption) => getGroupedCustomFeatureAddonOptionId(additionalOption) === groupedAddonOptionId
+                      ) ||
+                      additionalOptionsForGroup.find(
+                        (additionalOption) =>
+                          getGroupedCustomFeatureAdditionalOptionName(additionalOption) === groupedAddonLabel
+                      );
+                    const resolvedGroupedAddonOptionId =
+                      matchedAdditionalOption?.id ||
+                      groupedAddonOptionId ||
+                      (groupedAddonLabel ? `legacy-addon-${option.id}` : '');
+                    const dropdownAdditionalOptions =
+                      groupedAddonLabel && !matchedAdditionalOption
+                        ? [
+                            {
+                              id: resolvedGroupedAddonOptionId,
+                              groupName: additionalOptionCategory,
+                              name: groupedAddonLabel,
+                              addonUnitPrice: selectedFeature
+                                ? getGroupedCustomFeatureAddonUnitPrice(selectedFeature)
+                                : 0,
+                            },
+                            ...additionalOptionsForGroup,
+                          ]
+                        : additionalOptionsForGroup;
+                    const hasGroupedAddon = Boolean(selectedFeature && dropdownAdditionalOptions.length > 0);
 
-              return (
-                <div
-                  key={option.id}
-                  className={`custom-feature-group-card${isSelected ? ' active' : ''}${
-                    isOffContract ? ' off-contract' : ''
-                  }${option.isRetired ? ' retired' : ''}`}
-                >
-                  <div className="custom-feature-group-card__header">
-                    <div>
-                      <div className="custom-feature-group-card__title">{option.name || 'Untitled Grouped Feature'}</div>
-                      <div className="custom-feature-group-card__status">
-                        {isSelected ? (isOffContract ? 'Selected | Off Contract' : 'Selected') : 'Available'}
+                    return (
+                      <div
+                        key={option.id}
+                        className={`custom-feature-group-card${isSelected ? ' active' : ''}${
+                          isOffContract ? ' off-contract' : ''
+                        }${option.isRetired ? ' retired' : ''}`}
+                      >
+                        <div className="custom-feature-group-card__header">
+                          <div>
+                            <div className="custom-feature-group-card__title">
+                              {option.name || 'Untitled Grouped Feature'}
+                            </div>
+                            <div className="custom-feature-group-card__status">
+                              {isSelected ? (isOffContract ? 'Selected | Off Contract' : 'Selected') : 'Available'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className={`action-btn ${isSelected ? 'secondary' : ''}`}
+                            onClick={() => toggleGroupedFeature(option)}
+                          >
+                            {isSelected ? 'Remove' : 'Select'}
+                          </button>
+                        </div>
+
+                        {option.description?.trim() && (
+                          <div className="custom-feature-group-card__description">{option.description.trim()}</div>
+                        )}
+
+                        {isSelected && pricingMode === 'sqft' && (
+                          <div className="custom-feature-group-card__sqft-editor">
+                            <label className="spec-label">Square Footage</label>
+                            <div className="custom-feature-group-card__sqft-row">
+                              <div className="compact-input-wrapper custom-feature-group-card__sqft-input">
+                                <input
+                                  type="number"
+                                  className="compact-input"
+                                  value={groupedSqft || ''}
+                                  onChange={(e) => updateGroupedFeatureSqft(option.id, e.target.value)}
+                                  onBlur={(e) => updateGroupedFeatureSqft(option.id, toNumber(e.target.value))}
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="Enter SF"
+                                />
+                              </div>
+                              <div className="custom-feature-group-card__sqft-summary">
+                                {groupedSqft > 0
+                                  ? `Area entered: ${formatNumber(groupedSqft)} SF`
+                                  : 'Enter the selected area for this feature.'}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {isSelected && hasGroupedAddon && (
+                          <div className="custom-feature-group-card__sqft-editor">
+                            <label className="spec-label">{additionalOptionCategory || 'Additional Options'}</label>
+                            <div className="compact-input-wrapper" style={{ marginBottom: '0.75rem' }}>
+                              <select
+                                className="compact-input"
+                                value={resolvedGroupedAddonOptionId}
+                                onChange={(e) => updateGroupedFeatureAddonSelection(option.id, e.target.value)}
+                              >
+                                {dropdownAdditionalOptions.map((additionalOption) => (
+                                  <option
+                                    key={additionalOption.id || `${additionalOption.groupName}-${additionalOption.name}`}
+                                    value={additionalOption.id || ''}
+                                  >
+                                    {getGroupedCustomFeatureAdditionalOptionName(additionalOption)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="custom-feature-group-card__sqft-row">
+                              <div className="compact-input-wrapper custom-feature-group-card__sqft-input">
+                                <input
+                                  type="number"
+                                  className="compact-input"
+                                  value={groupedAddonQuantity || groupedAddonQuantity === 0 ? groupedAddonQuantity : ''}
+                                  onChange={(e) => updateGroupedFeatureAddonQuantity(option.id, e.target.value)}
+                                  onBlur={(e) => updateGroupedFeatureAddonQuantity(option.id, toNumber(e.target.value))}
+                                  step="1"
+                                  min="0"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div className="custom-feature-group-card__sqft-summary">
+                                {`${
+                                  groupedAddonLabel || 'Selected additional option'
+                                } count: ${formatNumber(groupedAddonQuantity)}`}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="custom-feature-group-card__footer">
+                          {option.isRetired && <span className="info-pill">No longer in active pricing model</span>}
+                          {isSelected && (
+                            <label className="custom-option-toggle">
+                              <input
+                                type="checkbox"
+                                checked={isOffContract}
+                                onChange={(e) => updateGroupedFeatureOffContract(option.id, e.target.checked)}
+                              />
+                              <span>Mark as Off-Contract</span>
+                            </label>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      className={`action-btn ${isSelected ? 'secondary' : ''}`}
-                      onClick={() => toggleGroupedFeature(option)}
-                    >
-                      {isSelected ? 'Remove' : 'Select'}
-                    </button>
-                  </div>
-
-                  <div className="custom-feature-group-card__description">
-                    {option.description?.trim() || 'No description provided'}
-                  </div>
-
-                  <div className="custom-feature-group-card__footer">
-                    {option.isRetired && (
-                      <span className="info-pill">No longer in active pricing model</span>
-                    )}
-                    {isSelected && (
-                      <label className="custom-option-toggle">
-                        <input
-                          type="checkbox"
-                          checked={isOffContract}
-                          onChange={(e) => updateGroupedFeatureOffContract(option.id, e.target.checked)}
-                        />
-                        <span>Mark as Off-Contract</span>
-                      </label>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -250,7 +506,7 @@ function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions 
           const isEditing = activeFeatureIndex === index;
           const total = getCustomFeatureTotal(feature);
           const isOffContract = Boolean(feature.isOffContract);
-          const subtitle = feature.description?.trim() || 'No description provided';
+          const subtitle = feature.description?.trim() || '';
           const clippedSubtitle = subtitle.length > 120 ? `${subtitle.slice(0, 120)}...` : subtitle;
 
           return (
@@ -260,7 +516,7 @@ function CustomFeaturesSectionNew({ data, onChange, retailPrice, groupedOptions 
                   <div className="spec-subcard-title">{feature.name?.trim() || `Custom Feature #${index + 1}`}</div>
                   {!isEditing && (
                     <>
-                      <div className="spec-subcard-subtitle">{clippedSubtitle}</div>
+                      {clippedSubtitle && <div className="spec-subcard-subtitle">{clippedSubtitle}</div>}
                       <div className="spec-subcard-subtitle">
                         {isOffContract
                           ? `Off Contract | Total: ${formatCurrency(total)}`

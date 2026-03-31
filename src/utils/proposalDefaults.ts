@@ -28,6 +28,7 @@ import { getNoPumpSelection } from './pumpDefaults';
 export function getDefaultPoolSpecs(): PoolSpecs {
   return {
     poolType: 'gunite',
+    poolShape: 'geometric',
     perimeter: 0,
     surfaceArea: 0,
     shallowDepth: 0,
@@ -132,8 +133,13 @@ export function getDefaultTileCopingDecking(): TileCopingDecking {
     copingLength: 0,
     deckingType: 'travertine-level1',
     deckingArea: 0,
+    additionalDeckingType: '',
+    additionalDeckingArea: 0,
     concreteStepsLength: 0,
     isDeckingOffContract: false,
+    isDeckingWasteRemoved: false,
+    isAdditionalDeckingOffContract: false,
+    isAdditionalDeckingWasteRemoved: false,
     deckingOffContractCost: 0,
     bullnoseLnft: 0,
     doubleBullnoseLnft: 0,

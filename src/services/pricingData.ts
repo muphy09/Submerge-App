@@ -252,6 +252,7 @@ const pricingData = {
       spillwayLabor: 150,
     },
     decking: {
+      additionalOptions: [],
       labor: {
         pavers: 8,
         travertine: 8,
@@ -672,6 +673,7 @@ const pricingData = {
     },
   },
   customFeatures: {
+    groupedSubcategories: [],
     groupedOptions: [],
   },
   masonry: {

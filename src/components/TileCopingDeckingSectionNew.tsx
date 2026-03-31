@@ -1,5 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { TileCopingDecking } from '../types/proposal-new';
+import {
+  getAdditionalDeckingOption,
+  getAdditionalDeckingOptions,
+  getDeckingTypeFullLabel,
+} from '../utils/decking';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
@@ -53,6 +58,25 @@ const CompactInput = ({
 function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDeckingArea }: Props) {
   const showStoneRockwork = false;
   const isDeckingOffContract = Boolean(data.isDeckingOffContract);
+  const isDeckingWasteRemoved = Boolean(data.isDeckingWasteRemoved);
+  const isAdditionalDeckingOffContract = Boolean(data.isAdditionalDeckingOffContract);
+  const isAdditionalDeckingWasteRemoved = Boolean(data.isAdditionalDeckingWasteRemoved);
+  const additionalDeckingType = data.additionalDeckingType ?? '';
+  const additionalDeckingOptions = useMemo(() => {
+    const options = getAdditionalDeckingOptions();
+    if (additionalDeckingType && !options.some((option) => option.id === additionalDeckingType)) {
+      return [
+        ...options,
+        {
+          id: additionalDeckingType,
+          label: getDeckingTypeFullLabel(additionalDeckingType),
+          laborRate: getAdditionalDeckingOption(additionalDeckingType)?.laborRate ?? 0,
+          materialRate: getAdditionalDeckingOption(additionalDeckingType)?.materialRate ?? 0,
+        },
+      ];
+    }
+    return options;
+  }, [additionalDeckingType]);
   const handleChange = (field: keyof TileCopingDecking, value: any) => {
     onChange({ ...data, [field]: value });
   };
@@ -60,6 +84,41 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
     onChange({
       ...data,
       isDeckingOffContract: enabled,
+    });
+  };
+  const handleDeckingWasteRemovedChange = (enabled: boolean) => {
+    onChange({
+      ...data,
+      isDeckingWasteRemoved: enabled,
+    });
+  };
+  const handleAdditionalDeckingTypeChange = (value: string) => {
+    if (!value) {
+      onChange({
+        ...data,
+        additionalDeckingType: '',
+        additionalDeckingArea: 0,
+        isAdditionalDeckingOffContract: false,
+        isAdditionalDeckingWasteRemoved: false,
+      });
+      return;
+    }
+
+    onChange({
+      ...data,
+      additionalDeckingType: value,
+    });
+  };
+  const handleAdditionalDeckingOffContractChange = (enabled: boolean) => {
+    onChange({
+      ...data,
+      isAdditionalDeckingOffContract: enabled,
+    });
+  };
+  const handleAdditionalDeckingWasteRemovedChange = (enabled: boolean) => {
+    onChange({
+      ...data,
+      isAdditionalDeckingWasteRemoved: enabled,
     });
   };
 
@@ -187,14 +246,24 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
           <h2 className="spec-block-title" style={{ width: 'auto', margin: 0 }}>
             Decking
           </h2>
-          <label className="form-checkbox">
-            <input
-              type="checkbox"
-              checked={isDeckingOffContract}
-              onChange={(e) => handleDeckingOffContractChange(e.target.checked)}
-            />
-            <span>Mark as Off-Contract</span>
-          </label>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="form-checkbox">
+              <input
+                type="checkbox"
+                checked={isDeckingOffContract}
+                onChange={(e) => handleDeckingOffContractChange(e.target.checked)}
+              />
+              <span>Mark as Off-Contract</span>
+            </label>
+            <label className="form-checkbox">
+              <input
+                type="checkbox"
+                checked={isDeckingWasteRemoved}
+                onChange={(e) => handleDeckingWasteRemovedChange(e.target.checked)}
+              />
+              <span>Remove Waste</span>
+            </label>
+          </div>
         </div>
 
         <div className="spec-grid-5-fixed">
@@ -213,6 +282,57 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
               <option value="concrete">Concrete</option>
             </select>
           </div>
+          <div className="spec-field">
+            <label className="spec-label">Additional Decking</label>
+            <select
+              className="compact-input"
+              value={additionalDeckingType}
+              onChange={(e) => handleAdditionalDeckingTypeChange(e.target.value)}
+            >
+              <option value="">No Additional Decking</option>
+              {additionalDeckingOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {additionalDeckingType && (
+            <>
+              <div className="spec-field">
+                <label className="spec-label">Additional Decking SQFT</label>
+                <CompactInput
+                  value={data.additionalDeckingArea ?? 0}
+                  onChange={(e) => handleChange('additionalDeckingArea', parseFloat(e.target.value) || 0)}
+                  unit="SQFT"
+                  min="0"
+                  step="1"
+                />
+              </div>
+              <div className="spec-field">
+                <label className="spec-label">Additional Off-Contract</label>
+                <label className="form-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={isAdditionalDeckingOffContract}
+                    onChange={(e) => handleAdditionalDeckingOffContractChange(e.target.checked)}
+                  />
+                  <span>Mark as Off-Contract</span>
+                </label>
+              </div>
+              <div className="spec-field">
+                <label className="spec-label">Additional Remove Waste</label>
+                <label className="form-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={isAdditionalDeckingWasteRemoved}
+                    onChange={(e) => handleAdditionalDeckingWasteRemovedChange(e.target.checked)}
+                  />
+                  <span>Remove Waste</span>
+                </label>
+              </div>
+            </>
+          )}
         </div>
 
         {data.deckingType === 'concrete' && (

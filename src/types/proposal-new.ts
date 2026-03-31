@@ -18,6 +18,7 @@ export interface CustomerInfo {
 // ============================================================================
 
 export type PoolType = 'gunite' | 'fiberglass';
+export type PoolShape = 'geometric' | 'freeform';
 export type FiberglassSize = 'small' | 'medium' | 'large' | 'crystite';
 export type SpaType = 'none' | 'gunite' | 'fiberglass';
 export type SpaShape = 'round' | 'square';
@@ -28,6 +29,7 @@ export type MasonryFacing = string;
 export interface PoolSpecs {
   // Pool Type
   poolType: PoolType;
+  poolShape: PoolShape;
 
   // Fiberglass specific
   fiberglassSize?: FiberglassSize;
@@ -223,8 +225,13 @@ export interface TileCopingDecking {
   // Decking
   deckingType: DeckingType;
   deckingArea: number; // SQFT
+  additionalDeckingType?: string;
+  additionalDeckingArea?: number; // SQFT
   concreteStepsLength: number; // LNFT
   isDeckingOffContract?: boolean;
+  isDeckingWasteRemoved?: boolean;
+  isAdditionalDeckingOffContract?: boolean;
+  isAdditionalDeckingWasteRemoved?: boolean;
   deckingOffContractCost?: number;
 
   // Specialty details
@@ -494,12 +501,26 @@ export interface CustomOption {
 // CUSTOM FEATURES
 // ============================================================================
 
+export interface GroupedCustomFeatureSubcategoryConfig {
+  id?: string;
+  groupName?: string;
+  name: string;
+  addonLabel?: string;
+  addonUnitPrice?: number;
+}
+
 export interface GroupedCustomFeatureOption {
   id: string;
   name: string;
+  subcategory?: string;
+  additionalOptionCategory?: string;
   description: string;
+  pricingMode?: GroupedCustomFeaturePricingMode;
   totalPrice: number;
+  pricePerSqft?: number;
 }
+
+export type GroupedCustomFeaturePricingMode = 'total' | 'sqft';
 
 export type CustomFeatureSource = 'manual' | 'grouped';
 
@@ -512,6 +533,15 @@ export interface CustomFeature {
   isOffContract?: boolean;
   source?: CustomFeatureSource;
   groupedOptionId?: string;
+  groupedSubcategory?: string;
+  groupedAdditionalOptionCategory?: string;
+  groupedAddonOptionId?: string;
+  groupedAddonLabel?: string;
+  groupedAddonUnitPrice?: number;
+  groupedAddonQuantity?: number;
+  groupedPricingMode?: GroupedCustomFeaturePricingMode;
+  groupedPricePerSqft?: number;
+  groupedSqft?: number;
 }
 
 export interface CustomFeatures {

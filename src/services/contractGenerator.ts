@@ -6,7 +6,13 @@ import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/w
 import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
 import { getDeckingTypeFullLabel } from '../utils/decking';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
-import { hasCustomFeatureContent, isOffContractCustomFeature, normalizeCustomFeatures } from '../utils/customFeatures';
+import {
+  getGroupedCustomFeatureSubcategory,
+  hasCustomFeatureContent,
+  isGroupedCustomFeature,
+  isOffContractCustomFeature,
+  normalizeCustomFeatures,
+} from '../utils/customFeatures';
 
 export type ContractOverrides = Record<string, string | number | null>;
 
@@ -293,7 +299,12 @@ function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): strin
     .map((feature, index) => {
       const name = feature.name?.trim() || '';
       const description = feature.description?.trim() || '';
-      const base = name || description || `Custom Feature #${index + 1}`;
+      const subcategory = getGroupedCustomFeatureSubcategory(feature);
+      const groupedLabel =
+        isGroupedCustomFeature(feature) && subcategory
+          ? [subcategory, name || description || `Custom Feature #${index + 1}`].filter(Boolean).join(' - ')
+          : '';
+      const base = groupedLabel || name || description || `Custom Feature #${index + 1}`;
       return isOffContractCustomFeature(feature) ? `${base} (OFF CONTRACT)` : base;
     })
     .slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);
@@ -598,6 +609,23 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return hasTile && proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Trim Tile' : 'None';
   }
   if (field.id === 'p1_37_size') return proposal.tileCopingDecking?.copingSize || '';
+  const primaryDeckingType = proposal.tileCopingDecking?.deckingType || 'none';
+  const additionalDeckingType = String(proposal.tileCopingDecking?.additionalDeckingType || '').trim();
+  const primaryDeckingArea = Number(proposal.tileCopingDecking?.deckingArea || proposal.poolSpecs?.deckingArea || 0);
+  const additionalDeckingArea = Number(proposal.tileCopingDecking?.additionalDeckingArea || 0);
+  const formatDeckingContractLabel = (
+    deckingType: string,
+    isOffContract: boolean,
+    prefix?: string
+  ): string => {
+    if (!deckingType || deckingType === 'none') {
+      return isOffContract && !prefix ? 'OFF CONTRACT' : '';
+    }
+    const baseLabel = prefix
+      ? `${prefix} - ${getDeckingTypeFullLabel(deckingType)}`
+      : getDeckingTypeFullLabel(deckingType);
+    return isOffContract ? `${baseLabel} - OFF CONTRACT` : baseLabel;
+  };
   if (/coping/.test(label)) {
     const lookup: Record<string, string> = {
       none: 'None',
@@ -611,27 +639,34 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return lookup[proposal.tileCopingDecking?.copingType as string] || '';
   }
   if (field.id === 'p1_38_qty') {
-    const deckingArea = Number(proposal.tileCopingDecking?.deckingArea || proposal.poolSpecs?.deckingArea || 0);
-    return formatNumberValue(deckingArea);
+    const quantities = [
+      primaryDeckingType !== 'none' && primaryDeckingArea > 0 ? formatNumberValue(primaryDeckingArea) : '',
+      additionalDeckingType && additionalDeckingArea > 0 ? formatNumberValue(additionalDeckingArea) : '',
+    ].filter(Boolean);
+
+    if (quantities.length > 0) {
+      return quantities.join(' + ');
+    }
+
+    return formatNumberValue(primaryDeckingArea);
   }
   if (/decking drainage/.test(label)) return proposal.drainage?.deckDrainTotalLF ? 'BY BUILDER' : overrideDefault;
   if (field.id === 'p1_40_qty') return formatNumberValue(proposal.drainage?.downspoutTotalLF);
   if (/decking\b/i.test(label)) {
-    if (proposal.tileCopingDecking?.isDeckingOffContract) {
-      const selectedDeckingLabel = getDeckingTypeFullLabel(proposal.tileCopingDecking?.deckingType);
-      return proposal.tileCopingDecking?.deckingType === 'none'
-        ? 'OFF CONTRACT'
-        : `${selectedDeckingLabel} - OFF CONTRACT`;
+    const selections = [
+      formatDeckingContractLabel(primaryDeckingType, Boolean(proposal.tileCopingDecking?.isDeckingOffContract)),
+      formatDeckingContractLabel(
+        additionalDeckingType,
+        Boolean(proposal.tileCopingDecking?.isAdditionalDeckingOffContract),
+        'Additional Decking'
+      ),
+    ].filter(Boolean);
+
+    if (selections.length > 0) {
+      return selections.join(' + ');
     }
-    const lookup: Record<string, string> = {
-      none: 'None',
-      'travertine-level1': 'Travertine Lvl 1',
-      'travertine-level2': 'Travertine Lvl 2',
-      'travertine-level3': 'Travertine Lvl 3',
-      paver: 'Paver',
-      concrete: 'Concrete',
-    };
-    return lookup[proposal.tileCopingDecking?.deckingType as string] || '';
+
+    return primaryDeckingType === 'none' ? 'None' : getDeckingTypeFullLabel(primaryDeckingType);
   }
 
   if (/skimmer/.test(label)) {

@@ -1406,6 +1406,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               data={proposal.customFeatures!}
               onChange={(data) => updateProposal('customFeatures', data)}
               retailPrice={retailPrice}
+              additionalOptions={(pricingData as any).customFeatures?.groupedSubcategories || []}
               groupedOptions={(pricingData as any).customFeatures?.groupedOptions || []}
             />
           );
