@@ -39,6 +39,7 @@ import {
 import MasterPage from './pages/MasterPage';
 import type { MasterFranchise } from './services/masterAdminAdapter';
 import AdminPinModal from './components/AdminPinModal';
+import { useFranchiseAppName } from './hooks/useFranchiseAppName';
 import {
   ADMIN_PANEL_PIN_LENGTH,
   ADMIN_PANEL_PIN_LOCKOUT_MESSAGE,
@@ -195,12 +196,17 @@ function AppContent() {
       role: (masterImpersonation.actingRole || 'owner') as UserSession['role'],
     };
   })();
+  const { displayName } = useFranchiseAppName(effectiveSession?.franchiseId);
 
   useEffect(() => {
     if (effectiveSession?.franchiseId) {
       void loadPricingForFranchise(effectiveSession.franchiseId);
     }
   }, [effectiveSession?.franchiseId, loadPricingForFranchise]);
+
+  useEffect(() => {
+    document.title = `${displayName} Proposal Builder`;
+  }, [displayName]);
 
   const handleInstallUpdate = () => {
     if (window.electron) {

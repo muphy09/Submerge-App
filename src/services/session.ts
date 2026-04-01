@@ -80,6 +80,10 @@ export function isMasterImpersonating(): boolean {
   return Boolean(getActiveMasterImpersonation());
 }
 
+export function isMasterSession(): boolean {
+  return (readSession()?.role || '').toLowerCase() === 'master';
+}
+
 export function updateSession(partial: Partial<UserSession>): UserSession | null {
   const current = readSession() || {};
   const next = { ...current, ...partial };

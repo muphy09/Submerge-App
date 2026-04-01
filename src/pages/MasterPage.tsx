@@ -316,6 +316,10 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     onActAsFranchise(franchise);
   };
 
+  const handleEditFranchise = (franchise: MasterFranchise) => {
+    setEditingFranchise(franchise);
+  };
+
   const handleFranchiseUpdated = (franchise: MasterFranchise) => {
     setEditingFranchise(franchise);
     setFranchises((prev) => prev.map((row) => (row.id === franchise.id ? { ...row, ...franchise } : row)));
@@ -418,21 +422,18 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                 const isActing = Boolean(actingFranchiseId && actingFranchiseId === franchise.id);
                 return (
                   <div
-                    className={`master-franchise-row${inactive ? ' is-inactive' : ''}${canActAs ? ' is-clickable' : ''}${isActing ? ' is-acting' : ''}`}
+                    className={`master-franchise-row is-clickable${inactive ? ' is-inactive' : ''}${isActing ? ' is-acting' : ''}`}
                     key={franchise.id}
-                    role={canActAs ? 'button' : undefined}
-                    tabIndex={canActAs ? 0 : undefined}
-                    onClick={() => {
-                      if (canActAs) handleActAsFranchise(franchise);
-                    }}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleEditFranchise(franchise)}
                     onKeyDown={(event) => {
-                      if (!canActAs) return;
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
-                        handleActAsFranchise(franchise);
+                        handleEditFranchise(franchise);
                       }
                     }}
-                    title={canActAs ? 'Act as owner for this franchise' : undefined}
+                    title="Edit franchise settings"
                   >
                     <div className="master-franchise-meta">
                       <div className="master-franchise-name">{franchise.name || franchise.id}</div>
@@ -460,10 +461,11 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          setEditingFranchise(franchise);
+                          handleActAsFranchise(franchise);
                         }}
+                        disabled={!canActAs}
                       >
-                        Edit
+                        Act as Owner
                       </button>
                       <button
                         className="master-danger-btn"

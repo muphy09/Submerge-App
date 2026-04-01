@@ -9,7 +9,6 @@ import {
 import {
   createFranchiseUser,
   deleteFranchiseUser,
-  markDesignerProposalsDeleted,
   resetFranchiseUserPassword,
   updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
@@ -221,7 +220,6 @@ function MasterFranchiseEditorModal({
     setStatus(null);
     try {
       await deleteFranchiseUser(user.id);
-      await markDesignerProposalsDeleted(franchise.id, user.name || user.email);
       await onRefresh();
       setStatus({ type: 'success', message: `${getDisplayName(user)} was removed.` });
     } catch (error: any) {

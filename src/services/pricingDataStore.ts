@@ -12,6 +12,7 @@ type PricingLoadState = {
   pricing: PricingData;
   pricingModelId: string | null;
   pricingModelName: string | null;
+  pricingModelFranchiseId: string | null;
   isDefault: boolean;
 };
 
@@ -24,6 +25,7 @@ let latestLoadRequestId = 0;
 let activeFranchiseId = DEFAULT_FRANCHISE_ID;
 let activePricingModelId: string | null = null;
 let activePricingModelName: string | null = null;
+let activePricingModelFranchiseId: string | null = null;
 let activePricingModelIsDefault = true;
 const defaultSnapshot: PricingData = deepClone(pricingData);
 let pricingState: PricingData = deepClone(pricingData);
@@ -145,6 +147,7 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
   pricing: PricingData | null;
   pricingModelId: string | null;
   pricingModelName: string | null;
+  pricingModelFranchiseId: string | null;
   isDefault: boolean;
 }> {
   try {
@@ -154,6 +157,7 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
         pricing: result.pricing as PricingData,
         pricingModelId: result.pricingModelId || null,
         pricingModelName: result.pricingModelName || null,
+        pricingModelFranchiseId: result.pricingModelId ? result.franchiseId || franchiseId : null,
         isDefault: Boolean(result.isDefault),
       };
     }
@@ -177,6 +181,7 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
           pricing: JSON.parse(raw),
           pricingModelId: null,
           pricingModelName: null,
+          pricingModelFranchiseId: null,
           isDefault: true,
         };
       }
@@ -189,6 +194,7 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
     pricing: null,
     pricingModelId: null,
     pricingModelName: null,
+    pricingModelFranchiseId: null,
     isDefault: true,
   };
 }
@@ -198,10 +204,15 @@ function notify() {
   listeners.forEach((listener) => listener(snapshot));
 }
 
-async function resolvePricingState(franchiseId: string, pricingModelId?: string): Promise<PricingLoadState> {
+async function resolvePricingState(
+  franchiseId: string,
+  pricingModelId?: string,
+  pricingModelFranchiseId?: string
+): Promise<PricingLoadState> {
   try {
     if (pricingModelId) {
-      const result = await loadPricingModelRemote(franchiseId, pricingModelId);
+      const sourceFranchiseId = pricingModelFranchiseId || franchiseId;
+      const result = await loadPricingModelRemote(sourceFranchiseId, pricingModelId);
       if (result?.pricing) {
         return {
           franchiseId,
@@ -211,6 +222,7 @@ async function resolvePricingState(franchiseId: string, pricingModelId?: string)
           ),
           pricingModelId: result.pricingModelId || pricingModelId,
           pricingModelName: result.pricingModelName || null,
+          pricingModelFranchiseId: result.franchiseId || sourceFranchiseId,
           isDefault: Boolean(result.isDefault),
         };
       }
@@ -225,6 +237,7 @@ async function resolvePricingState(franchiseId: string, pricingModelId?: string)
     pricing: normalizePricingState(mergeDeep(defaultSnapshot, saved.pricing ?? {}), saved.pricing),
     pricingModelId: saved.pricingModelId,
     pricingModelName: saved.pricingModelName,
+    pricingModelFranchiseId: saved.pricingModelFranchiseId,
     isDefault: saved.isDefault,
   };
 }
@@ -234,14 +247,19 @@ function applyPricingState(state: PricingLoadState) {
   activeFranchiseId = state.franchiseId;
   activePricingModelId = state.pricingModelId;
   activePricingModelName = state.pricingModelName;
+  activePricingModelFranchiseId = state.pricingModelFranchiseId;
   activePricingModelIsDefault = state.isDefault;
   syncBaseFromState();
   notify();
 }
 
-async function loadPricingForFranchise(franchiseId: string, pricingModelId?: string) {
+async function loadPricingForFranchise(
+  franchiseId: string,
+  pricingModelId?: string,
+  pricingModelFranchiseId?: string
+) {
   const requestId = ++latestLoadRequestId;
-  const resolved = await resolvePricingState(franchiseId, pricingModelId);
+  const resolved = await resolvePricingState(franchiseId, pricingModelId, pricingModelFranchiseId);
   if (requestId !== latestLoadRequestId) {
     return resolved;
   }
@@ -249,12 +267,16 @@ async function loadPricingForFranchise(franchiseId: string, pricingModelId?: str
   return resolved;
 }
 
-export async function initPricingDataStore(franchiseId?: string, pricingModelId?: string) {
-  if (loadingPromise && !franchiseId && !pricingModelId) return loadingPromise;
+export async function initPricingDataStore(
+  franchiseId?: string,
+  pricingModelId?: string,
+  pricingModelFranchiseId?: string
+) {
+  if (loadingPromise && !franchiseId && !pricingModelId && !pricingModelFranchiseId) return loadingPromise;
 
   const currentPromise = (async () => {
     const targetId = await resolveTargetFranchiseId(franchiseId);
-    await loadPricingForFranchise(targetId, pricingModelId);
+    await loadPricingForFranchise(targetId, pricingModelId, pricingModelFranchiseId);
   })();
 
   loadingPromise = currentPromise;
@@ -287,18 +309,23 @@ export function getActivePricingModelMeta() {
   return {
     pricingModelId: activePricingModelId,
     pricingModelName: activePricingModelName,
+    pricingModelFranchiseId: activePricingModelFranchiseId,
     isDefault: activePricingModelIsDefault,
   };
 }
 
-export async function setActivePricingModel(pricingModelId: string) {
+export async function setActivePricingModel(pricingModelId: string, pricingModelFranchiseId?: string) {
   if (!pricingModelId) return;
-  await loadPricingForFranchise(activeFranchiseId, pricingModelId);
+  await loadPricingForFranchise(activeFranchiseId, pricingModelId, pricingModelFranchiseId);
 }
 
-export async function loadPricingSnapshotForFranchise(franchiseId?: string, pricingModelId?: string) {
+export async function loadPricingSnapshotForFranchise(
+  franchiseId?: string,
+  pricingModelId?: string,
+  pricingModelFranchiseId?: string
+) {
   const targetId = await resolveTargetFranchiseId(franchiseId);
-  const resolved = await resolvePricingState(targetId, pricingModelId);
+  const resolved = await resolvePricingState(targetId, pricingModelId, pricingModelFranchiseId);
   return {
     ...resolved,
     pricing: deepClone(resolved.pricing),
@@ -318,6 +345,7 @@ export function withTemporaryPricingSnapshot<T>(snapshot: PricingData, callback:
 export function clearActivePricingModelMeta() {
   activePricingModelId = null;
   activePricingModelName = null;
+  activePricingModelFranchiseId = null;
   activePricingModelIsDefault = false;
 }
 

@@ -253,7 +253,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
           <div className="settings-section">
             <h3>About</h3>
-            <p className="about-text">Submerge Proposal Builder</p>
+            <p className="about-text">{displayName} Proposal Builder</p>
             <p className="about-text">Version {window.electron?.appVersion || '1.0.5'}</p>
             <p className="about-text">(c) {new Date().getFullYear()} Submerge</p>
           </div>

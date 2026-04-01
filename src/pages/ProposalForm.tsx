@@ -69,6 +69,7 @@ import {
   packageSupportsSpa,
 } from '../utils/equipmentPackages';
 import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpSelections';
+import { listAllFranchises, listAllPricingModels } from '../services/masterAdminAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { hasSupabaseConnection } from '../services/supabaseClient';
@@ -79,7 +80,7 @@ import {
   getSessionFranchiseId,
   getSessionRole,
   getSessionUserName,
-  isMasterImpersonating,
+  isMasterSession,
 } from '../services/session';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
@@ -258,16 +259,25 @@ type ProposalFormProps = {
   cloudIssue?: CloudConnectionIssue;
 };
 
+type PricingModelOption = {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+  removed?: boolean;
+  franchiseId?: string;
+  franchiseName?: string;
+};
+
 function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
   const location = useLocation();
   const sessionRole = getSessionRole();
+  const isMasterUser = isMasterSession();
   const canViewCostBreakdown = sessionRole === 'admin' || sessionRole === 'owner';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
   const canOpenCogsBreakdown = canViewCostBreakdown && !hideCogsFromProposalBuilder;
-  const isMasterActingAsOwner = isMasterImpersonating();
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
   const versionNameFromState = (location.state as any)?.versionName as string | undefined;
   const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -275,15 +285,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     if (typeof window === 'undefined') return true;
     return window.innerWidth >= 1100;
   };
-
-  useEffect(() => {
-    if (!isMasterActingAsOwner) return;
-    if (proposalNumber) {
-      navigate(`/proposal/view/${proposalNumber}`, { replace: true });
-    } else {
-      navigate('/', { replace: true });
-    }
-  }, [isMasterActingAsOwner, navigate, proposalNumber]);
   const [currentSection, setCurrentSection] = useState(0);
   const [isLoading, setIsLoading] = useState(!!proposalNumber);
   const loadRequestRef = useRef(0);
@@ -314,7 +315,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const formHeaderRef = useRef<HTMLElement | null>(null);
   const sectionContentRef = useRef<HTMLDivElement | null>(null);
   const [formHeaderHeight, setFormHeaderHeight] = useState<number>(68);
-  const [pricingModels, setPricingModels] = useState<{ id: string; name: string; isDefault?: boolean; removed?: boolean }[]>([]);
+  const [pricingModels, setPricingModels] = useState<PricingModelOption[]>([]);
   const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
@@ -385,10 +386,11 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     modelName?: string | null,
     isDefault?: boolean,
     skipRemote?: boolean,
-    markDirty?: boolean
+    markDirty?: boolean,
+    modelFranchiseId?: string | null
   ) => {
     if (modelId && !skipRemote) {
-      await setActivePricingModel(modelId);
+      await setActivePricingModel(modelId, modelFranchiseId || undefined);
     }
     if (papDiscountSourceRef.current !== 'proposal' || markDirty) {
       syncPapDiscountsFromModel();
@@ -413,6 +415,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       ...prev,
       pricingModelId: modelId || undefined,
       pricingModelName: modelName || undefined,
+      pricingModelFranchiseId:
+        modelId ? modelFranchiseId || prev.pricingModelFranchiseId || prev.franchiseId || getSessionFranchiseId() : undefined,
       pricingModelIsDefault: isDefault ?? undefined,
       franchiseId: prev.franchiseId || getSessionFranchiseId(),
     }));
@@ -421,27 +425,75 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     }
   };
 
-  const loadPricingModels = async (franchiseId: string, desiredModelId?: string | null) => {
+  const loadPricingModels = async (
+    franchiseId: string,
+    desiredModelId?: string | null,
+    desiredModelFranchiseId?: string | null
+  ) => {
     try {
-      const rows = await listPricingModelsRemote(franchiseId);
-      let models = rows || [];
-      const defaultModel = rows?.find((m: any) => m.isDefault) || rows?.[0];
+      let models: PricingModelOption[] = [];
+      const franchiseNameLookup = new Map<string, string>();
+
+      if (isMasterUser) {
+        const [allModels, franchises] = await Promise.all([listAllPricingModels(), listAllFranchises()]);
+        (franchises || []).forEach((franchise) => {
+          if (!franchise?.id) return;
+          franchiseNameLookup.set(franchise.id, franchise.name || franchise.franchiseCode || franchise.id);
+        });
+        models = (allModels || [])
+          .map((model) => ({
+            id: model.id,
+            name: model.name,
+            isDefault: model.isDefault,
+            franchiseId: model.franchiseId,
+            franchiseName: franchiseNameLookup.get(model.franchiseId) || model.franchiseId,
+          }))
+          .sort((a, b) => {
+            const aCurrent = (a.franchiseId || franchiseId) === franchiseId ? 0 : 1;
+            const bCurrent = (b.franchiseId || franchiseId) === franchiseId ? 0 : 1;
+            if (aCurrent !== bCurrent) return aCurrent - bCurrent;
+            const aFranchise = (a.franchiseName || a.franchiseId || '').toLowerCase();
+            const bFranchise = (b.franchiseName || b.franchiseId || '').toLowerCase();
+            if (aFranchise !== bFranchise) return aFranchise.localeCompare(bFranchise);
+            return (a.name || '').localeCompare(b.name || '');
+          });
+      } else {
+        const rows = await listPricingModelsRemote(franchiseId);
+        models = (rows || []).map((row) => ({
+          ...row,
+          franchiseId,
+        }));
+      }
+
+      const currentFranchiseModels = models.filter((model) => (model.franchiseId || franchiseId) === franchiseId);
+      const defaultModel = currentFranchiseModels.find((model) => model.isDefault) || currentFranchiseModels[0];
       setDefaultPricingModelId(defaultModel ? defaultModel.id : null);
 
       const targetModelId = desiredModelId || selectedPricingModelId || defaultModel?.id || null;
-      const targetModel = rows?.find((m: any) => m.id === targetModelId) || null;
+      const targetModel =
+        models.find(
+          (model) =>
+            model.id === targetModelId &&
+            (!desiredModelFranchiseId || !model.franchiseId || model.franchiseId === desiredModelFranchiseId)
+        ) ||
+        models.find((model) => model.id === targetModelId) ||
+        null;
 
       const missingModelId = desiredModelId || selectedPricingModelId;
-      const missingModelKnown = missingModelId && rows?.some((m: any) => m.id === missingModelId);
+      const missingModelKnown = missingModelId && models.some((model) => model.id === missingModelId);
       if (missingModelId && !missingModelKnown) {
         const placeholderName = proposal.pricingModelName || selectedPricingModelName || 'Unknown Pricing Model';
+        const placeholderFranchiseId =
+          desiredModelFranchiseId ||
+          proposal.pricingModelFranchiseId ||
+          pricingModels.find((model) => model.id === missingModelId)?.franchiseId ||
+          franchiseId;
         const removedModel = {
           id: missingModelId,
           name: `${placeholderName} (Removed)`,
-          version: 'removed',
           isDefault: false,
-          createdAt: undefined,
-          updatedAt: undefined,
+          franchiseId: placeholderFranchiseId,
+          franchiseName: franchiseNameLookup.get(placeholderFranchiseId) || placeholderFranchiseId,
           removed: true,
         };
         models = [...models, removedModel];
@@ -451,6 +503,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
           ...prev,
           pricingModelId: missingModelId || undefined,
           pricingModelName: placeholderName || undefined,
+          pricingModelFranchiseId: placeholderFranchiseId || undefined,
           pricingModelIsDefault: false,
         }));
         setPricingModels(models);
@@ -459,9 +512,23 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       setPricingModels(models);
 
       if (targetModel) {
-        await applyPricingModelSelection(targetModel.id, targetModel.name, Boolean(targetModel.isDefault));
+        await applyPricingModelSelection(
+          targetModel.id,
+          targetModel.name,
+          Boolean(targetModel.isDefault),
+          Boolean(targetModel.removed),
+          false,
+          targetModel.franchiseId
+        );
       } else if (!desiredModelId && defaultModel) {
-        await applyPricingModelSelection(defaultModel.id, defaultModel.name, Boolean(defaultModel.isDefault));
+        await applyPricingModelSelection(
+          defaultModel.id,
+          defaultModel.name,
+          Boolean(defaultModel.isDefault),
+          Boolean(defaultModel.removed),
+          false,
+          defaultModel.franchiseId
+        );
       }
     } catch (error) {
       console.warn('Unable to load pricing models for franchise', franchiseId, error);
@@ -538,6 +605,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       } as Proposal['pricing'],
       pricingModelId: shouldUseActiveDefault ? modelMeta.pricingModelId || undefined : undefined,
       pricingModelName: shouldUseActiveDefault ? modelMeta.pricingModelName || undefined : undefined,
+      pricingModelFranchiseId: shouldUseActiveDefault ? modelMeta.pricingModelFranchiseId || franchiseId : undefined,
       pricingModelIsDefault: shouldUseActiveDefault ? modelMeta.isDefault : undefined,
       equipment: {
         ...getDefaultEquipment(),
@@ -914,9 +982,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     if (proposalNumber && isLoading) return;
     const franchiseId = proposal.franchiseId || getSessionFranchiseId();
     const desiredModelId = proposal.pricingModelId || null;
-    void initPricingDataStore(franchiseId, desiredModelId || undefined);
-    void loadPricingModels(franchiseId, desiredModelId);
-  }, [proposal.franchiseId, proposal.pricingModelId, proposalNumber, isLoading]);
+    const desiredModelFranchiseId = proposal.pricingModelFranchiseId || null;
+    void initPricingDataStore(franchiseId, desiredModelId || undefined, desiredModelFranchiseId || undefined);
+    void loadPricingModels(franchiseId, desiredModelId, desiredModelFranchiseId);
+  }, [proposal.franchiseId, proposal.pricingModelId, proposal.pricingModelFranchiseId, proposalNumber, isLoading]);
 
   const loadProposal = async (num: string, requestId: number) => {
     try {
@@ -937,6 +1006,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
       // Ensure franchise + pricing model metadata are present
       freshData.franchiseId = freshData.franchiseId || getSessionFranchiseId();
+      if (freshData.pricingModelId && !freshData.pricingModelFranchiseId) {
+        freshData.pricingModelFranchiseId = freshData.franchiseId;
+      }
       freshData.designerName = freshData.designerName || getSessionUserName();
       freshData.designerRole = freshData.designerRole || getSessionRole();
       freshData.designerCode = freshData.designerCode || getSessionFranchiseCode();
@@ -1108,6 +1180,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       designerName: normalized.designerName || getSessionUserName(),
       designerRole: normalized.designerRole || getSessionRole(),
       designerCode: normalized.designerCode || getSessionFranchiseCode(),
+      pricingModelFranchiseId:
+        normalized.pricingModelId
+          ? normalized.pricingModelFranchiseId || normalized.franchiseId || getSessionFranchiseId()
+          : undefined,
       papDiscounts,
       costBreakdown: result.costBreakdown,
       pricing: result.pricing,
@@ -1268,7 +1344,14 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
   const handleSelectPricingModel = async (id: string) => {
     const model = pricingModels.find((entry) => entry.id === id);
-    await applyPricingModelSelection(id, model?.name, model?.isDefault, Boolean(model?.removed), true);
+    await applyPricingModelSelection(
+      id,
+      model?.name,
+      model?.isDefault,
+      Boolean(model?.removed),
+      true,
+      model?.franchiseId
+    );
   };
 
   const renderSection = () => {
@@ -1480,23 +1563,59 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const proposalIndicator = buildProposalIndicator(currentCostBreakdown.pricing?.grossProfitMargin);
   const showCostSidebar = false;
   const selectedPricingModel =
-    pricingModels.find((model) => model.id === selectedPricingModelId) || null;
+    pricingModels.find(
+      (model) =>
+        model.id === selectedPricingModelId &&
+        (!proposal.pricingModelFranchiseId || !model.franchiseId || model.franchiseId === proposal.pricingModelFranchiseId)
+    ) ||
+    pricingModels.find((model) => model.id === selectedPricingModelId) ||
+    null;
+  const selectedPricingModelFranchiseId =
+    selectedPricingModel?.franchiseId || proposal.pricingModelFranchiseId || proposal.franchiseId || getSessionFranchiseId();
+  const isSelectedPricingModelFromCurrentFranchise = selectedPricingModelFranchiseId === (proposal.franchiseId || getSessionFranchiseId());
+  const buildPricingModelLabel = (
+    name: string,
+    franchiseId?: string | null,
+    franchiseName?: string | null,
+    removed?: boolean
+  ) => {
+    const franchiseLabel = isMasterUser ? (franchiseName || franchiseId || '').trim() : '';
+    const normalizedName = (name || '').trim();
+    if (!normalizedName && !franchiseLabel) {
+      return '';
+    }
+    const baseLabel = [normalizedName || 'Unknown Pricing Model', franchiseLabel].filter(Boolean).join(' - ');
+    if (removed && !baseLabel.toLowerCase().includes('(removed)')) {
+      return `${baseLabel} (Removed)`;
+    }
+    return baseLabel;
+  };
   const showRemovedPricingModelIndicator = Boolean(selectedPricingModelId && selectedPricingModel?.removed);
   const showStalePricingModelIndicator =
     Boolean(selectedPricingModelId) &&
     Boolean(defaultPricingModelId) &&
+    isSelectedPricingModelFromCurrentFranchise &&
     selectedPricingModelId !== defaultPricingModelId &&
     !showRemovedPricingModelIndicator;
   const isActivePricingModel =
-    Boolean(selectedPricingModelId) && selectedPricingModelId === defaultPricingModelId && !showRemovedPricingModelIndicator;
-  const normalizedSelectedPricingModelName = (selectedPricingModelName || selectedPricingModel?.name || '').trim();
+    Boolean(selectedPricingModelId) &&
+    isSelectedPricingModelFromCurrentFranchise &&
+    selectedPricingModelId === defaultPricingModelId &&
+    !showRemovedPricingModelIndicator;
+  const normalizedSelectedPricingModelName = selectedPricingModelName || selectedPricingModel?.name || '';
+  const normalizedSelectedPricingModelLabel = buildPricingModelLabel(
+    normalizedSelectedPricingModelName,
+    selectedPricingModelFranchiseId,
+    selectedPricingModel?.franchiseName,
+    showRemovedPricingModelIndicator
+  );
   const pricingModelDisplayName = showRemovedPricingModelIndicator
-    ? normalizedSelectedPricingModelName.toLowerCase().includes('(removed)')
-      ? normalizedSelectedPricingModelName
-      : `${normalizedSelectedPricingModelName || 'Unknown Pricing Model'} (Removed)`
-    : normalizedSelectedPricingModelName || 'Select Pricing Model';
+    ? normalizedSelectedPricingModelLabel || 'Unknown Pricing Model (Removed)'
+    : normalizedSelectedPricingModelLabel || 'Select Pricing Model';
   const pricingModelStatusLabel = showRemovedPricingModelIndicator
     ? 'Removed'
+    : selectedPricingModelId && !isSelectedPricingModelFromCurrentFranchise
+    ? 'Selected'
     : showStalePricingModelIndicator
     ? 'Inactive'
     : isActivePricingModel
@@ -1531,10 +1650,12 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
           {pricingModels.length === 0 ? 'No pricing models available' : 'Select pricing model'}
         </option>
         {pricingModels.map((model) => {
-          const baseLabel =
-            model.removed && !model.name.toLowerCase().includes('(removed)')
-              ? `${model.name} (Removed)`
-              : model.name;
+          const baseLabel = buildPricingModelLabel(
+            model.name,
+            model.franchiseId,
+            model.franchiseName,
+            Boolean(model.removed)
+          );
           return (
             <option key={model.id} value={model.id}>
               {baseLabel}
@@ -1561,10 +1682,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     if (!canSubmit || isSaving || isOffline) return;
     void handleSave('draft', { navigateToSummary: true });
   };
-
-  if (isMasterActingAsOwner) {
-    return null;
-  }
 
   return (
     <div className="proposal-form" style={proposalFormStyle}>
@@ -1648,15 +1765,16 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
                   </div>
                   <button
                     type="button"
-                    className="nav-customer-breakdown-button"
+                    className="cost-modal-button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowCostModal(true);
                     }}
-                    data-tooltip="View Customer Cost and Warranty Breakdown"
                     aria-label="View Customer Cost and Warranty Breakdown"
+                    title="View Customer Proposal"
                   >
-                    Customer Cost and Warranty Breakdown
+                    <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
+                    <span className="cost-modal-label">Customer Proposal</span>
                   </button>
                 </div>
               )}
@@ -1762,18 +1880,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               pricing={currentCostBreakdown.pricing}
               showWarranty
               showZoomControl={canViewCostBreakdown}
-              allowRetailAdjustments={!isMasterActingAsOwner}
-              editableWarranty={!isMasterActingAsOwner}
-              onRetailAdjustmentsChange={
-                !isMasterActingAsOwner
-                  ? (adjustments) => updateProposal('retailAdjustments', adjustments)
-                  : undefined
-              }
-              onWarrantySectionsChange={
-                !isMasterActingAsOwner
-                  ? (sections) => updateProposal('warrantySections', sections)
-                  : undefined
-              }
+              allowRetailAdjustments
+              editableWarranty
+              onRetailAdjustmentsChange={(adjustments) => updateProposal('retailAdjustments', adjustments)}
+              onWarrantySectionsChange={(sections) => updateProposal('warrantySections', sections)}
             />
           </div>
         </div>

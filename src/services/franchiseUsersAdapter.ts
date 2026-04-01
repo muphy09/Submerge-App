@@ -201,7 +201,25 @@ export async function setFranchiseUserActive(userId: string, isActive: boolean) 
 }
 
 export async function deleteFranchiseUser(userId: string) {
-  return setFranchiseUserActive(userId, false);
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    requireSupabase();
+    return null;
+  }
+  const { data, error } = await supabase.functions.invoke('delete-franchise-user', {
+    body: { userId },
+  });
+  if (error) {
+    const message = await extractFunctionErrorMessage(error);
+    if (message) {
+      throw new Error(message);
+    }
+    throw error;
+  }
+  if (!data?.success || data?.user?.isActive !== false) {
+    throw new Error('User removal did not persist.');
+  }
+  return data as { success?: boolean; user?: Pick<FranchiseUser, 'id' | 'franchiseId' | 'role' | 'isActive'>; proposalsUpdated?: number };
 }
 
 export async function markDesignerProposalsDeleted(franchiseId: string, name: string) {

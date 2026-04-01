@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast';
 import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
 import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, isMasterImpersonating, type UserSession } from '../services/session';
+import { getSessionFranchiseId, type UserSession } from '../services/session';
 import syncGoodIcon from '../../docs/img/syncgood.png';
 import syncBadIcon from '../../docs/img/syncbad.png';
 import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
@@ -39,11 +39,6 @@ function HomePage({ session }: HomePageProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; proposalNumber: string } | null>(null);
   const { showToast } = useToast();
   const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
-  const isMasterActingAsOwner = isMasterImpersonating();
-  const canCreateProposal = !isMasterActingAsOwner;
-  const createDisabledReason = isMasterActingAsOwner
-    ? 'Master accounts cannot create proposals while acting as owner.'
-    : undefined;
 
   const loadProposals = useCallback(async () => {
     setLoading(true);
@@ -85,12 +80,13 @@ function HomePage({ session }: HomePageProps) {
         try {
           const merged = mergeWithDefaults(raw);
           const targetFranchiseId = merged.franchiseId || sessionFranchiseId;
-          const pricingCacheKey = `${targetFranchiseId}::${merged.pricingModelId || 'default'}`;
+          const pricingCacheKey = `${targetFranchiseId}::${merged.pricingModelFranchiseId || targetFranchiseId}::${merged.pricingModelId || 'default'}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
             pricingSnapshot = await loadPricingSnapshotForFranchise(
               targetFranchiseId,
-              merged.pricingModelId || undefined
+              merged.pricingModelId || undefined,
+              merged.pricingModelFranchiseId || undefined
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }
@@ -129,7 +125,6 @@ function HomePage({ session }: HomePageProps) {
   }, [loadProposals]);
 
   const handleNewProposal = () => {
-    if (!canCreateProposal) return;
     navigate('/proposal/new');
   };
 
@@ -191,8 +186,6 @@ function HomePage({ session }: HomePageProps) {
             <button
               className="btn-create-proposal"
               onClick={handleNewProposal}
-              disabled={!canCreateProposal}
-              title={createDisabledReason}
             >
               Create New Proposal
             </button>
@@ -280,8 +273,6 @@ function HomePage({ session }: HomePageProps) {
             <button
               className="quick-action-btn"
               onClick={handleNewProposal}
-              disabled={!canCreateProposal}
-              title={createDisabledReason}
             >
               <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>

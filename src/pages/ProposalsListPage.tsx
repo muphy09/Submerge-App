@@ -5,9 +5,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
+import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import './ProposalsListPage.css';
 import { deleteProposal as deleteProposalRemote, listDashboardProposals } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, isMasterImpersonating } from '../services/session';
+import { getSessionFranchiseId } from '../services/session';
 import syncGoodIcon from '../../docs/img/syncgood.png';
 import syncBadIcon from '../../docs/img/syncbad.png';
 import { listAllVersions } from '../utils/proposalVersions';
@@ -26,11 +27,6 @@ function ProposalsListPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
   const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
-  const isMasterActingAsOwner = isMasterImpersonating();
-  const canCreateProposal = !isMasterActingAsOwner;
-  const createDisabledReason = isMasterActingAsOwner
-    ? 'Master accounts cannot create proposals while acting as owner.'
-    : undefined;
 
   useEffect(() => {
     loadProposals();
@@ -46,28 +42,43 @@ function ProposalsListPage() {
     setLoading(true);
     try {
       const filtered = await listDashboardProposals(getSessionFranchiseId());
-      const enriched = filtered.map((proposal) => {
+      const enriched: Proposal[] = [];
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+      for (const proposal of filtered) {
         try {
-          const calculated = MasterPricingEngine.calculateCompleteProposal(
-            proposal,
-            proposal.papDiscounts
+          const resolvedFranchiseId = proposal.franchiseId || getSessionFranchiseId();
+          const pricingCacheKey = `${resolvedFranchiseId}::${proposal.pricingModelFranchiseId || resolvedFranchiseId}::${proposal.pricingModelId || 'default'}`;
+          let pricingSnapshot = pricingCache.get(pricingCacheKey);
+          if (!pricingSnapshot) {
+            pricingSnapshot = await loadPricingSnapshotForFranchise(
+              resolvedFranchiseId,
+              proposal.pricingModelId || undefined,
+              proposal.pricingModelFranchiseId || undefined
+            );
+            pricingCache.set(pricingCacheKey, pricingSnapshot);
+          }
+          const calculated = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
+            MasterPricingEngine.calculateCompleteProposal(
+              proposal,
+              proposal.papDiscounts
+            )
           );
 
-          return {
+          enriched.push({
             ...proposal,
             pricing: calculated.pricing,
             costBreakdown: calculated.costBreakdown,
             subtotal: calculated.subtotal,
             totalCost: calculated.totalCost,
-          };
+          });
         } catch (error) {
           console.error(
             `Failed to recalculate pricing for proposal ${proposal.proposalNumber}:`,
             error
           );
-          return proposal;
+          enriched.push(proposal);
         }
-      });
+      }
 
       setProposals(enriched);
 
@@ -260,11 +271,8 @@ function ProposalsListPage() {
           <button
             className="btn-create"
             onClick={() => {
-              if (!canCreateProposal) return;
               navigate('/proposal/new');
             }}
-            disabled={!canCreateProposal}
-            title={createDisabledReason}
           >
             Create New Proposal
           </button>

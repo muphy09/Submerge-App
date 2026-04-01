@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { Proposal } from '../types/proposal-new';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels, setDefaultPricingModel } from '../services/pricingModelsAdapter';
@@ -10,7 +11,6 @@ import {
   createFranchiseUser,
   deleteFranchiseUser,
   listFranchiseUsers,
-  markDesignerProposalsDeleted,
   resetFranchiseUserPassword,
   updateFranchiseUserCommissionRates,
   updateFranchiseUserRole,
@@ -198,12 +198,13 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         try {
           const merged = mergeWithDefaults(raw);
           const resolvedFranchiseId = merged.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID;
-          const pricingCacheKey = `${resolvedFranchiseId}::${merged.pricingModelId || 'default'}`;
+          const pricingCacheKey = `${resolvedFranchiseId}::${merged.pricingModelFranchiseId || resolvedFranchiseId}::${merged.pricingModelId || 'default'}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
             pricingSnapshot = await loadPricingSnapshotForFranchise(
               resolvedFranchiseId,
-              merged.pricingModelId || undefined
+              merged.pricingModelId || undefined,
+              merged.pricingModelFranchiseId || undefined
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }
@@ -354,10 +355,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
       return;
     }
     try {
-      const targetUser = franchiseUsers.find((u) => u.id === userId);
-      const targetName = targetUser?.name || targetUser?.email || '';
       await deleteFranchiseUser(userId);
-      await markDesignerProposalsDeleted(franchiseId, targetName);
       await loadUsers(franchiseId);
       await loadProposals(franchiseId);
       setSelectedUserId(null);
@@ -444,6 +442,207 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
     setNewUserEmail('');
     setUserError(null);
   };
+
+  const modalRoot = typeof document !== 'undefined' ? document.body : null;
+
+  const addUserModal =
+    showAddUserForm && modalRoot
+      ? createPortal(
+          <div className="admin-user-modal-backdrop" onClick={handleCloseAddUserForm}>
+            <div
+              className="admin-user-modal"
+              role="dialog"
+              aria-modal="true"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="admin-user-modal-header">
+                <div>
+                  <p className="admin-user-modal-kicker">Designers</p>
+                  <h3 className="admin-user-modal-title">Add a New Designer</h3>
+                </div>
+                <button
+                  className="admin-user-modal-close"
+                  type="button"
+                  onClick={handleCloseAddUserForm}
+                  aria-label="Close add designer form"
+                >
+                  x
+                </button>
+              </div>
+              <div className="admin-users-add">
+                <div className="admin-users-add-card">
+                  <div className="admin-users-add-field">
+                    <label className="admin-users-add-label" htmlFor="designer-name-input">
+                      Designer Name
+                    </label>
+                    <input
+                      id="designer-name-input"
+                      type="text"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      placeholder="Enter Designer Name"
+                      disabled={addingUser}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="admin-users-add-field">
+                    <label className="admin-users-add-label" htmlFor="designer-email-input">
+                      Designer Email
+                    </label>
+                    <div className="admin-users-add-email">
+                      <input
+                        id="designer-email-input"
+                        type="email"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        placeholder="Enter Designer Email"
+                        disabled={addingUser}
+                      />
+                      <button
+                        className="admin-primary-btn"
+                        type="button"
+                        onClick={handleAddUser}
+                        disabled={addingUser}
+                      >
+                        {addingUser ? 'Adding...' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {userError && <div className="admin-error">{userError}</div>}
+            </div>
+          </div>,
+          modalRoot
+        )
+      : null;
+
+  const selectedUserModal =
+    selectedUser && modalRoot
+      ? createPortal(
+          <div className="admin-user-modal-backdrop" onClick={handleCloseSelectedUser}>
+            <div
+              className="admin-user-modal"
+              role="dialog"
+              aria-modal="true"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="admin-user-modal-header">
+                <div>
+                  <p className="admin-user-modal-kicker">User Details</p>
+                  <h3 className="admin-user-modal-title">{selectedUser.name || selectedUser.email}</h3>
+                </div>
+                <button
+                  className="admin-user-modal-close"
+                  type="button"
+                  onClick={handleCloseSelectedUser}
+                  aria-label="Close user details"
+                >
+                  x
+                </button>
+              </div>
+              <div className="admin-user-modal-details">
+                <div className="admin-user-detail">
+                  <span className="admin-user-detail-label">Role</span>
+                  <span className="admin-user-detail-value">{getRoleLabel(selectedUser.role)}</span>
+                </div>
+                <div className="admin-user-detail">
+                  <span className="admin-user-detail-label">Email</span>
+                  <span className="admin-user-detail-value">{selectedUser.email}</span>
+                </div>
+              </div>
+              <div className="admin-user-commission-section">
+                <div className="admin-user-commission-header">
+                  <div className="admin-user-commission-title">Commission Settings</div>
+                  <div className="admin-user-commission-subtitle">Percent of retail price</div>
+                </div>
+                <div className="admin-user-commission-grid">
+                  <label className="admin-user-commission-field" htmlFor="closeout-commission-input">
+                    <span>Closeout Commission</span>
+                    <div className="admin-user-commission-input">
+                      <input
+                        id="closeout-commission-input"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={selectedCloseoutCommissionPercent}
+                        onChange={(event) => setSelectedCloseoutCommissionPercent(event.target.value)}
+                        disabled={savingCommissionUserId === selectedUser.id}
+                      />
+                      <span>%</span>
+                    </div>
+                  </label>
+                  <label className="admin-user-commission-field" htmlFor="dig-commission-input">
+                    <span>Dig Commission</span>
+                    <div className="admin-user-commission-input">
+                      <input
+                        id="dig-commission-input"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={selectedDigCommissionPercent}
+                        onChange={(event) => setSelectedDigCommissionPercent(event.target.value)}
+                        disabled={savingCommissionUserId === selectedUser.id}
+                      />
+                      <span>%</span>
+                    </div>
+                  </label>
+                </div>
+                <button
+                  className="admin-primary-btn"
+                  type="button"
+                  onClick={() => handleSaveCommissionRates(selectedUser.id)}
+                  disabled={savingCommissionUserId === selectedUser.id}
+                >
+                  {savingCommissionUserId === selectedUser.id ? 'Saving...' : 'Save Commission Settings'}
+                </button>
+                {selectedUserStatus?.type === 'error' && (
+                  <div className="admin-error">{selectedUserStatus.message}</div>
+                )}
+                {selectedUserStatus?.type === 'success' && (
+                  <div className="admin-success">{selectedUserStatus.message}</div>
+                )}
+              </div>
+              <div className="admin-user-modal-actions">
+                {selectedUser.role === 'designer' && (
+                  <button
+                    className="admin-primary-btn ghost"
+                    type="button"
+                    onClick={() => handlePromoteUser(selectedUser.id)}
+                    disabled={promotingUserId === selectedUser.id}
+                  >
+                    {promotingUserId === selectedUser.id ? 'Promoting...' : 'Make Admin'}
+                  </button>
+                )}
+                {selectedUser.role !== 'owner' && (
+                  <button
+                    className="admin-primary-btn ghost"
+                    type="button"
+                    onClick={() => handleResetPassword(selectedUser.id)}
+                    disabled={resettingUserId === selectedUser.id}
+                  >
+                    {resettingUserId === selectedUser.id ? 'Resetting...' : 'Reset Password'}
+                  </button>
+                )}
+                {selectedUser.role === 'designer' && (
+                  <button
+                    className="admin-remove-btn"
+                    type="button"
+                    onClick={() => handleRemoveUser(selectedUser.id, selectedUser.role)}
+                  >
+                    Remove User
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>,
+          modalRoot
+        )
+      : null;
 
   const submittedProposals = useMemo(
     () => proposals.filter((proposal) => isSubmittedStatus(proposal.status)),
@@ -893,7 +1092,10 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         )}
       </div>
 
-      {showAddUserForm && (
+      {addUserModal}
+      {selectedUserModal}
+
+      {false && showAddUserForm && (
         <div className="admin-user-modal-backdrop" onClick={handleCloseAddUserForm}>
           <div
             className="admin-user-modal"
@@ -960,7 +1162,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         </div>
       )}
 
-      {selectedUser && (
+      {false && selectedUser && (
         <div className="admin-user-modal-backdrop" onClick={handleCloseSelectedUser}>
           <div
             className="admin-user-modal"

@@ -757,6 +757,7 @@ export interface Proposal {
   designerCode?: string;
   pricingModelId?: string;
   pricingModelName?: string;
+  pricingModelFranchiseId?: string;
   pricingModelIsDefault?: boolean;
   syncStatus?: 'synced' | 'pending' | 'error';
   syncMessage?: string;

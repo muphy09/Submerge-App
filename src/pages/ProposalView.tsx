@@ -17,7 +17,7 @@ import summaryIconImg from '../../docs/img/summary.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { initPricingDataStore } from '../services/pricingDataStore';
-import { getSessionRole, isMasterImpersonating } from '../services/session';
+import { getSessionRole } from '../services/session';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 import {
   getDefaultProposal,
@@ -205,11 +205,8 @@ function ProposalView() {
   const canViewFullSummary = sessionRole === 'admin' || sessionRole === 'owner';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
   const canViewCogsBreakdown = canViewFullSummary && !hideCogsFromProposalBuilder;
-  const isMasterActingAsOwner = isMasterImpersonating();
-  const canEditProposal = !isMasterActingAsOwner;
-  const editDisabledReason = isMasterActingAsOwner
-    ? 'Master accounts cannot edit proposals while acting as owner.'
-    : undefined;
+  const canEditProposal = true;
+  const editDisabledReason = undefined;
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
@@ -274,7 +271,11 @@ function ProposalView() {
         allVersions.find((v) => v.versionId === activeId) ||
         (mergeProposalWithDefaults(activeApplied) as Proposal);
 
-      await initPricingDataStore(activeVersion.franchiseId, activeVersion.pricingModelId || undefined);
+      await initPricingDataStore(
+        activeVersion.franchiseId,
+        activeVersion.pricingModelId || undefined,
+        activeVersion.pricingModelFranchiseId || undefined
+      );
 
       setVersions(allVersions);
       setActiveVersionId(activeId);
@@ -364,7 +365,11 @@ function ProposalView() {
           .filter((v) => (v.versionId || 'original') !== versionId)
           .map((v) => ({ ...v, versions: [] })),
       };
-      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
       const saved = await saveProposalRemote(container);
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
@@ -408,7 +413,11 @@ function ProposalView() {
         activeVersionId: nextActive.versionId || 'original',
         versions: remaining.filter((v) => (v.versionId || 'original') !== (nextActive.versionId || 'original')),
       };
-      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
       const saved = await saveProposalRemote(container);
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
@@ -449,7 +458,11 @@ function ProposalView() {
         proposal.versionId,
         newVersionName && newVersionName.trim() ? newVersionName.trim() : undefined
       );
-      await initPricingDataStore(nextContainer.franchiseId, nextContainer.pricingModelId || undefined);
+      await initPricingDataStore(
+        nextContainer.franchiseId,
+        nextContainer.pricingModelId || undefined,
+        nextContainer.pricingModelFranchiseId || undefined
+      );
       const saved = await saveProposalRemote(nextContainer);
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
@@ -503,7 +516,11 @@ function ProposalView() {
         versions: others,
       };
 
-      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
       const saved = await saveProposalRemote(container);
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
@@ -566,7 +583,11 @@ function ProposalView() {
         activeVersionId: desiredActiveId,
         versions: others,
       };
-      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
       const saved = await saveProposalRemote(container);
       const updated = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
@@ -610,7 +631,11 @@ function ProposalView() {
         activeVersionId: desiredActiveId,
         versions: others,
       };
-      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
       const saved = await saveProposalRemote(container);
       const updated = listAllVersions(saved as Proposal).map((version) => ({
         ...(mergeProposalWithDefaults(version) as Proposal),
@@ -856,7 +881,11 @@ function ProposalView() {
         versions: others,
       };
 
-      await initPricingDataStore(container.franchiseId, container.pricingModelId || undefined);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
       const saved = await saveProposalRemote(container);
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),

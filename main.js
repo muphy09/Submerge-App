@@ -35,7 +35,7 @@ try {
     } catch (_) {
       // ignore log write issues
     }
-    dialog.showErrorBox('Startup error', `Failed to start Submerge Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
+    dialog.showErrorBox('Startup error', `Failed to start Proposal Builder due to a native module error.\n\nDetails written to:\n${logPath}\n\n${err.message}`);
     app.quit();
   } else {
     // App not ready yet, log to console and rethrow
@@ -59,6 +59,7 @@ try {
 let appPath = __dirname;
 let iconPath = path.join(__dirname, 'icon.ico');
 const APP_NAME = 'Submerge Proposal Builder';
+const DEFAULT_WINDOW_TITLE = 'Proposal Builder';
 const PROPOSAL_FILE_EXTENSION = '.submerge';
 
 let mainWindow = null;
@@ -453,7 +454,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: APP_NAME,
+    title: DEFAULT_WINDOW_TITLE,
     icon: iconPath,
     show: false,
     webPreferences: {
