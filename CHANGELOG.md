@@ -31,7 +31,7 @@
 ## [2.0.18] - 3/31/26
 ## Changes
 - App Name now updates to the Franchise name
-- Designer 'Customer Cost Breakdown' button aligned with Admins button
+- Designer 'Customer Cost Breakdown' button aligned with Admins' button
 -----
 ## [2.0.17] - 3/31/26
 ## Fixes
