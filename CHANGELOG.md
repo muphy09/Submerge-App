@@ -24,7 +24,7 @@
     - Included all changes and logic requested for the updated breakdown
 - Contract
     - New 'Additional Features' mapped to the Contracts
-        - *Only Bubblers autofills currently*
+        - *Only Bubblers autofill currently*
 - Customer Job Cost Summary
     - Decking no longer appears in this summary if "Off Contract" is active
 -----
