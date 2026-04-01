@@ -1,6 +1,7 @@
 import { saveFranchiseAppName, loadFranchiseAppName } from './franchiseBranding';
 import { saveFranchiseCode } from './franchisesAdapter';
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
+import { logLedgerEventSafe } from './ledger';
 import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
 
 export type MasterFranchise = {
@@ -216,7 +217,10 @@ export async function saveMasterFranchiseSettings(payload: {
     franchiseName,
     franchiseCode: payload.franchiseCode,
     previousCode: payload.previousCode,
-  });
+  }, { skipLedger: true });
+
+  const normalizedPreviousCode = normalizeText(payload.previousCode).toUpperCase();
+  const normalizedNextCode = normalizeText(result.franchiseCode).toUpperCase();
 
   try {
     const currentAppName = await loadFranchiseAppName(franchiseId, { force: true });
@@ -238,6 +242,23 @@ export async function saveMasterFranchiseSettings(payload: {
     }
   } catch (error) {
     console.warn('Unable to synchronize franchise app name after updating franchise settings:', error);
+  }
+
+  if (normalizeComparableText(previousName) !== normalizeComparableText(franchiseName) || normalizedPreviousCode !== normalizedNextCode) {
+    await logLedgerEventSafe({
+      franchiseId,
+      franchiseName,
+      action: 'Franchise settings updated',
+      targetType: 'franchise',
+      targetId: franchiseId,
+      details: {
+        franchiseId,
+        previousName: previousName || null,
+        nextName: franchiseName,
+        previousCode: normalizedPreviousCode || null,
+        nextCode: normalizedNextCode,
+      },
+    });
   }
 
   return {

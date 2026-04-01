@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { getAdminClient, getRequesterProfile } from '../_shared/auth.ts';
+import { insertLedgerEvent } from '../_shared/ledger.ts';
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'designer']);
 
@@ -10,7 +11,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getAdminClient();
-    const { profile } = await getRequesterProfile(req, supabase);
+    const { profile, user } = await getRequesterProfile(req, supabase);
     const requesterRole = String(profile.role || '').toLowerCase();
 
     if (!['master', 'owner', 'admin'].includes(requesterRole)) {
@@ -23,6 +24,10 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const userId = String(body?.userId || '').trim();
     const nextRole = String(body?.role || '').trim().toLowerCase();
+    const effectiveRole =
+      requesterRole === 'master'
+        ? String(body?.actingAsRole || '').trim().toLowerCase() || requesterRole
+        : requesterRole;
 
     if (!userId || !nextRole) {
       return new Response(JSON.stringify({ error: 'userId and role are required.' }), {
@@ -40,7 +45,7 @@ Deno.serve(async (req) => {
 
     const { data: target, error: targetError } = await supabase
       .from('franchise_users')
-      .select('id,franchise_id,role,is_active')
+      .select('id,franchise_id,role,is_active,name,email')
       .eq('id', userId)
       .maybeSingle();
     if (targetError && targetError.code !== 'PGRST116') throw targetError;
@@ -85,6 +90,30 @@ Deno.serve(async (req) => {
     if (updateError) throw updateError;
     if (!updated || String(updated.role || '').toLowerCase() !== nextRole) {
       throw new Error('Role update did not persist.');
+    }
+
+    try {
+      await insertLedgerEvent(supabase, {
+        franchiseId: updated.franchise_id,
+        actorUser: {
+          id: user?.id || null,
+          email: user?.email || null,
+        },
+        actorProfile: profile,
+        effectiveRole,
+        action: 'User role changed',
+        targetType: 'user',
+        targetId: userId,
+        details: {
+          targetUserId: userId,
+          targetName: target.name || null,
+          targetEmail: target.email || null,
+          previousRole: targetRole,
+          nextRole,
+        },
+      });
+    } catch (ledgerError) {
+      console.error('Unable to write ledger event for update-franchise-user-role:', ledgerError);
     }
 
     return new Response(

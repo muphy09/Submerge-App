@@ -1,7 +1,7 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
 - Contract needs to autofill to new created sections
-    - Bubbler option
+- Default Warranty needs to be updated
 
 Fiberglass Pools:
     - 3 Levels: Small, Medium, Large (Datasheet)
@@ -12,6 +12,7 @@ Fiberglass Pools:
         - 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
+There needs to be a way for users in a franchise to sumbit feedback for fixes/features they would like to see in the app. This should be a Feedback Icon Button that is located in the bottom right corner above the Role line (ensure this wont interfere with the auto-update popup that could appear). The button should just be an icon of something resembling feedback, should slightly enlarge or have some effect to signify it is being hovered, and have a tooltip that says "Submit Feedback Here!". When this button is pressed, a popup box should appear that allows for sending a message for feedback, features, improvements, etc. After the message is sent, it should appear in a new category in the Master tab named Feedback. The Feedback section should start minimized, with a button labeled 'Open' to expand the entire area. The section should have filters to sort by franchise, and include the Time, Name, Role, Franchise, and Version along with the submitted message. Master role acting as owner can submit feedback and it will deliver as if the Owner of the franchise submitted the feedback. Before implementing this, assess what needs to be done and see if i missed anything important. ask questions before if needed and then we can implement.
 -----
 - Submission workflow
     - Submitting a proposal should put the proposal into an approval state. Admins or bookkeeper (new role) will need to 'Complete' which then marks as 'Complete'

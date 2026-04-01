@@ -1,11 +1,11 @@
-## [2.0.18] What's New
+## [2.0.18] What's New 3/31/26
 - App Name now updates to the Franchise name
 - Designer 'Customer Cost Breakdown' button aligned with Admins button
 -----
-## [2.0.17] What's New
+## [2.0.17] What's New 3/31/26
 - Exporting Contract & Warranty PDF fixed
 -----
-## [2.0.16] What's New
+## [2.0.16] What's New 3/31/26
 - Warranty Customization
     - Added ability to customize the Warranty section of the Job Cost Summary
     - Left click a category or line item to edit the field
@@ -13,12 +13,12 @@
 - Exporting Options
     - Job Cost Summary & Warranty export logic now matches the Contract export logic
 -----
-## [2.0.15] What's New
+## [2.0.15] What's New 3/31/26
 -  Aligned Additional Decking with intended use case
     - Ability to add multiple decking options
     - Changed Concrete Waste overhead to 0%
 -----
-## [2.0.14] What's New
+## [2.0.14] What's New 3/31/26
 - Additional Decking Options
     - Ability to add Additional Decking options
     - Independant 'Off Contract' & 'Remove Waste' logic
@@ -32,7 +32,7 @@
     - Configurable with Set Price or Price Per SQFT
         - Ability to include extra costs (Gates) per Subcategory
 -----
-## [2.0.13] What's New
+## [2.0.13] What's New 3/30/26
 - Master Tab Update
 - Commission Amount adjustable per user
     - Admins can configure default Commission Amount

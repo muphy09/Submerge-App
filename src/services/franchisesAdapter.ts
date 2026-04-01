@@ -1,5 +1,6 @@
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
+import { logLedgerEventSafe } from './ledger';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
@@ -8,6 +9,10 @@ type FranchiseCodeUpdate = {
   franchiseCode: string;
   franchiseName?: string | null;
   previousCode?: string | null;
+};
+
+type SaveFranchiseCodeOptions = {
+  skipLedger?: boolean;
 };
 
 function requireSupabase() {
@@ -60,7 +65,7 @@ async function updateLocalFranchiseCode(payload: { franchiseId: string; franchis
   });
 }
 
-export async function saveFranchiseCode(payload: FranchiseCodeUpdate) {
+export async function saveFranchiseCode(payload: FranchiseCodeUpdate, options: SaveFranchiseCodeOptions = {}) {
   if (!payload.franchiseId) {
     throw new Error('Franchise ID is required.');
   }
@@ -110,6 +115,22 @@ export async function saveFranchiseCode(payload: FranchiseCodeUpdate) {
       }
     }
     throw error;
+  }
+
+  if (!options.skipLedger && previousCode !== franchiseCode) {
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId,
+      franchiseName: payload.franchiseName || null,
+      action: 'Franchise code updated',
+      targetType: 'franchise',
+      targetId: payload.franchiseId,
+      details: {
+        franchiseId: payload.franchiseId,
+        franchiseName: payload.franchiseName || null,
+        previousCode: previousCode || null,
+        nextCode: franchiseCode,
+      },
+    });
   }
 
   return { franchiseId: payload.franchiseId, franchiseCode };

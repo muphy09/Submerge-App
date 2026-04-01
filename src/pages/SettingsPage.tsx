@@ -14,6 +14,7 @@ import {
 } from '../services/adminPanelPin';
 import { saveFranchiseAppName, saveFranchiseLogo } from '../services/franchiseBranding';
 import { saveFranchiseCode } from '../services/franchisesAdapter';
+import { logLedgerEventSafe } from '../services/ledger';
 import {
   getSessionFranchiseCode,
   getSessionFranchiseId,
@@ -326,6 +327,17 @@ const SettingsPage: React.FC = () => {
       const savedPin = saveAdminPanelPin(franchiseId, normalizedPendingAdminPin);
       setPendingAdminPin(savedPin);
       setAdminPinStatus({ type: 'success', message: 'Admin panel PIN updated.' });
+      void logLedgerEventSafe({
+        franchiseId,
+        action: 'Admin panel PIN updated',
+        targetType: 'admin_panel_pin',
+        targetId: franchiseId,
+        details: {
+          franchiseId,
+          pinLength: ADMIN_PANEL_PIN_LENGTH,
+          resetToDefault: false,
+        },
+      });
     } catch (error: any) {
       console.error('Failed to save admin panel PIN:', error);
       setAdminPinStatus({
@@ -342,6 +354,17 @@ const SettingsPage: React.FC = () => {
       setAdminPinStatus({
         type: 'success',
         message: 'Admin panel PIN reset to default.',
+      });
+      void logLedgerEventSafe({
+        franchiseId,
+        action: 'Admin panel PIN reset',
+        targetType: 'admin_panel_pin',
+        targetId: franchiseId,
+        details: {
+          franchiseId,
+          pinLength: ADMIN_PANEL_PIN_LENGTH,
+          resetToDefault: true,
+        },
       });
     } catch (error) {
       console.error('Failed to reset admin panel PIN:', error);

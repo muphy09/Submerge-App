@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
+import { logLedgerEventSafe } from './ledger';
 
 type FranchiseBrandingRecord = {
   logoUrl: string | null;
@@ -270,6 +271,34 @@ export async function saveFranchiseBranding(
   }
   if (hasAppName) {
     emitAppNameUpdate(payload.franchiseId, record.appName ?? null);
+  }
+
+  if (hasLogo) {
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId,
+      action: logoUrl ? 'Franchise logo updated' : 'Franchise logo reset',
+      targetType: 'franchise_branding',
+      targetId: payload.franchiseId,
+      details: {
+        franchiseId: payload.franchiseId,
+        previousLogoUrl: existing?.logoUrl ?? null,
+        nextLogoUrl: logoUrl ?? null,
+      },
+    });
+  }
+
+  if (hasAppName) {
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId,
+      action: appName ? 'Franchise app name updated' : 'Franchise app name reset',
+      targetType: 'franchise_branding',
+      targetId: payload.franchiseId,
+      details: {
+        franchiseId: payload.franchiseId,
+        previousAppName: existing?.appName ?? null,
+        nextAppName: appName ?? null,
+      },
+    });
   }
   return record;
 }

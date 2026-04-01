@@ -1,5 +1,7 @@
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
+import { logLedgerEventSafe } from './ledger';
+import { readSession } from './session';
 
 export type PricingModelRow = {
   id: string;
@@ -36,6 +38,13 @@ type LoadedPricingModel = {
 const DEFAULT_VERSION = 'v1';
 const DEFAULT_FRANCHISE_ID = 'default';
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
+
+function getUpdatedByValue(explicit?: string | null) {
+  const normalizedExplicit = String(explicit || '').trim();
+  if (normalizedExplicit) return normalizedExplicit;
+  const session = readSession();
+  return session?.userEmail || session?.userName || null;
+}
 
 function withFallback<T>(supabaseFn: () => Promise<T>, fallbackFn: () => Promise<T>) {
   const enabled = isSupabaseEnabled();
@@ -125,12 +134,17 @@ export async function savePricingModel(payload: {
   version?: string;
   updatedBy?: string | null;
   createNew?: boolean;
+  copiedFromFranchiseId?: string;
+  copiedFromFranchiseName?: string | null;
+  copiedFromPricingModelId?: string;
+  copiedFromPricingModelName?: string | null;
 }) {
   return withFallback(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
     const id = payload.createNew || !payload.pricingModelId ? crypto.randomUUID() : payload.pricingModelId;
     const now = new Date().toISOString();
+    const updatedBy = getUpdatedByValue(payload.updatedBy);
     const { error } = await supabase.from('franchise_pricing_models').upsert({
       id,
       franchise_id: payload.franchiseId || DEFAULT_FRANCHISE_ID,
@@ -139,7 +153,7 @@ export async function savePricingModel(payload: {
       pricing_json: payload.pricing,
       is_default: payload.setDefault ? true : undefined,
       updated_at: now,
-      updated_by: payload.updatedBy || null,
+      updated_by: updatedBy,
     });
     if (error) throw error;
     if (payload.setDefault) {
@@ -153,6 +167,26 @@ export async function savePricingModel(payload: {
         .update({ is_default: true, updated_at: now })
         .eq('id', id);
     }
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId || DEFAULT_FRANCHISE_ID,
+      action: payload.copiedFromPricingModelId
+        ? 'Pricing model copied'
+        : payload.createNew || !payload.pricingModelId
+        ? 'Pricing model created'
+        : 'Pricing model updated',
+      targetType: 'pricing_model',
+      targetId: id,
+      details: {
+        pricingModelId: id,
+        pricingModelName: payload.name,
+        version: payload.version || DEFAULT_VERSION,
+        setAsDefault: Boolean(payload.setDefault),
+        copiedFromFranchiseId: payload.copiedFromFranchiseId || null,
+        copiedFromFranchiseName: payload.copiedFromFranchiseName || null,
+        copiedFromPricingModelId: payload.copiedFromPricingModelId || null,
+        copiedFromPricingModelName: payload.copiedFromPricingModelName || null,
+      },
+    });
     return { franchiseId: payload.franchiseId, pricingModelId: id, updatedAt: now, isDefault: payload.setDefault };
   }, async () => {
     return window.electron.savePricingModel(payload);
@@ -164,6 +198,12 @@ export async function setDefaultPricingModel(payload: { franchiseId: string; pri
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
     const now = new Date().toISOString();
+    const { data: targetModel } = await supabase
+      .from('franchise_pricing_models')
+      .select('id,name')
+      .eq('franchise_id', payload.franchiseId || DEFAULT_FRANCHISE_ID)
+      .eq('id', payload.pricingModelId)
+      .maybeSingle();
     await supabase
       .from('franchise_pricing_models')
       .update({ is_default: false })
@@ -172,6 +212,16 @@ export async function setDefaultPricingModel(payload: { franchiseId: string; pri
       .from('franchise_pricing_models')
       .update({ is_default: true, updated_at: now })
       .eq('id', payload.pricingModelId);
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId || DEFAULT_FRANCHISE_ID,
+      action: 'Pricing model set as default',
+      targetType: 'pricing_model',
+      targetId: payload.pricingModelId,
+      details: {
+        pricingModelId: payload.pricingModelId,
+        pricingModelName: targetModel?.name || null,
+      },
+    });
     return { franchiseId: payload.franchiseId, pricingModelId: payload.pricingModelId, updatedAt: now };
   }, async () => {
     return window.electron.setDefaultPricingModel(payload);
@@ -182,12 +232,30 @@ export async function deletePricingModel(payload: { franchiseId: string; pricing
   return withFallback(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
+    const { data: targetModel } = await supabase
+      .from('franchise_pricing_models')
+      .select('id,name,version,is_default')
+      .eq('franchise_id', payload.franchiseId || DEFAULT_FRANCHISE_ID)
+      .eq('id', payload.pricingModelId)
+      .maybeSingle();
     const { error } = await supabase
       .from('franchise_pricing_models')
       .delete()
       .eq('franchise_id', payload.franchiseId || DEFAULT_FRANCHISE_ID)
       .eq('id', payload.pricingModelId);
     if (error) throw error;
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId || DEFAULT_FRANCHISE_ID,
+      action: 'Pricing model deleted',
+      targetType: 'pricing_model',
+      targetId: payload.pricingModelId,
+      details: {
+        pricingModelId: payload.pricingModelId,
+        pricingModelName: targetModel?.name || null,
+        version: targetModel?.version || null,
+        wasDefault: Boolean(targetModel?.is_default),
+      },
+    });
     return payload;
   }, async () => {
     return window.electron.deletePricingModel(payload);

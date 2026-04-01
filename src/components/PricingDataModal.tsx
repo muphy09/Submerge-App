@@ -323,7 +323,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       await savePricingModelSnapshot({
         name: modelName.trim(),
         setDefault: false,
-        updatedBy: 'admin',
         createNew: savingAsNew,
       });
       setSavingAsNew(false);

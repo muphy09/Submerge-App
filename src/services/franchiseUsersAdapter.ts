@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './supabaseClient';
 import { Proposal } from '../types/proposal-new';
 import { isEnvFlagTrue } from './env';
+import { getLedgerContextPayload, logLedgerEventSafe } from './ledger';
 import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
 
 export type FranchiseUser = UserCommissionRates & {
@@ -118,6 +119,7 @@ export async function createFranchiseUser(payload: {
       email,
       name: displayName,
       role: payload.role || 'designer',
+      ...getLedgerContextPayload(),
     },
   });
   if (error) {
@@ -137,7 +139,7 @@ export async function updateFranchiseUserRole(userId: string, role: 'owner' | 'a
     return null;
   }
   const { data, error } = await supabase.functions.invoke('update-franchise-user-role', {
-    body: { userId, role },
+    body: { userId, role, ...getLedgerContextPayload() },
   });
   if (error) {
     const message = await extractFunctionErrorMessage(error);
@@ -160,6 +162,12 @@ export async function updateFranchiseUserCommissionRates(
   }
 
   const normalizedRates = normalizeUserCommissionRates(rates);
+  const { data: currentUser, error: currentUserError } = await supabase
+    .from('franchise_users')
+    .select('id,franchise_id,name,email,role,dig_commission_rate,closeout_commission_rate')
+    .eq('id', userId)
+    .maybeSingle();
+  if (currentUserError) throw currentUserError;
   const { error } = await supabase
     .from('franchise_users')
     .update({
@@ -169,6 +177,22 @@ export async function updateFranchiseUserCommissionRates(
     })
     .eq('id', userId);
   if (error) throw error;
+  await logLedgerEventSafe({
+    franchiseId: currentUser?.franchise_id || null,
+    action: 'User commission rates updated',
+    targetType: 'user',
+    targetId: userId,
+    details: {
+      targetUserId: userId,
+      targetName: currentUser?.name || null,
+      targetEmail: currentUser?.email || null,
+      targetRole: currentUser?.role || null,
+      previousDigCommissionRate: currentUser?.dig_commission_rate ?? null,
+      nextDigCommissionRate: normalizedRates.digCommissionRate,
+      previousCloseoutCommissionRate: currentUser?.closeout_commission_rate ?? null,
+      nextCloseoutCommissionRate: normalizedRates.closeoutCommissionRate,
+    },
+  });
   return normalizedRates;
 }
 
@@ -207,7 +231,7 @@ export async function deleteFranchiseUser(userId: string) {
     return null;
   }
   const { data, error } = await supabase.functions.invoke('delete-franchise-user', {
-    body: { userId },
+    body: { userId, ...getLedgerContextPayload() },
   });
   if (error) {
     const message = await extractFunctionErrorMessage(error);
@@ -265,7 +289,7 @@ export async function resetFranchiseUserPassword(userId: string) {
     return null;
   }
   const { data, error } = await supabase.functions.invoke('reset-franchise-user-password', {
-    body: { userId },
+    body: { userId, ...getLedgerContextPayload() },
   });
   if (error) throw error;
   return data as { tempPassword?: string };

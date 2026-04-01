@@ -1173,7 +1173,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
             <div className="admin-user-modal-header">
               <div>
                 <p className="admin-user-modal-kicker">User Details</p>
-                <h3 className="admin-user-modal-title">{selectedUser.name || selectedUser.email}</h3>
+                <h3 className="admin-user-modal-title">{selectedUser!.name || selectedUser!.email}</h3>
               </div>
               <button
                 className="admin-user-modal-close"
@@ -1187,11 +1187,11 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
             <div className="admin-user-modal-details">
               <div className="admin-user-detail">
                 <span className="admin-user-detail-label">Role</span>
-                <span className="admin-user-detail-value">{getRoleLabel(selectedUser.role)}</span>
+                <span className="admin-user-detail-value">{getRoleLabel(selectedUser!.role)}</span>
               </div>
               <div className="admin-user-detail">
                 <span className="admin-user-detail-label">Email</span>
-                <span className="admin-user-detail-value">{selectedUser.email}</span>
+                <span className="admin-user-detail-value">{selectedUser!.email}</span>
               </div>
             </div>
             <div className="admin-user-commission-section">
@@ -1212,7 +1212,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                       step="0.01"
                       value={selectedCloseoutCommissionPercent}
                       onChange={(event) => setSelectedCloseoutCommissionPercent(event.target.value)}
-                      disabled={savingCommissionUserId === selectedUser.id}
+                      disabled={savingCommissionUserId === selectedUser!.id}
                     />
                     <span>%</span>
                   </div>
@@ -1229,7 +1229,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
                       step="0.01"
                       value={selectedDigCommissionPercent}
                       onChange={(event) => setSelectedDigCommissionPercent(event.target.value)}
-                      disabled={savingCommissionUserId === selectedUser.id}
+                      disabled={savingCommissionUserId === selectedUser!.id}
                     />
                     <span>%</span>
                   </div>
@@ -1238,44 +1238,44 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
               <button
                 className="admin-primary-btn"
                 type="button"
-                onClick={() => handleSaveCommissionRates(selectedUser.id)}
-                disabled={savingCommissionUserId === selectedUser.id}
+                onClick={() => handleSaveCommissionRates(selectedUser!.id)}
+                disabled={savingCommissionUserId === selectedUser!.id}
               >
-                {savingCommissionUserId === selectedUser.id ? 'Saving...' : 'Save Commission Settings'}
+                {savingCommissionUserId === selectedUser!.id ? 'Saving...' : 'Save Commission Settings'}
               </button>
               {selectedUserStatus?.type === 'error' && (
-                <div className="admin-error">{selectedUserStatus.message}</div>
+                <div className="admin-error">{selectedUserStatus!.message}</div>
               )}
               {selectedUserStatus?.type === 'success' && (
-                <div className="admin-success">{selectedUserStatus.message}</div>
+                <div className="admin-success">{selectedUserStatus!.message}</div>
               )}
             </div>
             <div className="admin-user-modal-actions">
-              {selectedUser.role === 'designer' && (
+              {selectedUser!.role === 'designer' && (
                 <button
                   className="admin-primary-btn ghost"
                   type="button"
-                  onClick={() => handlePromoteUser(selectedUser.id)}
-                  disabled={promotingUserId === selectedUser.id}
+                  onClick={() => handlePromoteUser(selectedUser!.id)}
+                  disabled={promotingUserId === selectedUser!.id}
                 >
-                  {promotingUserId === selectedUser.id ? 'Promoting...' : 'Make Admin'}
+                  {promotingUserId === selectedUser!.id ? 'Promoting...' : 'Make Admin'}
                 </button>
               )}
-              {selectedUser.role !== 'owner' && (
+              {selectedUser!.role !== 'owner' && (
                 <button
                   className="admin-primary-btn ghost"
                   type="button"
-                  onClick={() => handleResetPassword(selectedUser.id)}
-                  disabled={resettingUserId === selectedUser.id}
+                  onClick={() => handleResetPassword(selectedUser!.id)}
+                  disabled={resettingUserId === selectedUser!.id}
                 >
-                  {resettingUserId === selectedUser.id ? 'Resetting...' : 'Reset Password'}
+                  {resettingUserId === selectedUser!.id ? 'Resetting...' : 'Reset Password'}
                 </button>
               )}
-              {selectedUser.role === 'designer' && (
+              {selectedUser!.role === 'designer' && (
                 <button
                   className="admin-remove-btn"
                   type="button"
-                  onClick={() => handleRemoveUser(selectedUser.id, selectedUser.role)}
+                  onClick={() => handleRemoveUser(selectedUser!.id, selectedUser!.role)}
                 >
                   Remove User
                 </button>

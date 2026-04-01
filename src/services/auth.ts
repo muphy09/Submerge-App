@@ -8,6 +8,7 @@ import {
   type UserRole,
   type UserSession,
 } from './session';
+import { logLedgerEventSafe } from './ledger';
 import { normalizeUserCommissionRates } from './userCommissionRates';
 
 type FranchiseRow = {
@@ -278,6 +279,18 @@ export async function completePasswordReset(newPassword: string) {
     .from('franchise_users')
     .update({ password_reset_required: false, password_updated_at: now })
     .eq('auth_user_id', userData.user.id);
+
+  const session = readSession();
+  await logLedgerEventSafe({
+    franchiseId: session?.franchiseId || DEFAULT_FRANCHISE_ID,
+    action: 'Password reset completed',
+    targetType: 'user',
+    targetId: userData.user.id,
+    details: {
+      targetUserId: userData.user.id,
+      targetEmail: userData.user.email || null,
+    },
+  });
 }
 
 export async function signOut() {

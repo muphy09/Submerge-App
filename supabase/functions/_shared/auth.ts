@@ -23,7 +23,7 @@ export async function getRequesterProfile(req: Request, supabase: ReturnType<typ
 
   const { data: profile, error: profileError } = await supabase
     .from('franchise_users')
-    .select('id,franchise_id,role,is_active')
+    .select('id,franchise_id,role,is_active,name,email')
     .eq('auth_user_id', userData.user.id)
     .maybeSingle();
 

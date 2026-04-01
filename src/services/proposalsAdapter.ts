@@ -11,6 +11,7 @@ import {
 } from './session';
 import { isEnvFlagTrue } from './env';
 import { applyActiveVersion } from '../utils/proposalVersions';
+import { logLedgerEventSafe } from './ledger';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
@@ -18,6 +19,9 @@ const OFFLINE_SAVE_MESSAGE = 'No internet connection. Connect to save this propo
 
 type SaveResult = Proposal & { lastModified: string };
 type SyncStatus = 'synced' | 'pending' | 'error';
+type SaveProposalOptions = {
+  ledgerAction?: 'proposal_submitted';
+};
 type Tombstone = { proposalNumber: string; removedAt: string };
 type StoredProposalRow = {
   proposal_json?: Proposal;
@@ -663,7 +667,7 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
   return withSyncStatus(best, 'synced', ONLINE_SYNC_MESSAGE);
 }
 
-export async function saveProposal(proposal: Proposal): Promise<SaveResult> {
+export async function saveProposal(proposal: Proposal, options: SaveProposalOptions = {}): Promise<SaveResult> {
   const now = nowIso();
   const session = readSession();
   clearDeletedTombstone(proposal.proposalNumber);
@@ -695,6 +699,20 @@ export async function saveProposal(proposal: Proposal): Promise<SaveResult> {
 
   const synced = await upsertToSupabase(normalizedWithVersions);
   await persistLocalProposal({ ...synced, franchiseId });
+  if (options.ledgerAction === 'proposal_submitted') {
+    await logLedgerEventSafe({
+      franchiseId,
+      action: 'Proposal submitted',
+      targetType: 'proposal',
+      targetId: synced.proposalNumber,
+      details: {
+        proposalNumber: synced.proposalNumber,
+        customerName: synced.customerInfo?.customerName || null,
+        designerName: synced.designerName || null,
+        status: synced.status || 'submitted',
+      },
+    });
+  }
   return { ...synced, lastModified: synced.lastModified || now };
 }
 
@@ -712,6 +730,16 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
   const supabase = getSupabaseClient();
   if (!supabase) {
     throw new Error('Supabase not configured');
+  }
+
+  const existing = await supabase
+    .from('franchise_proposals')
+    .select('proposal_number,franchise_id,designer_name,status,proposal_json')
+    .eq('proposal_number', proposalNumber)
+    .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
+    .maybeSingle();
+  if (existing.error && (existing.error as any).code !== 'PGRST116') {
+    throw existing.error;
   }
 
   const { error, data } = await supabase
@@ -742,4 +770,18 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
       throw new Error('Failed to delete proposal from local database after Supabase delete.');
     }
   }
+
+  const existingProposal = (existing.data as any)?.proposal_json as Proposal | undefined;
+  await logLedgerEventSafe({
+    franchiseId: (existing.data as any)?.franchise_id || targetFranchiseId || DEFAULT_FRANCHISE_ID,
+    action: 'Proposal deleted',
+    targetType: 'proposal',
+    targetId: proposalNumber,
+    details: {
+      proposalNumber,
+      customerName: existingProposal?.customerInfo?.customerName || null,
+      designerName: (existing.data as any)?.designer_name || existingProposal?.designerName || null,
+      status: (existing.data as any)?.status || existingProposal?.status || null,
+    },
+  });
 }

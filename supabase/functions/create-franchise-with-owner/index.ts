@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { getAdminClient, getRequesterProfile } from '../_shared/auth.ts';
+import { insertLedgerEvent } from '../_shared/ledger.ts';
 
 function generateTempPassword(length = 12) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%';
@@ -137,6 +138,31 @@ Deno.serve(async (req) => {
         });
       }
       throw userError;
+    }
+
+    try {
+      await insertLedgerEvent(supabase, {
+        franchiseId,
+        franchiseName,
+        actorUser: {
+          id: user?.id || null,
+          email: user?.email || null,
+        },
+        actorProfile: profile,
+        effectiveRole: requesterRole,
+        action: 'Franchise created',
+        targetType: 'franchise',
+        targetId: franchiseId,
+        details: {
+          franchiseId,
+          franchiseName,
+          franchiseCode,
+          ownerEmail,
+          ownerName,
+        },
+      });
+    } catch (ledgerError) {
+      console.error('Unable to write ledger event for create-franchise-with-owner:', ledgerError);
     }
 
     return new Response(JSON.stringify({ franchiseId, tempPassword }), {

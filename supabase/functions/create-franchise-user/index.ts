@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { getAdminClient, getRequesterProfile } from '../_shared/auth.ts';
+import { insertLedgerEvent } from '../_shared/ledger.ts';
 
 function generateTempPassword(length = 12) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%';
@@ -32,7 +33,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getAdminClient();
-    const { profile } = await getRequesterProfile(req, supabase);
+    const { profile, user } = await getRequesterProfile(req, supabase);
     const body = await req.json();
     const franchiseId = String(body?.franchiseId || '').trim();
     const email = String(body?.email || '').trim().toLowerCase();
@@ -47,6 +48,10 @@ Deno.serve(async (req) => {
     }
 
     const requesterRole = String(profile.role || '').toLowerCase();
+    const effectiveRole =
+      requesterRole === 'master'
+        ? String(body?.actingAsRole || '').trim().toLowerCase() || requesterRole
+        : requesterRole;
     if (!['master', 'owner', 'admin'].includes(requesterRole)) {
       return new Response(JSON.stringify({ error: 'Forbidden.' }), {
         status: 403,
@@ -104,6 +109,30 @@ Deno.serve(async (req) => {
         });
       }
       throw insertError;
+    }
+
+    try {
+      await insertLedgerEvent(supabase, {
+        franchiseId,
+        actorUser: {
+          id: user?.id || null,
+          email: user?.email || null,
+        },
+        actorProfile: profile,
+        effectiveRole,
+        action: 'User created',
+        targetType: 'user',
+        targetId: created.user.id,
+        details: {
+          targetUserId: created.user.id,
+          targetEmail: email,
+          targetName: name,
+          targetRole: role,
+          passwordResetRequired: true,
+        },
+      });
+    } catch (ledgerError) {
+      console.error('Unable to write ledger event for create-franchise-user:', ledgerError);
     }
 
     return new Response(JSON.stringify({ tempPassword, userId: created.user.id }), {

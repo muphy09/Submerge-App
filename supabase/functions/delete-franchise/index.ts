@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { getAdminClient, getRequesterProfile } from '../_shared/auth.ts';
+import { insertLedgerEvent } from '../_shared/ledger.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -8,7 +9,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getAdminClient();
-    const { profile } = await getRequesterProfile(req, supabase);
+    const { profile, user } = await getRequesterProfile(req, supabase);
     const requesterRole = String(profile.role || '').toLowerCase();
     if (requesterRole !== 'master') {
       return new Response(JSON.stringify({ error: 'Forbidden.' }), {
@@ -26,6 +27,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: franchise, error: franchiseError } = await supabase
+      .from('franchises')
+      .select('id,name,franchise_code')
+      .eq('id', franchiseId)
+      .maybeSingle();
+    if (franchiseError && franchiseError.code !== 'PGRST116') throw franchiseError;
+
     const now = new Date().toISOString();
     const { error: updateFranchiseError } = await supabase
       .from('franchises')
@@ -37,6 +45,29 @@ Deno.serve(async (req) => {
       .from('franchise_users')
       .update({ is_active: false, updated_at: now })
       .eq('franchise_id', franchiseId);
+
+    try {
+      await insertLedgerEvent(supabase, {
+        franchiseId,
+        franchiseName: franchise?.name || null,
+        actorUser: {
+          id: user?.id || null,
+          email: user?.email || null,
+        },
+        actorProfile: profile,
+        effectiveRole: requesterRole,
+        action: 'Franchise soft deleted',
+        targetType: 'franchise',
+        targetId: franchiseId,
+        details: {
+          franchiseId,
+          franchiseName: franchise?.name || null,
+          franchiseCode: franchise?.franchise_code || null,
+        },
+      });
+    } catch (ledgerError) {
+      console.error('Unable to write ledger event for delete-franchise:', ledgerError);
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

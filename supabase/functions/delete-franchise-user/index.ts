@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { getAdminClient, getRequesterProfile } from '../_shared/auth.ts';
+import { insertLedgerEvent } from '../_shared/ledger.ts';
 
 function normalizeText(value?: string | null) {
   return String(value || '').trim();
@@ -12,7 +13,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getAdminClient();
-    const { profile } = await getRequesterProfile(req, supabase);
+    const { profile, user } = await getRequesterProfile(req, supabase);
     const requesterRole = String(profile.role || '').toLowerCase();
 
     if (!['master', 'owner', 'admin'].includes(requesterRole)) {
@@ -24,6 +25,10 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const userId = String(body?.userId || '').trim();
+    const effectiveRole =
+      requesterRole === 'master'
+        ? String(body?.actingAsRole || '').trim().toLowerCase() || requesterRole
+        : requesterRole;
     if (!userId) {
       return new Response(JSON.stringify({ error: 'userId is required.' }), {
         status: 400,
@@ -109,6 +114,30 @@ Deno.serve(async (req) => {
         if (proposalsUpdateError) throw proposalsUpdateError;
         proposalsUpdated = updates.length;
       }
+    }
+
+    try {
+      await insertLedgerEvent(supabase, {
+        franchiseId: updated.franchise_id,
+        actorUser: {
+          id: user?.id || null,
+          email: user?.email || null,
+        },
+        actorProfile: profile,
+        effectiveRole,
+        action: 'User removed',
+        targetType: 'user',
+        targetId: userId,
+        details: {
+          targetUserId: userId,
+          targetName: target.name || null,
+          targetEmail: target.email || null,
+          targetRole,
+          proposalsUpdated,
+        },
+      });
+    } catch (ledgerError) {
+      console.error('Unable to write ledger event for delete-franchise-user:', ledgerError);
     }
 
     return new Response(

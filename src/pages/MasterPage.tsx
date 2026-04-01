@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MasterFranchiseEditorModal from '../components/MasterFranchiseEditorModal';
 import TempPasswordModal from '../components/TempPasswordModal';
+import { getLedgerRoleLabel, listLedgerEvents, type LedgerEvent } from '../services/ledger';
 import {
   createFranchiseWithOwner,
   listAllPricingModels,
@@ -27,6 +28,28 @@ const formatDate = (value?: string) => {
   if (!value) return 'N/A';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleString();
+};
+
+const formatDetailLabel = (key: string) =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, (char) => char.toUpperCase());
+
+const formatDetailValue = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return 'N/A';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.length ? value.join(', ') : 'None';
+  if (typeof value === 'object') return JSON.stringify(value, null, 2);
+  return String(value);
 };
 
 const getUserNameLabel = (user: Pick<MasterUser, 'name'>) => {
@@ -56,6 +79,11 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [editingFranchise, setEditingFranchise] = useState<MasterFranchise | null>(null);
+  const [ledgerEvents, setLedgerEvents] = useState<LedgerEvent[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(true);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [ledgerFranchiseFilter, setLedgerFranchiseFilter] = useState('all');
+  const [selectedLedgerEvent, setSelectedLedgerEvent] = useState<LedgerEvent | null>(null);
 
   const [franchiseName, setFranchiseName] = useState('');
   const [franchiseCode, setFranchiseCode] = useState('');
@@ -97,10 +125,30 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     }
   };
 
+  const loadLedger = async () => {
+    setLedgerLoading(true);
+    setLedgerError(null);
+    try {
+      const events = await listLedgerEvents(200);
+      setLedgerEvents(events || []);
+    } catch (error: any) {
+      console.error('Failed to load ledger events:', error);
+      setLedgerEvents([]);
+      setLedgerError(error?.message || 'Unable to load ledger events.');
+    } finally {
+      setLedgerLoading(false);
+    }
+  };
+
+  const refreshMasterData = async () => {
+    await Promise.all([loadData(), loadLedger()]);
+  };
+
   useEffect(() => {
     if (isMaster) {
       void loadData();
       void loadPricingModels();
+      void loadLedger();
     }
   }, [isMaster]);
 
@@ -218,6 +266,27 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     return `${filteredPricingModels.length} of ${pricingModels.length} total`;
   }, [filteredPricingModels.length, pricingModels.length]);
 
+  const filteredLedgerEvents = useMemo(() => {
+    if (ledgerFranchiseFilter === 'all') return ledgerEvents;
+    return ledgerEvents.filter((event) => event.franchiseId === ledgerFranchiseFilter);
+  }, [ledgerEvents, ledgerFranchiseFilter]);
+
+  useEffect(() => {
+    if (ledgerFranchiseFilter === 'all') return;
+    const selectedStillExists = franchiseOptions.some((franchise) => franchise.id === ledgerFranchiseFilter);
+    if (!selectedStillExists) {
+      setLedgerFranchiseFilter('all');
+    }
+  }, [franchiseOptions, ledgerFranchiseFilter]);
+
+  const ledgerCountLabel = useMemo(() => {
+    if (ledgerEvents.length === 0) return '0 total';
+    if (filteredLedgerEvents.length === ledgerEvents.length) {
+      return `${ledgerEvents.length} total`;
+    }
+    return `${filteredLedgerEvents.length} of ${ledgerEvents.length} total`;
+  }, [filteredLedgerEvents.length, ledgerEvents.length]);
+
   const handleCreateFranchise = async () => {
     const trimmedName = franchiseName.trim();
     const trimmedCode = franchiseCode.trim().toUpperCase();
@@ -243,7 +312,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
       setFranchiseCode('');
       setOwnerEmail('');
       setOwnerName('');
-      await loadData();
+      await refreshMasterData();
     } catch (error: any) {
       console.error('Failed to create franchise:', error);
       setFormError(error?.message || 'Unable to create franchise.');
@@ -260,7 +329,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     setDeletingId(franchiseId);
     try {
       await softDeleteFranchise(franchiseId);
-      await loadData();
+      await refreshMasterData();
     } catch (error) {
       console.error('Failed to delete franchise:', error);
     } finally {
@@ -300,9 +369,13 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
         version: loaded.version,
         updatedBy: session?.userEmail || session?.userName || null,
         createNew: true,
+        copiedFromFranchiseId: model.franchiseId,
+        copiedFromFranchiseName: getFranchiseLabel(model.franchiseId),
+        copiedFromPricingModelId: model.id,
+        copiedFromPricingModelName: name,
       });
       setCopySuccess(`Copied "${name}" to ${getFranchiseLabel(targetFranchiseId)}.`);
-      await loadPricingModels();
+      await Promise.all([loadPricingModels(), loadLedger()]);
     } catch (error: any) {
       console.error('Failed to copy pricing model:', error);
       setCopyError(error?.message || 'Unable to copy pricing model.');
@@ -324,7 +397,25 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     setEditingFranchise(franchise);
     setFranchises((prev) => prev.map((row) => (row.id === franchise.id ? { ...row, ...franchise } : row)));
     onFranchiseUpdated?.(franchise);
+    void loadLedger();
   };
+
+  const getLedgerFranchiseLabel = (event: LedgerEvent) => {
+    if (event.franchiseName) return event.franchiseName;
+    if (event.franchiseId) return getFranchiseLabel(event.franchiseId);
+    return 'System';
+  };
+
+  const getLedgerUserLabel = (event: LedgerEvent) => {
+    const actorName = String(event.actorName || '').trim();
+    const actorEmail = String(event.actorEmail || '').trim();
+    return actorName || actorEmail || 'Unknown User';
+  };
+
+  const selectedLedgerEntries = useMemo(() => {
+    if (!selectedLedgerEvent?.details) return [] as Array<[string, unknown]>;
+    return Object.entries(selectedLedgerEvent.details).filter(([, value]) => value !== undefined);
+  }, [selectedLedgerEvent]);
 
   if (!isMaster) {
     return (
@@ -615,6 +706,102 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
             </div>
           )}
         </div>
+
+        <div className="master-card">
+          <div className="master-card-header">
+            <div>
+              <h2>Ledger</h2>
+              <p className="master-kicker">Recent Franchise Activity</p>
+            </div>
+            <button
+              className="master-primary-btn master-small-btn"
+              type="button"
+              onClick={() => void loadLedger()}
+              disabled={ledgerLoading}
+            >
+              {ledgerLoading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
+          <div className="master-table-actions">
+            <div className="master-filter">
+              <label htmlFor="ledger-franchise">Franchise</label>
+              <select
+                id="ledger-franchise"
+                value={ledgerFranchiseFilter}
+                onChange={(e) => setLedgerFranchiseFilter(e.target.value)}
+              >
+                <option value="all">All franchises</option>
+                {franchiseOptions.map((franchise) => (
+                  <option key={franchise.id} value={franchise.id}>
+                    {franchise.name || franchise.franchiseCode || franchise.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="master-table-meta">{ledgerCountLabel}</div>
+          </div>
+          {ledgerError && <div className="master-error">{ledgerError}</div>}
+          {ledgerLoading ? (
+            <div className="master-empty">Loading ledger...</div>
+          ) : filteredLedgerEvents.length === 0 ? (
+            <div className="master-empty">
+              {ledgerEvents.length === 0
+                ? 'No ledger events recorded yet.'
+                : 'No ledger events match the selected franchise.'}
+            </div>
+          ) : (
+            <div className="master-table-wrapper">
+              <table className="master-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Franchise Name</th>
+                    <th>User</th>
+                    <th>Role</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLedgerEvents.map((event) => {
+                    const userLabel = getLedgerUserLabel(event);
+                    const userEmail = String(event.actorEmail || '').trim();
+                    return (
+                      <tr
+                        key={event.id}
+                        className="master-ledger-row"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedLedgerEvent(event)}
+                        onKeyDown={(keyboardEvent) => {
+                          if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                            keyboardEvent.preventDefault();
+                            setSelectedLedgerEvent(event);
+                          }
+                        }}
+                      >
+                        <td>{formatDateTime(event.createdAt)}</td>
+                        <td>
+                          <div className="master-table-primary">{getLedgerFranchiseLabel(event)}</div>
+                        </td>
+                        <td>
+                          <div className="master-table-primary">{userLabel}</div>
+                          {userEmail && userEmail !== userLabel && (
+                            <div className="master-table-secondary master-table-secondary--muted">{userEmail}</div>
+                          )}
+                        </td>
+                        <td>{getLedgerRoleLabel(event)}</td>
+                        <td>
+                          <div className="master-table-primary">{event.action}</div>
+                          <div className="master-table-secondary master-table-secondary--muted">View details</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {tempPassword && (
@@ -632,9 +819,68 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
           users={usersByFranchise.get(editingFranchise.id) || []}
           updatedBy={session?.userEmail || session?.userName || null}
           onClose={() => setEditingFranchise(null)}
-          onRefresh={loadData}
+          onRefresh={refreshMasterData}
           onFranchiseUpdated={handleFranchiseUpdated}
         />
+      )}
+
+      {selectedLedgerEvent && (
+        <div className="master-ledger-backdrop" onClick={() => setSelectedLedgerEvent(null)}>
+          <div
+            className="master-ledger-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="master-editor-header">
+              <div>
+                <p className="master-editor-kicker">Ledger Detail</p>
+                <h2 className="master-editor-title">{selectedLedgerEvent.action}</h2>
+              </div>
+              <button
+                className="master-editor-close"
+                type="button"
+                onClick={() => setSelectedLedgerEvent(null)}
+                aria-label="Close ledger detail"
+              >
+                x
+              </button>
+            </div>
+            <div className="master-ledger-meta">
+              <div className="master-ledger-meta-row">
+                <span>Time</span>
+                <strong>{formatDateTime(selectedLedgerEvent.createdAt)}</strong>
+              </div>
+              <div className="master-ledger-meta-row">
+                <span>Franchise</span>
+                <strong>{getLedgerFranchiseLabel(selectedLedgerEvent)}</strong>
+              </div>
+              <div className="master-ledger-meta-row">
+                <span>User</span>
+                <strong>{getLedgerUserLabel(selectedLedgerEvent)}</strong>
+              </div>
+              <div className="master-ledger-meta-row">
+                <span>Role</span>
+                <strong>{getLedgerRoleLabel(selectedLedgerEvent)}</strong>
+              </div>
+            </div>
+            <div className="master-ledger-details">
+              <h3>Stored Detail</h3>
+              {selectedLedgerEntries.length === 0 ? (
+                <div className="master-empty">No additional details recorded.</div>
+              ) : (
+                <div className="master-ledger-detail-list">
+                  {selectedLedgerEntries.map(([key, value]) => (
+                    <div className="master-ledger-detail-row" key={key}>
+                      <div className="master-ledger-detail-key">{formatDetailLabel(key)}</div>
+                      <pre className="master-ledger-detail-value">{formatDetailValue(value)}</pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

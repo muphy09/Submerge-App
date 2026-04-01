@@ -1291,7 +1291,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         activeVersionId || finalProposal.versionId || currentVersionId
       );
 
-      const saved = await saveProposalRemote(containerToSave);
+      const saved = await saveProposalRemote(
+        containerToSave,
+        effectiveMode === 'submit' ? { ledgerAction: 'proposal_submitted' } : undefined
+      );
 
       const savedActive = applyActiveVersion(saved as Proposal);
       setProposal({ ...(savedActive as Proposal) });
