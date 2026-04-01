@@ -1,7 +1,5 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-- Contract needs to autofill to new created sections
-- Default Warranty needs to be updated
 
 Fiberglass Pools:
     - 3 Levels: Small, Medium, Large (Datasheet)
@@ -34,18 +32,13 @@ Mid Term -
 - ** Ability to select the indiviudual material instead of tiers
     - Backburner
 - Workflow for Addendum (contract changes after original) must show cost comparison of before and after 
-- Fiberglass Pricing models (email)
 - Booster pump is an add on pump
 - Ability to 'Search' for an input in the Admin Pricing Model
-- Improve export flow for Breadowns (naming)
 - Add workflow for transferring proposals to another user in the franchise (prompt before deleting user too)
-- Admin menu redesign
 - Stacked view for nav boxes
 - Tooltips for input fields that appear with logic (if electric autofill is selected, tooltip for autofill run field)
 - Option to require approval for certain users after submitting proposals. 'Submitted for Review' type of workflow
-- Franchise Code and Admin Access settings need to be behind Admin Panel for security
 - Supporting Documents (measurments) included when submitting proposal
-- Adjust profit margin % per indiviudual designer *need more info
 - Lighted Sheer (needs electric run and price) Is this lighted? checkbox (maybe)
         - Will add pool light and housing cost, Has conduit run and match WF run.
 ---------------------------------------------------------------------------------------------------------

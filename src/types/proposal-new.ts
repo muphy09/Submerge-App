@@ -799,5 +799,6 @@ export interface Proposal {
 
   // Designer overrides for contract cells (cell address -> value)
   contractOverrides?: Record<string, string | number | null>;
+  contractTemplateRevision?: string;
   warrantySections?: WarrantySection[] | null;
 }

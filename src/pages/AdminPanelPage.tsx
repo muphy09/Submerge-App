@@ -197,18 +197,18 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
 
       for (const raw of data || []) {
         try {
-          const merged = mergeWithDefaults(raw);
-          const resolvedFranchiseId = merged.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID;
-          const pricingCacheKey = `${resolvedFranchiseId}::${merged.pricingModelFranchiseId || resolvedFranchiseId}::${merged.pricingModelId || 'default'}`;
+          const resolvedFranchiseId = raw.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID;
+          const pricingCacheKey = `${resolvedFranchiseId}::${raw.pricingModelFranchiseId || resolvedFranchiseId}::${raw.pricingModelId || 'default'}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
             pricingSnapshot = await loadPricingSnapshotForFranchise(
               resolvedFranchiseId,
-              merged.pricingModelId || undefined,
-              merged.pricingModelFranchiseId || undefined
+              raw.pricingModelId || undefined,
+              raw.pricingModelFranchiseId || undefined
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }
+          const merged = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(raw));
           const calculated = withTemporaryPricingSnapshot(
             pricingSnapshot.pricing,
             () =>

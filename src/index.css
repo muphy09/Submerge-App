@@ -24,27 +24,14 @@ code {
   min-height: 100vh;
 }
 
-/* Global custom scrollbar styling */
+/* Hide default scrollbars while keeping scroll behavior intact. */
 * {
-  scrollbar-width: thin;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
   scrollbar-color: transparent transparent;
 }
 
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 3px;
-  transition: background 0.2s ease;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: rgba(8, 37, 86, 0.6);
+  width: 0;
+  height: 0;
 }

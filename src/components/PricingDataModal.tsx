@@ -9,7 +9,6 @@ import {
   savePricingModelSnapshot,
   setActivePricingModel,
   removePricingListItem,
-  resetPricingData,
   subscribeToPricingData,
   updatePricingListItem,
   updatePricingValue,
@@ -158,6 +157,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     return meta.pricingModelId || null;
   });
   const [modelName, setModelName] = useState('');
+  const [hideModelFromView, setHideModelFromView] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingAsNew, setSavingAsNew] = useState(false);
@@ -167,7 +167,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [contextHelp, setContextHelp] = useState<ContextHelp | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const activateTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<{ id: string; name: string } | null>(null);
   const labelFranchiseId = franchiseId || getActiveFranchiseId() || 'default';
@@ -212,6 +211,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     const targetFranchise = franchiseId || getActiveFranchiseId();
     setIsInitializing(true);
     setModelName('');
+    setHideModelFromView(false);
     setSelectedModelId(null);
     setHasChanges(false);
     setSelectedListItem(null);
@@ -263,21 +263,25 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       const activeMeta = getActivePricingModelMeta();
       if (rows?.length) {
         if (activeMeta.pricingModelId) {
+          const activeModel = rows.find((model) => model.id === activeMeta.pricingModelId);
           setSelectedModelId(activeMeta.pricingModelId);
           setModelName(
             activeMeta.pricingModelName ||
-              rows.find((model) => model.id === activeMeta.pricingModelId)?.name ||
+              activeModel?.name ||
               ''
           );
+          setHideModelFromView(Boolean(activeModel?.isHiddenFromView));
         } else {
           const fallback = rows.find((m) => m.isDefault) || rows[0];
           setSelectedModelId(fallback?.id ?? null);
           setModelName(fallback?.name || '');
+          setHideModelFromView(Boolean(fallback?.isHiddenFromView));
         }
       } else {
         // New franchise: keep name empty, no selected model
         setSelectedModelId(null);
         setModelName('');
+        setHideModelFromView(false);
       }
       setHasChanges(false);
     } catch (error) {
@@ -291,7 +295,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     try {
       await setActivePricingModel(modelId);
       const meta = getActivePricingModelMeta();
-      setModelName(meta.pricingModelName || '');
+      const selectedRow = pricingModels.find((model) => model.id === modelId);
+      setModelName(meta.pricingModelName || selectedRow?.name || '');
+      setHideModelFromView(Boolean(selectedRow?.isHiddenFromView));
       setSelectedListItem(null);
       setContextHelp(null);
       setPricingModels((prev) =>
@@ -306,6 +312,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const handleSelectModel = async (modelId: string) => {
     if (!modelId) {
       setSelectedModelId(null);
+      setHideModelFromView(false);
       return;
     }
     await handleLoadModel(modelId);
@@ -317,14 +324,22 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setSaveError('Please provide a model name.');
       return;
     }
+    if (selectedModelIsDefault && hideModelFromView) {
+      setSaveError('Active pricing models cannot be hidden. Set another model as active first.');
+      return;
+    }
     setSaveError(null);
     setSavingModel(true);
     try {
-      await savePricingModelSnapshot({
+      const savedModel = await savePricingModelSnapshot({
         name: modelName.trim(),
         setDefault: false,
+        isHiddenFromView: hideModelFromView,
         createNew: savingAsNew,
       });
+      if (savedModel?.pricingModelId) {
+        await setActivePricingModel(savedModel.pricingModelId);
+      }
       setSavingAsNew(false);
       await loadModels();
       emitModelsUpdated();
@@ -339,15 +354,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const handleCreateNewModel = async () => {
     setIsInitializing(true);
     try {
-      const defaultModel = pricingModels.find((m) => m.isDefault) || pricingModels[0];
-      if (defaultModel) {
-        await setActivePricingModel(defaultModel.id);
-      } else {
-        await initPricingDataStore(franchiseId || getActiveFranchiseId());
-      }
       clearActivePricingModelMeta();
       setSelectedModelId(null);
       setModelName('');
+      setSaveError(null);
       setSelectedListItem(null);
       setContextHelp(null);
       setSavingAsNew(true);
@@ -579,6 +589,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const selectedModel = selectedModelId ? pricingModels.find((m) => m.id === selectedModelId) : null;
   const selectedModelIsDefault = Boolean(selectedModel?.isDefault);
+  const selectedModelIsHiddenFromView = Boolean(hideModelFromView);
   const getSectionGlyph = (title: string) => {
     const parts = title.split(' ').filter(Boolean);
     const abbreviation = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).trim();
@@ -699,6 +710,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const handleActivateSelected = async () => {
     if (!selectedModelId) return;
+    if (selectedModelIsHiddenFromView) {
+      setSaveError('Hidden pricing models must be unhidden before they can be set active.');
+      return;
+    }
     if (activateTimerRef.current) {
       clearTimeout(activateTimerRef.current);
     }
@@ -3932,14 +3947,33 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       <option value="">Start a new pricing model</option>
                       {pricingModels.map((model) => (
                         <option key={model.id} value={model.id}>
-                          {model.name} {model.isDefault ? '(Active)' : ''}
+                          {`${model.name}${model.isDefault ? ' (Active)' : ''}${model.isHiddenFromView ? ' (Hidden)' : ''}`}
                         </option>
                       ))}
                     </select>
                   </div>
                 </label>
                 <label className="pricing-input-block pricing-hero__control">
-                  <span className="pricing-input-block__label">Model Name</span>
+                  <div className="pricing-input-block__label-row">
+                    <span className="pricing-input-block__label">Model Name</span>
+                    <div
+                      className="pricing-tooltip"
+                      data-tooltip="Hide this pricing model from the dropdown selection in the proposal builder"
+                    >
+                      <label className="pricing-checkbox inline pricing-model-visibility-toggle">
+                        <input
+                          type="checkbox"
+                          checked={hideModelFromView}
+                          disabled={isInitializing}
+                          onChange={(e) => {
+                            setHideModelFromView(e.target.checked);
+                            setHasChanges(true);
+                          }}
+                        />
+                        <span>Hide this model from view</span>
+                      </label>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     className="pricing-input"
@@ -3960,14 +3994,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                     disabled={isInitializing}
                   >
                     Create New Model
-                  </button>
-                  <button
-                    className="pricing-chip-button ghost"
-                    onClick={() => setConfirmResetOpen(true)}
-                    type="button"
-                    disabled={isInitializing}
-                  >
-                    Reset to Defaults
                   </button>
                   {showSetActiveButton && (
                     <button
@@ -4021,6 +4047,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               <span className="pricing-label muted">Current Model:</span>
               <span className="pricing-model-panel__name">{displayModelName}</span>
               {selectedModelIsDefault && <span className="pricing-pill success">Active</span>}
+              {selectedModelIsHiddenFromView && <span className="pricing-pill">Hidden</span>}
             </div>
           </div>
 
@@ -4123,28 +4150,20 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           </div>
         </div>
       </div>
-      {(confirmDeleteModel || confirmResetOpen) && (
+      {confirmDeleteModel && (
         <div className="pricing-confirm-backdrop">
           <div className="pricing-confirm-card">
             <div className="pricing-confirm-message">
-              {confirmDeleteModel
-                ? `Are you sure you want to remove the '${confirmDeleteModel.name}' price model?`
-                : `Are you sure you want to reset '${displayModelName}' back to default?`}
+              {`Are you sure you want to remove the '${confirmDeleteModel.name}' price model?`}
             </div>
             <div className="pricing-confirm-actions">
               <button
                 className="pricing-chip-button danger"
                 type="button"
                 onClick={() => {
-                  if (confirmDeleteModel) {
-                    void handleDeleteModel(confirmDeleteModel.id, false);
-                    setConfirmDeleteModel(null);
-                    setHasChanges(false);
-                  } else {
-                    resetPricingData();
-                    setConfirmResetOpen(false);
-                    setHasChanges(true);
-                  }
+                  void handleDeleteModel(confirmDeleteModel.id, false);
+                  setConfirmDeleteModel(null);
+                  setHasChanges(false);
                 }}
               >
                 I'm sure
@@ -4154,7 +4173,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 type="button"
                 onClick={() => {
                   setConfirmDeleteModel(null);
-                  setConfirmResetOpen(false);
                 }}
               >
                 No

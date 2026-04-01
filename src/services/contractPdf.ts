@@ -1,6 +1,6 @@
 import { PDFDocument, PDFFont, rgb, StandardFonts, TextAlignment } from 'pdf-lib';
 import { ContractFieldRender } from './contractGenerator';
-import { ContractTemplateId, getContractTemplate } from './contractTemplates';
+import { ContractStaticPatch, ContractTemplateId, getContractTemplate } from './contractTemplates';
 
 export type ContractPdfFieldLayout = {
   name: string;
@@ -33,6 +33,13 @@ const HEIGHT_SCALE = 0.92; // reduce further to account for field padding/appear
 const WIDTH_PADDING = 2;
 const BLUE_FILL = rgb(232 / 255, 240 / 255, 255 / 255);
 const YELLOW_FILL = rgb(255 / 255, 247 / 255, 209 / 255);
+const WHITE_FILL = rgb(1, 1, 1);
+const HEADER_GRAY_FILL = rgb(174 / 255, 170 / 255, 170 / 255);
+
+function resolvePatchFillColor(fill: ContractStaticPatch['fill']) {
+  if (fill === 'headerGray') return HEADER_GRAY_FILL;
+  return WHITE_FILL;
+}
 
 async function loadTemplateBytes(templateId?: ContractTemplateId): Promise<Uint8Array> {
   const template = getContractTemplate(templateId);
@@ -70,10 +77,12 @@ export async function buildContractPdf(
   options: ContractPdfBuildOptions = {}
 ): Promise<ContractPdfResult> {
   const { flatten = false, includeFormFields = true, templateId } = options;
+  const template = getContractTemplate(templateId);
   const templateBytes = await loadTemplateBytes(templateId);
   const pdf = await PDFDocument.load(templateBytes);
   const form = pdf.getForm();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
   const shouldDrawText = flatten;
   const useFormFields = includeFormFields && !flatten;
 
@@ -99,6 +108,37 @@ export async function buildContractPdf(
   }));
 
   const pdfFields: ContractPdfFieldLayout[] = [];
+
+  template.staticPatches.forEach((patch) => {
+    const pageIndex = Math.max(0, Math.min(pdf.getPageCount() - 1, patch.page - 1));
+    const page = pdf.getPage(pageIndex);
+    const [x, y, width, height] = patch.rect;
+
+    page.drawRectangle({
+      x,
+      y,
+      width,
+      height,
+      color: resolvePatchFillColor(patch.fill),
+      borderWidth: 0,
+    });
+
+    (patch.texts || []).forEach((text) => {
+      const textFont = text.fontStyle === 'bold' ? boldFont : font;
+      const textWidth = textFont.widthOfTextAtSize(text.text, text.fontSize);
+      const drawX =
+        text.align === 'center' && text.width
+          ? text.x + Math.max(0, (text.width - textWidth) / 2)
+          : text.x;
+      page.drawText(text.text, {
+        x: drawX,
+        y: text.y,
+        size: text.fontSize,
+        font: textFont,
+        color: rgb(0, 0, 0),
+      });
+    });
+  });
 
   fields.forEach((field) => {
     if (!(field.label || '').trim()) return;

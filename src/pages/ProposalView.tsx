@@ -16,7 +16,11 @@ import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
-import { initPricingDataStore } from '../services/pricingDataStore';
+import {
+  initPricingDataStore,
+  loadPricingSnapshotForFranchise,
+  withTemporaryPricingSnapshot,
+} from '../services/pricingDataStore';
 import { getSessionRole } from '../services/session';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 import {
@@ -257,20 +261,42 @@ function ProposalView() {
         navigate('/', { replace: true });
         return;
       }
-      const merged = mergeProposalWithDefaults(data || {}) as Proposal;
-      const allVersions = listAllVersions(merged as Proposal).map((v) => ({
-        ...(mergeProposalWithDefaults(v) as Proposal),
-        versionId: v.versionId || 'original',
-        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
-        isOriginalVersion: v.isOriginalVersion,
-        activeVersionId: v.activeVersionId,
-        versions: [],
-      })) as Proposal[];
-      const activeApplied = applyActiveVersion(merged as Proposal);
+      const sourceProposal = JSON.parse(JSON.stringify(data)) as Proposal;
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+      const mergeWithPricingSnapshot = async (input: Partial<Proposal>): Promise<Partial<Proposal>> => {
+        const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || 'default';
+        const pricingModelId = input.pricingModelId || undefined;
+        const pricingModelFranchiseId = input.pricingModelFranchiseId || undefined;
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
+        let pricingSnapshot = pricingCache.get(pricingCacheKey);
+        if (!pricingSnapshot) {
+          pricingSnapshot = await loadPricingSnapshotForFranchise(
+            resolvedFranchiseId,
+            pricingModelId,
+            pricingModelFranchiseId
+          );
+          pricingCache.set(pricingCacheKey, pricingSnapshot);
+        }
+        return withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(input));
+      };
+
+      const activeApplied = applyActiveVersion(sourceProposal);
+      const allVersions = (
+        await Promise.all(
+          listAllVersions(sourceProposal).map(async (v) => ({
+            ...((await mergeWithPricingSnapshot(v)) as Proposal),
+            versionId: v.versionId || 'original',
+            versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+            isOriginalVersion: v.isOriginalVersion,
+            activeVersionId: v.activeVersionId,
+            versions: [],
+          }))
+        )
+      ) as Proposal[];
       const activeId = activeApplied.activeVersionId || activeApplied.versionId || 'original';
       const activeVersion =
         allVersions.find((v) => v.versionId === activeId) ||
-        (mergeProposalWithDefaults(activeApplied) as Proposal);
+        ((await mergeWithPricingSnapshot(activeApplied)) as Proposal);
 
       await initPricingDataStore(
         activeVersion.franchiseId,

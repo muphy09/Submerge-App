@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjustment } from '../types/proposal-new';
 import SubmergeAdvantageWarranty from './SubmergeAdvantageWarranty';
 import FranchiseLogo from './FranchiseLogo';
+import { hasIncludedDecking } from '../utils/decking';
 import './CostBreakdownView.css';
 
 interface Props {
@@ -63,6 +64,9 @@ function CostBreakdownView({
     () => normalizeRetailAdjustments(proposal?.retailAdjustments),
     [proposal?.retailAdjustments]
   );
+  const shouldUseCopingOnlyLabels = Boolean(proposal?.tileCopingDecking) && !hasIncludedDecking(proposal);
+  const copingDeckingLaborLabel = shouldUseCopingOnlyLabels ? 'Coping Labor' : 'Coping/Decking Labor';
+  const copingDeckingMaterialLabel = shouldUseCopingOnlyLabels ? 'Coping Material' : 'Coping/Decking Material';
   const [adjustmentInputs, setAdjustmentInputs] = useState<string[]>(
     () => retailAdjustments.map((adj) => (adj.amount === 0 ? '' : String(adj.amount)))
   );
@@ -172,8 +176,8 @@ function CostBreakdownView({
     { label: 'Shotcrete Material', cost: baseTotals.shotcreteMaterial ?? 0, items: costBreakdown.shotcreteMaterial || [] },
     { label: 'Tile Labor', cost: baseTotals.tileLabor ?? 0, items: costBreakdown.tileLabor || [] },
     { label: 'Tile Material', cost: baseTotals.tileMaterial ?? 0, items: costBreakdown.tileMaterial || [] },
-    { label: 'Coping/Decking Labor', cost: baseTotals.copingDeckingLabor ?? 0, items: costBreakdown.copingDeckingLabor || [] },
-    { label: 'Coping/Decking Material', cost: baseTotals.copingDeckingMaterial ?? 0, items: costBreakdown.copingDeckingMaterial || [] },
+    { label: copingDeckingLaborLabel, cost: baseTotals.copingDeckingLabor ?? 0, items: costBreakdown.copingDeckingLabor || [] },
+    { label: copingDeckingMaterialLabel, cost: baseTotals.copingDeckingMaterial ?? 0, items: costBreakdown.copingDeckingMaterial || [] },
     {
       label: 'Stone/Rockwork',
       cost: (baseTotals.stoneRockworkLabor ?? 0) + (baseTotals.stoneRockworkMaterial ?? 0),
@@ -362,8 +366,8 @@ function CostBreakdownView({
       'Shotcrete Material',
       'Tile Labor',
       'Tile Material',
-      'Coping/Decking Labor',
-      'Coping/Decking Material',
+      copingDeckingLaborLabel,
+      copingDeckingMaterialLabel,
       'Stone/Rockwork',
       'Drainage',
       'Equipment Ordered',

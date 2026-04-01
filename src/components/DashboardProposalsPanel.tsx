@@ -97,12 +97,16 @@ function formatStatusLabel(status?: string | null) {
   return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function getPricingModelSourceFranchiseId(proposal: Proposal) {
+  return proposal.pricingModelFranchiseId || proposal.franchiseId || 'default';
+}
+
 function getPricingModelClass(
   proposal: Proposal,
   defaultModelMap: Record<string, string | null>,
   availableModelMap: Record<string, Set<string>>
 ) {
-  const franchiseId = proposal.franchiseId || 'default';
+  const franchiseId = getPricingModelSourceFranchiseId(proposal);
   const modelId = proposal.pricingModelId || '';
   const defaultId = defaultModelMap[franchiseId];
   const availableSet = availableModelMap[franchiseId] || new Set<string>();
@@ -177,7 +181,9 @@ function DashboardProposalsPanel({
     let cancelled = false;
 
     async function loadPricingModels() {
-      const franchiseIds = Array.from(new Set(proposals.map((proposal) => proposal.franchiseId || 'default')));
+      const franchiseIds = Array.from(
+        new Set(proposals.map((proposal) => getPricingModelSourceFranchiseId(proposal)))
+      );
       const nextDefaultMap: Record<string, string | null> = {};
       const nextAvailableMap: Record<string, Set<string>> = {};
 

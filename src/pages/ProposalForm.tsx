@@ -53,8 +53,10 @@ import {
   getActivePricingModelMeta,
   initPricingDataStore,
   getPricingDataSnapshot,
+  loadPricingSnapshotForFranchise,
   setActivePricingModel,
   subscribeToPricingData,
+  withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
 import pricingData from '../services/pricingData';
 import {
@@ -255,6 +257,7 @@ type PricingModelOption = {
   id: string;
   name: string;
   isDefault?: boolean;
+  isHiddenFromView?: boolean;
   removed?: boolean;
   franchiseId?: string;
   franchiseName?: string;
@@ -438,6 +441,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             id: model.id,
             name: model.name,
             isDefault: model.isDefault,
+            isHiddenFromView: model.isHiddenFromView,
             franchiseId: model.franchiseId,
             franchiseName: franchiseNameLookup.get(model.franchiseId) || model.franchiseId,
           }))
@@ -458,8 +462,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         }));
       }
 
-      const currentFranchiseModels = models.filter((model) => (model.franchiseId || franchiseId) === franchiseId);
-      const defaultModel = currentFranchiseModels.find((model) => model.isDefault) || currentFranchiseModels[0];
+      const visibleModels = models.filter((model) => !model.isHiddenFromView);
+      const visibleCurrentFranchiseModels = visibleModels.filter((model) => (model.franchiseId || franchiseId) === franchiseId);
+      const defaultModel = visibleCurrentFranchiseModels.find((model) => model.isDefault) || visibleCurrentFranchiseModels[0];
       setDefaultPricingModelId(defaultModel ? defaultModel.id : null);
 
       const targetModelId = desiredModelId || selectedPricingModelId || defaultModel?.id || null;
@@ -485,11 +490,13 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
           id: missingModelId,
           name: `${placeholderName} (Removed)`,
           isDefault: false,
+          isHiddenFromView: false,
           franchiseId: placeholderFranchiseId,
           franchiseName: franchiseNameLookup.get(placeholderFranchiseId) || placeholderFranchiseId,
           removed: true,
         };
         models = [...models, removedModel];
+        const selectableModels = [...visibleModels, removedModel];
         setSelectedPricingModelId(missingModelId);
         setSelectedPricingModelName(removedModel.name);
         setProposal((prev) => ({
@@ -499,10 +506,14 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
           pricingModelFranchiseId: placeholderFranchiseId || undefined,
           pricingModelIsDefault: false,
         }));
-        setPricingModels(models);
+        setPricingModels(selectableModels);
         return;
       }
-      setPricingModels(models);
+      const selectableModels =
+        targetModel && targetModel.isHiddenFromView && !visibleModels.some((model) => model.id === targetModel.id)
+          ? [...visibleModels, targetModel]
+          : visibleModels;
+      setPricingModels(selectableModels);
 
       if (targetModel) {
         await applyPricingModelSelection(
@@ -1022,8 +1033,26 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         navigate('/', { replace: true });
         return;
       }
-      // Deep clone to ensure fresh object references
-      const freshData = mergeWithDefaults(JSON.parse(JSON.stringify(data)));
+      const sourceProposal = JSON.parse(JSON.stringify(data)) as Proposal;
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+      const mergeWithPricingSnapshot = async (input: Partial<Proposal>): Promise<Partial<Proposal>> => {
+        const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || getSessionFranchiseId();
+        const pricingModelId = input.pricingModelId || undefined;
+        const pricingModelFranchiseId = input.pricingModelFranchiseId || undefined;
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
+        let pricingSnapshot = pricingCache.get(pricingCacheKey);
+        if (!pricingSnapshot) {
+          pricingSnapshot = await loadPricingSnapshotForFranchise(
+            resolvedFranchiseId,
+            pricingModelId,
+            pricingModelFranchiseId
+          );
+          pricingCache.set(pricingCacheKey, pricingSnapshot);
+        }
+        return withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(input));
+      };
+
+      const freshData = await mergeWithPricingSnapshot(sourceProposal);
 
       // Normalize water features to the new catalog-driven shape
       freshData.waterFeatures = normalizeWaterFeatures(freshData.waterFeatures);
@@ -1042,21 +1071,26 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
       const versioned = applyActiveVersion(freshData as Proposal);
       const allVersions = listAllVersions(freshData as Proposal);
-      const allVersionsWithDefaults = allVersions.map((v) => ({
-        ...(mergeWithDefaults(v) as Proposal),
-        versionId: v.versionId || 'original',
-        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
-        isOriginalVersion: v.isOriginalVersion,
-        activeVersionId: v.activeVersionId,
-        versions: [],
-      })) as Proposal[];
+      const allVersionsWithDefaults = (
+        await Promise.all(
+          allVersions.map(async (v) => ({
+            ...((await mergeWithPricingSnapshot(v)) as Proposal),
+            waterFeatures: normalizeWaterFeatures((v as Proposal).waterFeatures),
+            versionId: v.versionId || 'original',
+            versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
+            isOriginalVersion: v.isOriginalVersion,
+            activeVersionId: v.activeVersionId,
+            versions: [],
+          }))
+        )
+      ) as Proposal[];
       const desiredVersionId =
         versionIdFromState || versioned.activeVersionId || versioned.versionId || 'original';
       const targetVersion =
         allVersionsWithDefaults.find((v) => v.versionId === desiredVersionId) ||
         allVersionsWithDefaults.find((v) => v.versionId === versioned.versionId) ||
         allVersionsWithDefaults[0] ||
-        (mergeWithDefaults(versioned) as Proposal);
+        ((await mergeWithPricingSnapshot(versioned)) as Proposal);
       const sanitizedTarget: Proposal = { ...(targetVersion as Proposal), versions: [] };
       const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
 
@@ -1627,7 +1661,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     name: string,
     franchiseId?: string | null,
     franchiseName?: string | null,
-    removed?: boolean
+    removed?: boolean,
+    hidden?: boolean
   ) => {
     const franchiseLabel = isMasterUser ? (franchiseName || franchiseId || '').trim() : '';
     const normalizedName = (name || '').trim();
@@ -1637,6 +1672,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const baseLabel = [normalizedName || 'Unknown Pricing Model', franchiseLabel].filter(Boolean).join(' - ');
     if (removed && !baseLabel.toLowerCase().includes('(removed)')) {
       return `${baseLabel} (Removed)`;
+    }
+    if (hidden && !baseLabel.toLowerCase().includes('(hidden)')) {
+      return `${baseLabel} (Hidden)`;
     }
     return baseLabel;
   };
@@ -1657,7 +1695,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     normalizedSelectedPricingModelName,
     selectedPricingModelFranchiseId,
     selectedPricingModel?.franchiseName,
-    showRemovedPricingModelIndicator
+    showRemovedPricingModelIndicator,
+    Boolean(selectedPricingModel?.isHiddenFromView) && !showRemovedPricingModelIndicator
   );
   const pricingModelDisplayName = showRemovedPricingModelIndicator
     ? normalizedSelectedPricingModelLabel || 'Unknown Pricing Model (Removed)'
@@ -1704,7 +1743,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             model.name,
             model.franchiseId,
             model.franchiseName,
-            Boolean(model.removed)
+            Boolean(model.removed),
+            Boolean(model.isHiddenFromView)
           );
           return (
             <option key={model.id} value={model.id}>

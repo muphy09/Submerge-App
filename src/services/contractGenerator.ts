@@ -78,6 +78,7 @@ const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set([
 const SANITATION_NONE_FIELD_IDS = new Set(['p1_24', 'p1_25']);
 const WATER_FEATURE_CATALOG = flattenWaterFeatures(pricingData.waterFeatures);
 const WATER_FEATURE_NAME_BY_ID = new Map(WATER_FEATURE_CATALOG.map((item) => [item.id, item.name]));
+const WATER_FEATURE_CATEGORY_BY_ID = new Map(WATER_FEATURE_CATALOG.map((item) => [item.id, item.category]));
 export const CONTRACT_DEPOSIT_SOURCE_FIELD_IDS = ['p1_deposit_amount', 'p1_pay_deposit'] as const;
 export const CONTRACT_DEPOSIT_SCHEDULE_FIELD_IDS = [
   'p1_pay_excavation',
@@ -270,6 +271,15 @@ function getWaterFeatureName(featureId?: string): string {
   return WATER_FEATURE_NAME_BY_ID.get(featureId) || featureId;
 }
 
+function getWaterFeatureCategory(featureId?: string): string {
+  if (!featureId) return '';
+  if (WATER_FEATURE_CATEGORY_BY_ID.has(featureId)) {
+    return WATER_FEATURE_CATEGORY_BY_ID.get(featureId) || '';
+  }
+  const byName = WATER_FEATURE_CATALOG.find((item) => item.name === featureId);
+  return byName?.category || '';
+}
+
 function getInteriorFinishLabel(finishType?: string): string {
   if (!finishType) return '';
   const finish = pricingData.interiorFinish?.finishes?.find((item) => item.id === finishType);
@@ -324,20 +334,24 @@ function pickWaterFeatures(selections: WaterFeatureSelection[] | undefined) {
     laminar: [] as WaterFeatureSelection[],
     bowl: [] as WaterFeatureSelection[],
     sconce: [] as WaterFeatureSelection[],
+    bubbler: [] as WaterFeatureSelection[],
     other: [] as WaterFeatureSelection[],
   };
 
   base.forEach((sel) => {
     const id = sel.featureId || '';
-    if (id.includes('sheer')) {
+    const category = getWaterFeatureCategory(id).toLowerCase();
+    if (category.includes('sheer') || id.includes('sheer')) {
       byType.sheer.push(sel);
-    } else if (id.includes('deck-jet')) {
+    } else if (category === 'jets' || id.includes('deck-jet')) {
       byType.deckJet.push(sel);
-    } else if (id.includes('laminar')) {
+    } else if (category.includes('laminar') || id.includes('laminar')) {
       byType.laminar.push(sel);
-    } else if (id.includes('wok') || id.includes('bowl')) {
+    } else if (category.includes('bubbler') || id.includes('bubbler')) {
+      byType.bubbler.push(sel);
+    } else if (category.includes('wok') || category.includes('bowl') || id.includes('wok') || id.includes('bowl')) {
       byType.bowl.push(sel);
-    } else if (id.includes('sconce') || id.includes('scupper')) {
+    } else if (category.includes('sconce') || category.includes('scupper') || id.includes('sconce') || id.includes('scupper')) {
       byType.sconce.push(sel);
     } else {
       byType.other.push(sel);
@@ -369,6 +383,30 @@ function getRetailPrice(proposal: ProposalWithPricing): number {
   );
 }
 
+function getContractBubblerSummary(selections: WaterFeatureSelection[]): { name: string; quantity: string } {
+  const bubblerSelections = selections.filter((selection) => Number(selection.quantity || 0) > 0);
+  if (!bubblerSelections.length) {
+    return { name: 'None', quantity: '0' };
+  }
+
+  const uniqueNames = Array.from(
+    new Set(
+      bubblerSelections
+        .map((selection) => getWaterFeatureName(selection.featureId))
+        .map((name) => name.trim())
+        .filter(Boolean)
+    )
+  );
+  const totalQuantity = bubblerSelections.reduce((sum, selection) => sum + (Number(selection.quantity) || 0), 0);
+  const primaryName = uniqueNames[0] || 'None';
+  const name = uniqueNames.length <= 1 ? primaryName : `${primaryName} +${uniqueNames.length - 1} more`;
+
+  return {
+    name,
+    quantity: formatCount(totalQuantity),
+  };
+}
+
 export function getContractTotalCashPrice(proposal: Proposal): number {
   return getRetailPrice(proposal);
 }
@@ -389,6 +427,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   const pricing = getRetailPrice(proposal);
   const waterFeatures = pickWaterFeatures(proposal.waterFeatures?.selections);
   const additionalSpecificationLines = buildAdditionalSpecificationLines(proposal);
+  const bubblerSummary = getContractBubblerSummary(waterFeatures.bubbler);
 
   if (ADDITIONAL_SPEC_FIELD_ID_SET.has(field.id)) {
     const fieldIndex = ADDITIONAL_SPEC_FIELD_IDS.indexOf(field.id as (typeof ADDITIONAL_SPEC_FIELD_IDS)[number]);
@@ -493,10 +532,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   }
 
   if (['p2_82', 'p2_84', 'p2_86', 'p2_88'].includes(field.id)) {
+    if (field.id === 'p2_82') return bubblerSummary.name;
     return 'None';
   }
 
   if (['p2_83', 'p2_85', 'p2_87', 'p2_89'].includes(field.id)) {
+    if (field.id === 'p2_83') return bubblerSummary.quantity;
     return '0';
   }
 

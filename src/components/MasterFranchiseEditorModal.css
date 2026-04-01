@@ -191,6 +191,30 @@
   justify-content: flex-end;
 }
 
+.master-editor-pricing-table-wrapper {
+  border-radius: 12px;
+  border: 1px solid #d9e4ee;
+  background: #ffffff;
+}
+
+.master-editor-pricing-table {
+  min-width: 680px;
+}
+
+.master-editor-pricing-table th:last-child,
+.master-editor-pricing-table td:last-child {
+  width: 340px;
+}
+
+.master-editor-pricing-actions {
+  justify-content: flex-start;
+}
+
+.master-editor-pricing-actions select {
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+
 .master-secondary-btn {
   padding: 10px 12px;
   background: #ffffff;
@@ -248,6 +272,7 @@
 
   .master-editor-user-actions .master-secondary-btn,
   .master-editor-user-actions .master-danger-btn,
+  .master-editor-pricing-actions .master-primary-btn,
   .master-editor-section-header .master-primary-btn,
   .master-editor-add-card .master-primary-btn {
     width: 100%;

@@ -12,6 +12,7 @@ import {
 import { isEnvFlagTrue } from './env';
 import { applyActiveVersion } from '../utils/proposalVersions';
 import { logLedgerEventSafe } from './ledger';
+import { upgradeProposalContractTemplateRevision } from './contractTemplateUpgrade';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
@@ -241,11 +242,14 @@ function ensureProposalWriteMetadata(proposal: Proposal, session?: UserSession |
 }
 
 function normalizeForConsumption(proposal: Proposal, session?: UserSession | null, stored?: StoredProposalRow): Proposal {
-  const withMeta = ensureProposalReadMetadata(proposal, session, stored);
+  const withMeta = upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(proposal, session, stored));
   const active = applyActiveVersion(withMeta);
-  const normalizedVersions = (active.versions || []).map((v) => ensureProposalReadMetadata(v, session, stored));
+  const normalizedActive = upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(active, session, stored));
+  const normalizedVersions = (normalizedActive.versions || []).map((v) =>
+    upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(v, session, stored))
+  );
   return {
-    ...ensureProposalReadMetadata(active, session, stored),
+    ...normalizedActive,
     versions: normalizedVersions,
   };
 }
@@ -352,7 +356,7 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase not configured');
 
-  const normalized = ensureProposalWriteMetadata(applyActiveVersion(proposal));
+  const normalized = upgradeProposalContractTemplateRevision(ensureProposalWriteMetadata(applyActiveVersion(proposal)));
   const now = nowIso();
 
   const { error } = await supabase

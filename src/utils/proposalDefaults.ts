@@ -21,6 +21,7 @@ import {
   RetailAdjustment,
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { CURRENT_CONTRACT_TEMPLATE_REVISION } from '../services/contractTemplateUpgrade';
 import { getEquipmentItemCost } from './equipmentCost';
 import { getDefaultCleanerOption, getDefaultCleanerQuantity } from './cleanerDefaults';
 import { getNoPumpSelection } from './pumpDefaults';
@@ -423,6 +424,7 @@ export function getDefaultProposal(): Partial<Proposal> {
     taxAmount: 0,
     totalCost: 0,
     contractOverrides: {},
+    contractTemplateRevision: CURRENT_CONTRACT_TEMPLATE_REVISION,
     warrantySections: null,
   };
 }

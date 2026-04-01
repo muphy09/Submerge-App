@@ -511,29 +511,6 @@
   margin-left: auto;
 }
 
-.pricing-reset-confirm {
-  margin-top: 10px;
-  padding: 12px;
-  border: 1px solid #e0e7ef;
-  border-radius: 12px;
-  background: #f8fafc;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.08);
-}
-
-.pricing-reset-confirm__message {
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.pricing-reset-confirm__actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
 .pricing-label {
   font-weight: 700;
   color: #1f2c3d;
@@ -550,6 +527,14 @@
   font-size: 13px;
   color: #475569;
   font-weight: 700;
+}
+
+.pricing-input-block__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .pricing-select select,
@@ -594,6 +579,14 @@
 
 .pricing-checkbox.inline {
   white-space: nowrap;
+}
+
+.pricing-model-visibility-toggle {
+  font-size: 12px;
+}
+
+.pricing-model-visibility-toggle input {
+  margin: 0;
 }
 
 .pricing-model-panel__info-bar {

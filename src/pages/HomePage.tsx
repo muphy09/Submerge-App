@@ -86,18 +86,18 @@ function HomePage({ session }: HomePageProps) {
       const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
       for (const raw of filtered) {
         try {
-          const merged = mergeWithDefaults(raw);
-          const targetFranchiseId = merged.franchiseId || sessionFranchiseId;
-          const pricingCacheKey = `${targetFranchiseId}::${merged.pricingModelFranchiseId || targetFranchiseId}::${merged.pricingModelId || 'default'}`;
+          const targetFranchiseId = raw.franchiseId || sessionFranchiseId;
+          const pricingCacheKey = `${targetFranchiseId}::${raw.pricingModelFranchiseId || targetFranchiseId}::${raw.pricingModelId || 'default'}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
             pricingSnapshot = await loadPricingSnapshotForFranchise(
               targetFranchiseId,
-              merged.pricingModelId || undefined,
-              merged.pricingModelFranchiseId || undefined
+              raw.pricingModelId || undefined,
+              raw.pricingModelFranchiseId || undefined
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }
+          const merged = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(raw));
           const calculated = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
             MasterPricingEngine.calculateCompleteProposal(merged, (merged as any).papDiscounts)
           );

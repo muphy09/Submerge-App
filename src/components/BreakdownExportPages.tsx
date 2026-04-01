@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { resolveWarrantySections } from '../utils/warranty';
+import { hasIncludedDecking } from '../utils/decking';
 import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjustment } from '../types/proposal-new';
 import type { WarrantySection } from '../types/warranty';
 import './BreakdownExportPages.css';
@@ -60,8 +61,12 @@ const getRetailOverride = (item?: CostLineItem): number | null => {
   return Number.isFinite(override) ? Number(override) : null;
 };
 
-const toCostRows = (costBreakdown: CostBreakdown): ExportRow[] => {
+const toCostRows = (costBreakdown: CostBreakdown, proposal?: Partial<Proposal>): ExportRow[] => {
   const baseTotals = costBreakdown?.totals || ({} as CostBreakdown['totals']);
+  const shouldUseCopingOnlyLabels = Boolean(proposal?.tileCopingDecking) && !hasIncludedDecking(proposal);
+  const copingDeckingLaborLabel = shouldUseCopingOnlyLabels ? 'Coping Labor' : 'Coping/Decking Labor';
+  const copingDeckingMaterialLabel = shouldUseCopingOnlyLabels ? 'Coping Material' : 'Coping/Decking Material';
+
   return [
     { label: 'Plans & Engineering', value: baseTotals.plansAndEngineering ?? 0 },
     { label: 'Layout', value: baseTotals.layout ?? 0 },
@@ -75,8 +80,8 @@ const toCostRows = (costBreakdown: CostBreakdown): ExportRow[] => {
     { label: 'Shotcrete Material', value: baseTotals.shotcreteMaterial ?? 0 },
     { label: 'Tile Labor', value: baseTotals.tileLabor ?? 0 },
     { label: 'Tile Material', value: baseTotals.tileMaterial ?? 0 },
-    { label: 'Coping/Decking Labor', value: baseTotals.copingDeckingLabor ?? 0 },
-    { label: 'Coping/Decking Material', value: baseTotals.copingDeckingMaterial ?? 0 },
+    { label: copingDeckingLaborLabel, value: baseTotals.copingDeckingLabor ?? 0 },
+    { label: copingDeckingMaterialLabel, value: baseTotals.copingDeckingMaterial ?? 0 },
     {
       label: 'Stone/Rockwork',
       value: (baseTotals.stoneRockworkLabor ?? 0) + (baseTotals.stoneRockworkMaterial ?? 0),
@@ -128,7 +133,7 @@ const allItems = (costBreakdown: CostBreakdown): CostLineItem[] => [
 export function BreakdownCostExportPage({ costBreakdown, customerName, proposal, pricing }: CostExportProps) {
   const franchiseId = proposal?.franchiseId;
   const rows = useMemo(() => {
-    const baseRows = toCostRows(costBreakdown);
+    const baseRows = toCostRows(costBreakdown, proposal);
     const baseTotals = costBreakdown?.totals || ({} as CostBreakdown['totals']);
     const costBasis =
       pricing?.totalCostsBeforeOverhead ??

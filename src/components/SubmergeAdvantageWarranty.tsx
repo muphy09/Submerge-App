@@ -22,6 +22,7 @@ type FocusTarget =
 type ContextMenuState =
   | { x: number; y: number; type: 'sheet' }
   | { x: number; y: number; type: 'section'; sectionId: string }
+  | { x: number; y: number; type: 'advantage-column'; sectionId: string }
   | { x: number; y: number; type: 'feature'; sectionId: string; itemId: string }
   | { x: number; y: number; type: 'advantage'; sectionId: string; itemId: string };
 
@@ -399,6 +400,22 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
     setContextMenu(null);
   };
 
+  const handleAddAdvantageItem = (sectionId: string) => {
+    const newAdvantage = createEmptyWarrantyAdvantageItem();
+    applySections((prev) =>
+      prev.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              advantageItems: [...section.advantageItems, newAdvantage],
+            }
+          : section
+      )
+    );
+    setContextMenu(null);
+    setFocusTarget({ type: 'advantage', sectionId, itemId: newAdvantage.id || '' });
+  };
+
   const handleAddCategoryBelow = (sectionId: string) => {
     const nextSection = createEmptyWarrantySection();
     applySections((prev) => {
@@ -469,6 +486,17 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
       );
     }
 
+    if (contextMenu.type === 'advantage-column') {
+      return createPortal(
+        <div className="warranty-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button type="button" onClick={() => handleAddAdvantageItem(contextMenu.sectionId)}>
+            Add Line Item
+          </button>
+        </div>,
+        document.body
+      );
+    }
+
     if (contextMenu.type === 'feature') {
       return createPortal(
         <div className="warranty-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
@@ -515,7 +543,7 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
           </p>
           {editable && (
             <p className="warranty-edit-hint">
-              Click text to edit. Right-click category titles or line items to add or remove entries.
+              Click text to edit. Right-click category titles, line items, or empty advantage space to add or remove entries.
             </p>
           )}
         </div>
@@ -699,10 +727,28 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
                   ))}
                 </div>
 
-                <div className="warranty-advantage-column">
+                <div
+                  className="warranty-advantage-column"
+                  onMouseDown={(event) =>
+                    openContextMenuOnMouseDown(event, {
+                      x: event.clientX,
+                      y: event.clientY,
+                      type: 'advantage-column',
+                      sectionId: section.id || '',
+                    })
+                  }
+                  onContextMenu={(event) =>
+                    openContextMenu(event, {
+                      x: event.clientX,
+                      y: event.clientY,
+                      type: 'advantage-column',
+                      sectionId: section.id || '',
+                    })
+                  }
+                >
                   {!section.advantageItems.length && (
                     <div className="warranty-advantage-card muted">
-                      No warranty advantages listed. Right-click the category title to add one.
+                      No warranty advantages listed. Right-click here to add one.
                     </div>
                   )}
                   {section.advantageItems.map((item) => (

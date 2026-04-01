@@ -1,6 +1,6 @@
 ## [2.1.0] - 3/31/26
 ### Security Changes
-- Only 1 logged in session can be active at a time
+- Only 1 logged in session per user can be active at a time
     - Will prompt to sign other session out if 2 active logins are detected
 - Moved Admin-only settings into the Admin Tab in the new 'Admin Settings' area
     - Change App Name, Franchise Code, Admin PIN, & Hide COGS view
@@ -19,10 +19,14 @@
     - Filter Customer Name, Status, Pricing Mode, and Contract Type
     - Ability to 'Hide Table' from view
 ### Requested Changes
-- Warranty Breakdown Update
+- Warranty Breakdown
     - Polished the look of the PDF when exporting & printing
-    - Included all changes and logic requested for the default warranty
-    - 
+    - Included all changes and logic requested for the updated breakdown
+- Contract
+    - New 'Additional Features' mapped to the Contracts
+        - *Only Bubblers autofills currently*
+- Customer Job Cost Summary
+    - Decking no longer appears in this summary if "Off Contract" is active
 -----
 ## [2.0.18] - 3/31/26
 ## Changes

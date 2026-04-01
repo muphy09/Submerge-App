@@ -10,6 +10,7 @@ export type PricingModelRow = {
   version: string;
   pricing_json: any;
   is_default: boolean;
+  is_hidden_from_view: boolean;
   created_at?: string;
   updated_at?: string;
   updated_by?: string | null;
@@ -20,6 +21,7 @@ type PricingModelSummary = {
   name: string;
   version: string;
   isDefault: boolean;
+  isHiddenFromView?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -29,6 +31,7 @@ type LoadedPricingModel = {
   pricingModelId?: string;
   pricingModelName?: string;
   isDefault?: boolean;
+  isHiddenFromView?: boolean;
   version: string;
   pricing: any;
   updatedAt?: string;
@@ -63,7 +66,7 @@ export async function listPricingModels(franchiseId: string): Promise<PricingMod
     if (!supabase) return [];
     const { data, error } = await supabase
       .from('franchise_pricing_models')
-      .select('id,name,version,is_default,created_at,updated_at')
+      .select('id,name,version,is_default,is_hidden_from_view,created_at,updated_at')
       .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
       .order('is_default', { ascending: false })
       .order('updated_at', { ascending: false });
@@ -73,6 +76,7 @@ export async function listPricingModels(franchiseId: string): Promise<PricingMod
       name: row.name,
       version: row.version,
       isDefault: row.is_default,
+      isHiddenFromView: row.is_hidden_from_view,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -112,6 +116,7 @@ export async function loadPricingModel(
       pricingModelId: data.id,
       pricingModelName: data.name,
       isDefault: data.is_default,
+      isHiddenFromView: data.is_hidden_from_view,
       version: data.version,
       pricing: data.pricing_json,
       updatedAt: data.updated_at,
@@ -131,6 +136,7 @@ export async function savePricingModel(payload: {
   name: string;
   pricingModelId?: string;
   setDefault?: boolean;
+  isHiddenFromView?: boolean;
   version?: string;
   updatedBy?: string | null;
   createNew?: boolean;
@@ -152,6 +158,7 @@ export async function savePricingModel(payload: {
       version: payload.version || DEFAULT_VERSION,
       pricing_json: payload.pricing,
       is_default: payload.setDefault ? true : undefined,
+      is_hidden_from_view: Boolean(payload.isHiddenFromView),
       updated_at: now,
       updated_by: updatedBy,
     });
@@ -181,6 +188,7 @@ export async function savePricingModel(payload: {
         pricingModelName: payload.name,
         version: payload.version || DEFAULT_VERSION,
         setAsDefault: Boolean(payload.setDefault),
+        hiddenFromView: Boolean(payload.isHiddenFromView),
         copiedFromFranchiseId: payload.copiedFromFranchiseId || null,
         copiedFromFranchiseName: payload.copiedFromFranchiseName || null,
         copiedFromPricingModelId: payload.copiedFromPricingModelId || null,

@@ -37,12 +37,6 @@ type MasterPageProps = {
   onFranchiseUpdated?: (franchise: MasterFranchise) => void;
 };
 
-const formatDate = (value?: string) => {
-  if (!value) return 'N/A';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
-};
-
 const formatDateTime = (value?: string) => {
   if (!value) return 'N/A';
   const date = new Date(value);
@@ -150,10 +144,6 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   const [pricingModels, setPricingModels] = useState<MasterPricingModel[]>([]);
   const [pricingLoading, setPricingLoading] = useState(true);
   const [pricingError, setPricingError] = useState<string | null>(null);
-  const [pricingSearch, setPricingSearch] = useState('');
-  const [pricingFranchiseFilter, setPricingFranchiseFilter] = useState('all');
-  const [pricingSort, setPricingSort] = useState('updated-desc');
-  const [hideInactivePricingFranchises, setHideInactivePricingFranchises] = useState(true);
   const [copyTargets, setCopyTargets] = useState<Record<string, string>>({});
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -334,14 +324,14 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     });
   }, [franchises]);
 
-  const pricingFranchiseOptions = useMemo(() => {
-    if (!hideInactivePricingFranchises) return franchiseOptions;
+  const copyTargetOptions = useMemo(() => {
+    if (!hideInactive) return franchiseOptions;
     return franchiseOptions.filter((franchise) => !franchise.deletedAt && franchise.isActive !== false);
-  }, [franchiseOptions, hideInactivePricingFranchises]);
+  }, [franchiseOptions, hideInactive]);
 
-  const pricingFranchiseOptionIds = useMemo(
-    () => new Set(pricingFranchiseOptions.map((franchise) => franchise.id)),
-    [pricingFranchiseOptions]
+  const copyTargetOptionIds = useMemo(
+    () => new Set(copyTargetOptions.map((franchise) => franchise.id)),
+    [copyTargetOptions]
   );
 
   const ledgerFranchiseOptions = useMemo(() => {
@@ -360,9 +350,9 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   );
 
   const visibleFranchises = useMemo(() => {
-    if (!hideInactive) return franchises;
-    return franchises.filter((franchise) => !franchise.deletedAt && franchise.isActive !== false);
-  }, [franchises, hideInactive]);
+    if (!hideInactive) return franchiseOptions;
+    return franchiseOptions.filter((franchise) => !franchise.deletedAt && franchise.isActive !== false);
+  }, [franchiseOptions, hideInactive]);
 
   const usersByFranchise = useMemo(() => {
     const map = new Map<string, MasterUser[]>();
@@ -374,78 +364,30 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     return map;
   }, [users]);
 
-  const filteredPricingModels = useMemo(() => {
-    const normalizedSearch = pricingSearch.trim().toLowerCase();
-    let rows = pricingModels;
-    if (hideInactivePricingFranchises) {
-      rows = rows.filter((model) => {
-        const franchise = franchiseLookup.get(model.franchiseId);
-        return !franchise || (!franchise.deletedAt && franchise.isActive !== false);
-      });
-    }
-    if (pricingFranchiseFilter !== 'all') {
-      rows = rows.filter((model) => model.franchiseId === pricingFranchiseFilter);
-    }
-    if (normalizedSearch) {
-      rows = rows.filter((model) => {
-        const franchise = franchiseLookup.get(model.franchiseId);
-        const franchiseLabel = (franchise?.name || franchise?.franchiseCode || model.franchiseId || '')
-          .toLowerCase();
-        const modelName = (model.name || '').toLowerCase();
-        return modelName.includes(normalizedSearch) || franchiseLabel.includes(normalizedSearch);
-      });
-    }
-    const sorted = [...rows];
-    sorted.sort((a, b) => {
-      if (pricingSort === 'name-asc') {
-        return (a.name || '').localeCompare(b.name || '');
+  const pricingModelsByFranchise = useMemo(() => {
+    const map = new Map<string, MasterPricingModel[]>();
+    pricingModels.forEach((model) => {
+      if (!map.has(model.franchiseId)) {
+        map.set(model.franchiseId, []);
       }
-      if (pricingSort === 'franchise-asc') {
-        const nameA = franchiseLookup.get(a.franchiseId);
-        const nameB = franchiseLookup.get(b.franchiseId);
-        const labelA = nameA?.name || nameA?.franchiseCode || a.franchiseId;
-        const labelB = nameB?.name || nameB?.franchiseCode || b.franchiseId;
-        return labelA.localeCompare(labelB);
-      }
-      const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      if (pricingSort === 'updated-asc') {
-        return dateA - dateB;
-      }
-      return dateB - dateA;
+      map.get(model.franchiseId)?.push(model);
     });
-    return sorted;
-  }, [pricingModels, pricingFranchiseFilter, pricingSearch, pricingSort, franchiseLookup, hideInactivePricingFranchises]);
-
-  useEffect(() => {
-    if (pricingFranchiseFilter === 'all') return;
-    const selectedStillVisible = pricingFranchiseOptionIds.has(pricingFranchiseFilter);
-    if (!selectedStillVisible) {
-      setPricingFranchiseFilter('all');
-    }
-  }, [pricingFranchiseFilter, pricingFranchiseOptionIds]);
+    return map;
+  }, [pricingModels]);
 
   useEffect(() => {
     setCopyTargets((prev) => {
       let changed = false;
       const next = Object.fromEntries(
         Object.entries(prev).filter(([, franchiseId]) => {
-          const keep = pricingFranchiseOptionIds.has(franchiseId);
+          const keep = copyTargetOptionIds.has(franchiseId);
           if (!keep) changed = true;
           return keep;
         })
       );
       return changed ? next : prev;
     });
-  }, [pricingFranchiseOptionIds]);
-
-  const pricingCountLabel = useMemo(() => {
-    if (pricingModels.length === 0) return '0 total';
-    if (filteredPricingModels.length === pricingModels.length) {
-      return `${pricingModels.length} total`;
-    }
-    return `${filteredPricingModels.length} of ${pricingModels.length} total`;
-  }, [filteredPricingModels.length, pricingModels.length]);
+  }, [copyTargetOptionIds]);
 
   const filteredLedgerEvents = useMemo(() => {
     let rows = ledgerEvents;
@@ -614,7 +556,15 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   };
 
   const handleEditFranchise = (franchise: MasterFranchise) => {
+    setCopyError(null);
+    setCopySuccess(null);
     setEditingFranchise(franchise);
+  };
+
+  const handleCloseFranchiseEditor = () => {
+    setCopyError(null);
+    setCopySuccess(null);
+    setEditingFranchise(null);
   };
 
   const handleFranchiseUpdated = (franchise: MasterFranchise) => {
@@ -884,136 +834,6 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                   </div>
                 );
               })}
-            </div>
-          )}
-        </div>
-
-        <div className="master-card">
-          <div className="master-card-header">
-            <div>
-              <h2>Pricing Models</h2>
-              <p className="master-kicker">All franchise pricing models</p>
-            </div>
-          </div>
-          <div className="master-table-actions">
-            <div className="master-filter">
-              <label htmlFor="pricing-search">Search</label>
-              <input
-                id="pricing-search"
-                type="text"
-                value={pricingSearch}
-                onChange={(e) => setPricingSearch(e.target.value)}
-                placeholder="Search by franchise or model"
-              />
-            </div>
-            <div className="master-filter">
-              <label htmlFor="pricing-franchise">Franchise</label>
-              <select
-                id="pricing-franchise"
-                value={pricingFranchiseFilter}
-                onChange={(e) => setPricingFranchiseFilter(e.target.value)}
-              >
-                <option value="all">All franchises</option>
-                {pricingFranchiseOptions.map((franchise) => (
-                  <option key={franchise.id} value={franchise.id}>
-                    {franchise.name || franchise.franchiseCode || franchise.id}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="master-filter">
-              <label htmlFor="pricing-sort">Sort</label>
-              <select
-                id="pricing-sort"
-                value={pricingSort}
-                onChange={(e) => setPricingSort(e.target.value)}
-              >
-                <option value="updated-desc">Date modified (newest)</option>
-                <option value="updated-asc">Date modified (oldest)</option>
-                <option value="name-asc">Pricing model name (A-Z)</option>
-                <option value="franchise-asc">Franchise name (A-Z)</option>
-              </select>
-            </div>
-            <label className="master-toggle master-toggle--table">
-              <input
-                type="checkbox"
-                checked={hideInactivePricingFranchises}
-                onChange={(e) => setHideInactivePricingFranchises(e.target.checked)}
-              />
-              Hide Inactive Franchises
-            </label>
-            <div className="master-table-meta">{pricingCountLabel}</div>
-          </div>
-          {pricingError && <div className="master-error">{pricingError}</div>}
-          {copyError && <div className="master-error">{copyError}</div>}
-          {copySuccess && <div className="master-success">{copySuccess}</div>}
-          {pricingLoading ? (
-            <div className="master-empty">Loading pricing models...</div>
-          ) : filteredPricingModels.length === 0 ? (
-            <div className="master-empty">
-              {pricingModels.length === 0
-                ? 'No pricing models found.'
-                : 'No pricing models match the current filters.'}
-            </div>
-          ) : (
-            <div className="master-table-wrapper">
-              <table className="master-table">
-                <colgroup>
-                  <col style={{ width: '30%' }} />
-                  <col style={{ width: '30%' }} />
-                  <col style={{ width: '20%' }} />
-                  <col style={{ width: '20%' }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>Franchise Name</th>
-                    <th>Pricing Model Name</th>
-                    <th>Date Modified</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPricingModels.map((model) => {
-                    const franchise = franchiseLookup.get(model.franchiseId);
-                    const franchiseLabel = getFranchiseLabel(model.franchiseId);
-                    const inactive = Boolean(franchise?.deletedAt || franchise?.isActive === false);
-                    const modelName = model.name || 'Unnamed model';
-                    return (
-                      <tr key={`${model.franchiseId}-${model.id}`}>
-                        <td>
-                          <div className="master-table-primary">{franchiseLabel}</div>
-                          {inactive && <div className="master-table-secondary">Inactive</div>}
-                        </td>
-                        <td>{modelName}</td>
-                        <td>{formatDate(model.updatedAt || model.createdAt)}</td>
-                        <td>
-                          <div className="master-copy-controls">
-                            <select
-                              value={copyTargets[model.id] || ''}
-                              onChange={(e) => handleCopyTargetChange(model.id, e.target.value)}
-                            >
-                              <option value="">Copy to franchise...</option>
-                              {pricingFranchiseOptions.map((franchiseOption) => (
-                                <option key={franchiseOption.id} value={franchiseOption.id}>
-                                  {franchiseOption.name || franchiseOption.franchiseCode || franchiseOption.id}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              className="master-primary-btn master-small-btn"
-                              type="button"
-                              onClick={() => handleCopyPricingModel(model)}
-                              disabled={copyingId === model.id}
-                            >
-                              {copyingId === model.id ? 'Copying...' : 'Copy'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
             </div>
           )}
         </div>
@@ -1459,8 +1279,18 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
         <MasterFranchiseEditorModal
           franchise={editingFranchise}
           users={usersByFranchise.get(editingFranchise.id) || []}
+          pricingModels={pricingModelsByFranchise.get(editingFranchise.id) || []}
+          pricingLoading={pricingLoading}
+          pricingError={pricingError}
+          copyTargets={copyTargets}
+          copyTargetOptions={copyTargetOptions}
+          copyingId={copyingId}
+          copyError={copyError}
+          copySuccess={copySuccess}
+          onCopyTargetChange={handleCopyTargetChange}
+          onCopyPricingModel={handleCopyPricingModel}
           updatedBy={session?.userEmail || session?.userName || null}
-          onClose={() => setEditingFranchise(null)}
+          onClose={handleCloseFranchiseEditor}
           onRefresh={refreshMasterData}
           onFranchiseUpdated={handleFranchiseUpdated}
         />

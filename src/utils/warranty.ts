@@ -9,7 +9,9 @@ import {
 } from '../types/warranty';
 import { getLightCounts } from './lighting';
 import { getEffectivePrimarySanitationSystemName } from './equipmentPackages';
+import { hasRealPumpSelection } from './pumpSelections';
 import { flattenWaterFeatures } from './waterFeatureCost';
+import { getAdditionalDeckingSelections, getDeckingTypeFullLabel, hasIncludedDecking } from './decking';
 
 type LegacyWarrantyItem = {
   id?: string;
@@ -28,7 +30,15 @@ type LegacyWarrantySection = {
 };
 
 const DEFAULT_WARRANTY_ICON: WarrantySectionIcon = 'plans';
+const GENERATED_PLUMBING_WARRANTY_ID_PREFIX = 'generated-plumbing';
 const GENERATED_WATER_FEATURE_WARRANTY_ID_PREFIX = 'generated-water-feature';
+const GENERATED_EQUIPMENT_WARRANTY_ID_PREFIX = 'generated-equipment';
+const GENERATED_ELECTRIC_WARRANTY_ID_PREFIX = 'generated-electric';
+const GENERATED_INTERIOR_FINISH_WARRANTY_ID_PREFIX = 'generated-interior-finish';
+const GENERATED_COPING_DECKING_WARRANTY_ID_PREFIX = 'generated-coping-decking';
+const GENERATED_COPING_DECKING_WARRANTY_SECTION_ID = 'generated-coping-decking-section';
+const PLUMBING_WARRANTY_ADVANTAGE_TEXT = 'Designed to Create a more efficient and higher performing system';
+const LEGACY_INTERIOR_FINISH_ADVANTAGE = 'Combines durability and functionality';
 
 const createWarrantyId = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
@@ -42,11 +52,28 @@ const slugifyWarrantyId = (value: string) =>
 const createGeneratedWaterFeatureWarrantyId = (value: string) =>
   `${GENERATED_WATER_FEATURE_WARRANTY_ID_PREFIX}-${slugifyWarrantyId(value)}`;
 
+const createGeneratedPlumbingWarrantyId = (value: string) =>
+  `${GENERATED_PLUMBING_WARRANTY_ID_PREFIX}-${slugifyWarrantyId(value)}`;
+
+const createGeneratedEquipmentWarrantyId = (value: string) =>
+  `${GENERATED_EQUIPMENT_WARRANTY_ID_PREFIX}-${slugifyWarrantyId(value)}`;
+
+const createGeneratedElectricWarrantyId = (value: string) =>
+  `${GENERATED_ELECTRIC_WARRANTY_ID_PREFIX}-${slugifyWarrantyId(value)}`;
+
+const createGeneratedInteriorFinishWarrantyId = (value: string) =>
+  `${GENERATED_INTERIOR_FINISH_WARRANTY_ID_PREFIX}-${slugifyWarrantyId(value)}`;
+
+const createGeneratedCopingDeckingWarrantyId = (value: string) =>
+  `${GENERATED_COPING_DECKING_WARRANTY_ID_PREFIX}-${slugifyWarrantyId(value)}`;
+
 const isWarrantySectionIcon = (value: unknown): value is WarrantySectionIcon =>
   typeof value === 'string' && (WARRANTY_SECTION_ICON_KEYS as readonly string[]).includes(value);
 
 const replaceBrandTokens = (value: string | undefined, brandName: string) =>
   value ? value.replace(/\bSubmerge\b/g, brandName) : value;
+
+const normalizeWarrantyText = (value: string | undefined) => (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 const normalizeWarrantyFeatureItem = (item: unknown): WarrantyFeatureItem | null => {
   if (!item || typeof item !== 'object') return null;
@@ -158,19 +185,70 @@ const createWarrantySectionFromEntries = (
   advantageItems: items
     .filter((item) => typeof item.advantage === 'string')
     .map((item) => ({
+      id: item.id ? `${item.id}-advantage` : undefined,
       text: item.advantage || '',
     })),
 });
 
+const getInteriorFinishOption = (finishType?: string) =>
+  pricingData.interiorFinish.finishes?.find((finish) => finish.id === finishType) ||
+  pricingData.interiorFinish.finishes?.find((finish) => finish.name === finishType);
+
 const getInteriorFinishLabel = (finishType?: string) =>
-  pricingData.interiorFinish.finishes?.find((finish) => finish.id === finishType)?.name ||
+  getInteriorFinishOption(finishType)?.name ||
   finishType ||
   'Interior finish';
+
+const LEGACY_EQUIPMENT_WARRANTY_ADVANTAGE = '3-Year NO-FAULT Warranty on all Jandy equipment';
 
 const formatNumber = (value?: number, digits = 1) =>
   value !== undefined && value !== null && !Number.isNaN(value)
     ? Number(value).toFixed(digits).replace(/\.0+$/, '')
     : '0';
+
+const summarizeQuantity = (value: string, quantity: number) =>
+  quantity > 1 ? `${quantity} x ${value}` : value;
+
+const summarizeLightQuantity = (value: string, quantity: number) =>
+  quantity > 1 ? `x${quantity} ${value}` : value;
+
+const summarizeSelectionNames = (
+  names: Array<string | undefined>,
+  options?: { quantityFormatter?: (value: string, quantity: number) => string }
+) => {
+  const filtered = names
+    .map((name) => (name || '').trim())
+    .filter((name) => name.length > 0);
+  if (!filtered.length) return '';
+
+  const counts = new Map<string, number>();
+  filtered.forEach((name) => counts.set(name, (counts.get(name) || 0) + 1));
+
+  return Array.from(counts.entries())
+    .map(([name, quantity]) => (options?.quantityFormatter || summarizeQuantity)(name, quantity))
+    .join(', ');
+};
+
+const hasRealEquipmentSelection = (name: string | undefined, placeholder: string) => {
+  const normalized = (name || '').trim().toLowerCase();
+  return Boolean(normalized) && !normalized.includes(placeholder);
+};
+
+const buildLegacyLightSummary = (proposal?: Partial<Proposal>) => {
+  const lightCounts = getLightCounts(proposal?.equipment as any);
+  return lightCounts.poolLights + lightCounts.spaLights > 0
+    ? [
+        lightCounts.poolLights > 0
+          ? `${lightCounts.poolLights} pool light${lightCounts.poolLights === 1 ? '' : 's'}`
+          : null,
+        lightCounts.spaLights > 0
+          ? `${lightCounts.spaLights} spa light${lightCounts.spaLights === 1 ? '' : 's'}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' + ')
+    : 'No lights specified yet';
+};
 
 const getWaterFeatureWarrantyCategoryLabel = (category?: string) => {
   switch (category) {
@@ -283,40 +361,221 @@ const buildInteriorFinishDetail = (proposal?: Partial<Proposal>) => {
   if (!poolSpecs || poolSpecs.poolType === 'fiberglass' || !interior) return undefined;
   const label = getInteriorFinishLabel(interior.finishType);
   const color = interior.color ? ` - ${interior.color}` : '';
-  return `${label}${color}`;
+  return `Interior Finish - ${label}${color}`;
+};
+
+const buildInteriorFinishWarrantyText = (proposal?: Partial<Proposal>) => {
+  const poolSpecs = proposal?.poolSpecs;
+  const interior = proposal?.interiorFinish;
+  if (!poolSpecs || poolSpecs.poolType === 'fiberglass' || !interior) return undefined;
+
+  const finish = getInteriorFinishOption(interior.finishType);
+  const finishName = (finish?.name || interior.finishType || '').trim().toLowerCase();
+  const finishId = (finish?.id || interior.finishType || '').trim().toLowerCase();
+
+  if (!finishName && !finishId) return undefined;
+  if (finishName.includes('ivory quartz') || finishId.includes('ivory-quartz')) {
+    return '1 Year Warranty on Ivory Quartz';
+  }
+  if (finishName.includes('npt') || finishId.includes('npt')) {
+    return '10 Year Warranty on NPT Finishes';
+  }
+  if (finishName.includes('pebble') || finishId.includes('pebble')) {
+    return '15 Year Warranty on PebbleTec Finishes';
+  }
+
+  return undefined;
+};
+
+const buildInteriorFinishWarrantyItem = (proposal?: Partial<Proposal>): LegacyWarrantyItem | null => {
+  const detail = buildInteriorFinishDetail(proposal);
+  if (!detail) return null;
+
+  return {
+    id: createGeneratedInteriorFinishWarrantyId('selected-finish'),
+    label: detail,
+    advantage: buildInteriorFinishWarrantyText(proposal),
+  };
+};
+
+const getCopingTypeWarrantyLabel = (copingType?: string) => {
+  switch (copingType) {
+    case 'travertine-level1':
+      return 'Travertine Level 1';
+    case 'travertine-level2':
+      return 'Travertine Level 2';
+    case 'cantilever':
+      return 'Cantilever';
+    case 'flagstone':
+      return 'Flagstone';
+    case 'paver':
+      return 'Paver';
+    case 'concrete':
+      return 'Concrete';
+    default:
+      return copingType || 'Coping';
+  }
+};
+
+const getCopingSquareFootMultiplier = (copingSize?: string) => {
+  switch (copingSize) {
+    case '12x24':
+      return 2;
+    case '16x16':
+      return 1.33;
+    case '12x12':
+    default:
+      return 1;
+  }
+};
+
+const getWarrantyCopingLength = (proposal?: Partial<Proposal>) => {
+  const tileCopingDecking = proposal?.tileCopingDecking;
+  const poolSpecs = proposal?.poolSpecs;
+  if (!tileCopingDecking) return 0;
+
+  const explicitLength = Number(tileCopingDecking.copingLength || 0);
+  if (explicitLength > 0) {
+    return explicitLength;
+  }
+
+  if (!poolSpecs) {
+    return 0;
+  }
+
+  const perimeter = Number(poolSpecs.perimeter || 0);
+  const spaPerimeter = Number(poolSpecs.spaPerimeter || 0);
+  return Math.max(0, Math.ceil(perimeter * 1.1 + spaPerimeter * 2.15));
+};
+
+const buildCopingDeckingItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => {
+  const tileCopingDecking = proposal?.tileCopingDecking;
+  if (!tileCopingDecking) return [];
+
+  const items: LegacyWarrantyItem[] = [];
+  const copingType = String(tileCopingDecking.copingType || '').trim();
+  if (copingType && copingType !== 'none') {
+    const copingLength = getWarrantyCopingLength(proposal);
+    const copingSqft = copingLength * getCopingSquareFootMultiplier(tileCopingDecking.copingSize);
+    if (copingSqft > 0) {
+      items.push({
+        id: createGeneratedCopingDeckingWarrantyId('coping'),
+        label: `Coping - ${formatNumber(copingSqft, 2)} SF ${getCopingTypeWarrantyLabel(copingType)}`,
+      });
+    }
+  }
+
+  const primaryDeckingType = String(tileCopingDecking.deckingType || '').trim();
+  const primaryDeckingArea = Number(tileCopingDecking.deckingArea || proposal?.poolSpecs?.deckingArea || 0);
+  if (
+    primaryDeckingType &&
+    primaryDeckingType !== 'none' &&
+    primaryDeckingArea > 0 &&
+    !tileCopingDecking.isDeckingOffContract
+  ) {
+    items.push({
+      id: createGeneratedCopingDeckingWarrantyId('primary-decking'),
+      label: `Decking - ${formatNumber(primaryDeckingArea, 2)} SF ${getDeckingTypeFullLabel(primaryDeckingType)}`,
+    });
+  }
+
+  getAdditionalDeckingSelections(tileCopingDecking).forEach((selection, index) => {
+    const deckingType = String(selection.deckingType || '').trim();
+    const area = Number(selection.area || 0);
+    if (!deckingType || area <= 0 || selection.isOffContract) {
+      return;
+    }
+
+    items.push({
+      id: createGeneratedCopingDeckingWarrantyId(`additional-decking-${index}`),
+      label: `Decking - ${formatNumber(area, 2)} SF ${getDeckingTypeFullLabel(deckingType)}`,
+    });
+  });
+
+  return items;
+};
+
+const buildCopingDeckingSection = (proposal?: Partial<Proposal>): WarrantySection | null => {
+  const items = buildCopingDeckingItems(proposal);
+  if (!items.length) return null;
+
+  const copingType = String(proposal?.tileCopingDecking?.copingType || '').trim();
+  const hasCoping = Boolean(copingType) && copingType !== 'none';
+  const includesDecking = hasIncludedDecking(proposal);
+  const title = hasCoping && includesDecking ? 'Coping & Decking' : hasCoping ? 'Coping' : 'Decking';
+
+  return {
+    id: GENERATED_COPING_DECKING_WARRANTY_SECTION_ID,
+    title,
+    icon: 'tile',
+    featureItems: items.map((item) => ({
+      id: item.id,
+      label: item.label || '',
+      detail: item.detail,
+    })),
+    advantageItems: [],
+  };
+};
+
+const buildLegacyEquipmentLabels = (proposal?: Partial<Proposal>): string[] => {
+  const equipment = proposal?.equipment;
+
+  if (!equipment) {
+    return ['Equipment selections not set yet'];
+  }
+
+  const auxiliaryPumps =
+    equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
+      ? equipment.auxiliaryPumps
+      : equipment.auxiliaryPump
+        ? [equipment.auxiliaryPump]
+        : [];
+
+  const sanitationSelections = [
+    getEffectivePrimarySanitationSystemName(equipment as any),
+    equipment.additionalSaltSystem?.name,
+  ].filter((label): label is string => Boolean(label));
+
+  return [
+    equipment.pump?.name || 'Primary pump not selected',
+    ...auxiliaryPumps.map((pump) => pump?.name).filter((label): label is string => Boolean(label)),
+    equipment.filter?.name || 'Filter not selected',
+    equipment.heater?.name || 'Heater not selected',
+    equipment.cleaner?.name || 'Cleaner not selected',
+    equipment.automation?.name || 'Automation not selected',
+    ...(sanitationSelections.length > 0 ? sanitationSelections : ['Sanitation system not selected']),
+    buildLegacyLightSummary(proposal),
+  ];
 };
 
 const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => {
   const equipment = proposal?.equipment;
-  const items: LegacyWarrantyItem[] = [];
 
   if (!equipment) {
-    return [
-      {
-        label: 'Equipment selections not set yet',
-        advantage: '3-Year NO-FAULT Warranty on all Jandy equipment',
-      },
-    ];
+    return [];
   }
 
-  const lightCounts = getLightCounts(equipment as any);
-  const lightsText =
-    lightCounts.poolLights + lightCounts.spaLights > 0
-      ? [
-          lightCounts.poolLights > 0
-            ? `${lightCounts.poolLights} pool light${lightCounts.poolLights === 1 ? '' : 's'}`
-            : null,
-          lightCounts.spaLights > 0
-            ? `${lightCounts.spaLights} spa light${lightCounts.spaLights === 1 ? '' : 's'}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' + ')
-      : 'No lights specified yet';
+  const items: LegacyWarrantyItem[] = [];
+  const pushEquipmentItem = (
+    id: string,
+    typeLabel: string,
+    value: string | undefined,
+    options?: { advantage?: string }
+  ) => {
+    const trimmedValue = value?.trim();
+    if (!trimmedValue) return;
+    items.push({
+      id: createGeneratedEquipmentWarrantyId(id),
+      label: `${typeLabel} - ${trimmedValue}`,
+      advantage: options?.advantage,
+    });
+  };
 
-  items.push({
-    label: equipment.pump?.name || 'Primary pump not selected',
-    advantage: '3-Year NO-FAULT Warranty on all Jandy equipment',
+  const primaryPumpName = hasRealPumpSelection(equipment.pump)
+    ? equipment.pump?.name?.trim()
+    : undefined;
+  pushEquipmentItem('pump', 'Pump', primaryPumpName, {
+    advantage: LEGACY_EQUIPMENT_WARRANTY_ADVANTAGE,
   });
 
   const auxiliaryPumps =
@@ -326,30 +585,96 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[]
         ? [equipment.auxiliaryPump]
         : [];
 
-  auxiliaryPumps.forEach((pump) => {
-    if (pump?.name) items.push({ label: pump.name });
-  });
-
-  items.push(
-    { label: equipment.filter?.name || 'Filter not selected' },
-    { label: equipment.heater?.name || 'Heater not selected' },
-    { label: equipment.cleaner?.name || 'Cleaner not selected' },
-    { label: equipment.automation?.name || 'Automation not selected' }
-  );
-
-  const sanitationSelections = [
-    getEffectivePrimarySanitationSystemName(equipment as any),
-    equipment.additionalSaltSystem?.name,
-  ].filter((label): label is string => Boolean(label));
-
-  if (sanitationSelections.length > 0) {
-    sanitationSelections.forEach((label) => items.push({ label }));
-  } else {
-    items.push({ label: 'Sanitation system not selected' });
+  const auxiliaryPumpSummary = summarizeSelectionNames(auxiliaryPumps.map((pump) => pump?.name));
+  if (auxiliaryPumpSummary) {
+    pushEquipmentItem('auxiliary-pump', 'Auxiliary Pump', auxiliaryPumpSummary);
   }
 
-  items.push({ label: lightsText });
+  pushEquipmentItem(
+    'filter',
+    'Filter',
+    hasRealEquipmentSelection(equipment.filter?.name, 'no filter') ? equipment.filter?.name?.trim() : undefined
+  );
+  pushEquipmentItem(
+    'heater',
+    'Heater',
+    hasRealEquipmentSelection(equipment.heater?.name, 'no heater') ? equipment.heater?.name?.trim() : undefined
+  );
+  pushEquipmentItem(
+    'cleaner',
+    'Cleaner',
+    hasRealEquipmentSelection(equipment.cleaner?.name, 'no cleaner') ? equipment.cleaner?.name?.trim() : undefined
+  );
+  pushEquipmentItem(
+    'automation',
+    'Automation',
+    hasRealEquipmentSelection(equipment.automation?.name, 'no automation')
+      ? equipment.automation?.name?.trim()
+      : undefined
+  );
+
+  const primarySanitation = getEffectivePrimarySanitationSystemName(equipment as any)?.trim();
+  pushEquipmentItem('sanitation', 'Sanitation', primarySanitation);
+
+  const additionalSanitation = equipment.additionalSaltSystem?.name?.trim();
+  if (additionalSanitation) {
+    pushEquipmentItem('additional-sanitation', 'Additional Sanitation', additionalSanitation);
+  }
+
   return items;
+};
+
+const buildElectricalLightItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => {
+  const equipment = proposal?.equipment;
+  if (!equipment) return [];
+
+  const poolLightSummary = summarizeSelectionNames(equipment.poolLights?.map((light) => light?.name) || [], {
+    quantityFormatter: summarizeLightQuantity,
+  });
+  const spaLightSummary = summarizeSelectionNames(equipment.spaLights?.map((light) => light?.name) || [], {
+    quantityFormatter: summarizeLightQuantity,
+  });
+  const items: LegacyWarrantyItem[] = [];
+
+  if (poolLightSummary) {
+    items.push({
+      id: createGeneratedElectricWarrantyId('pool-lights'),
+      label: `Pool Lights - ${poolLightSummary}`,
+    });
+  }
+
+  if (spaLightSummary) {
+    items.push({
+      id: createGeneratedElectricWarrantyId('spa-lights'),
+      label: `Spa Lights - ${spaLightSummary}`,
+    });
+  }
+
+  return items;
+};
+
+const buildElectricalItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => [
+  { label: 'Breakers at pad included', advantage: 'Protected outlet for homeowner convenience' },
+  { label: '110 volt GFI protected light circuit with outlet' },
+  { label: '220 volt pump circuit' },
+  { label: 'Jandy IQ20 pump controller', advantage: 'Control your pump from your phone' },
+  { label: 'Bonding as per N.E.C. Code' },
+  ...buildElectricalLightItems(proposal),
+];
+
+const buildCleanupItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => {
+  const excavation = proposal?.excavation;
+  const dirtHaulText = excavation?.hasDirtHaul ? 'Dirt haul off included' : 'Dirt to remain at property';
+  const interiorFinishWarrantyItem = buildInteriorFinishWarrantyItem(proposal);
+
+  return [
+    { label: 'All trenches filled and yard rough graded' },
+    { label: 'All construction debris hauled away' },
+    ...(interiorFinishWarrantyItem ? [interiorFinishWarrantyItem] : []),
+    { label: 'VGB compliant main drain covers' },
+    { label: dirtHaulText },
+    { label: 'Pool filled with water', advantage: 'Water trucks included' },
+  ];
 };
 
 const buildPlumbingItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => [
@@ -385,6 +710,72 @@ const applyBrandToSection = (section: WarrantySection, brandName: string): Warra
 const isGeneratedWaterFeatureWarrantyItem = (item: WarrantyFeatureItem) =>
   typeof item.id === 'string' && item.id.startsWith(`${GENERATED_WATER_FEATURE_WARRANTY_ID_PREFIX}-`);
 
+const isGeneratedEquipmentWarrantyItem = (item: WarrantyFeatureItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_EQUIPMENT_WARRANTY_ID_PREFIX}-`);
+
+const isGeneratedEquipmentWarrantyAdvantageItem = (item: WarrantyAdvantageItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_EQUIPMENT_WARRANTY_ID_PREFIX}-`);
+
+const isGeneratedElectricWarrantyItem = (item: WarrantyFeatureItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_ELECTRIC_WARRANTY_ID_PREFIX}-`);
+
+const isGeneratedInteriorFinishWarrantyFeatureItem = (item: WarrantyFeatureItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_INTERIOR_FINISH_WARRANTY_ID_PREFIX}-`);
+
+const isGeneratedInteriorFinishWarrantyAdvantageItem = (item: WarrantyAdvantageItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_INTERIOR_FINISH_WARRANTY_ID_PREFIX}-`);
+
+const isGeneratedCopingDeckingWarrantyItem = (item: WarrantyFeatureItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_COPING_DECKING_WARRANTY_ID_PREFIX}-`);
+
+const isGeneratedPlumbingWarrantyAdvantageItem = (item: WarrantyAdvantageItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_PLUMBING_WARRANTY_ID_PREFIX}-`);
+
+const ensurePlumbingWarrantyAdvantage = (sections: WarrantySection[]): WarrantySection[] => {
+  const canonicalText = normalizeWarrantyText(PLUMBING_WARRANTY_ADVANTAGE_TEXT);
+
+  return sections.map((section) => {
+    if (section.title.trim().toLowerCase() !== 'plumbing') {
+      return section;
+    }
+
+    let hasCanonicalAdvantage = false;
+    const advantageItems = section.advantageItems.reduce<WarrantyAdvantageItem[]>((items, item) => {
+      const isCanonicalMatch =
+        isGeneratedPlumbingWarrantyAdvantageItem(item) || normalizeWarrantyText(item.text) === canonicalText;
+
+      if (!isCanonicalMatch) {
+        items.push(item);
+        return items;
+      }
+
+      if (hasCanonicalAdvantage) {
+        return items;
+      }
+
+      hasCanonicalAdvantage = true;
+      items.push({
+        ...item,
+        id: item.id || createGeneratedPlumbingWarrantyId('system-performance'),
+        text: PLUMBING_WARRANTY_ADVANTAGE_TEXT,
+      });
+      return items;
+    }, []);
+
+    if (!hasCanonicalAdvantage) {
+      advantageItems.push({
+        id: createGeneratedPlumbingWarrantyId('system-performance'),
+        text: PLUMBING_WARRANTY_ADVANTAGE_TEXT,
+      });
+    }
+
+    return {
+      ...section,
+      advantageItems,
+    };
+  });
+};
+
 const mergeSelectedWaterFeaturesIntoPlumbingSection = (
   sections: WarrantySection[],
   proposal?: Partial<Proposal>
@@ -410,16 +801,224 @@ const mergeSelectedWaterFeaturesIntoPlumbingSection = (
   });
 };
 
+const mergeEquipmentItemsIntoEquipmentSection = (
+  sections: WarrantySection[],
+  proposal?: Partial<Proposal>
+): WarrantySection[] => {
+  const equipmentEntries = buildEquipmentItems(proposal);
+  const equipmentItems = equipmentEntries.map((item) => ({
+    id: item.id,
+    label: item.label || '',
+    detail: item.detail,
+  }));
+  const equipmentAdvantageItems = equipmentEntries
+    .filter((item) => typeof item.advantage === 'string')
+    .map((item) => ({
+      id: item.id ? `${item.id}-advantage` : undefined,
+      text: item.advantage || '',
+    }));
+  const legacyLabels = new Set(buildLegacyEquipmentLabels(proposal));
+
+  return sections.flatMap((section) => {
+    if (section.title.trim().toLowerCase() !== 'equipment') {
+      return [section];
+    }
+
+    const featureItems = [
+      ...section.featureItems.filter(
+        (item) => !isGeneratedEquipmentWarrantyItem(item) && !legacyLabels.has(item.label)
+      ),
+      ...equipmentItems,
+    ];
+    const advantageItems = [
+      ...section.advantageItems.filter(
+        (item) =>
+          !isGeneratedEquipmentWarrantyAdvantageItem(item) &&
+          item.text.trim() !== LEGACY_EQUIPMENT_WARRANTY_ADVANTAGE
+      ),
+      ...equipmentAdvantageItems,
+    ];
+
+    if (!featureItems.length && !advantageItems.length) {
+      return [];
+    }
+
+    return [{
+      ...section,
+      featureItems,
+      advantageItems,
+    }];
+  });
+};
+
+const mergeElectricalLightItemsIntoElectricSection = (
+  sections: WarrantySection[],
+  proposal?: Partial<Proposal>
+): WarrantySection[] => {
+  const electricalLightItems = buildElectricalLightItems(proposal).map((item) => ({
+    id: item.id,
+    label: item.label || '',
+    detail: item.detail,
+  }));
+  const legacyLabels = new Set(['(2) Low-voltage Submerge colored LED lights']);
+
+  return sections.map((section) => {
+    if (section.title.trim().toLowerCase() !== 'electric') {
+      return section;
+    }
+
+    return {
+      ...section,
+      featureItems: [
+        ...section.featureItems.filter(
+          (item) => !isGeneratedElectricWarrantyItem(item) && !legacyLabels.has(item.label)
+        ),
+        ...electricalLightItems,
+      ],
+    };
+  });
+};
+
+const mergeInteriorFinishWarrantyIntoCleanupSection = (
+  sections: WarrantySection[],
+  proposal?: Partial<Proposal>
+): WarrantySection[] => {
+  const finishNames = new Set(
+    (pricingData.interiorFinish.finishes || [])
+      .map((finish) => (finish?.name || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const interiorFinishWarrantyItem = buildInteriorFinishWarrantyItem(proposal);
+  const nextFeatureItems = interiorFinishWarrantyItem
+    ? [
+        {
+          id: interiorFinishWarrantyItem.id,
+          label: interiorFinishWarrantyItem.label || '',
+          detail: interiorFinishWarrantyItem.detail,
+        },
+      ]
+    : [];
+  const nextAdvantageItems = interiorFinishWarrantyItem?.advantage
+    ? [
+        {
+          id: `${interiorFinishWarrantyItem.id}-advantage`,
+          text: interiorFinishWarrantyItem.advantage,
+        },
+      ]
+    : [];
+  const cleanupInteriorWarrantyTexts = new Set([
+    LEGACY_INTERIOR_FINISH_ADVANTAGE,
+    '15 Year Warranty on PebbleTec Finishes',
+    '10 Year Warranty on NPT Finishes',
+    '1 Year Warranty on Ivory Quartz',
+  ]);
+
+  return sections.map((section) => {
+    if (section.title.trim().toLowerCase() !== 'clean up & interior') {
+      return section;
+    }
+
+    return {
+      ...section,
+      featureItems: [
+        ...section.featureItems.filter((item) => {
+          if (isGeneratedInteriorFinishWarrantyFeatureItem(item)) return false;
+          const normalizedLabel = item.label.trim().toLowerCase();
+          return !Array.from(finishNames).some(
+            (finishName) =>
+              normalizedLabel.startsWith(finishName) ||
+              normalizedLabel === `interior finish - ${finishName}` ||
+              normalizedLabel.startsWith(`interior finish - ${finishName} -`)
+          );
+        }),
+        ...nextFeatureItems,
+      ],
+      advantageItems: [
+        ...section.advantageItems.filter(
+          (item) =>
+            !isGeneratedInteriorFinishWarrantyAdvantageItem(item) &&
+            !cleanupInteriorWarrantyTexts.has(item.text.trim())
+        ),
+        ...nextAdvantageItems,
+      ],
+    };
+  });
+};
+
+const mergeCopingDeckingSection = (
+  sections: WarrantySection[],
+  proposal?: Partial<Proposal>
+): WarrantySection[] => {
+  const generatedSection = buildCopingDeckingSection(proposal);
+  const targetTitles = new Set(['coping & decking', 'coping', 'decking']);
+  let foundSection = false;
+
+  const mergedSections = sections
+    .map((section) => {
+      if (!targetTitles.has(section.title.trim().toLowerCase())) {
+        return section;
+      }
+
+      foundSection = true;
+      const manualFeatureItems = section.featureItems.filter((item) => !isGeneratedCopingDeckingWarrantyItem(item));
+      const nextFeatureItems = [
+        ...manualFeatureItems,
+        ...(generatedSection?.featureItems || []),
+      ];
+
+      if (!generatedSection && section.id === GENERATED_COPING_DECKING_WARRANTY_SECTION_ID && !manualFeatureItems.length) {
+        return null;
+      }
+
+      return {
+        ...section,
+        id: section.id || GENERATED_COPING_DECKING_WARRANTY_SECTION_ID,
+        title: generatedSection?.title || section.title,
+        icon: generatedSection?.icon || section.icon,
+        featureItems: nextFeatureItems,
+      };
+    })
+    .filter((section): section is WarrantySection => Boolean(section));
+
+  if (foundSection || !generatedSection) {
+    return mergedSections;
+  }
+
+  const shotcreteIndex = mergedSections.findIndex(
+    (section) => section.title.trim().toLowerCase() === 'shotcrete'
+  );
+  const tileIndex = mergedSections.findIndex(
+    (section) => section.title.trim().toLowerCase() === 'tile & masonry'
+  );
+
+  if (shotcreteIndex >= 0) {
+    return [
+      ...mergedSections.slice(0, shotcreteIndex + 1),
+      generatedSection,
+      ...mergedSections.slice(shotcreteIndex + 1),
+    ];
+  }
+
+  if (tileIndex >= 0) {
+    return [
+      ...mergedSections.slice(0, tileIndex),
+      generatedSection,
+      ...mergedSections.slice(tileIndex),
+    ];
+  }
+
+  return [...mergedSections, generatedSection];
+};
+
 export const buildGeneratedWarrantySections = (
   proposal?: Partial<Proposal>,
   brandName: string = 'Submerge'
 ): WarrantySection[] => {
   const poolSpecs = proposal?.poolSpecs;
-  const excavation = proposal?.excavation;
   const isFiberglass = poolSpecs?.poolType === 'fiberglass';
   const spa = buildSpaDetail(proposal);
-  const interiorFinishDetail = buildInteriorFinishDetail(proposal);
-  const dirtHaulText = excavation?.hasDirtHaul ? 'Dirt haul off included' : 'Dirt to remain at property';
+  const equipmentItems = buildEquipmentItems(proposal);
+  const copingDeckingSection = buildCopingDeckingSection(proposal);
 
   const sections: WarrantySection[] = [
     createWarrantySectionFromEntries('Dimensions', 'dimensions', [
@@ -473,14 +1072,7 @@ export const buildGeneratedWarrantySections = (
           ]
     ),
     createWarrantySectionFromEntries('Plumbing', 'plumbing', buildPlumbingItems(proposal)),
-    createWarrantySectionFromEntries('Electric', 'electric', [
-      { label: 'Breakers at pad included', advantage: 'Protected outlet for homeowner convenience' },
-      { label: '110 volt GFI protected light circuit with outlet' },
-      { label: '220 volt pump circuit' },
-      { label: 'Jandy IQ20 pump controller', advantage: 'Control your pump from your phone' },
-      { label: 'Bonding as per N.E.C. Code' },
-      { label: '(2) Low-voltage Submerge colored LED lights' },
-    ]),
+    createWarrantySectionFromEntries('Electric', 'electric', buildElectricalItems(proposal)),
     createWarrantySectionFromEntries(
       'Shotcrete',
       'shotcrete',
@@ -493,6 +1085,7 @@ export const buildGeneratedWarrantySections = (
             { label: 'Lifetime structural warranty' },
           ]
     ),
+    ...(copingDeckingSection ? [copingDeckingSection] : []),
     createWarrantySectionFromEntries(
       'Tile & Masonry',
       'tile',
@@ -509,15 +1102,8 @@ export const buildGeneratedWarrantySections = (
             },
           ]
     ),
-    createWarrantySectionFromEntries('Equipment', 'equipment', buildEquipmentItems(proposal)),
-    createWarrantySectionFromEntries('Clean Up & Interior', 'cleanup', [
-      { label: 'All trenches filled and yard rough graded' },
-      { label: 'All construction debris hauled away' },
-      ...(interiorFinishDetail ? [{ label: interiorFinishDetail, advantage: 'Combines durability and functionality' }] : []),
-      { label: 'VGB compliant main drain covers' },
-      { label: dirtHaulText },
-      { label: 'Pool filled with water', advantage: 'Water trucks included' },
-    ]),
+    ...(equipmentItems.length ? [createWarrantySectionFromEntries('Equipment', 'equipment', equipmentItems)] : []),
+    createWarrantySectionFromEntries('Clean Up & Interior', 'cleanup', buildCleanupItems(proposal)),
     createWarrantySectionFromEntries('Start Up & Orientation', 'startup', [
       {
         label: 'Equipment turned on and started-up',
@@ -528,7 +1114,9 @@ export const buildGeneratedWarrantySections = (
     ]),
   ];
 
-  return normalizeWarrantySections(sections).map((section) => applyBrandToSection(section, brandName));
+  return ensurePlumbingWarrantyAdvantage(normalizeWarrantySections(sections)).map((section) =>
+    applyBrandToSection(section, brandName)
+  );
 };
 
 export const resolveWarrantySections = (
@@ -536,9 +1124,23 @@ export const resolveWarrantySections = (
   brandName: string = 'Submerge'
 ): WarrantySection[] => {
   if (Array.isArray(proposal?.warrantySections)) {
-    return mergeSelectedWaterFeaturesIntoPlumbingSection(
-      normalizeWarrantySections(proposal.warrantySections),
-      proposal
+    return ensurePlumbingWarrantyAdvantage(
+      mergeInteriorFinishWarrantyIntoCleanupSection(
+        mergeCopingDeckingSection(
+          mergeElectricalLightItemsIntoElectricSection(
+            mergeEquipmentItemsIntoEquipmentSection(
+              mergeSelectedWaterFeaturesIntoPlumbingSection(
+                normalizeWarrantySections(proposal.warrantySections),
+                proposal
+              ),
+              proposal
+            ),
+            proposal
+          ),
+          proposal
+        ),
+        proposal
+      )
     ).map((section) => applyBrandToSection(section, brandName));
   }
   return buildGeneratedWarrantySections(proposal, brandName);

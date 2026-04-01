@@ -172,6 +172,7 @@ function initializeDatabase() {
 
   // Read and execute schema (creates tables/indexes if missing)
   db.exec(schema);
+  ensurePricingModelHiddenFlagColumn();
 
   // Migrate any legacy single-pricing rows into pricing models
   migrateFranchisePricingToModels();
@@ -221,6 +222,20 @@ function backfillFranchiseCodes() {
     });
   } catch (error) {
     console.warn('Failed to backfill franchise codes:', error);
+  }
+}
+
+function ensurePricingModelHiddenFlagColumn() {
+  if (!db) return;
+  try {
+    const columns = db.prepare(`PRAGMA table_info('franchise_pricing_models')`).all() || [];
+    const hasHiddenFlag = columns.some((c) => c.name === 'is_hidden_from_view');
+    if (!hasHiddenFlag) {
+      db.exec(`ALTER TABLE franchise_pricing_models ADD COLUMN is_hidden_from_view INTEGER NOT NULL DEFAULT 0;`);
+      console.log('Added is_hidden_from_view column to franchise_pricing_models table (migration).');
+    }
+  } catch (error) {
+    console.warn('Failed to verify/alter franchise_pricing_models table:', error);
   }
 }
 
@@ -282,8 +297,8 @@ function migrateFranchisePricingToModels() {
 
     const insertModel = db.prepare(
       `INSERT INTO franchise_pricing_models
-       (id, franchise_id, name, version, pricing_json, is_default, created_at, updated_at, updated_by)
-       VALUES (@id, @franchise_id, @name, @version, @pricing_json, @is_default, @created_at, @updated_at, @updated_by)`
+       (id, franchise_id, name, version, pricing_json, is_default, is_hidden_from_view, created_at, updated_at, updated_by)
+       VALUES (@id, @franchise_id, @name, @version, @pricing_json, @is_default, @is_hidden_from_view, @created_at, @updated_at, @updated_by)`
     );
 
     const now = new Date().toISOString();
@@ -297,6 +312,7 @@ function migrateFranchisePricingToModels() {
           version: row.version || DEFAULT_PRICING_VERSION,
           pricing_json: row.pricing_json,
           is_default: 1,
+          is_hidden_from_view: 0,
           created_at: row.updated_at || now,
           updated_at: row.updated_at || now,
           updated_by: row.updated_by || null,
@@ -362,7 +378,8 @@ function getDefaultPricingModel(franchiseId) {
   return (
     db
       .prepare(
-        `SELECT id, name, version, pricing_json AS pricingJson, is_default AS isDefault, updated_at AS updatedAt, updated_by AS updatedBy
+        `SELECT id, name, version, pricing_json AS pricingJson, is_default AS isDefault, updated_at AS updatedAt,
+                updated_by AS updatedBy, is_hidden_from_view AS isHiddenFromView
          FROM franchise_pricing_models
          WHERE franchise_id = ?
          ORDER BY is_default DESC, updated_at DESC
@@ -377,7 +394,8 @@ function getPricingModelById(franchiseId, modelId) {
   return (
     db
       .prepare(
-        `SELECT id, name, version, pricing_json AS pricingJson, is_default AS isDefault, updated_at AS updatedAt, updated_by AS updatedBy
+        `SELECT id, name, version, pricing_json AS pricingJson, is_default AS isDefault, updated_at AS updatedAt,
+                updated_by AS updatedBy, is_hidden_from_view AS isHiddenFromView
          FROM franchise_pricing_models
          WHERE franchise_id = ? AND id = ?`
       )
@@ -962,7 +980,7 @@ ipcMain.handle('list-pricing-models', async (_, franchiseId) => {
   return (
     db
       .prepare(
-        `SELECT id, name, version, is_default AS isDefault, created_at AS createdAt, updated_at AS updatedAt
+        `SELECT id, name, version, is_default AS isDefault, is_hidden_from_view AS isHiddenFromView, created_at AS createdAt, updated_at AS updatedAt
          FROM franchise_pricing_models
          WHERE franchise_id = ?
          ORDER BY is_default DESC, updated_at DESC`
@@ -997,6 +1015,7 @@ ipcMain.handle('load-franchise-pricing', async (_, franchiseId) => {
     pricingModelId: model.id,
     pricingModelName: model.name,
     isDefault: Boolean(model.isDefault),
+    isHiddenFromView: Boolean(model.isHiddenFromView),
   };
 });
 
@@ -1021,6 +1040,7 @@ ipcMain.handle('load-pricing-model', async (_, payload) => {
     pricingModelId: model.id,
     pricingModelName: model.name,
     isDefault: Boolean(model.isDefault),
+    isHiddenFromView: Boolean(model.isHiddenFromView),
     version: model.version,
     pricing,
     updatedAt: model.updatedAt,
@@ -1036,6 +1056,7 @@ ipcMain.handle('save-pricing-model', async (_, payload) => {
   const version = payload?.version || DEFAULT_PRICING_VERSION;
   const updatedBy = payload?.updatedBy || null;
   const setDefault = Boolean(payload?.setDefault);
+  const isHiddenFromView = Boolean(payload?.isHiddenFromView);
   ensureFranchiseExists(franchiseId, payload?.franchiseName, payload?.franchiseCode || DEFAULT_FRANCHISE_CODE);
 
   const now = new Date().toISOString();
@@ -1045,12 +1066,13 @@ ipcMain.handle('save-pricing-model', async (_, payload) => {
   const tx = db.transaction(() => {
     db.prepare(
       `INSERT INTO franchise_pricing_models
-       (id, franchise_id, name, version, pricing_json, is_default, created_at, updated_at, updated_by)
-       VALUES (@id, @franchise_id, @name, @version, @pricing_json, @is_default, @created_at, @updated_at, @updated_by)
+       (id, franchise_id, name, version, pricing_json, is_default, is_hidden_from_view, created_at, updated_at, updated_by)
+       VALUES (@id, @franchise_id, @name, @version, @pricing_json, @is_default, @is_hidden_from_view, @created_at, @updated_at, @updated_by)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          version = excluded.version,
          pricing_json = excluded.pricing_json,
+         is_hidden_from_view = excluded.is_hidden_from_view,
          updated_at = excluded.updated_at,
          updated_by = excluded.updated_by,
          is_default = CASE WHEN excluded.is_default = 1 THEN 1 ELSE franchise_pricing_models.is_default END`
@@ -1061,6 +1083,7 @@ ipcMain.handle('save-pricing-model', async (_, payload) => {
       version,
       pricing_json: JSON.stringify(pricing),
       is_default: setDefault ? 1 : 0,
+      is_hidden_from_view: isHiddenFromView ? 1 : 0,
       created_at: now,
       updated_at: now,
       updated_by: updatedBy,

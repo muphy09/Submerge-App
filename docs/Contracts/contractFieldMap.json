@@ -523,35 +523,35 @@
     },
     {
       "cell": "E96",
-      "label": "Rock Waterfall I",
+      "label": "Bubblers",
       "proposalPath": null,
       "formatter": "waterFeature.rock1",
       "fallback": "None"
     },
     {
       "cell": "J96",
-      "label": "Rock Waterfall I Qty",
+      "label": "Bubblers Qty",
       "proposalPath": null,
       "formatter": "waterFeatureQty.rock1",
       "fallback": 0
     },
     {
       "cell": "E97",
-      "label": "Rock Waterfall II",
+      "label": "Umbrella Sleeves",
       "proposalPath": null,
       "formatter": "waterFeature.rock2",
       "fallback": "None"
     },
     {
       "cell": "J97",
-      "label": "Rock Waterfall II Qty",
+      "label": "Umbrella Sleeves Qty",
       "proposalPath": null,
       "formatter": "waterFeatureQty.rock2",
       "fallback": 0
     },
     {
       "cell": "E98",
-      "label": "Beam Rock Lnft",
+      "label": "Handrails",
       "proposalPath": null,
       "formatter": "number",
       "fallback": 0,
@@ -559,14 +559,14 @@
     },
     {
       "cell": "J98",
-      "label": "Beam Rock Qty",
+      "label": "Handrails Qty",
       "proposalPath": null,
       "formatter": "number",
       "fallback": 0
     },
     {
       "cell": "E99",
-      "label": "Notched Rock Lnft",
+      "label": "Jump Rock",
       "proposalPath": null,
       "formatter": "number",
       "fallback": 0,
@@ -574,7 +574,7 @@
     },
     {
       "cell": "J99",
-      "label": "Notched Rock Qty",
+      "label": "Jump Rock Lnft",
       "proposalPath": null,
       "formatter": "number",
       "fallback": 0

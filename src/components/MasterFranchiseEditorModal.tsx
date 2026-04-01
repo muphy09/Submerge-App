@@ -4,6 +4,7 @@ import './MasterFranchiseEditorModal.css';
 import {
   saveMasterFranchiseSettings,
   type MasterFranchise,
+  type MasterPricingModel,
   type MasterUser,
 } from '../services/masterAdminAdapter';
 import {
@@ -27,6 +28,16 @@ type TempPasswordState = {
 type MasterFranchiseEditorModalProps = {
   franchise: MasterFranchise;
   users: MasterUser[];
+  pricingModels: MasterPricingModel[];
+  pricingLoading: boolean;
+  pricingError: string | null;
+  copyTargets: Record<string, string>;
+  copyTargetOptions: MasterFranchise[];
+  copyingId: string | null;
+  copyError: string | null;
+  copySuccess: string | null;
+  onCopyTargetChange: (modelId: string, value: string) => void;
+  onCopyPricingModel: (model: MasterPricingModel) => void | Promise<void>;
   updatedBy?: string | null;
   onClose: () => void;
   onRefresh: () => Promise<void>;
@@ -38,9 +49,25 @@ const getDisplayName = (user: Pick<MasterUser, 'name' | 'email'>) => {
   return trimmedName || user.email;
 };
 
+const formatPricingModelDate = (value?: string) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
+};
+
 function MasterFranchiseEditorModal({
   franchise,
   users,
+  pricingModels,
+  pricingLoading,
+  pricingError,
+  copyTargets,
+  copyTargetOptions,
+  copyingId,
+  copyError,
+  copySuccess,
+  onCopyTargetChange,
+  onCopyPricingModel,
   updatedBy,
   onClose,
   onRefresh,
@@ -84,6 +111,16 @@ function MasterFranchiseEditorModal({
   const admins = activeUsers.filter((user) => user.role === 'admin');
   const designers = activeUsers.filter((user) => user.role === 'designer');
   const isInactive = Boolean(franchise.deletedAt || franchise.isActive === false);
+  const sortedPricingModels = useMemo(() => {
+    const rows = [...pricingModels];
+    rows.sort((a, b) => {
+      const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      if (dateA !== dateB) return dateB - dateA;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    return rows;
+  }, [pricingModels]);
 
   const normalizedPendingName = pendingName.trim();
   const normalizedPendingCode = pendingCode.trim().toUpperCase();
@@ -403,7 +440,6 @@ function MasterFranchiseEditorModal({
             <div className="master-editor-section-header">
               <div>
                 <h3>Basic Settings</h3>
-                <p>Update the franchise name and login code.</p>
               </div>
               <button
                 className="master-primary-btn master-small-btn"
@@ -441,12 +477,87 @@ function MasterFranchiseEditorModal({
           <div className="master-editor-section">
             <div className="master-editor-section-header">
               <div>
+                <h3>Pricing Models</h3>
+              </div>
+            </div>
+            {pricingError && <div className="master-error">{pricingError}</div>}
+            {copyError && <div className="master-error">{copyError}</div>}
+            {copySuccess && <div className="master-success">{copySuccess}</div>}
+            {pricingLoading ? (
+              <div className="master-empty">Loading pricing models...</div>
+            ) : sortedPricingModels.length === 0 ? (
+              <div className="master-empty">No pricing models found for this franchise.</div>
+            ) : (
+              <div className="master-table-wrapper master-editor-pricing-table-wrapper">
+                <table className="master-table master-editor-pricing-table">
+                  <colgroup>
+                    <col />
+                    <col style={{ width: '180px' }} />
+                    <col style={{ width: '340px' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Pricing Model Name</th>
+                      <th>Date Modified</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedPricingModels.map((model) => {
+                      const modelFlags = [
+                        model.isDefault ? 'Default' : null,
+                        model.isHiddenFromView ? 'Hidden from view' : null,
+                      ].filter(Boolean);
+                      return (
+                        <tr key={`${model.franchiseId}-${model.id}`}>
+                          <td>
+                            <div className="master-table-primary">{model.name || 'Unnamed model'}</div>
+                            {modelFlags.length > 0 && (
+                              <div className="master-table-secondary master-table-secondary--muted">
+                                {modelFlags.join(' | ')}
+                              </div>
+                            )}
+                          </td>
+                          <td>{formatPricingModelDate(model.updatedAt || model.createdAt)}</td>
+                          <td>
+                            <div className="master-copy-controls master-editor-pricing-actions">
+                              <select
+                                value={copyTargets[model.id] || ''}
+                                onChange={(event) => onCopyTargetChange(model.id, event.target.value)}
+                                aria-label={`Copy ${model.name || 'pricing model'} to franchise`}
+                              >
+                                <option value="">Copy to franchise...</option>
+                                {copyTargetOptions.map((franchiseOption) => (
+                                  <option key={franchiseOption.id} value={franchiseOption.id}>
+                                    {franchiseOption.name || franchiseOption.franchiseCode || franchiseOption.id}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                className="master-primary-btn master-small-btn"
+                                type="button"
+                                onClick={() => {
+                                  void onCopyPricingModel(model);
+                                }}
+                                disabled={copyingId === model.id}
+                              >
+                                {copyingId === model.id ? 'Copying...' : 'Copy'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="master-editor-section">
+            <div className="master-editor-section-header">
+              <div>
                 <h3>Owner</h3>
-                <p>
-                  {isInactive
-                    ? 'This franchise is inactive. User management actions are disabled.'
-                    : 'Reset the password or demote the owner to admin.'}
-                </p>
               </div>
             </div>
             {owners.length === 0 ? (
@@ -462,11 +573,6 @@ function MasterFranchiseEditorModal({
             <div className="master-editor-section-header">
               <div>
                 <h3>Admins</h3>
-                <p>
-                  {isInactive
-                    ? 'This franchise is inactive. User management actions are disabled.'
-                    : 'Reset admin passwords, demote admins to designers, or promote an admin to owner if no owner exists.'}
-                </p>
               </div>
             </div>
             {admins.length === 0 ? (
@@ -487,11 +593,6 @@ function MasterFranchiseEditorModal({
             <div className="master-editor-section-header">
               <div>
                 <h3>Designers</h3>
-                <p>
-                  {isInactive
-                    ? 'This franchise is inactive. User management actions are disabled.'
-                    : 'Add designers, reset passwords, promote them to admin, or remove them.'}
-                </p>
               </div>
             </div>
             <div className="master-editor-add-card">

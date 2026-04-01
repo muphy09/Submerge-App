@@ -32,6 +32,7 @@ export type MasterPricingModel = {
   name: string;
   version?: string;
   isDefault?: boolean;
+  isHiddenFromView?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -137,7 +138,7 @@ export async function listAllPricingModels(): Promise<MasterPricingModel[]> {
   }
   const { data, error } = await supabase
     .from('franchise_pricing_models')
-    .select('id,franchise_id,name,version,is_default,created_at,updated_at')
+    .select('id,franchise_id,name,version,is_default,is_hidden_from_view,created_at,updated_at')
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return (data || []).map((row: any) => ({
@@ -146,6 +147,7 @@ export async function listAllPricingModels(): Promise<MasterPricingModel[]> {
     name: row.name,
     version: row.version,
     isDefault: row.is_default,
+    isHiddenFromView: row.is_hidden_from_view,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));

@@ -52,7 +52,15 @@ declare global {
       }>;
       listPricingModels: (
         franchiseId: string
-      ) => Promise<{ id: string; name: string; version: string; isDefault: boolean; createdAt?: string; updatedAt?: string }[]>;
+      ) => Promise<{
+        id: string;
+        name: string;
+        version: string;
+        isDefault: boolean;
+        isHiddenFromView?: boolean;
+        createdAt?: string;
+        updatedAt?: string;
+      }[]>;
       loadFranchisePricing: (
         franchiseId?: string
       ) => Promise<{
@@ -60,6 +68,7 @@ declare global {
         pricingModelId?: string;
         pricingModelName?: string;
         isDefault?: boolean;
+        isHiddenFromView?: boolean;
         version: string;
         pricing: any;
         updatedAt?: string;
@@ -73,6 +82,7 @@ declare global {
         pricingModelId?: string;
         pricingModelName?: string;
         isDefault?: boolean;
+        isHiddenFromView?: boolean;
         version: string;
         pricing: any;
         updatedAt?: string;
@@ -88,6 +98,7 @@ declare global {
         version?: string;
         updatedBy?: string | null;
         setDefault?: boolean;
+        isHiddenFromView?: boolean;
         createNew?: boolean;
       }) => Promise<{ franchiseId: string; pricingModelId: string; updatedAt: string; isDefault?: boolean }>;
       saveFranchisePricing: (payload: {
@@ -100,6 +111,7 @@ declare global {
         version?: string;
         updatedBy?: string | null;
         setDefault?: boolean;
+        isHiddenFromView?: boolean;
         createNew?: boolean;
       }) => Promise<{ franchiseId: string; pricingModelId: string; updatedAt: string; isDefault?: boolean }>;
       setDefaultPricingModel: (payload: { franchiseId?: string; pricingModelId: string }) => Promise<{

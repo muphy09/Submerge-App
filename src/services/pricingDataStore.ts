@@ -352,6 +352,7 @@ export function clearActivePricingModelMeta() {
 export async function savePricingModelSnapshot(options: {
   name: string;
   setDefault?: boolean;
+  isHiddenFromView?: boolean;
   updatedBy?: string | null;
   createNew?: boolean;
 }) {
@@ -362,6 +363,7 @@ export async function savePricingModelSnapshot(options: {
     name: options.name,
     pricingModelId: options.createNew ? undefined : activePricingModelId || undefined,
     setDefault: options.setDefault ?? false,
+    isHiddenFromView: options.isHiddenFromView ?? false,
     updatedBy: options.updatedBy ?? null,
     createNew: options.createNew ?? false,
   });

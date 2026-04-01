@@ -1,5 +1,5 @@
 import pricingData from '../services/pricingData';
-import type { AdditionalDeckingSelection, TileCopingDecking } from '../types/proposal-new';
+import type { AdditionalDeckingSelection, Proposal, TileCopingDecking } from '../types/proposal-new';
 
 const DECKING_TYPE_FULL_LABELS: Record<string, string> = {
   none: 'No Decking',
@@ -100,6 +100,36 @@ export const getAdditionalDeckingSelections = (
   return legacySelection.deckingType || legacySelection.area > 0 || legacySelection.isOffContract
     ? [legacySelection]
     : [];
+};
+
+const isIncludedDeckingSelection = (
+  selection?: Partial<AdditionalDeckingSelection> | null
+): boolean => {
+  const deckingType = String(selection?.deckingType || '').trim();
+  const area = toNumber(selection?.area);
+
+  return Boolean(deckingType) && deckingType !== 'none' && area > 0 && !Boolean(selection?.isOffContract);
+};
+
+export const hasIncludedDecking = (proposal?: Partial<Proposal> | null): boolean => {
+  const tileCopingDecking = proposal?.tileCopingDecking;
+  if (!tileCopingDecking) {
+    return false;
+  }
+
+  const primaryDeckingType = String(tileCopingDecking.deckingType || '').trim();
+  const primaryDeckingArea = toNumber(tileCopingDecking.deckingArea || proposal?.poolSpecs?.deckingArea || 0);
+  const hasIncludedPrimaryDecking =
+    Boolean(primaryDeckingType) &&
+    primaryDeckingType !== 'none' &&
+    primaryDeckingArea > 0 &&
+    !Boolean(tileCopingDecking.isDeckingOffContract);
+
+  if (hasIncludedPrimaryDecking) {
+    return true;
+  }
+
+  return getAdditionalDeckingSelections(tileCopingDecking).some(isIncludedDeckingSelection);
 };
 
 export const withAdditionalDeckingSelections = (
