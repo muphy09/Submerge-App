@@ -2,7 +2,7 @@
 Immediate Changes - 
 
 Fiberglass Pools:
-    - 3 Levels: Small, Medium, Large (Datasheet)
+    - 3 Levels- Small, Medium, Large (Datasheet)
     - Spas and Tanning ledges as options
     - When Fiberglass Pool is selected;
         - 
@@ -10,7 +10,7 @@ Fiberglass Pools:
         - 
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
-
+- Cleanup visuals on Contract export
 -----
 - Submission workflow
     - Submitting a proposal should put the proposal into an approval state. Admins or bookkeeper (new role) will need to 'Complete' which then marks as 'Complete'

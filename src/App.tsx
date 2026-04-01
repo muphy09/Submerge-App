@@ -561,6 +561,11 @@ function AppContent() {
     []
   );
 
+  const handleCloseChangelogPrompt = useCallback(() => {
+    acknowledgeChangelog(appVersion);
+    setShowChangelogPrompt(false);
+  }, [appVersion]);
+
   useEffect(() => {
     if (!isSupabaseEnabled()) return;
     let cancelled = false;
@@ -615,13 +620,13 @@ function AppContent() {
     : null;
 
   useEffect(() => {
+    if (showChangelogPrompt) return;
     if (!effectiveSession || showLogin || showPasswordReset) return;
     if (effectiveRole !== 'admin' && effectiveRole !== 'owner') return;
     if (!hasPendingChangelog(appVersion)) return;
 
-    acknowledgeChangelog(appVersion);
     setShowChangelogPrompt(true);
-  }, [appVersion, effectiveRole, effectiveSession, showLogin, showPasswordReset]);
+  }, [appVersion, effectiveRole, effectiveSession, showChangelogPrompt, showLogin, showPasswordReset]);
 
   const openAdminPanelPrompt = useCallback(
     (options?: { targetPath?: string | null; cancelDestination?: string | null }) => {
@@ -978,7 +983,7 @@ function AppContent() {
         onSubmit={submitAdminPanelPin}
         onClose={closeAdminPanelPrompt}
       />
-      <ChangelogModal isOpen={showChangelogPrompt} onClose={() => setShowChangelogPrompt(false)} />
+      <ChangelogModal isOpen={showChangelogPrompt} onClose={handleCloseChangelogPrompt} />
       <FeedbackSubmissionModal
         isOpen={showFeedbackModal}
         message={feedbackMessage}

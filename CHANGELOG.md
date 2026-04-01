@@ -1,4 +1,4 @@
-## [2.1.0] - 3/31/26
+## [2.1.1] - 3/31/26
 ### Security Changes
 - Only 1 logged in session per user can be active at a time
     - Will prompt to sign other session out if 2 active logins are detected
