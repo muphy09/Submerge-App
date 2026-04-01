@@ -71,13 +71,30 @@ import {
   publishGlobalFeedbackEnabled,
   submitFeedback,
 } from './services/feedback';
+import { hasSeenFeedbackTutorial, markFeedbackTutorialSeen } from './services/feedbackTutorial';
 import FeedbackLauncher from './components/FeedbackLauncher';
+import FeedbackTutorialOverlay, { type FeedbackTutorialTargetRect } from './components/FeedbackTutorialOverlay';
 import FeedbackSubmissionModal from './components/FeedbackSubmissionModal';
 import './App.css';
 
 type PendingSessionTakeover = {
   session: UserSession;
 };
+
+function readFeedbackLauncherRect(element: HTMLButtonElement | null): FeedbackTutorialTargetRect | null {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+
+  return {
+    top: rect.top,
+    left: rect.left,
+    right: rect.right,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
+}
 
 function AppContent() {
   const navigate = useNavigate();
@@ -115,10 +132,15 @@ function AppContent() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackAvailable, setFeedbackAvailable] = useState(true);
+  const [feedbackTutorialSeen, setFeedbackTutorialSeen] = useState(true);
+  const [feedbackInboxOpen, setFeedbackInboxOpen] = useState(false);
+  const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
+  const [feedbackLauncherRect, setFeedbackLauncherRect] = useState<FeedbackTutorialTargetRect | null>(null);
   const forcingRemoteLogoutRef = useRef(false);
   const expectedLocalSignOutRef = useRef(false);
   const expectedLocalSignOutTimeoutRef = useRef<number | null>(null);
   const sessionRef = useRef<UserSession | null>(null);
+  const feedbackLauncherRef = useRef<HTMLButtonElement | null>(null);
   const appVersion = getCurrentAppVersion();
   const { feedbackEnabled: globalFeedbackEnabled, isLoading: globalFeedbackEnabledLoading } =
     useGlobalFeedbackEnabled({ poll: Boolean(session) });
@@ -169,6 +191,14 @@ function AppContent() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    if (!session?.userId) {
+      setFeedbackTutorialSeen(true);
+      return;
+    }
+    setFeedbackTutorialSeen(hasSeenFeedbackTutorial(session.userId));
+  }, [session?.userId]);
 
   useEffect(() => {
     return subscribeToMasterImpersonationUpdates((nextImpersonation) => {
@@ -618,6 +648,17 @@ function AppContent() {
         masterImpersonation.franchiseCode ||
         masterImpersonation.franchiseId
     : null;
+  const shouldShowFeedbackTutorial =
+    location.pathname === '/' &&
+    canSubmitFeedback &&
+    Boolean(session?.userId) &&
+    !feedbackTutorialSeen &&
+    !showFeedbackModal &&
+    !showChangelogPrompt &&
+    !feedbackInboxLoading &&
+    !feedbackInboxOpen &&
+    !showOfflineGate &&
+    Boolean(feedbackLauncherRect);
 
   useEffect(() => {
     if (showChangelogPrompt) return;
@@ -666,11 +707,21 @@ function AppContent() {
     }
   }, [adminPanelPinPrompt.cancelDestination, navigate]);
 
+  const dismissFeedbackTutorial = useCallback(() => {
+    const userId = session?.userId;
+    if (!userId) return;
+    markFeedbackTutorialSeen(userId);
+    setFeedbackTutorialSeen(true);
+  }, [session?.userId]);
+
   const handleOpenFeedbackModal = useCallback(() => {
     if (!canSubmitFeedback) return;
+    if (shouldShowFeedbackTutorial) {
+      dismissFeedbackTutorial();
+    }
     setFeedbackError('');
     setShowFeedbackModal(true);
-  }, [canSubmitFeedback]);
+  }, [canSubmitFeedback, dismissFeedbackTutorial, shouldShowFeedbackTutorial]);
 
   const handleCloseFeedbackModal = useCallback(() => {
     if (feedbackSubmitting) return;
@@ -821,7 +872,42 @@ function AppContent() {
     setFeedbackMessage('');
     setFeedbackError('');
     setFeedbackSubmitting(false);
+    setFeedbackLauncherRect(null);
   }, [canSubmitFeedback]);
+
+  useEffect(() => {
+    if (location.pathname === '/') return;
+    setFeedbackInboxOpen(false);
+    setFeedbackInboxLoading(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === '/' && session?.userId) {
+      setFeedbackInboxLoading(true);
+      return;
+    }
+    setFeedbackInboxLoading(false);
+  }, [location.pathname, session?.userId]);
+
+  useEffect(() => {
+    if (!canSubmitFeedback || location.pathname !== '/') {
+      setFeedbackLauncherRect(null);
+      return;
+    }
+
+    const syncRect = () => {
+      setFeedbackLauncherRect(readFeedbackLauncherRect(feedbackLauncherRef.current));
+    };
+
+    const animationFrame = window.requestAnimationFrame(syncRect);
+    const handleResize = () => syncRect();
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [canSubmitFeedback, effectiveSession?.franchiseId, location.pathname, updateStatus]);
 
   return (
     <div className="app">
@@ -839,7 +925,13 @@ function AppContent() {
       <Routes>
         <Route
           path="/"
-          element={<HomePage session={effectiveSession} />}
+          element={
+            <HomePage
+              session={effectiveSession}
+              onFeedbackInboxLoadingChange={setFeedbackInboxLoading}
+              onFeedbackInboxVisibilityChange={setFeedbackInboxOpen}
+            />
+          }
         />
         <Route
           path="/admin"
@@ -895,8 +987,15 @@ function AppContent() {
         <div
           className={`app-feedback-anchor${updateStatus ? ' has-update' : ''}${effectiveSession && location.pathname === '/' ? ' has-session-meta' : ''}`}
         >
-          <FeedbackLauncher onClick={handleOpenFeedbackModal} />
+          <FeedbackLauncher ref={feedbackLauncherRef} onClick={handleOpenFeedbackModal} />
         </div>
+      )}
+      {shouldShowFeedbackTutorial && feedbackLauncherRect && (
+        <FeedbackTutorialOverlay
+          isOpen={shouldShowFeedbackTutorial}
+          targetRect={feedbackLauncherRect}
+          onDismiss={dismissFeedbackTutorial}
+        />
       )}
       <UpdateNotification
         status={updateStatus}

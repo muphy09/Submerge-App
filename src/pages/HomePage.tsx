@@ -36,9 +36,15 @@ import {
 
 type HomePageProps = {
   session?: UserSession | null;
+  onFeedbackInboxVisibilityChange?: (isOpen: boolean) => void;
+  onFeedbackInboxLoadingChange?: (isLoading: boolean) => void;
 };
 
-function HomePage({ session }: HomePageProps) {
+function HomePage({
+  session,
+  onFeedbackInboxVisibilityChange,
+  onFeedbackInboxLoadingChange,
+}: HomePageProps) {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,19 +142,34 @@ function HomePage({ session }: HomePageProps) {
     if (!session?.userId) {
       setPendingFeedbackReplies([]);
       setFeedbackInboxOpen(false);
+      onFeedbackInboxLoadingChange?.(false);
       return;
     }
+    onFeedbackInboxLoadingChange?.(true);
     try {
       const rows = await listPendingFeedbackReplies(20);
       setPendingFeedbackReplies(rows);
     } catch (error) {
       console.error('Failed to load feedback replies:', error);
+    } finally {
+      onFeedbackInboxLoadingChange?.(false);
     }
-  }, [session?.userId]);
+  }, [onFeedbackInboxLoadingChange, session?.userId]);
 
   useEffect(() => {
     setFeedbackInboxOpen(pendingFeedbackReplies.length > 0);
   }, [pendingFeedbackReplies.length]);
+
+  useEffect(() => {
+    onFeedbackInboxVisibilityChange?.(feedbackInboxOpen);
+  }, [feedbackInboxOpen, onFeedbackInboxVisibilityChange]);
+
+  useEffect(() => {
+    return () => {
+      onFeedbackInboxVisibilityChange?.(false);
+      onFeedbackInboxLoadingChange?.(false);
+    };
+  }, [onFeedbackInboxLoadingChange, onFeedbackInboxVisibilityChange]);
 
   useEffect(() => {
     void loadFeedbackReplies();

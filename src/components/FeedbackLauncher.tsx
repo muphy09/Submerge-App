@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import './FeedbackUi.css';
 
 type FeedbackLauncherProps = {
@@ -6,13 +7,17 @@ type FeedbackLauncherProps = {
   onClick: () => void;
 };
 
-function FeedbackLauncher({
-  className = '',
-  tooltip = 'Submit Feedback Here!',
-  onClick,
-}: FeedbackLauncherProps) {
+const FeedbackLauncher = forwardRef<HTMLButtonElement, FeedbackLauncherProps>(function FeedbackLauncher(
+  {
+    className = '',
+    tooltip = 'Submit Feedback Here!',
+    onClick,
+  },
+  ref
+) {
   return (
     <button
+      ref={ref}
       type="button"
       className={`feedback-launcher ${className}`.trim()}
       onClick={onClick}
@@ -28,6 +33,8 @@ function FeedbackLauncher({
       <span className="feedback-launcher-tooltip">{tooltip}</span>
     </button>
   );
-}
+});
+
+FeedbackLauncher.displayName = 'FeedbackLauncher';
 
 export default FeedbackLauncher;
