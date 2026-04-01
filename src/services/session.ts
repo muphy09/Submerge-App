@@ -25,6 +25,7 @@ export type MasterImpersonation = {
 
 export const SESSION_STORAGE_KEY = 'submerge-user-session';
 export const MASTER_IMPERSONATION_KEY = 'submerge-master-impersonation';
+export const REMOTE_SIGNOUT_NOTICE_KEY = 'submerge-remote-signout-notice';
 export const DEFAULT_FRANCHISE_ID = 'default';
 
 export function readSession(): UserSession | null {
@@ -46,6 +47,21 @@ export function saveSession(session: UserSession) {
 export function clearSession() {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+export function shouldShowRemoteSignoutNotice() {
+  if (typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(REMOTE_SIGNOUT_NOTICE_KEY) === '1';
+}
+
+export function markRemoteSignoutNotice() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(REMOTE_SIGNOUT_NOTICE_KEY, '1');
+}
+
+export function clearRemoteSignoutNotice() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(REMOTE_SIGNOUT_NOTICE_KEY);
 }
 
 export function readMasterImpersonation(): MasterImpersonation | null {

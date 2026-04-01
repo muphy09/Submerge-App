@@ -34,8 +34,12 @@ import {
   type UserSession,
   clearSession,
   clearMasterImpersonation,
+  clearRemoteSignoutNotice,
+  markRemoteSignoutNotice,
   readMasterImpersonation,
+  readSession,
   saveMasterImpersonation,
+  shouldShowRemoteSignoutNotice,
   updateSession,
 } from './services/session';
 import {
@@ -78,7 +82,7 @@ function AppContent() {
   const [pendingSessionTakeover, setPendingSessionTakeover] = useState<PendingSessionTakeover | null>(null);
   const [pendingSessionTakeoverError, setPendingSessionTakeoverError] = useState('');
   const [pendingSessionTakeoverLoading, setPendingSessionTakeoverLoading] = useState(false);
-  const [showLoggedOutElsewhereNotice, setShowLoggedOutElsewhereNotice] = useState(false);
+  const [showLoggedOutElsewhereNotice, setShowLoggedOutElsewhereNotice] = useState(() => shouldShowRemoteSignoutNotice());
   const [adminPanelPin, setAdminPanelPin] = useState('');
   const [adminPanelPinError, setAdminPanelPinError] = useState('');
   const [adminPanelPinPrompt, setAdminPanelPinPrompt] = useState<{
@@ -160,6 +164,7 @@ function AppContent() {
 
       window.setTimeout(() => {
         if (shouldShowRemoteLogoutNotice) {
+          markRemoteSignoutNotice();
           setShowLoggedOutElsewhereNotice(true);
         }
         resetSignedOutUiState();
@@ -175,10 +180,12 @@ function AppContent() {
     // Restore session from Supabase Auth if possible
     let cancelled = false;
     const restoreSession = async () => {
+      const hadSavedSession = Boolean(readSession()?.userId);
       try {
         const restored = await loadSessionFromSupabase();
         if (cancelled) return;
         if (restored?.session) {
+          clearRemoteSignoutNotice();
           setShowLoggedOutElsewhereNotice(false);
           setPendingSessionTakeover(null);
           setPendingSessionTakeoverError('');
@@ -195,14 +202,23 @@ function AppContent() {
             DEFAULT_FRANCHISE_ID;
           void loadPricingForFranchise(targetId);
         } else {
-          setShowLoggedOutElsewhereNotice(false);
+          if (hadSavedSession) {
+            markRemoteSignoutNotice();
+            setShowLoggedOutElsewhereNotice(true);
+          } else {
+            clearRemoteSignoutNotice();
+            setShowLoggedOutElsewhereNotice(false);
+          }
           markExpectedLocalSignOut();
           void signOut();
           resetSignedOutUiState();
         }
       } catch (error) {
         console.warn('Unable to restore saved session:', error);
-        setShowLoggedOutElsewhereNotice(false);
+        if (hadSavedSession) {
+          markRemoteSignoutNotice();
+          setShowLoggedOutElsewhereNotice(true);
+        }
         resetSignedOutUiState();
       }
     };
@@ -282,6 +298,7 @@ function AppContent() {
         });
         if (!cancelled && result.status === 'displaced') {
           forcingRemoteLogoutRef.current = true;
+          markRemoteSignoutNotice();
           setShowLoggedOutElsewhereNotice(true);
           try {
             await signOut();
@@ -352,6 +369,7 @@ function AppContent() {
         return;
       }
 
+      clearRemoteSignoutNotice();
       setShowLoggedOutElsewhereNotice(false);
       setPendingSessionTakeover(null);
       setPendingSessionTakeoverError('');
@@ -424,6 +442,7 @@ function AppContent() {
   }, [resetSignedOutUiState]);
 
   const handleLogout = async () => {
+    clearRemoteSignoutNotice();
     setShowLoggedOutElsewhereNotice(false);
     try {
       markExpectedLocalSignOut();
@@ -798,8 +817,14 @@ function AppContent() {
         message="Account logged in elsewhere."
         confirmLabel="OK"
         hideCancel
-        onConfirm={() => setShowLoggedOutElsewhereNotice(false)}
-        onCancel={() => setShowLoggedOutElsewhereNotice(false)}
+        onConfirm={() => {
+          clearRemoteSignoutNotice();
+          setShowLoggedOutElsewhereNotice(false);
+        }}
+        onCancel={() => {
+          clearRemoteSignoutNotice();
+          setShowLoggedOutElsewhereNotice(false);
+        }}
       />
       <AdminPinModal
         isOpen={adminPanelPinPrompt.isOpen}
