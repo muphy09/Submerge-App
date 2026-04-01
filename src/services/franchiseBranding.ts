@@ -1,10 +1,15 @@
 import { getSupabaseClient } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
 import { logLedgerEventSafe } from './ledger';
+import {
+  ADMIN_PANEL_PIN_LENGTH,
+  sanitizeAdminPanelPinInput,
+} from './adminPanelPinConfig';
 
 type FranchiseBrandingRecord = {
   logoUrl: string | null;
   appName: string | null;
+  adminPanelPin: string | null;
   updatedAt?: string | null;
   fetchedAt: number;
 };
@@ -13,7 +18,12 @@ type FranchiseBrandingUpdate = {
   franchiseId: string;
   logoUrl?: string | null;
   appName?: string | null;
+  adminPanelPin?: string | null;
   updatedBy?: string | null;
+};
+
+type SaveFranchiseBrandingOptions = {
+  skipLedger?: boolean;
 };
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
@@ -21,6 +31,7 @@ const BRANDING_TABLE = 'franchise_branding';
 const BRANDING_STORAGE_PREFIX = 'submerge.franchiseLogo';
 const LOGO_UPDATED_EVENT = 'submerge-franchise-logo-updated';
 const APP_NAME_UPDATED_EVENT = 'submerge-franchise-app-name-updated';
+const ADMIN_PANEL_PIN_UPDATED_EVENT = 'submerge-admin-panel-pin-updated';
 const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_APP_NAME = 'Submerge';
 
@@ -49,6 +60,12 @@ function normalizeAppName(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizeAdminPanelPin(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = sanitizeAdminPanelPinInput(value);
+  return normalized.length === ADMIN_PANEL_PIN_LENGTH ? normalized : null;
+}
+
 function emitLogoUpdate(franchiseId: string, logoUrl: string | null) {
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
   window.dispatchEvent(
@@ -60,6 +77,13 @@ function emitAppNameUpdate(franchiseId: string, appName: string | null) {
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
   window.dispatchEvent(
     new CustomEvent(APP_NAME_UPDATED_EVENT, { detail: { franchiseId, appName } })
+  );
+}
+
+function emitAdminPanelPinUpdate(franchiseId: string, adminPanelPin: string | null) {
+  if (typeof window === 'undefined' || !window.dispatchEvent) return;
+  window.dispatchEvent(
+    new CustomEvent(ADMIN_PANEL_PIN_UPDATED_EVENT, { detail: { franchiseId, adminPanelPin } })
   );
 }
 
@@ -91,6 +115,22 @@ export function subscribeToFranchiseAppNameUpdates(
   return () => window.removeEventListener(APP_NAME_UPDATED_EVENT, handler as EventListener);
 }
 
+export function subscribeToFranchiseAdminPanelPinUpdates(
+  franchiseId: string,
+  callback: (adminPanelPin: string | null) => void
+) {
+  if (typeof window === 'undefined' || !window.addEventListener) return () => {};
+  const handler = (event: Event) => {
+    const detail = (
+      event as CustomEvent<{ franchiseId: string; adminPanelPin: string | null }>
+    ).detail;
+    if (!detail || detail.franchiseId !== franchiseId) return;
+    callback(detail.adminPanelPin ?? null);
+  };
+  window.addEventListener(ADMIN_PANEL_PIN_UPDATED_EVENT, handler as EventListener);
+  return () => window.removeEventListener(ADMIN_PANEL_PIN_UPDATED_EVENT, handler as EventListener);
+}
+
 function persistFranchiseBrandingCache(franchiseId: string, record: FranchiseBrandingRecord | null) {
   memoryCache.set(franchiseId, record);
   if (typeof localStorage === 'undefined') return;
@@ -110,6 +150,7 @@ function buildBrandingRecord(raw?: Partial<FranchiseBrandingRecord> | null): Fra
   return {
     logoUrl: normalizeLogoUrl(raw?.logoUrl),
     appName: normalizeAppName(raw?.appName),
+    adminPanelPin: normalizeAdminPanelPin(raw?.adminPanelPin),
     updatedAt: typeof raw?.updatedAt === 'string' ? raw?.updatedAt : null,
     fetchedAt: typeof raw?.fetchedAt === 'number' ? raw?.fetchedAt : 0,
   };
@@ -152,6 +193,14 @@ export function getCachedFranchiseAppName(
   return cached?.appName ?? null;
 }
 
+export function getCachedFranchiseAdminPanelPin(
+  franchiseId: string
+): string | null | undefined {
+  const cached = getCachedFranchiseBranding(franchiseId);
+  if (cached === undefined) return undefined;
+  return cached?.adminPanelPin ?? null;
+}
+
 function isCacheFresh(record: FranchiseBrandingRecord | null | undefined) {
   if (!record) return false;
   return Date.now() - record.fetchedAt < BRANDING_CACHE_TTL_MS;
@@ -179,7 +228,7 @@ export async function loadFranchiseBranding(
 
     const { data, error } = await supabase
       .from(BRANDING_TABLE)
-      .select('franchise_id, logo_url, app_name, updated_at, updated_by')
+      .select('franchise_id, logo_url, app_name, admin_panel_pin, updated_at, updated_by')
       .eq('franchise_id', franchiseId)
       .maybeSingle();
 
@@ -190,6 +239,7 @@ export async function loadFranchiseBranding(
     const record: FranchiseBrandingRecord = {
       logoUrl: normalizeLogoUrl(data?.logo_url),
       appName: normalizeAppName(data?.app_name),
+      adminPanelPin: normalizeAdminPanelPin(data?.admin_panel_pin),
       updatedAt: data?.updated_at ?? null,
       fetchedAt: Date.now(),
     };
@@ -197,6 +247,7 @@ export async function loadFranchiseBranding(
     persistFranchiseBrandingCache(franchiseId, record);
     emitLogoUpdate(franchiseId, record.logoUrl ?? null);
     emitAppNameUpdate(franchiseId, record.appName ?? null);
+    emitAdminPanelPinUpdate(franchiseId, record.adminPanelPin ?? null);
     return record;
   })();
 
@@ -223,12 +274,21 @@ export async function loadFranchiseAppName(
   return record?.appName ?? null;
 }
 
+export async function loadFranchiseAdminPanelPin(
+  franchiseId: string,
+  options: { force?: boolean } = {}
+): Promise<string | null> {
+  const record = await loadFranchiseBranding(franchiseId, options);
+  return record?.adminPanelPin ?? null;
+}
+
 function hasOwnProp<T extends object>(payload: T, key: keyof T): boolean {
   return Object.prototype.hasOwnProperty.call(payload, key);
 }
 
 export async function saveFranchiseBranding(
-  payload: FranchiseBrandingUpdate
+  payload: FranchiseBrandingUpdate,
+  options: SaveFranchiseBrandingOptions = {}
 ): Promise<FranchiseBrandingRecord> {
   if (!payload.franchiseId) {
     throw new Error('Franchise ID is required to save branding.');
@@ -238,8 +298,10 @@ export async function saveFranchiseBranding(
   const supabase = getSupabaseClient();
   const hasLogo = hasOwnProp(payload, 'logoUrl');
   const hasAppName = hasOwnProp(payload, 'appName');
+  const hasAdminPanelPin = hasOwnProp(payload, 'adminPanelPin');
   const logoUrl = hasLogo ? normalizeLogoUrl(payload.logoUrl) : undefined;
   const appName = hasAppName ? normalizeAppName(payload.appName) : undefined;
+  const adminPanelPin = hasAdminPanelPin ? normalizeAdminPanelPin(payload.adminPanelPin) : undefined;
 
   if (!supabase) {
     requireSupabase();
@@ -251,6 +313,7 @@ export async function saveFranchiseBranding(
     };
     if (hasLogo) update.logo_url = logoUrl;
     if (hasAppName) update.app_name = appName;
+    if (hasAdminPanelPin) update.admin_panel_pin = adminPanelPin;
     const { error } = await supabase
       .from(BRANDING_TABLE)
       .upsert(update, { onConflict: 'franchise_id', ignoreDuplicates: false });
@@ -261,6 +324,7 @@ export async function saveFranchiseBranding(
   const record: FranchiseBrandingRecord = {
     logoUrl: hasLogo ? (logoUrl ?? null) : existing?.logoUrl ?? null,
     appName: hasAppName ? (appName ?? null) : existing?.appName ?? null,
+    adminPanelPin: hasAdminPanelPin ? (adminPanelPin ?? null) : existing?.adminPanelPin ?? null,
     updatedAt: nowIso,
     fetchedAt: Date.now(),
   };
@@ -272,8 +336,11 @@ export async function saveFranchiseBranding(
   if (hasAppName) {
     emitAppNameUpdate(payload.franchiseId, record.appName ?? null);
   }
+  if (hasAdminPanelPin) {
+    emitAdminPanelPinUpdate(payload.franchiseId, record.adminPanelPin ?? null);
+  }
 
-  if (hasLogo) {
+  if (!options.skipLedger && hasLogo) {
     await logLedgerEventSafe({
       franchiseId: payload.franchiseId,
       action: logoUrl ? 'Franchise logo updated' : 'Franchise logo reset',
@@ -287,7 +354,7 @@ export async function saveFranchiseBranding(
     });
   }
 
-  if (hasAppName) {
+  if (!options.skipLedger && hasAppName) {
     await logLedgerEventSafe({
       franchiseId: payload.franchiseId,
       action: appName ? 'Franchise app name updated' : 'Franchise app name reset',
@@ -297,6 +364,20 @@ export async function saveFranchiseBranding(
         franchiseId: payload.franchiseId,
         previousAppName: existing?.appName ?? null,
         nextAppName: appName ?? null,
+      },
+    });
+  }
+
+  if (!options.skipLedger && hasAdminPanelPin) {
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId,
+      action: adminPanelPin ? 'Admin panel PIN updated' : 'Admin panel PIN reset',
+      targetType: 'admin_panel_pin',
+      targetId: payload.franchiseId,
+      details: {
+        franchiseId: payload.franchiseId,
+        pinLength: ADMIN_PANEL_PIN_LENGTH,
+        resetToDefault: !adminPanelPin,
       },
     });
   }
@@ -313,4 +394,11 @@ export async function saveFranchiseAppName(
   payload: { franchiseId: string; appName: string | null; updatedBy?: string | null }
 ): Promise<FranchiseBrandingRecord> {
   return saveFranchiseBranding(payload);
+}
+
+export async function saveFranchiseAdminPanelPin(
+  payload: { franchiseId: string; adminPanelPin: string | null; updatedBy?: string | null },
+  options: SaveFranchiseBrandingOptions = {}
+): Promise<FranchiseBrandingRecord> {
+  return saveFranchiseBranding(payload, options);
 }

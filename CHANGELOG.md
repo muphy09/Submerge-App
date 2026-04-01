@@ -3,21 +3,30 @@
 - Only 1 logged in session can be active at a time
     - Will prompt to sign other session out if 2 active logins are detected
 - Moved Admin-only settings into the Admin Tab in the new 'Admin Settings' area
-    - Change App Name
-    - Change Franchise Code
-    - Change Admin PIN
-    - Hide COGS view from Proposal Builder
-- Active ledger logs milestone events per franchise
+    - Change App Name, Franchise Code, Admin PIN, & Hide COGS view
+- Active ledger logs milestone events per franchise (server side)
     - Logs User, Role, Time, and Action conducted
         - Action examples: Creating a new user, deleting a user, promoting a user to admin, etc
+### Improvements
+- User Profile Section
+    - Clicking the 'Profile Settings' option from the User Block (Your Name) opens a new Profile section
+    - Edit Name, Email, and Reset Password
+- Feedback Button
+    - Leave feedback for improvements, issues, and feature requests all within the app
+    - Feedback Button is located persistently in the bottom right corner of the app
 ### Requested Changes
-- Fiberglass
+- Warranty Breakdown Update
+    - Polished the look of the PDF when exporting & printing
+    - Included all changes and logic requested for the default warranty
+    - 
 -----
 ## [2.0.18] - 3/31/26
+## Changes
 - App Name now updates to the Franchise name
 - Designer 'Customer Cost Breakdown' button aligned with Admins button
 -----
 ## [2.0.17] - 3/31/26
+## Fixes
 - Exporting Contract & Warranty PDF fixed
 -----
 ## [2.0.16] - 3/31/26

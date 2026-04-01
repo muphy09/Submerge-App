@@ -1,7 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MasterFranchiseEditorModal from '../components/MasterFranchiseEditorModal';
 import TempPasswordModal from '../components/TempPasswordModal';
+import { useGlobalFeedbackEnabled } from '../hooks/useGlobalFeedbackEnabled';
+import {
+  archiveFeedback,
+  deleteFeedback,
+  getMasterFeedbackSummary,
+  isFeedbackFeatureUnavailableError,
+  listMasterFeedback,
+  resolveFeedback,
+  setGlobalFeedbackEnabled,
+  type FeedbackEntry,
+  type FeedbackStatus,
+  type FeedbackSummary,
+} from '../services/feedback';
 import { getLedgerRoleLabel, listLedgerEvents, type LedgerEvent } from '../services/ledger';
 import {
   createFranchiseWithOwner,
@@ -36,6 +49,32 @@ const formatDateTime = (value?: string) => {
   return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleString();
 };
 
+const renderDateTimeCell = (value?: string) => {
+  if (!value) {
+    return (
+      <div className="master-date-time">
+        <div className="master-date-line">N/A</div>
+      </div>
+    );
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return (
+      <div className="master-date-time">
+        <div className="master-date-line">N/A</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="master-date-time">
+      <div className="master-date-line">{date.toLocaleDateString()}</div>
+      <div className="master-time-line">{date.toLocaleTimeString()}</div>
+    </div>
+  );
+};
+
 const formatDetailLabel = (key: string) =>
   key
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -56,6 +95,47 @@ const getUserNameLabel = (user: Pick<MasterUser, 'name'>) => {
   const trimmedName = String(user.name || '').trim();
   return trimmedName || 'Unnamed';
 };
+
+const formatRoleLabel = (value?: string | null) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return 'Unknown';
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+const formatFeedbackStatusLabel = (status: FeedbackStatus) => {
+  if (status === 'resolved') return 'Resolved';
+  if (status === 'archived') return 'Archived';
+  return 'New';
+};
+
+type FeedbackActionIconButtonProps = {
+  label: string;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+};
+
+function FeedbackActionIconButton({
+  label,
+  danger = false,
+  disabled = false,
+  onClick,
+  children,
+}: FeedbackActionIconButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`master-feedback-icon-btn${danger ? ' is-danger' : ''}`}
+      data-tooltip={label}
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
 
 function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseUpdated }: MasterPageProps) {
   const navigate = useNavigate();
@@ -85,6 +165,28 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   const [ledgerFranchiseFilter, setLedgerFranchiseFilter] = useState('all');
   const [hideInactiveLedgerFranchises, setHideInactiveLedgerFranchises] = useState(true);
   const [selectedLedgerEvent, setSelectedLedgerEvent] = useState<LedgerEvent | null>(null);
+  const [feedbackEntries, setFeedbackEntries] = useState<FeedbackEntry[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackSummary, setFeedbackSummary] = useState<FeedbackSummary>({
+    newCount: 0,
+    resolvedCount: 0,
+    archivedCount: 0,
+  });
+  const [feedbackSectionOpen, setFeedbackSectionOpen] = useState(false);
+  const [feedbackFranchiseFilter, setFeedbackFranchiseFilter] = useState('all');
+  const [feedbackStatusView, setFeedbackStatusView] = useState<Exclude<FeedbackStatus, 'archived'>>('new');
+  const [showArchivedFeedback, setShowArchivedFeedback] = useState(false);
+  const [feedbackStatusMessage, setFeedbackStatusMessage] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const [feedbackActionId, setFeedbackActionId] = useState<string | null>(null);
+  const [feedbackResolveTarget, setFeedbackResolveTarget] = useState<FeedbackEntry | null>(null);
+  const [feedbackResolutionMessage, setFeedbackResolutionMessage] = useState('');
+  const [resolvingFeedback, setResolvingFeedback] = useState(false);
+  const [updatingGlobalFeedbackEnabled, setUpdatingGlobalFeedbackEnabled] = useState(false);
+  const [showCreateFranchiseModal, setShowCreateFranchiseModal] = useState(false);
 
   const [franchiseName, setFranchiseName] = useState('');
   const [franchiseCode, setFranchiseCode] = useState('');
@@ -92,6 +194,8 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   const [ownerName, setOwnerName] = useState('');
 
   const isMaster = (session?.role || '').toLowerCase() === 'master';
+  const { feedbackEnabled: globalFeedbackEnabled, isLoading: globalFeedbackEnabledLoading } =
+    useGlobalFeedbackEnabled();
 
   const loadData = async () => {
     setLoading(true);
@@ -141,6 +245,50 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     }
   };
 
+  const loadFeedbackSummary = async (franchiseId?: string | null) => {
+    try {
+      const summary = await getMasterFeedbackSummary(franchiseId || null);
+      setFeedbackSummary(summary);
+    } catch (error: any) {
+      console.error('Failed to load feedback summary:', error);
+      setFeedbackSummary({
+        newCount: 0,
+        resolvedCount: 0,
+        archivedCount: 0,
+      });
+    }
+  };
+
+  const loadFeedback = async (options?: {
+    status?: FeedbackStatus;
+    franchiseId?: string | null;
+    silent?: boolean;
+  }) => {
+    const silent = Boolean(options?.silent);
+    if (!silent) {
+      setFeedbackLoading(true);
+      setFeedbackError(null);
+    }
+    try {
+      const rows = await listMasterFeedback({
+        status: options?.status || (showArchivedFeedback ? 'archived' : feedbackStatusView),
+        franchiseId: options?.franchiseId || null,
+        limit: 250,
+      });
+      setFeedbackEntries(rows);
+    } catch (error: any) {
+      console.error('Failed to load feedback:', error);
+      if (!silent) {
+        setFeedbackEntries([]);
+        setFeedbackError(error?.message || 'Unable to load feedback.');
+      }
+    } finally {
+      if (!silent) {
+        setFeedbackLoading(false);
+      }
+    }
+  };
+
   const refreshMasterData = async () => {
     await Promise.all([loadData(), loadLedger()]);
   };
@@ -150,8 +298,25 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
       void loadData();
       void loadPricingModels();
       void loadLedger();
+      void loadFeedbackSummary();
     }
   }, [isMaster]);
+
+  useEffect(() => {
+    if (!isMaster) return;
+    const intervalId = window.setInterval(() => {
+      void loadFeedbackSummary();
+      if (feedbackSectionOpen) {
+        void loadFeedback({
+          status: showArchivedFeedback ? 'archived' : feedbackStatusView,
+          franchiseId: feedbackFranchiseFilter === 'all' ? null : feedbackFranchiseFilter,
+          silent: true,
+        });
+      }
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [feedbackFranchiseFilter, feedbackSectionOpen, feedbackStatusView, isMaster, showArchivedFeedback]);
 
   const franchiseLookup = useMemo(() => {
     const map = new Map<string, MasterFranchise>();
@@ -187,6 +352,11 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   const ledgerFranchiseOptionIds = useMemo(
     () => new Set(ledgerFranchiseOptions.map((franchise) => franchise.id)),
     [ledgerFranchiseOptions]
+  );
+
+  const feedbackFranchiseOptionIds = useMemo(
+    () => new Set(franchiseOptions.map((franchise) => franchise.id)),
+    [franchiseOptions]
   );
 
   const visibleFranchises = useMemo(() => {
@@ -300,6 +470,20 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     }
   }, [ledgerFranchiseFilter, ledgerFranchiseOptionIds]);
 
+  useEffect(() => {
+    if (feedbackFranchiseFilter === 'all') return;
+    if (feedbackFranchiseOptionIds.has(feedbackFranchiseFilter)) return;
+    setFeedbackFranchiseFilter('all');
+  }, [feedbackFranchiseFilter, feedbackFranchiseOptionIds]);
+
+  useEffect(() => {
+    if (!isMaster || !feedbackSectionOpen) return;
+    void loadFeedback({
+      status: showArchivedFeedback ? 'archived' : feedbackStatusView,
+      franchiseId: feedbackFranchiseFilter === 'all' ? null : feedbackFranchiseFilter,
+    });
+  }, [feedbackFranchiseFilter, feedbackSectionOpen, feedbackStatusView, isMaster, showArchivedFeedback]);
+
   const ledgerCountLabel = useMemo(() => {
     if (ledgerEvents.length === 0) return '0 total';
     if (filteredLedgerEvents.length === ledgerEvents.length) {
@@ -307,6 +491,13 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     }
     return `${filteredLedgerEvents.length} of ${ledgerEvents.length} total`;
   }, [filteredLedgerEvents.length, ledgerEvents.length]);
+
+  const activeFeedbackStatus = showArchivedFeedback ? 'archived' : feedbackStatusView;
+  const activeFeedbackCount = showArchivedFeedback
+    ? feedbackSummary.archivedCount
+    : feedbackStatusView === 'resolved'
+    ? feedbackSummary.resolvedCount
+    : feedbackSummary.newCount;
 
   const handleCreateFranchise = async () => {
     const trimmedName = franchiseName.trim();
@@ -329,6 +520,8 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
         ownerName: trimmedOwnerName,
       });
       setTempPassword(result?.tempPassword || null);
+      setShowCreateFranchiseModal(false);
+      setFormError(null);
       setFranchiseName('');
       setFranchiseCode('');
       setOwnerEmail('');
@@ -340,6 +533,16 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleCloseCreateFranchiseModal = () => {
+    if (creating) return;
+    setShowCreateFranchiseModal(false);
+    setFormError(null);
+    setFranchiseName('');
+    setFranchiseCode('');
+    setOwnerEmail('');
+    setOwnerName('');
   };
 
   const handleDeleteFranchise = async (franchiseId: string, franchiseName?: string | null) => {
@@ -438,6 +641,120 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     return Object.entries(selectedLedgerEvent.details).filter(([, value]) => value !== undefined);
   }, [selectedLedgerEvent]);
 
+  const handleToggleFeedbackSection = () => {
+    setFeedbackSectionOpen((current) => !current);
+    setFeedbackStatusMessage(null);
+  };
+
+  const refreshFeedback = async (nextStatus?: FeedbackStatus) => {
+    await loadFeedbackSummary();
+    if (feedbackSectionOpen) {
+      await loadFeedback({
+        status: nextStatus || activeFeedbackStatus,
+        franchiseId: feedbackFranchiseFilter === 'all' ? null : feedbackFranchiseFilter,
+      });
+    }
+  };
+
+  const handleGlobalFeedbackToggle = async (turnOffFeedback: boolean) => {
+    setUpdatingGlobalFeedbackEnabled(true);
+    setFeedbackStatusMessage(null);
+    try {
+      await setGlobalFeedbackEnabled(!turnOffFeedback);
+      setFeedbackStatusMessage({
+        type: 'success',
+        message: turnOffFeedback ? 'Global feedback turned off.' : 'Global feedback turned on.',
+      });
+    } catch (error: any) {
+      if (!isFeedbackFeatureUnavailableError(error)) {
+        console.error('Failed to update global feedback setting:', error);
+      }
+      setFeedbackStatusMessage({
+        type: 'error',
+        message: error?.message || 'Unable to update the global feedback setting.',
+      });
+    } finally {
+      setUpdatingGlobalFeedbackEnabled(false);
+    }
+  };
+
+  const handleResolveFeedback = async () => {
+    const target = feedbackResolveTarget;
+    const trimmedMessage = feedbackResolutionMessage.trim();
+    if (!target) return;
+    if (!trimmedMessage) {
+      setFeedbackStatusMessage({ type: 'error', message: 'Enter a resolution message before sending.' });
+      return;
+    }
+
+    setResolvingFeedback(true);
+    setFeedbackStatusMessage(null);
+    try {
+      await resolveFeedback(target.id, trimmedMessage);
+      setFeedbackResolveTarget(null);
+      setFeedbackResolutionMessage('');
+      setFeedbackStatusMessage({ type: 'success', message: 'Feedback reply sent.' });
+      await refreshFeedback('resolved');
+      if (!showArchivedFeedback) {
+        setFeedbackStatusView('resolved');
+      }
+      setShowArchivedFeedback(false);
+    } catch (error: any) {
+      if (!isFeedbackFeatureUnavailableError(error)) {
+        console.error('Failed to resolve feedback:', error);
+      }
+      setFeedbackStatusMessage({
+        type: 'error',
+        message: error?.message || 'Unable to resolve this feedback item.',
+      });
+    } finally {
+      setResolvingFeedback(false);
+    }
+  };
+
+  const handleArchiveFeedback = async (entry: FeedbackEntry) => {
+    setFeedbackActionId(entry.id);
+    setFeedbackStatusMessage(null);
+    try {
+      await archiveFeedback(entry.id);
+      setFeedbackStatusMessage({ type: 'success', message: 'Feedback archived.' });
+      await refreshFeedback();
+    } catch (error: any) {
+      if (!isFeedbackFeatureUnavailableError(error)) {
+        console.error('Failed to archive feedback:', error);
+      }
+      setFeedbackStatusMessage({
+        type: 'error',
+        message: error?.message || 'Unable to archive this feedback item.',
+      });
+    } finally {
+      setFeedbackActionId(null);
+    }
+  };
+
+  const handleDeleteFeedback = async (entry: FeedbackEntry) => {
+    const confirmed = window.confirm('Delete this feedback item permanently?');
+    if (!confirmed) return;
+
+    setFeedbackActionId(entry.id);
+    setFeedbackStatusMessage(null);
+    try {
+      await deleteFeedback(entry.id);
+      setFeedbackStatusMessage({ type: 'success', message: 'Feedback deleted.' });
+      await refreshFeedback();
+    } catch (error: any) {
+      if (!isFeedbackFeatureUnavailableError(error)) {
+        console.error('Failed to delete feedback:', error);
+      }
+      setFeedbackStatusMessage({
+        type: 'error',
+        message: error?.message || 'Unable to delete this feedback item.',
+      });
+    } finally {
+      setFeedbackActionId(null);
+    }
+  };
+
   if (!isMaster) {
     return (
       <div className="master-page">
@@ -460,47 +777,20 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
 
       <div className="master-grid">
         <div className="master-card">
-          <h2>Create Franchise + Owner</h2>
-          <div className="master-form">
-            <input
-              type="text"
-              value={franchiseName}
-              onChange={(e) => setFranchiseName(e.target.value)}
-              placeholder="Franchise name"
-            />
-            <input
-              type="text"
-              value={franchiseCode}
-              onChange={(e) => setFranchiseCode(e.target.value.toUpperCase())}
-              placeholder="Franchise code"
-            />
-            <input
-              type="email"
-              value={ownerEmail}
-              onChange={(e) => setOwnerEmail(e.target.value)}
-              placeholder="Owner email"
-            />
-            <input
-              type="text"
-              value={ownerName}
-              onChange={(e) => setOwnerName(e.target.value)}
-              placeholder="Owner display name"
-            />
-            {formError && <div className="master-error">{formError}</div>}
-            <button
-              className="master-primary-btn"
-              type="button"
-              onClick={handleCreateFranchise}
-              disabled={creating}
-            >
-              {creating ? 'Creating...' : 'Create Franchise'}
-            </button>
-          </div>
-        </div>
-
-        <div className="master-card">
           <div className="master-card-header">
-            <h2>Franchises</h2>
+            <div className="master-card-title-actions">
+              <h2>Franchises</h2>
+              <button
+                className="master-primary-btn master-small-btn"
+                type="button"
+                onClick={() => {
+                  setFormError(null);
+                  setShowCreateFranchiseModal(true);
+                }}
+              >
+                Create Franchise
+              </button>
+            </div>
             <label className="master-toggle">
               <input
                 type="checkbox"
@@ -730,6 +1020,251 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
 
         <div className="master-card">
           <div className="master-card-header">
+            <div className="master-feedback-heading">
+              <div className="master-feedback-title-row">
+                <h2>Feedback</h2>
+                <button
+                  className="master-primary-btn master-small-btn"
+                  type="button"
+                  onClick={handleToggleFeedbackSection}
+                >
+                  {feedbackSectionOpen ? 'Close' : 'Open'}
+                </button>
+                {feedbackSummary.newCount > 0 && (
+                  <span className="master-feedback-badge">{feedbackSummary.newCount} New</span>
+                )}
+              </div>
+              <p className="master-kicker">Franchise requests, fixes, and feature suggestions</p>
+            </div>
+            <label className="master-toggle master-toggle--feedback-header">
+              <input
+                type="checkbox"
+                checked={!globalFeedbackEnabled}
+                onChange={(e) => {
+                  void handleGlobalFeedbackToggle(e.target.checked);
+                }}
+                disabled={globalFeedbackEnabledLoading || updatingGlobalFeedbackEnabled}
+              />
+              Turn Off Global Feedback
+            </label>
+          </div>
+          {feedbackStatusMessage && (
+            <div className={feedbackStatusMessage.type === 'error' ? 'master-error' : 'master-success'}>
+              {feedbackStatusMessage.message}
+            </div>
+          )}
+          {!feedbackSectionOpen ? (
+            <div className="master-empty">
+              {!globalFeedbackEnabled
+                ? feedbackSummary.newCount > 0
+                  ? `Global feedback is turned off. ${feedbackSummary.newCount} submitted item${
+                      feedbackSummary.newCount === 1 ? '' : 's'
+                    } still waiting.`
+                  : 'Global feedback is turned off. You can still open this section to review prior submissions.'
+                : feedbackSummary.newCount > 0
+                ? `${feedbackSummary.newCount} new feedback item${feedbackSummary.newCount === 1 ? '' : 's'} waiting.`
+                : 'No new feedback waiting.'}
+            </div>
+          ) : (
+            <>
+              <div className="master-table-actions">
+                <div className="master-filter">
+                  <label htmlFor="feedback-franchise">Franchise</label>
+                  <select
+                    id="feedback-franchise"
+                    value={feedbackFranchiseFilter}
+                    onChange={(e) => setFeedbackFranchiseFilter(e.target.value)}
+                  >
+                    <option value="all">All franchises</option>
+                    {franchiseOptions.map((franchise) => (
+                      <option key={franchise.id} value={franchise.id}>
+                        {franchise.name || franchise.franchiseCode || franchise.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="master-feedback-view-toggle" role="group" aria-label="Filter feedback by status">
+                  <button
+                    type="button"
+                    className={`master-feedback-view-btn${!showArchivedFeedback && feedbackStatusView === 'new' ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setShowArchivedFeedback(false);
+                      setFeedbackStatusView('new');
+                    }}
+                  >
+                    New ({feedbackSummary.newCount})
+                  </button>
+                  <button
+                    type="button"
+                    className={`master-feedback-view-btn${!showArchivedFeedback && feedbackStatusView === 'resolved' ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setShowArchivedFeedback(false);
+                      setFeedbackStatusView('resolved');
+                    }}
+                  >
+                    Resolved ({feedbackSummary.resolvedCount})
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className={`master-feedback-archive-toggle${showArchivedFeedback ? ' is-active' : ''}`}
+                  onClick={() => setShowArchivedFeedback((current) => !current)}
+                >
+                  Archived ({feedbackSummary.archivedCount})
+                </button>
+                <button
+                  className="master-primary-btn master-small-btn"
+                  type="button"
+                  onClick={() => void refreshFeedback()}
+                  disabled={feedbackLoading}
+                >
+                  {feedbackLoading ? 'Refreshing...' : 'Refresh'}
+                </button>
+                <div className="master-table-meta">
+                  {activeFeedbackCount} {formatFeedbackStatusLabel(activeFeedbackStatus)}
+                </div>
+              </div>
+              {feedbackError && <div className="master-error">{feedbackError}</div>}
+              {feedbackLoading && feedbackEntries.length === 0 ? (
+                <div className="master-empty">Loading feedback...</div>
+              ) : feedbackEntries.length === 0 ? (
+                <div className="master-empty">
+                  No {formatFeedbackStatusLabel(activeFeedbackStatus).toLowerCase()} feedback found.
+                </div>
+              ) : (
+                <div className="master-table-wrapper">
+                  <table className="master-table master-feedback-table">
+                    <colgroup>
+                      <col style={{ width: '142px' }} />
+                      <col style={{ width: '146px' }} />
+                      <col style={{ width: '72px' }} />
+                      <col style={{ width: '104px' }} />
+                      <col style={{ width: '82px' }} />
+                      <col />
+                      <col style={{ width: '126px' }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Franchise</th>
+                        <th>Version</th>
+                        <th>Message</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {feedbackEntries.map((entry) => {
+                        const entryBusy = feedbackActionId === entry.id;
+                        const feedbackFranchiseLabel =
+                          entry.franchiseName || getFranchiseLabel(entry.franchiseId);
+                        const resolvedRead = Boolean(entry.responseReadAt);
+                        return (
+                          <tr key={entry.id}>
+                            <td>{renderDateTimeCell(entry.createdAt)}</td>
+                            <td>
+                              <div className="master-table-primary">{entry.submitterName}</div>
+                              {entry.submitterEmail && (
+                                <div className="master-table-secondary master-table-secondary--muted">
+                                  {entry.submitterEmail}
+                                </div>
+                              )}
+                            </td>
+                            <td>{formatRoleLabel(entry.submitterRole)}</td>
+                            <td>{feedbackFranchiseLabel}</td>
+                            <td>{entry.appVersion || 'N/A'}</td>
+                            <td>
+                              <div className="master-feedback-message">{entry.message}</div>
+                              {entry.resolutionMessage && (
+                                <div className="master-feedback-reply-block">
+                                  <div className="master-feedback-reply-label">Reply</div>
+                                  <div className="master-feedback-reply-text">{entry.resolutionMessage}</div>
+                                  <div className="master-feedback-reply-meta">
+                                    <span>
+                                      {entry.resolvedByName || 'Master'} on {formatDateTime(entry.resolvedAt || entry.updatedAt)}
+                                    </span>
+                                    {entry.status === 'resolved' && (
+                                      <span
+                                        className={`master-feedback-read-indicator${resolvedRead ? ' is-read' : ''}`}
+                                        title={resolvedRead ? 'Reply read by submitter' : 'Awaiting submitter acknowledgment'}
+                                      >
+                                        <svg viewBox="0 0 16 16" aria-hidden="true">
+                                          <path d="M3.2 8.1 6.4 11.3 12.8 4.9" />
+                                        </svg>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              {entry.status === 'archived' && entry.archivedAt && (
+                                <div className="master-feedback-archived-note">
+                                  Archived {formatDateTime(entry.archivedAt)}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <div className="master-feedback-actions">
+                                {entry.status !== 'resolved' && (
+                                  <FeedbackActionIconButton
+                                    label="Resolve"
+                                    onClick={() => {
+                                      setFeedbackResolveTarget(entry);
+                                      setFeedbackResolutionMessage('');
+                                      setFeedbackStatusMessage(null);
+                                    }}
+                                    disabled={entryBusy || resolvingFeedback}
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path d="M9 7 4 12l5 5" />
+                                      <path d="M4 12h8a6 6 0 0 1 6 6" />
+                                    </svg>
+                                  </FeedbackActionIconButton>
+                                )}
+                                {entry.status !== 'archived' && (
+                                  <FeedbackActionIconButton
+                                    label="Archive"
+                                    onClick={() => {
+                                      void handleArchiveFeedback(entry);
+                                    }}
+                                    disabled={entryBusy || resolvingFeedback}
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <rect x="3.5" y="4.5" width="17" height="4.5" rx="1.3" />
+                                      <path d="M5.5 9v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V9" />
+                                      <path d="M10 12h4" />
+                                    </svg>
+                                  </FeedbackActionIconButton>
+                                )}
+                                <FeedbackActionIconButton
+                                  label="Delete"
+                                  danger
+                                  onClick={() => {
+                                    void handleDeleteFeedback(entry);
+                                  }}
+                                  disabled={entryBusy || resolvingFeedback}
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="8" />
+                                    <path d="m9.25 9.25 5.5 5.5" />
+                                    <path d="m14.75 9.25-5.5 5.5" />
+                                  </svg>
+                                </FeedbackActionIconButton>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="master-card">
+          <div className="master-card-header">
             <div>
               <h2>Ledger</h2>
               <p className="master-kicker">Recent Franchise Activity</p>
@@ -808,7 +1343,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                           }
                         }}
                       >
-                        <td>{formatDateTime(event.createdAt)}</td>
+                        <td>{renderDateTimeCell(event.createdAt)}</td>
                         <td>
                           <div className="master-table-primary">{getLedgerFranchiseLabel(event)}</div>
                         </td>
@@ -833,6 +1368,84 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
         </div>
       </div>
 
+      {showCreateFranchiseModal && (
+        <div className="master-ledger-backdrop" onClick={handleCloseCreateFranchiseModal}>
+          <div
+            className="master-create-franchise-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Create franchise"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="master-editor-header">
+              <div>
+                <p className="master-editor-kicker">Franchises</p>
+                <h2 className="master-editor-title">Create Franchise</h2>
+              </div>
+              <button
+                className="master-editor-close"
+                type="button"
+                onClick={handleCloseCreateFranchiseModal}
+                aria-label="Close create franchise dialog"
+                disabled={creating}
+              >
+                x
+              </button>
+            </div>
+            <p className="master-create-franchise-copy">
+              Add the franchise details and assign the initial owner account.
+            </p>
+            <form
+              className="master-form master-create-franchise-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleCreateFranchise();
+              }}
+            >
+              <input
+                type="text"
+                value={franchiseName}
+                onChange={(e) => setFranchiseName(e.target.value)}
+                placeholder="Franchise name"
+                autoFocus
+              />
+              <input
+                type="text"
+                value={franchiseCode}
+                onChange={(e) => setFranchiseCode(e.target.value.toUpperCase())}
+                placeholder="Franchise code"
+              />
+              <input
+                type="email"
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                placeholder="Owner email"
+              />
+              <input
+                type="text"
+                value={ownerName}
+                onChange={(e) => setOwnerName(e.target.value)}
+                placeholder="Owner display name"
+              />
+              {formError && <div className="master-error">{formError}</div>}
+              <div className="master-create-franchise-actions">
+                <button
+                  className="master-secondary-btn"
+                  type="button"
+                  onClick={handleCloseCreateFranchiseModal}
+                  disabled={creating}
+                >
+                  Cancel
+                </button>
+                <button className="master-primary-btn" type="submit" disabled={creating}>
+                  {creating ? 'Creating...' : 'Create New Franchise'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {tempPassword && (
         <TempPasswordModal
           tempPassword={tempPassword}
@@ -851,6 +1464,77 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
           onRefresh={refreshMasterData}
           onFranchiseUpdated={handleFranchiseUpdated}
         />
+      )}
+
+      {feedbackResolveTarget && (
+        <div
+          className="master-ledger-backdrop"
+          onClick={() => {
+            if (!resolvingFeedback) setFeedbackResolveTarget(null);
+          }}
+        >
+          <div
+            className="master-feedback-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="master-editor-header">
+              <div>
+                <p className="master-editor-kicker">Resolve Feedback</p>
+                <h2 className="master-editor-title">{feedbackResolveTarget.submitterName}</h2>
+              </div>
+              <button
+                className="master-editor-close"
+                type="button"
+                onClick={() => setFeedbackResolveTarget(null)}
+                aria-label="Close feedback resolution"
+                disabled={resolvingFeedback}
+              >
+                x
+              </button>
+            </div>
+            <div className="master-feedback-modal-meta">
+              <div>
+                <strong>Franchise:</strong> {feedbackResolveTarget.franchiseName || getFranchiseLabel(feedbackResolveTarget.franchiseId)}
+              </div>
+              <div>
+                <strong>Original:</strong> {feedbackResolveTarget.message}
+              </div>
+            </div>
+            <textarea
+              className="master-feedback-modal-textarea"
+              value={feedbackResolutionMessage}
+              onChange={(event) => setFeedbackResolutionMessage(event.target.value)}
+              placeholder="Type the reply that should appear in the submitter's dashboard inbox..."
+              maxLength={4000}
+              disabled={resolvingFeedback}
+            />
+            <div className="master-feedback-modal-footer">
+              <div className="master-table-secondary master-table-secondary--muted">
+                {feedbackResolutionMessage.trim().length}/4000
+              </div>
+              <div className="master-feedback-actions">
+                <button
+                  className="master-secondary-btn master-small-btn"
+                  type="button"
+                  onClick={() => setFeedbackResolveTarget(null)}
+                  disabled={resolvingFeedback}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="master-primary-btn master-small-btn"
+                  type="button"
+                  onClick={() => void handleResolveFeedback()}
+                  disabled={resolvingFeedback}
+                >
+                  {resolvingFeedback ? 'Sending...' : 'Send Reply'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedLedgerEvent && (

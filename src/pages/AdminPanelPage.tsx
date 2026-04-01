@@ -38,6 +38,7 @@ import { normalizeEquipmentLighting } from '../utils/lighting';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { listAllVersions } from '../utils/proposalVersions';
 import TempPasswordModal from '../components/TempPasswordModal';
+import AdminSettingsModal from '../components/AdminSettingsModal';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 
 const DEFAULT_FRANCHISE_ID = 'default';
@@ -60,6 +61,7 @@ type SelectedUserStatus = {
 interface AdminPanelPageProps {
   onOpenPricingData?: () => void;
   session?: SessionInfo | null;
+  offsetSettingsLauncher?: boolean;
 }
 
 const getStatusColor = (status: string) => {
@@ -98,7 +100,7 @@ const hasExcessiveDiscount = (proposal: Proposal) => {
   return hasNegativeAdjustment && Number.isFinite(grossMargin) && grossMargin < FRANCHISE_MARGIN_LIMIT;
 };
 
-function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
+function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = false }: AdminPanelPageProps) {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(true);
@@ -131,6 +133,7 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const [selectedCloseoutCommissionPercent, setSelectedCloseoutCommissionPercent] = useState('');
   const [savingCommissionUserId, setSavingCommissionUserId] = useState<string | null>(null);
   const [designerFilter, setDesignerFilter] = useState('all');
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
   const userListRef = useRef<HTMLDivElement | null>(null);
   const userWheelLockRef = useRef<number>(0);
 
@@ -1092,8 +1095,24 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
         )}
       </div>
 
+      <button
+        type="button"
+        className={`admin-settings-launcher${offsetSettingsLauncher ? ' is-offset' : ''}`}
+        onClick={() => setShowAdminSettings(true)}
+        aria-label="Admin Settings"
+      >
+        <span className="admin-settings-launcher-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation">
+            <circle cx="12" cy="12" r="3.1" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 4.2l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 19.8 7.04l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.39 1.26 1 1.51H21a2 2 0 1 1 0 4h-.09c-.66 0-1.26.39-1.51 1Z" />
+          </svg>
+        </span>
+        <span className="admin-settings-launcher-tooltip">Admin Settings</span>
+      </button>
+
       {addUserModal}
       {selectedUserModal}
+      <AdminSettingsModal isOpen={showAdminSettings} onClose={() => setShowAdminSettings(false)} />
 
       {false && showAddUserForm && (
         <div className="admin-user-modal-backdrop" onClick={handleCloseAddUserForm}>

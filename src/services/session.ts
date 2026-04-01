@@ -27,6 +27,14 @@ export const SESSION_STORAGE_KEY = 'submerge-user-session';
 export const MASTER_IMPERSONATION_KEY = 'submerge-master-impersonation';
 export const REMOTE_SIGNOUT_NOTICE_KEY = 'submerge-remote-signout-notice';
 export const DEFAULT_FRANCHISE_ID = 'default';
+export const MASTER_IMPERSONATION_UPDATED_EVENT = 'submerge-master-impersonation-updated';
+
+function emitMasterImpersonationUpdate(impersonation: MasterImpersonation | null) {
+  if (typeof window === 'undefined' || !window.dispatchEvent) return;
+  window.dispatchEvent(
+    new CustomEvent(MASTER_IMPERSONATION_UPDATED_EVENT, { detail: { impersonation } })
+  );
+}
 
 export function readSession(): UserSession | null {
   if (typeof localStorage === 'undefined') return null;
@@ -80,11 +88,25 @@ export function readMasterImpersonation(): MasterImpersonation | null {
 export function saveMasterImpersonation(impersonation: MasterImpersonation) {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(MASTER_IMPERSONATION_KEY, JSON.stringify(impersonation));
+  emitMasterImpersonationUpdate(impersonation);
 }
 
 export function clearMasterImpersonation() {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(MASTER_IMPERSONATION_KEY);
+  emitMasterImpersonationUpdate(null);
+}
+
+export function subscribeToMasterImpersonationUpdates(
+  callback: (impersonation: MasterImpersonation | null) => void
+) {
+  if (typeof window === 'undefined' || !window.addEventListener) return () => {};
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<{ impersonation: MasterImpersonation | null }>).detail;
+    callback(detail?.impersonation ?? null);
+  };
+  window.addEventListener(MASTER_IMPERSONATION_UPDATED_EVENT, handler as EventListener);
+  return () => window.removeEventListener(MASTER_IMPERSONATION_UPDATED_EVENT, handler as EventListener);
 }
 
 export function getActiveMasterImpersonation(): MasterImpersonation | null {

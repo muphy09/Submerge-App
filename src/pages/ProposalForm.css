@@ -1218,38 +1218,8 @@
   width: 100%;
 }
 
-.nav-retail-price {
-  background: white;
-  border: 2px solid #c3d2e8;
-  border-radius: 12px;
-  padding: clamp(8px, 1.2vh, 12px) 12px;
-  box-shadow: 0 4px 10px rgba(12, 34, 67, 0.12);
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-
-.nav-retail-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #0c2243;
-  letter-spacing: 0.2px;
-  text-transform: uppercase;
-}
-
-.nav-retail-value {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #0c2243;
-}
-
-.nav-retail-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
+.nav-action-buttons > *:only-child {
+  grid-column: 1 / -1;
 }
 
 .nav-customer-breakdown-button {

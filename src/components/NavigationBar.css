@@ -97,7 +97,7 @@
 .nav-userbox {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 0.5rem 0.85rem;
@@ -113,13 +113,21 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.nav-usertext {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  line-height: 1;
+}
+
 .nav-welcome {
   font-size: 1rem;
+  font-weight: 500;
   color: rgba(255, 255, 255, 0.8);
 }
 
 .nav-username {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 600;
   color: white;
 }
@@ -217,9 +225,10 @@
   border-radius: 12px;
   padding: 0.5rem;
   z-index: 10;
+  min-width: 210px;
 }
 
-.nav-logout {
+.nav-user-menu-item {
   border: 1px solid rgba(30, 58, 95, 0.15);
   background: white;
   color: #0f2a4f;
@@ -229,11 +238,44 @@
   cursor: pointer;
   transition: all 0.2s ease;
   width: 100%;
+  text-align: center;
 }
 
-.nav-logout:hover {
+.nav-user-menu-item:hover {
   background: #f0f6fb;
   border-color: rgba(30, 58, 95, 0.25);
+}
+
+.nav-profile-settings {
+  background: #f4d03f;
+  border-color: #d4ac0d;
+  color: #4a3600;
+}
+
+.nav-profile-settings:hover,
+.nav-profile-settings:focus-visible {
+  background: #d4ac0d;
+  border-color: #b7950b;
+  color: #3b2d00;
+}
+
+.nav-logout {
+  background: #c0392b;
+  border-color: #a93226;
+  color: white;
+}
+
+.nav-logout:hover,
+.nav-logout:focus-visible {
+  background: #a93226;
+  border-color: #922b21;
+  color: white;
+}
+
+.nav-user-menu-divider {
+  height: 1px;
+  margin: 0.45rem 0;
+  background: rgba(30, 58, 95, 0.1);
 }
 
 /* Responsive Design */
@@ -285,6 +327,10 @@
 
   .nav-welcome {
     display: none;
+  }
+
+  .nav-usertext {
+    gap: 0;
   }
 
   .nav-username {

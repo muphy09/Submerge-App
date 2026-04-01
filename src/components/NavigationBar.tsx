@@ -7,6 +7,7 @@ import './NavigationBar.css';
 interface NavigationBarProps {
   userName?: string;
   onLogout?: () => void;
+  onProfileSettings?: () => void;
   isAdmin?: boolean;
   isMaster?: boolean;
   franchiseId?: string;
@@ -16,6 +17,7 @@ interface NavigationBarProps {
 function NavigationBar({
   userName = 'User',
   onLogout,
+  onProfileSettings,
   isAdmin = false,
   isMaster = false,
   franchiseId,
@@ -96,22 +98,39 @@ function NavigationBar({
 
       <div className="nav-right" ref={menuRef}>
         <button className="nav-userbox" type="button" onClick={() => setMenuOpen((open) => !open)}>
-          <span className="nav-welcome">Welcome,</span>
-          <span className="nav-username">{userName}</span>
+          <span className="nav-usertext">
+            <span className="nav-welcome">Welcome,</span>
+            <span className="nav-username">{userName}</span>
+          </span>
           <div className="nav-avatar">{userName.charAt(0).toUpperCase()}</div>
         </button>
-        {menuOpen && onLogout && (
+        {menuOpen && (onProfileSettings || onLogout) && (
           <div className="nav-user-menu">
-            <button
-              className="nav-logout"
-              onClick={() => {
-                setMenuOpen(false);
-                onLogout();
-              }}
-              type="button"
-            >
-              Logout
-            </button>
+            {onProfileSettings && (
+              <button
+                className="nav-user-menu-item nav-profile-settings"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onProfileSettings();
+                }}
+                type="button"
+              >
+                Profile Settings
+              </button>
+            )}
+            {onProfileSettings && onLogout && <div className="nav-user-menu-divider" />}
+            {onLogout && (
+              <button
+                className="nav-user-menu-item nav-logout"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onLogout();
+                }}
+                type="button"
+              >
+                Logout
+              </button>
+            )}
           </div>
         )}
       </div>

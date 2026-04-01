@@ -9,6 +9,7 @@ import {
 } from '../types/warranty';
 import { getLightCounts } from './lighting';
 import { getEffectivePrimarySanitationSystemName } from './equipmentPackages';
+import { flattenWaterFeatures } from './waterFeatureCost';
 
 type LegacyWarrantyItem = {
   id?: string;
@@ -27,9 +28,19 @@ type LegacyWarrantySection = {
 };
 
 const DEFAULT_WARRANTY_ICON: WarrantySectionIcon = 'plans';
+const GENERATED_WATER_FEATURE_WARRANTY_ID_PREFIX = 'generated-water-feature';
 
 const createWarrantyId = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+
+const slugifyWarrantyId = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '') || 'item';
+
+const createGeneratedWaterFeatureWarrantyId = (value: string) =>
+  `${GENERATED_WATER_FEATURE_WARRANTY_ID_PREFIX}-${slugifyWarrantyId(value)}`;
 
 const isWarrantySectionIcon = (value: unknown): value is WarrantySectionIcon =>
   typeof value === 'string' && (WARRANTY_SECTION_ICON_KEYS as readonly string[]).includes(value);
@@ -140,6 +151,7 @@ const createWarrantySectionFromEntries = (
   title,
   icon,
   featureItems: items.map((item) => ({
+    id: item.id,
     label: item.label || '',
     detail: item.detail,
   })),
@@ -159,6 +171,78 @@ const formatNumber = (value?: number, digits = 1) =>
   value !== undefined && value !== null && !Number.isNaN(value)
     ? Number(value).toFixed(digits).replace(/\.0+$/, '')
     : '0';
+
+const getWaterFeatureWarrantyCategoryLabel = (category?: string) => {
+  switch (category) {
+    case 'Sheer Descent':
+      return 'Sheer Descents';
+    case 'Bubbler':
+      return 'Bubbler';
+    case 'Jets':
+      return 'Jets';
+    default:
+      return category || 'Water Feature';
+  }
+};
+
+const simplifyWaterFeatureWarrantyName = (name: string, category?: string) => {
+  const trimmedName = name.trim();
+  if (!trimmedName) return trimmedName;
+
+  if (category === 'Sheer Descent') {
+    const simplified = trimmedName
+      .replace(/\bSheer Descents?\b/gi, '')
+      .replace(/\(\s*Requires[^)]*\)/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return simplified || trimmedName;
+  }
+
+  return trimmedName;
+};
+
+const buildSelectedWaterFeatureWarrantyItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => {
+  const selections = proposal?.waterFeatures?.selections;
+  if (!Array.isArray(selections) || selections.length === 0) {
+    return [];
+  }
+
+  const catalog = flattenWaterFeatures(pricingData.waterFeatures);
+  const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
+  const groupedSelections = new Map<
+    string,
+    { id: string; categoryLabel: string; featureName: string; quantity: number }
+  >();
+
+  selections.forEach((selection) => {
+    const quantity = Number(selection?.quantity ?? 0);
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+
+    const feature =
+      lookup.get(selection.featureId) || catalog.find((entry) => entry.name === selection.featureId);
+    const featureKey = feature?.id || selection.featureId;
+    const categoryLabel = getWaterFeatureWarrantyCategoryLabel(feature?.category);
+    const featureName = simplifyWaterFeatureWarrantyName(feature?.name || selection.featureId, feature?.category);
+    const existingEntry = groupedSelections.get(featureKey);
+
+    if (existingEntry) {
+      existingEntry.quantity += quantity;
+      return;
+    }
+
+    groupedSelections.set(featureKey, {
+      id: createGeneratedWaterFeatureWarrantyId(featureKey),
+      categoryLabel,
+      featureName,
+      quantity,
+    });
+  });
+
+  return Array.from(groupedSelections.values()).map((item) => ({
+    id: item.id,
+    label: `${item.categoryLabel}: ${item.featureName} - ${formatNumber(item.quantity, 0)}`,
+  }));
+};
 
 const buildPoolDetail = (proposal?: Partial<Proposal>) => {
   const poolSpecs = proposal?.poolSpecs;
@@ -268,6 +352,22 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[]
   return items;
 };
 
+const buildPlumbingItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => [
+  { label: '2 1/2 inch suction line', advantage: 'Submerge Stealth Series pump' },
+  {
+    label: '2 1/2 inch suction line for all pump motors larger than 1.0 HP',
+    advantage: 'Submerge High-Performance circulation pump',
+  },
+  { label: '2 inch return line (to 1st tee)', advantage: 'Submerge booster pump' },
+  { label: 'When possible 45-degree elbows are used rather than 90-degree to improve efficiency and performance' },
+  { label: 'Separate skimmer and main drain suction - allows for maximum performance' },
+  { label: 'Heavy duty surface skimmer' },
+  { label: 'Jandy Ball Valves' },
+  { label: 'Hose bib at pad for draining pool' },
+  { label: 'All circulation lines are pressure tested throughout construction' },
+  ...buildSelectedWaterFeatureWarrantyItems(proposal),
+];
+
 const applyBrandToSection = (section: WarrantySection, brandName: string): WarrantySection => ({
   ...section,
   title: replaceBrandTokens(section.title, brandName) || section.title,
@@ -281,6 +381,34 @@ const applyBrandToSection = (section: WarrantySection, brandName: string): Warra
     text: replaceBrandTokens(item.text, brandName) || item.text,
   })),
 });
+
+const isGeneratedWaterFeatureWarrantyItem = (item: WarrantyFeatureItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_WATER_FEATURE_WARRANTY_ID_PREFIX}-`);
+
+const mergeSelectedWaterFeaturesIntoPlumbingSection = (
+  sections: WarrantySection[],
+  proposal?: Partial<Proposal>
+): WarrantySection[] => {
+  const selectedWaterFeatureItems = buildSelectedWaterFeatureWarrantyItems(proposal).map((item) => ({
+    id: item.id,
+    label: item.label || '',
+    detail: item.detail,
+  }));
+
+  return sections.map((section) => {
+    if (section.title.trim().toLowerCase() !== 'plumbing') {
+      return section;
+    }
+
+    return {
+      ...section,
+      featureItems: [
+        ...section.featureItems.filter((item) => !isGeneratedWaterFeatureWarrantyItem(item)),
+        ...selectedWaterFeatureItems,
+      ],
+    };
+  });
+};
 
 export const buildGeneratedWarrantySections = (
   proposal?: Partial<Proposal>,
@@ -344,20 +472,7 @@ export const buildGeneratedWarrantySections = (
             { label: '8" on center in the deep end and coves' },
           ]
     ),
-    createWarrantySectionFromEntries('Plumbing', 'plumbing', [
-      { label: '2 1/2 inch suction line', advantage: 'Submerge Stealth Series pump' },
-      {
-        label: '2 1/2 inch suction line for all pump motors larger than 1.0 HP',
-        advantage: 'Submerge High-Performance circulation pump',
-      },
-      { label: '2 inch return line (to 1st tee)', advantage: 'Submerge booster pump' },
-      { label: 'When possible 45-degree elbows are used rather than 90-degree to improve efficiency and performance' },
-      { label: 'Separate skimmer and main drain suction - allows for maximum performance' },
-      { label: 'Heavy duty surface skimmer' },
-      { label: 'Jandy Ball Valves' },
-      { label: 'Hose bib at pad for draining pool' },
-      { label: 'All circulation lines are pressure tested throughout construction' },
-    ]),
+    createWarrantySectionFromEntries('Plumbing', 'plumbing', buildPlumbingItems(proposal)),
     createWarrantySectionFromEntries('Electric', 'electric', [
       { label: 'Breakers at pad included', advantage: 'Protected outlet for homeowner convenience' },
       { label: '110 volt GFI protected light circuit with outlet' },
@@ -421,9 +536,10 @@ export const resolveWarrantySections = (
   brandName: string = 'Submerge'
 ): WarrantySection[] => {
   if (Array.isArray(proposal?.warrantySections)) {
-    return normalizeWarrantySections(proposal.warrantySections).map((section) =>
-      applyBrandToSection(section, brandName)
-    );
+    return mergeSelectedWaterFeaturesIntoPlumbingSection(
+      normalizeWarrantySections(proposal.warrantySections),
+      proposal
+    ).map((section) => applyBrandToSection(section, brandName));
   }
   return buildGeneratedWarrantySections(proposal, brandName);
 };

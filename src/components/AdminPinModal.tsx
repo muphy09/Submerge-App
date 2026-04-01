@@ -10,6 +10,7 @@ interface AdminPinModalProps {
   isOpen: boolean;
   pin: string;
   error?: string;
+  statusMessage?: string;
   isDisabled?: boolean;
   onPinChange: (value: string) => void;
   onSubmit: () => void;
@@ -20,6 +21,7 @@ function AdminPinModal({
   isOpen,
   pin,
   error = '',
+  statusMessage = '',
   isDisabled = false,
   onPinChange,
   onSubmit,
@@ -107,6 +109,8 @@ function AdminPinModal({
               {error}
             </div>
           )}
+
+          {!error && statusMessage && <div className="admin-pin-status">{statusMessage}</div>}
 
           <div className="admin-pin-actions">
             <button type="button" className="admin-pin-button admin-pin-button--ghost" onClick={onClose}>

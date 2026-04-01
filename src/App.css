@@ -127,6 +127,25 @@
   white-space: nowrap;
 }
 
+.app-feedback-anchor {
+  position: fixed;
+  right: 14px;
+  bottom: 16px;
+  z-index: 9500;
+}
+
+.app-feedback-anchor.has-session-meta {
+  bottom: 44px;
+}
+
+.app-feedback-anchor.has-update {
+  bottom: 106px;
+}
+
+.app-feedback-anchor.has-update.has-session-meta {
+  bottom: 132px;
+}
+
 .offline-gate {
   position: fixed;
   inset: 0;

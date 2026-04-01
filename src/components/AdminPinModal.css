@@ -116,6 +116,16 @@
   font-weight: 600;
 }
 
+.admin-pin-status {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .admin-pin-actions {
   display: flex;
   justify-content: flex-end;

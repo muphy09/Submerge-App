@@ -202,7 +202,8 @@ function ProposalView() {
   const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
-  const canViewFullSummary = sessionRole === 'admin' || sessionRole === 'owner';
+  const canViewFullSummary =
+    sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
   const canViewCogsBreakdown = canViewFullSummary && !hideCogsFromProposalBuilder;
   const canEditProposal = true;

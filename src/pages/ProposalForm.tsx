@@ -199,14 +199,6 @@ const toFiniteNumber = (value: any): number => {
   return Number.isFinite(num) ? num : 0;
 };
 
-const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(amount);
-};
-
 const WATER_FEATURE_RUN_FIELDS: Array<keyof Proposal['plumbing']['runs']> = [
   'waterFeature1Run',
   'waterFeature2Run',
@@ -275,7 +267,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const location = useLocation();
   const sessionRole = getSessionRole();
   const isMasterUser = isMasterSession();
-  const canViewCostBreakdown = sessionRole === 'admin' || sessionRole === 'owner';
+  const canViewCostBreakdown =
+    sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
   const canOpenCogsBreakdown = canViewCostBreakdown && !hideCogsFromProposalBuilder;
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
@@ -1562,7 +1555,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       proposal.totalCost ??
       0
   );
-  const formattedRetailPrice = formatCurrency(retailPrice);
   const proposalIndicator = buildProposalIndicator(currentCostBreakdown.pricing?.grossProfitMargin);
   const showCostSidebar = false;
   const selectedPricingModel =
@@ -1733,54 +1725,34 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
             </button>
             <div className="nav-action-space" aria-hidden="true">
               <span className="nav-divider" />
-              {canViewCostBreakdown ? (
-                <div className="nav-action-buttons">
-                  {canOpenCogsBreakdown && (
-                    <button
-                      className="cost-modal-button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowCostBreakdownPage(true);
-                      }}
-                      title="View Cost Breakdown"
-                    >
-                      <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
-                      <span className="cost-modal-label">Cost Breakdown</span>
-                    </button>
-                  )}
+              <div className="nav-action-buttons">
+                {canOpenCogsBreakdown && (
                   <button
                     className="cost-modal-button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setShowCostModal(true);
+                      setShowCostBreakdownPage(true);
                     }}
-                    title="View Customer Proposal"
+                    title="View Cost Breakdown"
                   >
-                    <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
-                    <span className="cost-modal-label">Customer Proposal</span>
+                    <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
+                    <span className="cost-modal-label">Cost Breakdown</span>
                   </button>
-                </div>
-              ) : (
-                <div className="nav-retail-block">
-                  <div className="nav-retail-price">
-                    <span className="nav-retail-label">Retail Price:</span>
-                    <span className="nav-retail-value">{formattedRetailPrice}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="cost-modal-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowCostModal(true);
-                    }}
-                    aria-label="View Customer Cost and Warranty Breakdown"
-                    title="View Customer Proposal"
-                  >
-                    <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
-                    <span className="cost-modal-label">Customer Proposal</span>
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  type="button"
+                  className="cost-modal-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowCostModal(true);
+                  }}
+                  aria-label="View Customer Cost and Warranty Breakdown"
+                  title="View Customer Proposal"
+                >
+                  <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
+                  <span className="cost-modal-label">Customer Proposal</span>
+                </button>
+              </div>
               <span className="nav-divider" />
             </div>
             <div className="section-nav-grid">

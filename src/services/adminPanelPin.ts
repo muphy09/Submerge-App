@@ -1,22 +1,34 @@
-const ADMIN_PANEL_PIN_STORAGE_PREFIX = 'submerge.adminPanelPin';
-const ADMIN_PANEL_PIN_SECURITY_STORAGE_PREFIX = 'submerge.adminPanelPinSecurity';
+import {
+  DEFAULT_ADMIN_PANEL_PIN,
+  ADMIN_PANEL_PIN_LENGTH,
+  MIN_ADMIN_PANEL_PIN_LENGTH,
+  MAX_ADMIN_PANEL_PIN_LENGTH,
+  ADMIN_PANEL_PIN_MAX_ATTEMPTS,
+  ADMIN_PANEL_PIN_ATTEMPT_WINDOW_MS,
+  ADMIN_PANEL_PIN_LOCKOUT_MS,
+  ADMIN_PANEL_PIN_LOCKOUT_MESSAGE,
+  sanitizeAdminPanelPinInput,
+} from './adminPanelPinConfig';
+import {
+  getCachedFranchiseAdminPanelPin,
+  loadFranchiseAdminPanelPin,
+  saveFranchiseAdminPanelPin,
+  subscribeToFranchiseAdminPanelPinUpdates,
+} from './franchiseBranding';
 
-export const DEFAULT_ADMIN_PANEL_PIN = '2026';
-export const ADMIN_PANEL_PIN_LENGTH = 4;
-export const MIN_ADMIN_PANEL_PIN_LENGTH = ADMIN_PANEL_PIN_LENGTH;
-export const MAX_ADMIN_PANEL_PIN_LENGTH = ADMIN_PANEL_PIN_LENGTH;
-export const ADMIN_PANEL_PIN_MAX_ATTEMPTS = 5;
-export const ADMIN_PANEL_PIN_ATTEMPT_WINDOW_MS = 60 * 1000;
-export const ADMIN_PANEL_PIN_LOCKOUT_MS = 10 * 60 * 1000;
-export const ADMIN_PANEL_PIN_LOCKOUT_MESSAGE = 'Too many incorrect attempts. Wait 10 min';
+const LEGACY_ADMIN_PANEL_PIN_STORAGE_PREFIX = 'submerge.adminPanelPin';
+const ADMIN_PANEL_PIN_SECURITY_STORAGE_PREFIX = 'submerge.adminPanelPinSecurity';
 
 type AdminPanelPinSecurityState = {
   failedAttemptTimestamps: number[];
   lockedUntil: number | null;
 };
 
-function getAdminPanelPinStorageKey(franchiseId: string) {
-  return `${ADMIN_PANEL_PIN_STORAGE_PREFIX}.${franchiseId || 'default'}`;
+const loadedFranchiseIds = new Set<string>();
+const pendingLoads = new Map<string, Promise<string>>();
+
+function getLegacyAdminPanelPinStorageKey(franchiseId: string) {
+  return `${LEGACY_ADMIN_PANEL_PIN_STORAGE_PREFIX}.${franchiseId || 'default'}`;
 }
 
 function getAdminPanelPinSecurityStorageKey(franchiseId: string) {
@@ -33,9 +45,14 @@ function getDefaultSecurityState(): AdminPanelPinSecurityState {
 function sanitizeSecurityState(raw: Partial<AdminPanelPinSecurityState> | null | undefined): AdminPanelPinSecurityState {
   return {
     failedAttemptTimestamps: Array.isArray(raw?.failedAttemptTimestamps)
-      ? raw.failedAttemptTimestamps.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+      ? raw.failedAttemptTimestamps.filter(
+          (value): value is number => typeof value === 'number' && Number.isFinite(value)
+        )
       : [],
-    lockedUntil: typeof raw?.lockedUntil === 'number' && Number.isFinite(raw.lockedUntil) ? raw.lockedUntil : null,
+    lockedUntil:
+      typeof raw?.lockedUntil === 'number' && Number.isFinite(raw.lockedUntil)
+        ? raw.lockedUntil
+        : null,
   };
 }
 
@@ -79,25 +96,112 @@ function readSecurityState(franchiseId: string) {
   }
 }
 
-export function sanitizeAdminPanelPinInput(value: string) {
-  return String(value || '')
-    .replace(/\D/g, '')
-    .slice(0, ADMIN_PANEL_PIN_LENGTH);
-}
-
-export function getStoredAdminPanelPin(franchiseId: string) {
+function getLegacyStoredAdminPanelPin(franchiseId: string) {
   if (typeof localStorage === 'undefined') {
-    return DEFAULT_ADMIN_PANEL_PIN;
+    return null;
   }
 
   try {
-    const stored = localStorage.getItem(getAdminPanelPinStorageKey(franchiseId));
+    const stored = localStorage.getItem(getLegacyAdminPanelPinStorageKey(franchiseId));
     const normalized = sanitizeAdminPanelPinInput(stored || '');
-    return normalized || DEFAULT_ADMIN_PANEL_PIN;
+    return normalized.length === ADMIN_PANEL_PIN_LENGTH ? normalized : null;
   } catch (error) {
-    console.warn('Unable to read admin panel PIN:', error);
-    return DEFAULT_ADMIN_PANEL_PIN;
+    console.warn('Unable to read legacy admin panel PIN:', error);
+    return null;
   }
+}
+
+function clearLegacyStoredAdminPanelPin(franchiseId: string) {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.removeItem(getLegacyAdminPanelPinStorageKey(franchiseId));
+}
+
+export {
+  DEFAULT_ADMIN_PANEL_PIN,
+  ADMIN_PANEL_PIN_LENGTH,
+  MIN_ADMIN_PANEL_PIN_LENGTH,
+  MAX_ADMIN_PANEL_PIN_LENGTH,
+  ADMIN_PANEL_PIN_MAX_ATTEMPTS,
+  ADMIN_PANEL_PIN_ATTEMPT_WINDOW_MS,
+  ADMIN_PANEL_PIN_LOCKOUT_MS,
+  ADMIN_PANEL_PIN_LOCKOUT_MESSAGE,
+  sanitizeAdminPanelPinInput,
+};
+
+export function getCachedAdminPanelPin(franchiseId: string) {
+  const cached = getCachedFranchiseAdminPanelPin(franchiseId);
+  if (cached === undefined) return undefined;
+  return cached ?? DEFAULT_ADMIN_PANEL_PIN;
+}
+
+export function hasLoadedAdminPanelPin(franchiseId: string) {
+  if (!franchiseId) return true;
+  return loadedFranchiseIds.has(franchiseId) || getCachedFranchiseAdminPanelPin(franchiseId) !== undefined;
+}
+
+export async function loadAdminPanelPin(
+  franchiseId: string,
+  options: { force?: boolean } = {}
+) {
+  if (!franchiseId) return DEFAULT_ADMIN_PANEL_PIN;
+  if (!options.force && pendingLoads.has(franchiseId)) {
+    return pendingLoads.get(franchiseId)!;
+  }
+
+  const loadPromise = (async () => {
+    const cachedPin = getCachedFranchiseAdminPanelPin(franchiseId);
+    const legacyPin = getLegacyStoredAdminPanelPin(franchiseId);
+    let resolvedPin = cachedPin ?? null;
+
+    try {
+      resolvedPin = await loadFranchiseAdminPanelPin(franchiseId, options);
+    } catch (error) {
+      console.warn('Unable to load admin panel PIN from franchise settings:', error);
+    }
+
+    if (!resolvedPin && legacyPin && legacyPin !== DEFAULT_ADMIN_PANEL_PIN) {
+      try {
+        await saveFranchiseAdminPanelPin(
+          {
+            franchiseId,
+            adminPanelPin: legacyPin,
+            updatedBy: null,
+          },
+          { skipLedger: true }
+        );
+        resolvedPin = legacyPin;
+        clearLegacyStoredAdminPanelPin(franchiseId);
+      } catch (error) {
+        console.warn('Unable to migrate legacy admin panel PIN to franchise settings:', error);
+        resolvedPin = legacyPin;
+      }
+    }
+
+    loadedFranchiseIds.add(franchiseId);
+    return resolvedPin || legacyPin || DEFAULT_ADMIN_PANEL_PIN;
+  })();
+
+  pendingLoads.set(franchiseId, loadPromise);
+  try {
+    return await loadPromise;
+  } finally {
+    pendingLoads.delete(franchiseId);
+  }
+}
+
+export function getStoredAdminPanelPin(franchiseId: string) {
+  return getCachedAdminPanelPin(franchiseId) || getLegacyStoredAdminPanelPin(franchiseId) || DEFAULT_ADMIN_PANEL_PIN;
+}
+
+export function subscribeToStoredAdminPanelPinUpdates(
+  franchiseId: string,
+  callback: (pin: string) => void
+) {
+  if (!franchiseId) return () => {};
+  return subscribeToFranchiseAdminPanelPinUpdates(franchiseId, (nextPin) => {
+    loadedFranchiseIds.add(franchiseId);
+    callback(nextPin || DEFAULT_ADMIN_PANEL_PIN);
+  });
 }
 
 export function clearAdminPanelPinFailures(franchiseId: string) {
@@ -152,26 +256,41 @@ export function recordFailedAdminPanelPinAttempt(franchiseId: string) {
   };
 }
 
-export function saveAdminPanelPin(franchiseId: string, pin: string) {
+export async function saveAdminPanelPin(
+  franchiseId: string,
+  pin: string,
+  options: { updatedBy?: string | null } = {}
+) {
   const normalizedPin = sanitizeAdminPanelPinInput(pin);
   if (normalizedPin.length !== ADMIN_PANEL_PIN_LENGTH) {
     throw new Error(`PIN must be exactly ${ADMIN_PANEL_PIN_LENGTH} digits.`);
   }
 
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(getAdminPanelPinStorageKey(franchiseId), normalizedPin);
-  }
-  clearAdminPanelPinFailures(franchiseId);
+  await saveFranchiseAdminPanelPin({
+    franchiseId,
+    adminPanelPin: normalizedPin,
+    updatedBy: options.updatedBy ?? null,
+  });
 
+  loadedFranchiseIds.add(franchiseId);
+  clearLegacyStoredAdminPanelPin(franchiseId);
+  clearAdminPanelPinFailures(franchiseId);
   return normalizedPin;
 }
 
-export function resetAdminPanelPin(franchiseId: string) {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem(getAdminPanelPinStorageKey(franchiseId));
-  }
-  clearAdminPanelPinFailures(franchiseId);
+export async function resetAdminPanelPin(
+  franchiseId: string,
+  options: { updatedBy?: string | null } = {}
+) {
+  await saveFranchiseAdminPanelPin({
+    franchiseId,
+    adminPanelPin: null,
+    updatedBy: options.updatedBy ?? null,
+  });
 
+  loadedFranchiseIds.add(franchiseId);
+  clearLegacyStoredAdminPanelPin(franchiseId);
+  clearAdminPanelPinFailures(franchiseId);
   return DEFAULT_ADMIN_PANEL_PIN;
 }
 

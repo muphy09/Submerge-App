@@ -14,7 +14,6 @@ import {
   type UserRole,
   type UserSession,
 } from './session';
-import { logLedgerEventSafe } from './ledger';
 import { normalizeUserCommissionRates } from './userCommissionRates';
 
 type FranchiseRow = {
@@ -75,6 +74,31 @@ function assertSupabaseReady() {
     throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
   return supabase;
+}
+
+async function extractFunctionErrorMessage(error: any): Promise<string | null> {
+  const context = error?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const parsed = await context.json();
+      return typeof parsed?.error === 'string' ? parsed.error : null;
+    } catch (parseError) {
+      return null;
+    }
+  }
+
+  const body = context?.body;
+  if (!body) return null;
+  if (typeof body === 'string') {
+    try {
+      const parsed = JSON.parse(body);
+      return typeof parsed?.error === 'string' ? parsed.error : null;
+    } catch (parseError) {
+      return null;
+    }
+  }
+
+  return typeof body?.error === 'string' ? body.error : null;
 }
 
 async function getFranchiseById(franchiseId: string): Promise<FranchiseRow | null> {
@@ -366,39 +390,45 @@ export async function loadSessionFromSupabase(): Promise<{ session: UserSession;
   return { session, passwordResetRequired: Boolean(profile.password_reset_required) };
 }
 
-export async function completePasswordReset(newPassword: string) {
+async function updateCurrentUserPasswordInternal(
+  payload: {
+    newPassword: string;
+    oldPassword?: string;
+  },
+  action: 'Password reset completed' | 'Password updated'
+) {
   const supabase = assertSupabaseReady();
-  const trimmed = String(newPassword || '').trim();
+  const trimmed = String(payload.newPassword || '').trim();
+  const oldPassword = String(payload.oldPassword || '').trim();
   if (!trimmed) {
     throw new Error('New password is required.');
   }
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData?.user) {
-    throw userError || new Error('Unable to load user session.');
+
+  const online = await hasSupabaseConnection(true);
+  if (!online) {
+    throw new Error('No internet connection. Please reconnect to continue.');
   }
 
-  const { error: updateError } = await supabase.auth.updateUser({ password: trimmed });
-  if (updateError) {
-    throw updateError;
-  }
-
-  const now = new Date().toISOString();
-  await supabase
-    .from('franchise_users')
-    .update({ password_reset_required: false, password_updated_at: now })
-    .eq('auth_user_id', userData.user.id);
-
-  const session = readSession();
-  await logLedgerEventSafe({
-    franchiseId: session?.franchiseId || DEFAULT_FRANCHISE_ID,
-    action: 'Password reset completed',
-    targetType: 'user',
-    targetId: userData.user.id,
-    details: {
-      targetUserId: userData.user.id,
-      targetEmail: userData.user.email || null,
+  const { error } = await supabase.functions.invoke('change-current-user-password', {
+    body: {
+      newPassword: trimmed,
+      ...(action === 'Password updated' ? { oldPassword } : {}),
+      mode: action === 'Password reset completed' ? 'reset' : 'change',
     },
   });
+
+  if (error) {
+    const message = await extractFunctionErrorMessage(error);
+    throw new Error(message || error.message || 'Unable to update password.');
+  }
+}
+
+export async function completePasswordReset(newPassword: string) {
+  await updateCurrentUserPasswordInternal({ newPassword }, 'Password reset completed');
+}
+
+export async function changeCurrentUserPassword(oldPassword: string, newPassword: string) {
+  await updateCurrentUserPasswordInternal({ oldPassword, newPassword }, 'Password updated');
 }
 
 export async function signOut() {

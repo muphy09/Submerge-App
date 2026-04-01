@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
+import FeedbackReplyInboxModal from '../components/FeedbackReplyInboxModal';
 import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
 import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
@@ -27,6 +28,12 @@ import {
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
+import {
+  acknowledgeFeedbackReply,
+  isFeedbackFeatureUnavailableError,
+  listPendingFeedbackReplies,
+  type FeedbackEntry,
+} from '../services/feedback';
 
 type HomePageProps = {
   session?: UserSession | null;
@@ -37,6 +44,9 @@ function HomePage({ session }: HomePageProps) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; proposalNumber: string } | null>(null);
+  const [pendingFeedbackReplies, setPendingFeedbackReplies] = useState<FeedbackEntry[]>([]);
+  const [feedbackInboxOpen, setFeedbackInboxOpen] = useState(false);
+  const [acknowledgingFeedbackId, setAcknowledgingFeedbackId] = useState<string | null>(null);
   const { showToast } = useToast();
   const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
 
@@ -123,6 +133,62 @@ function HomePage({ session }: HomePageProps) {
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [loadProposals]);
+
+  const loadFeedbackReplies = useCallback(async () => {
+    if (!session?.userId) {
+      setPendingFeedbackReplies([]);
+      setFeedbackInboxOpen(false);
+      return;
+    }
+    try {
+      const rows = await listPendingFeedbackReplies(20);
+      setPendingFeedbackReplies(rows);
+    } catch (error) {
+      console.error('Failed to load feedback replies:', error);
+    }
+  }, [session?.userId]);
+
+  useEffect(() => {
+    setFeedbackInboxOpen(pendingFeedbackReplies.length > 0);
+  }, [pendingFeedbackReplies.length]);
+
+  useEffect(() => {
+    void loadFeedbackReplies();
+    if (!session?.userId) return;
+
+    const intervalId = window.setInterval(() => {
+      void loadFeedbackReplies();
+    }, 30000);
+    const handleOnline = () => void loadFeedbackReplies();
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [loadFeedbackReplies, session?.userId]);
+
+  const handleAcknowledgeFeedback = useCallback(
+    async (feedback: FeedbackEntry) => {
+      setAcknowledgingFeedbackId(feedback.id);
+      try {
+        await acknowledgeFeedbackReply(feedback.id);
+        setPendingFeedbackReplies((current) => current.filter((entry) => entry.id !== feedback.id));
+      } catch (error) {
+        if (!isFeedbackFeatureUnavailableError(error)) {
+          console.error('Failed to acknowledge feedback reply:', error);
+        }
+        showToast({
+          type: 'error',
+          message:
+            (error as any)?.message || 'Unable to acknowledge the feedback reply.',
+        });
+      } finally {
+        setAcknowledgingFeedbackId(null);
+      }
+    },
+    [showToast]
+  );
 
   const handleNewProposal = () => {
     navigate('/proposal/new');
@@ -304,6 +370,14 @@ function HomePage({ session }: HomePageProps) {
           </div>
         </>
       )}
+      <FeedbackReplyInboxModal
+        isOpen={feedbackInboxOpen}
+        entries={pendingFeedbackReplies}
+        acknowledgingId={acknowledgingFeedbackId}
+        onAcknowledge={(feedback) => {
+          void handleAcknowledgeFeedback(feedback);
+        }}
+      />
     </div>
   );
 }

@@ -34,7 +34,7 @@ function ConfirmDialog({
           <h3>{title}</h3>
         </div>
         <div className="confirm-body">
-          <p>{message}</p>
+          {message ? <p>{message}</p> : null}
           {errorMessage && <div className="confirm-error">{errorMessage}</div>}
         </div>
         <div className="confirm-actions">

@@ -9,8 +9,9 @@ import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
 import ChangelogModal from './components/ChangelogModal';
+import UserProfileModal from './components/UserProfileModal';
 import { setActiveFranchiseId } from './services/pricingDataStore';
-import { ToastProvider } from './components/Toast';
+import { ToastProvider, useToast } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import AdminPanelPage from './pages/AdminPanelPage';
 import AdminPricingPage from './pages/AdminPricingPage';
@@ -39,6 +40,7 @@ import {
   readMasterImpersonation,
   readSession,
   saveMasterImpersonation,
+  subscribeToMasterImpersonationUpdates,
   shouldShowRemoteSignoutNotice,
   updateSession,
 } from './services/session';
@@ -52,6 +54,8 @@ import MasterPage from './pages/MasterPage';
 import type { MasterFranchise } from './services/masterAdminAdapter';
 import AdminPinModal from './components/AdminPinModal';
 import { useFranchiseAppName } from './hooks/useFranchiseAppName';
+import { useAdminPanelPin } from './hooks/useAdminPanelPin';
+import { useGlobalFeedbackEnabled } from './hooks/useGlobalFeedbackEnabled';
 import {
   ADMIN_PANEL_PIN_LENGTH,
   ADMIN_PANEL_PIN_LOCKOUT_MESSAGE,
@@ -61,6 +65,16 @@ import {
   recordFailedAdminPanelPinAttempt,
   sanitizeAdminPanelPinInput,
 } from './services/adminPanelPin';
+import {
+  FEEDBACK_FEATURE_UNAVAILABLE_MESSAGE,
+  GLOBAL_FEEDBACK_DISABLED_MESSAGE,
+  isFeedbackFeatureUnavailableError,
+  isGlobalFeedbackDisabledError,
+  publishGlobalFeedbackEnabled,
+  submitFeedback,
+} from './services/feedback';
+import FeedbackLauncher from './components/FeedbackLauncher';
+import FeedbackSubmissionModal from './components/FeedbackSubmissionModal';
 import './App.css';
 
 type PendingSessionTakeover = {
@@ -70,12 +84,14 @@ type PendingSessionTakeover = {
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
   useKeyboardNavigation();
   const [updateStatus, setUpdateStatus] = useState<'downloading' | 'ready' | 'error' | null>(null);
   const [updateError, setUpdateError] = useState<string>('');
   const [session, setSession] = useState<UserSession | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showChangelogPrompt, setShowChangelogPrompt] = useState(false);
   const [cloudIssue, setCloudIssue] = useState<CloudConnectionIssue>(null);
   const [masterImpersonation, setMasterImpersonation] = useState<MasterImpersonation | null>(() => readMasterImpersonation());
@@ -96,11 +112,18 @@ function AppContent() {
   });
   const [adminPanelAccessFranchiseId, setAdminPanelAccessFranchiseId] = useState<string | null>(null);
   const [adminPanelLockoutUntil, setAdminPanelLockoutUntil] = useState<number | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+  const [feedbackAvailable, setFeedbackAvailable] = useState(true);
   const forcingRemoteLogoutRef = useRef(false);
   const expectedLocalSignOutRef = useRef(false);
   const expectedLocalSignOutTimeoutRef = useRef<number | null>(null);
   const sessionRef = useRef<UserSession | null>(null);
   const appVersion = getCurrentAppVersion();
+  const { feedbackEnabled: globalFeedbackEnabled, isLoading: globalFeedbackEnabledLoading } =
+    useGlobalFeedbackEnabled({ poll: Boolean(session) });
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
     try {
@@ -116,6 +139,7 @@ function AppContent() {
     setSession(null);
     setShowLogin(true);
     setShowPasswordReset(false);
+    setShowProfileSettings(false);
     setShowChangelogPrompt(false);
     setMasterImpersonation(null);
     setPendingSessionTakeover(null);
@@ -147,6 +171,12 @@ function AppContent() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    return subscribeToMasterImpersonationUpdates((nextImpersonation) => {
+      setMasterImpersonation(nextImpersonation);
+    });
+  }, []);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -268,7 +298,27 @@ function AppContent() {
       role: (masterImpersonation.actingRole || 'owner') as UserSession['role'],
     };
   })();
+  const effectiveRole = (effectiveSession?.role || '').toLowerCase();
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'owner';
+  const isMasterActingAsOwner =
+    isMaster &&
+    Boolean(masterImpersonation?.franchiseId) &&
+    (masterImpersonation?.actingRole || 'owner') === 'owner';
+  const canSubmitFeedback =
+    Boolean(session) &&
+    feedbackAvailable &&
+    globalFeedbackEnabled &&
+    !globalFeedbackEnabledLoading &&
+    Boolean(effectiveSession?.franchiseId) &&
+    (!isMaster || Boolean(masterImpersonation?.franchiseId));
+  const adminPanelRequiresPin =
+    isAdmin &&
+    Boolean(effectiveSession?.franchiseId) &&
+    !isMasterActingAsOwner;
   const { displayName } = useFranchiseAppName(effectiveSession?.franchiseId);
+  const { adminPanelPin: storedAdminPanelPin, isLoading: adminPanelPinLoading } = useAdminPanelPin(
+    adminPanelRequiresPin ? effectiveSession?.franchiseId : undefined
+  );
 
   useEffect(() => {
     if (effectiveSession?.franchiseId) {
@@ -444,6 +494,7 @@ function AppContent() {
   const handleLogout = async () => {
     clearRemoteSignoutNotice();
     setShowLoggedOutElsewhereNotice(false);
+    setShowProfileSettings(false);
     try {
       markExpectedLocalSignOut();
       await signOut();
@@ -501,6 +552,17 @@ function AppContent() {
     setShowPasswordReset(false);
   };
 
+  const handleProfileSessionUpdate = useCallback(
+    (partial: Partial<Pick<UserSession, 'userName' | 'userEmail'>>) => {
+      setSession((current) => {
+        if (!current) return current;
+        updateSession(partial);
+        return { ...current, ...partial };
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     if (!isSupabaseEnabled()) return;
     let cancelled = false;
@@ -542,16 +604,6 @@ function AppContent() {
 
   // Show navigation bar on main pages, hide it on proposal form/view pages
   const showNavigation = !location.pathname.startsWith('/proposal/');
-  const effectiveRole = (effectiveSession?.role || '').toLowerCase();
-  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'owner';
-  const isMasterActingAsOwner =
-    isMaster &&
-    Boolean(masterImpersonation?.franchiseId) &&
-    (masterImpersonation?.actingRole || 'owner') === 'owner';
-  const adminPanelRequiresPin =
-    isAdmin &&
-    Boolean(effectiveSession?.franchiseId) &&
-    !isMasterActingAsOwner;
   const isAdminPanelUnlocked = adminPanelAccessFranchiseId === (effectiveSession?.franchiseId || null);
   const canRenderAdminPanel = !adminPanelRequiresPin || isAdminPanelUnlocked;
   const isAdminPanelLocked = Boolean(adminPanelLockoutUntil && adminPanelLockoutUntil > Date.now());
@@ -580,14 +632,16 @@ function AppContent() {
       const lockout = franchiseId ? getAdminPanelPinLockout(franchiseId) : null;
       setAdminPanelPin('');
       setAdminPanelLockoutUntil(lockout?.lockedUntil ?? null);
-      setAdminPanelPinError(lockout?.locked ? ADMIN_PANEL_PIN_LOCKOUT_MESSAGE : '');
+      setAdminPanelPinError(
+        adminPanelPinLoading ? '' : lockout?.locked ? ADMIN_PANEL_PIN_LOCKOUT_MESSAGE : ''
+      );
       setAdminPanelPinPrompt({
         isOpen: true,
         targetPath: options?.targetPath ?? '/admin',
         cancelDestination: options?.cancelDestination ?? null,
       });
     },
-    [adminPanelRequiresPin, effectiveSession?.franchiseId]
+    [adminPanelPinLoading, adminPanelRequiresPin, effectiveSession?.franchiseId]
   );
 
   const handleAdminPanelTabClick = useCallback(
@@ -609,9 +663,68 @@ function AppContent() {
     }
   }, [adminPanelPinPrompt.cancelDestination, navigate]);
 
+  const handleOpenFeedbackModal = useCallback(() => {
+    if (!canSubmitFeedback) return;
+    setFeedbackError('');
+    setShowFeedbackModal(true);
+  }, [canSubmitFeedback]);
+
+  const handleCloseFeedbackModal = useCallback(() => {
+    if (feedbackSubmitting) return;
+    setShowFeedbackModal(false);
+    setFeedbackError('');
+    setFeedbackMessage('');
+  }, [feedbackSubmitting]);
+
+  const handleSubmitFeedback = useCallback(async () => {
+    const franchiseId = effectiveSession?.franchiseId;
+    const trimmedMessage = feedbackMessage.trim();
+    if (!franchiseId) {
+      setFeedbackError('A franchise is required to submit feedback.');
+      return;
+    }
+    if (!trimmedMessage) {
+      setFeedbackError('Please enter a feedback message before sending.');
+      return;
+    }
+
+    setFeedbackSubmitting(true);
+    setFeedbackError('');
+    try {
+      await submitFeedback({
+        franchiseId,
+        message: trimmedMessage,
+        appVersion,
+        effectiveRole: effectiveRole || null,
+      });
+      setShowFeedbackModal(false);
+      setFeedbackMessage('');
+      showToast({ type: 'success', message: 'Feedback submitted.' });
+    } catch (error: any) {
+      if (isFeedbackFeatureUnavailableError(error)) {
+        setFeedbackAvailable(false);
+        showToast({ type: 'error', message: FEEDBACK_FEATURE_UNAVAILABLE_MESSAGE });
+        return;
+      }
+      if (isGlobalFeedbackDisabledError(error)) {
+        publishGlobalFeedbackEnabled(false);
+        setShowFeedbackModal(false);
+        setFeedbackMessage('');
+        setFeedbackError('');
+        showToast({ type: 'error', message: GLOBAL_FEEDBACK_DISABLED_MESSAGE });
+        return;
+      }
+      console.error('Failed to submit feedback:', error);
+      setFeedbackError(error?.message || 'Unable to submit feedback.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }, [appVersion, effectiveRole, effectiveSession?.franchiseId, feedbackMessage, showToast]);
+
   const submitAdminPanelPin = useCallback(() => {
     const franchiseId = effectiveSession?.franchiseId;
     if (!franchiseId) return;
+    if (adminPanelPinLoading) return;
 
     const lockout = getAdminPanelPinLockout(franchiseId);
     if (lockout.locked) {
@@ -627,7 +740,7 @@ function AppContent() {
       return;
     }
 
-    if (!isAdminPanelPinValid(franchiseId, normalizedPin)) {
+    if (normalizedPin !== storedAdminPanelPin && !isAdminPanelPinValid(franchiseId, normalizedPin)) {
       const failedAttempt = recordFailedAdminPanelPinAttempt(franchiseId);
       setAdminPanelPin('');
       setAdminPanelLockoutUntil(failedAttempt.lockedUntil ?? null);
@@ -645,7 +758,14 @@ function AppContent() {
     if (targetPath) {
       navigate(targetPath);
     }
-  }, [adminPanelPin, adminPanelPinPrompt.targetPath, effectiveSession?.franchiseId, navigate]);
+  }, [
+    adminPanelPin,
+    adminPanelPinLoading,
+    adminPanelPinPrompt.targetPath,
+    effectiveSession?.franchiseId,
+    navigate,
+    storedAdminPanelPin,
+  ]);
 
   useEffect(() => {
     setAdminPanelAccessFranchiseId(null);
@@ -681,10 +801,10 @@ function AppContent() {
   }, [isAdminRoute]);
 
   useEffect(() => {
-    if (!adminPanelPinPrompt.isOpen || isAdminPanelLocked) return;
+    if (!adminPanelPinPrompt.isOpen || isAdminPanelLocked || adminPanelPinLoading) return;
     if (adminPanelPin.length !== ADMIN_PANEL_PIN_LENGTH) return;
     submitAdminPanelPin();
-  }, [adminPanelPin, adminPanelPinPrompt.isOpen, isAdminPanelLocked, submitAdminPanelPin]);
+  }, [adminPanelPin, adminPanelPinLoading, adminPanelPinPrompt.isOpen, isAdminPanelLocked, submitAdminPanelPin]);
 
   useEffect(() => {
     if (!isAdminRoute) return;
@@ -692,12 +812,21 @@ function AppContent() {
     openAdminPanelPrompt({ targetPath: null, cancelDestination: '/' });
   }, [adminPanelPinPrompt.isOpen, adminPanelRequiresPin, isAdminPanelUnlocked, isAdminRoute, openAdminPanelPrompt]);
 
+  useEffect(() => {
+    if (canSubmitFeedback) return;
+    setShowFeedbackModal(false);
+    setFeedbackMessage('');
+    setFeedbackError('');
+    setFeedbackSubmitting(false);
+  }, [canSubmitFeedback]);
+
   return (
     <div className="app">
       {showNavigation && (
         <NavigationBar
           userName={session?.userName || session?.userEmail || 'User'}
           onLogout={session ? handleLogout : undefined}
+          onProfileSettings={session ? () => setShowProfileSettings(true) : undefined}
           isAdmin={isAdmin}
           isMaster={isMaster}
           franchiseId={effectiveSession?.franchiseId}
@@ -716,6 +845,7 @@ function AppContent() {
               <AdminPanelPage
                 onOpenPricingData={() => navigate('/admin/pricing')}
                 session={effectiveSession}
+                offsetSettingsLauncher={Boolean(actingLabel)}
               />
             ) : null
           }
@@ -760,6 +890,13 @@ function AppContent() {
           )}
         </div>
       )}
+      {canSubmitFeedback && (
+        <div
+          className={`app-feedback-anchor${updateStatus ? ' has-update' : ''}${effectiveSession && location.pathname === '/' ? ' has-session-meta' : ''}`}
+        >
+          <FeedbackLauncher onClick={handleOpenFeedbackModal} />
+        </div>
+      )}
       <UpdateNotification
         status={updateStatus}
         onInstall={handleInstallUpdate}
@@ -783,9 +920,6 @@ function AppContent() {
       {effectiveSession && location.pathname === '/' && (
         <div className="app-session-meta">
           <div className="app-session-line">
-            Role: {effectiveSession.role ? effectiveSession.role.charAt(0).toUpperCase() + effectiveSession.role.slice(1) : 'Designer'}
-          </div>
-          <div className="app-session-line">
             {effectiveSession.franchiseName || effectiveSession.franchiseCode || effectiveSession.franchiseId || 'Unknown'}
           </div>
         </div>
@@ -796,6 +930,13 @@ function AppContent() {
       {showPasswordReset && (
         <PasswordResetModal onSubmit={handlePasswordReset} onLogout={handleLogout} />
       )}
+      <UserProfileModal
+        isOpen={showProfileSettings}
+        session={session}
+        onClose={() => setShowProfileSettings(false)}
+        onLogout={handleLogout}
+        onSessionUpdated={handleProfileSessionUpdate}
+      />
       <ConfirmDialog
         open={Boolean(pendingSessionTakeover)}
         title="Account logged in on another device"
@@ -830,7 +971,8 @@ function AppContent() {
         isOpen={adminPanelPinPrompt.isOpen}
         pin={adminPanelPin}
         error={adminPanelPinError}
-        isDisabled={isAdminPanelLocked}
+        statusMessage={adminPanelPinLoading ? 'Loading current franchise PIN...' : ''}
+        isDisabled={isAdminPanelLocked || adminPanelPinLoading}
         onPinChange={(value) => {
           setAdminPanelPin(value);
           if (adminPanelPinError && adminPanelPinError !== ADMIN_PANEL_PIN_LOCKOUT_MESSAGE) {
@@ -841,6 +983,17 @@ function AppContent() {
         onClose={closeAdminPanelPrompt}
       />
       <ChangelogModal isOpen={showChangelogPrompt} onClose={() => setShowChangelogPrompt(false)} />
+      <FeedbackSubmissionModal
+        isOpen={showFeedbackModal}
+        message={feedbackMessage}
+        isSubmitting={feedbackSubmitting}
+        errorMessage={feedbackError}
+        onMessageChange={setFeedbackMessage}
+        onSubmit={() => {
+          void handleSubmitFeedback();
+        }}
+        onClose={handleCloseFeedbackModal}
+      />
     </div>
   );
 }
