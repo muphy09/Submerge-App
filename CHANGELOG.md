@@ -1,7 +1,7 @@
 ## [2.1.0] - 3/31/26
 ### Security Changes
 - Only 1 logged in session can be active at a time
-    - Will prompt to sign other PC out if 2 active logins are detected
+    - Will prompt to sign other session out if 2 active logins are detected
 - Moved Admin-only settings into the Admin Tab in the new 'Admin Settings' area
     - Change App Name
     - Change Franchise Code

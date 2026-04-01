@@ -93,6 +93,9 @@ function AppContent() {
   const [adminPanelAccessFranchiseId, setAdminPanelAccessFranchiseId] = useState<string | null>(null);
   const [adminPanelLockoutUntil, setAdminPanelLockoutUntil] = useState<number | null>(null);
   const forcingRemoteLogoutRef = useRef(false);
+  const expectedLocalSignOutRef = useRef(false);
+  const expectedLocalSignOutTimeoutRef = useRef<number | null>(null);
+  const sessionRef = useRef<UserSession | null>(null);
   const appVersion = getCurrentAppVersion();
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
@@ -122,9 +125,24 @@ function AppContent() {
     void loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
   }, [loadPricingForFranchise]);
 
+  const markExpectedLocalSignOut = useCallback(() => {
+    expectedLocalSignOutRef.current = true;
+    if (expectedLocalSignOutTimeoutRef.current) {
+      window.clearTimeout(expectedLocalSignOutTimeoutRef.current);
+    }
+    expectedLocalSignOutTimeoutRef.current = window.setTimeout(() => {
+      expectedLocalSignOutRef.current = false;
+      expectedLocalSignOutTimeoutRef.current = null;
+    }, 5000);
+  }, []);
+
   useEffect(() => {
     recordAppLaunch(appVersion);
   }, [appVersion]);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -132,8 +150,18 @@ function AppContent() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event !== 'SIGNED_OUT') return;
+      const shouldShowRemoteLogoutNotice =
+        !expectedLocalSignOutRef.current && Boolean(sessionRef.current?.userId);
+      if (expectedLocalSignOutTimeoutRef.current) {
+        window.clearTimeout(expectedLocalSignOutTimeoutRef.current);
+        expectedLocalSignOutTimeoutRef.current = null;
+      }
+      expectedLocalSignOutRef.current = false;
 
       window.setTimeout(() => {
+        if (shouldShowRemoteLogoutNotice) {
+          setShowLoggedOutElsewhereNotice(true);
+        }
         resetSignedOutUiState();
       }, 0);
     });
@@ -168,6 +196,7 @@ function AppContent() {
           void loadPricingForFranchise(targetId);
         } else {
           setShowLoggedOutElsewhereNotice(false);
+          markExpectedLocalSignOut();
           void signOut();
           resetSignedOutUiState();
         }
@@ -209,7 +238,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, resetSignedOutUiState]);
+  }, [markExpectedLocalSignOut, navigate, resetSignedOutUiState]);
 
   const isMaster = (session?.role || '').toLowerCase() === 'master';
   const effectiveSession = (() => {
@@ -385,6 +414,7 @@ function AppContent() {
     setPendingSessionTakeoverError('');
     setPendingSessionTakeoverLoading(false);
     try {
+      markExpectedLocalSignOut();
       await signOut();
     } catch (error) {
       console.warn('Unable to cancel pending session takeover:', error);
@@ -396,6 +426,7 @@ function AppContent() {
   const handleLogout = async () => {
     setShowLoggedOutElsewhereNotice(false);
     try {
+      markExpectedLocalSignOut();
       await signOut();
     } finally {
       resetSignedOutUiState();
