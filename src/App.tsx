@@ -3,8 +3,6 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouse
 import HomePage from './pages/HomePage';
 import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
-import ProposalsListPage from './pages/ProposalsListPage';
-import TemplatesPage from './pages/TemplatesPage';
 import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
@@ -854,8 +852,6 @@ function AppContent() {
           path="/admin/pricing"
           element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
         />
-        <Route path="/proposals" element={<ProposalsListPage />} />
-        <Route path="/templates" element={<TemplatesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route
           path="/master"

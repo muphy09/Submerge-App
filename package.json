@@ -11,7 +11,7 @@
     "test:electron": "cross-env NODE_ENV=production npx electron .",
     "build": "tsc && vite build && electron-builder",
     "build:win": "npm run build -- --win",
-    "build:exe": "vite build && electron-builder --win portable",
+    "build:installer": "vite build && electron-builder --win nsis --publish never",
     "build:mac": "npm run build -- --mac",
     "build:linux": "npm run build -- --linux",
     "postinstall": "electron-builder install-app-deps"

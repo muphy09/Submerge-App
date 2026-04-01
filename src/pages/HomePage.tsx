@@ -3,12 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
 import FeedbackReplyInboxModal from '../components/FeedbackReplyInboxModal';
+import DashboardProposalsPanel from '../components/DashboardProposalsPanel';
 import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
 import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, type UserSession } from '../services/session';
-import syncGoodIcon from '../../docs/img/syncgood.png';
-import syncBadIcon from '../../docs/img/syncbad.png';
 import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import {
@@ -43,7 +42,6 @@ function HomePage({ session }: HomePageProps) {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; proposalNumber: string } | null>(null);
   const [pendingFeedbackReplies, setPendingFeedbackReplies] = useState<FeedbackEntry[]>([]);
   const [feedbackInboxOpen, setFeedbackInboxOpen] = useState(false);
   const [acknowledgingFeedbackId, setAcknowledgingFeedbackId] = useState<string | null>(null);
@@ -202,41 +200,11 @@ function HomePage({ session }: HomePageProps) {
     try {
       await deleteProposal(proposalNumber, sessionFranchiseId);
       setProposals(prev => prev.filter(p => p.proposalNumber !== proposalNumber));
-      setContextMenu(null);
       showToast({ type: 'success', message: 'Proposal deleted.' });
     } catch (error) {
       console.error('Failed to delete proposal', error);
       showToast({ type: 'error', message: 'Failed to delete proposal. Please try again.' });
     }
-  };
-
-  const getStatusColor = (status: string) => {
-    const key = (status || '').toLowerCase();
-    switch (key) {
-      case 'submitted':
-      case 'approved':
-      case 'sent':
-        return '#c8ead3'; // slightly darker light green
-      case 'draft':
-        return '#f7e08a'; // slightly darker light yellow
-      case 'modified':
-      case 'rejected':
-        return '#f6baba'; // slightly darker light red
-      default:
-        return '#e5e7eb';
-    }
-  };
-
-  // Get last 4 proposals sorted by most recent
-  const recentProposals = [...proposals]
-    .sort((a, b) => new Date(b.lastModified || b.createdDate).getTime() - new Date(a.lastModified || a.createdDate).getTime())
-    .slice(0, 4);
-
-  const renderSyncIcon = (proposal: Proposal) => {
-    const synced = (proposal.syncStatus || 'synced') === 'synced';
-    const src = synced ? syncGoodIcon : syncBadIcon;
-    const label = synced ? 'Cloud synced' : 'Pending cloud sync';
-    return <img src={src} alt={label} title={label} className="proposal-sync-icon" />;
   };
 
   return (
@@ -259,117 +227,15 @@ function HomePage({ session }: HomePageProps) {
         </div>
       </div>
 
-      <div className="dashboard-columns">
-        {/* Recent Proposals Column */}
-        <div className="dashboard-column recent-column">
-          <h2 className="column-title">Recent Proposals</h2>
-          <div className="recent-proposals-list">
-            {loading ? (
-              <div className="loading-message">Loading...</div>
-            ) : recentProposals.length === 0 ? (
-              <div className="empty-message">No proposals yet</div>
-            ) : (
-              recentProposals.map((proposal) => (
-                <div
-                  key={proposal.proposalNumber}
-                  className="recent-proposal-item"
-                  onClick={() => handleOpenProposal(proposal.proposalNumber)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu({ x: e.clientX, y: e.clientY, proposalNumber: proposal.proposalNumber });
-                  }}
-                >
-                  <div className="proposal-item-body">
-                    <div className="proposal-avatar" aria-hidden="true">
-                      <svg viewBox="0 0 32 32" focusable="false" className="proposal-avatar-icon">
-                        <path
-                          d="M9 12.5c0-3.59 2.91-6.5 6.5-6.5S22 8.91 22 12.5 19.09 19 15.5 19 9 16.09 9 12.5Z"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                        />
-                        <path
-                          d="M7 22.5c1.5 1 4.5 1 6 0s4.5-1 6 0 4.5 1 6 0"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                        />
-                        <path
-                          d="M7 18.5c1.5 1 4.5 1 6 0s4.5-1 6 0 4.5 1 6 0"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </div>
-                    <div className="proposal-item-content">
-                      <div className="proposal-item-header-line">
-                        <div className="proposal-item-name">
-                          {proposal.customerInfo.customerName}
-                          {renderSyncIcon(proposal)}
-                        </div>
-                      </div>
-                      <div className="proposal-item-meta">
-                        <span className="proposal-item-date">
-                          {new Date(proposal.lastModified || proposal.createdDate).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="proposal-status-right">
-                      <span
-                        className="proposal-item-status"
-                        style={{ backgroundColor: getStatusColor(proposal.status), borderColor: getStatusColor(proposal.status) }}
-                      >
-                        {proposal.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="dashboard-column">
-          <h2 className="column-title">Quick Actions</h2>
-          <div className="quick-actions-list">
-            <button
-              className="quick-action-btn"
-              onClick={handleNewProposal}
-            >
-              <svg className="quick-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              New Proposal
-            </button>
-          </div>
-        </div>
-
+      <div className="dashboard-content">
+        <DashboardProposalsPanel
+          proposals={proposals}
+          loading={loading}
+          onCreateProposal={handleNewProposal}
+          onDeleteProposal={handleDeleteProposal}
+          onOpenProposal={handleOpenProposal}
+        />
       </div>
-
-      {contextMenu && (
-        <>
-          <div
-            className="context-menu-backdrop"
-            onClick={() => setContextMenu(null)}
-          />
-          <div
-            className="proposal-context-menu"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
-          >
-            <button
-              className="context-menu-item delete"
-              onClick={() => handleDeleteProposal(contextMenu.proposalNumber)}
-            >
-              Delete
-            </button>
-          </div>
-        </>
-      )}
       <FeedbackReplyInboxModal
         isOpen={feedbackInboxOpen}
         entries={pendingFeedbackReplies}

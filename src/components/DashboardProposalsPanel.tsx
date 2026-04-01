@@ -1,0 +1,560 @@
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { Proposal } from '../types/proposal-new';
+import ConfirmDialog from './ConfirmDialog';
+import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
+import { getContractTemplateIdForProposal } from '../services/contractTemplates';
+import { listAllVersions } from '../utils/proposalVersions';
+import './DashboardProposalsPanel.css';
+
+type DashboardProposalsPanelProps = {
+  proposals: Proposal[];
+  loading: boolean;
+  onCreateProposal: () => void;
+  onDeleteProposal: (proposalNumber: string) => Promise<void> | void;
+  onOpenProposal: (proposalNumber: string) => void;
+};
+
+type SortField =
+  | 'customerName'
+  | 'lastModified'
+  | 'status'
+  | 'pricingModel'
+  | 'proposalVersions'
+  | 'contractType';
+
+type SortDirection = 'asc' | 'desc';
+
+type ContextMenuState = {
+  proposalNumber: string;
+  x: number;
+  y: number;
+};
+
+const COLLAPSED_STORAGE_KEY = 'submerge.dashboard-proposals-collapsed';
+
+function readCollapsedPreference() {
+  if (typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(COLLAPSED_STORAGE_KEY) === '1';
+}
+
+function writeCollapsedPreference(collapsed: boolean) {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0');
+}
+
+function getContractTypeLabel(proposal: Proposal): string {
+  const templateId = getContractTemplateIdForProposal(proposal);
+  if (!templateId || !templateId.includes('-')) return 'Unknown';
+  const [state, poolType] = templateId.split('-');
+  const typeLabel = poolType === 'fiberglass' ? 'Fiberglass' : 'Shotcrete';
+  return `${String(state || '').toUpperCase()} ${typeLabel}`;
+}
+
+function getVersionCount(proposal: Proposal) {
+  return listAllVersions(proposal).length;
+}
+
+function getSortValue(proposal: Proposal, field: SortField) {
+  switch (field) {
+    case 'customerName':
+      return String(proposal.customerInfo?.customerName || '').toLowerCase();
+    case 'lastModified':
+      return new Date(proposal.lastModified || proposal.createdDate || 0).getTime();
+    case 'status':
+      return String(proposal.status || '').toLowerCase();
+    case 'pricingModel':
+      return String(proposal.pricingModelName || '').toLowerCase();
+    case 'proposalVersions':
+      return getVersionCount(proposal);
+    case 'contractType':
+      return getContractTypeLabel(proposal).toLowerCase();
+    default:
+      return '';
+  }
+}
+
+function getStatusBadgeClass(status: string) {
+  switch (String(status || '').toLowerCase()) {
+    case 'submitted':
+      return 'dashboard-status-pill is-submitted';
+    case 'approved':
+      return 'dashboard-status-pill is-approved';
+    case 'rejected':
+      return 'dashboard-status-pill is-rejected';
+    case 'modified':
+      return 'dashboard-status-pill is-modified';
+    case 'sent':
+      return 'dashboard-status-pill is-sent';
+    case 'draft':
+    default:
+      return 'dashboard-status-pill is-draft';
+  }
+}
+
+function formatStatusLabel(status?: string | null) {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (!normalized) return 'Draft';
+  return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function getPricingModelClass(
+  proposal: Proposal,
+  defaultModelMap: Record<string, string | null>,
+  availableModelMap: Record<string, Set<string>>
+) {
+  const franchiseId = proposal.franchiseId || 'default';
+  const modelId = proposal.pricingModelId || '';
+  const defaultId = defaultModelMap[franchiseId];
+  const availableSet = availableModelMap[franchiseId] || new Set<string>();
+  const explicitRemoved = String(proposal.pricingModelName || '').toLowerCase().includes('(removed)');
+  const isRemoved = Boolean(modelId) && (!availableSet.has(modelId) || explicitRemoved);
+  const isActive =
+    Boolean(modelId) &&
+    Boolean(defaultId) &&
+    modelId === defaultId &&
+    availableSet.has(modelId) &&
+    !explicitRemoved;
+
+  if (isActive) return 'dashboard-model-pill is-active';
+  if (isRemoved) return 'dashboard-model-pill is-removed';
+  return 'dashboard-model-pill is-inactive';
+}
+
+function SortIndicator({
+  active,
+  direction,
+}: {
+  active: boolean;
+  direction: SortDirection;
+}) {
+  return (
+    <span className={`dashboard-sort-indicator${active ? ' is-active' : ''}`} aria-hidden="true">
+      <svg viewBox="0 0 12 12" focusable="false">
+        <path
+          d="M3 4.5 6 1.5l3 3"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.3"
+          opacity={active && direction === 'asc' ? 1 : 0.38}
+        />
+        <path
+          d="M3 7.5 6 10.5l3-3"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.3"
+          opacity={active && direction === 'desc' ? 1 : 0.38}
+        />
+      </svg>
+    </span>
+  );
+}
+
+function DashboardProposalsPanel({
+  proposals,
+  loading,
+  onCreateProposal,
+  onDeleteProposal,
+  onOpenProposal,
+}: DashboardProposalsPanelProps) {
+  const [sortField, setSortField] = useState<SortField>('lastModified');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [pricingModelFilter, setPricingModelFilter] = useState('all');
+  const [contractTypeFilter, setContractTypeFilter] = useState('all');
+  const [collapsed, setCollapsed] = useState(readCollapsedPreference);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [proposalToDelete, setProposalToDelete] = useState<string | null>(null);
+  const [deletingProposalNumber, setDeletingProposalNumber] = useState<string | null>(null);
+  const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
+  const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPricingModels() {
+      const franchiseIds = Array.from(new Set(proposals.map((proposal) => proposal.franchiseId || 'default')));
+      const nextDefaultMap: Record<string, string | null> = {};
+      const nextAvailableMap: Record<string, Set<string>> = {};
+
+      for (const franchiseId of franchiseIds) {
+        try {
+          const rows = await listPricingModelsRemote(franchiseId);
+          const defaultModel = rows?.find((row: any) => row.isDefault);
+          nextDefaultMap[franchiseId] = defaultModel?.id || null;
+          nextAvailableMap[franchiseId] = new Set((rows || []).map((row: any) => row.id));
+        } catch (error) {
+          console.warn('Unable to load pricing models for franchise', franchiseId, error);
+          nextDefaultMap[franchiseId] = null;
+          nextAvailableMap[franchiseId] = new Set<string>();
+        }
+      }
+
+      if (cancelled) return;
+      setDefaultModelMap(nextDefaultMap);
+      setAvailableModelMap(nextAvailableMap);
+    }
+
+    void loadPricingModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [proposals]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const closeMenu = () => setContextMenu(null);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+
+    return () => {
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    };
+  }, [contextMenu]);
+
+  const statusOptions = Array.from(
+    new Set(proposals.map((proposal) => String(proposal.status || '').trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const pricingModelOptions = Array.from(
+    new Set(proposals.map((proposal) => String(proposal.pricingModelName || '').trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const contractTypeOptions = Array.from(
+    new Set(proposals.map((proposal) => getContractTypeLabel(proposal)))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filteredProposals = proposals
+    .filter((proposal) => {
+      const searchValue = searchTerm.trim().toLowerCase();
+      const customerName = String(proposal.customerInfo?.customerName || '').toLowerCase();
+      const contractTypeLabel = getContractTypeLabel(proposal);
+
+      const matchesSearch = !searchValue || customerName.includes(searchValue);
+      const matchesStatus = statusFilter === 'all' || proposal.status === statusFilter;
+      const matchesPricingModel =
+        pricingModelFilter === 'all' || (proposal.pricingModelName || '') === pricingModelFilter;
+      const matchesContractType = contractTypeFilter === 'all' || contractTypeLabel === contractTypeFilter;
+
+      return matchesSearch && matchesStatus && matchesPricingModel && matchesContractType;
+    })
+    .sort((a, b) => {
+      const aValue = getSortValue(a, sortField);
+      const bValue = getSortValue(b, sortField);
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+  const hasActiveFilters =
+    searchTerm.trim().length > 0 ||
+    statusFilter !== 'all' ||
+    pricingModelFilter !== 'all' ||
+    contractTypeFilter !== 'all';
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+
+    setSortField(field);
+    setSortDirection(field === 'lastModified' ? 'desc' : 'asc');
+  };
+
+  const handleToggleCollapsed = () => {
+    const nextCollapsed = !collapsed;
+    setCollapsed(nextCollapsed);
+    writeCollapsedPreference(nextCollapsed);
+  };
+
+  const handleOpenContextMenu = (event: ReactMouseEvent<HTMLTableRowElement>, proposalNumber: string) => {
+    event.preventDefault();
+    setContextMenu({
+      proposalNumber,
+      x: Math.min(event.clientX, Math.max(window.innerWidth - 188, 24)),
+      y: Math.min(event.clientY, Math.max(window.innerHeight - 92, 24)),
+    });
+  };
+
+  const handleDeleteRequest = () => {
+    if (!contextMenu?.proposalNumber) return;
+    setProposalToDelete(contextMenu.proposalNumber);
+    setContextMenu(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!proposalToDelete) return;
+
+    try {
+      setDeletingProposalNumber(proposalToDelete);
+      await onDeleteProposal(proposalToDelete);
+      setProposalToDelete(null);
+    } finally {
+      setDeletingProposalNumber(null);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setPricingModelFilter('all');
+    setContractTypeFilter('all');
+  };
+
+  return (
+    <section className={`dashboard-proposals-panel${collapsed ? ' is-collapsed' : ''}`}>
+      <div className="dashboard-proposals-header">
+        <div className="dashboard-proposals-header-copy">
+          <p className="dashboard-proposals-kicker">Dashboard Workspace</p>
+          <div className="dashboard-proposals-title-row">
+            <h2>My Proposals</h2>
+          </div>
+        </div>
+        <div className="dashboard-proposals-header-actions">
+          <button
+            type="button"
+            className="dashboard-proposals-header-btn dashboard-proposals-header-btn-secondary"
+            onClick={handleToggleCollapsed}
+          >
+            {collapsed ? 'Show Table' : 'Hide Table'}
+          </button>
+          <button
+            type="button"
+            className="dashboard-proposals-header-btn dashboard-proposals-header-btn-primary"
+            onClick={onCreateProposal}
+          >
+            New Proposal
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && (
+        <div className="dashboard-proposals-body">
+          <div className="dashboard-proposals-toolbar">
+            <label className="dashboard-filter-field dashboard-filter-search">
+              <span>Search</span>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Customer Name"
+              />
+            </label>
+
+            <label className="dashboard-filter-field">
+              <span>Status</span>
+              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="all">All Statuses</option>
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {formatStatusLabel(status)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="dashboard-filter-field">
+              <span>Pricing Model</span>
+              <select value={pricingModelFilter} onChange={(event) => setPricingModelFilter(event.target.value)}>
+                <option value="all">All Models</option>
+                {pricingModelOptions.map((modelName) => (
+                  <option key={modelName} value={modelName}>
+                    {modelName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="dashboard-filter-field">
+              <span>Contract Type</span>
+              <select value={contractTypeFilter} onChange={(event) => setContractTypeFilter(event.target.value)}>
+                <option value="all">All Contracts</option>
+                {contractTypeOptions.map((contractType) => (
+                  <option key={contractType} value={contractType}>
+                    {contractType}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              className="dashboard-clear-filters-btn"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          <div className="dashboard-proposals-table-shell">
+            {loading ? (
+              <div className="dashboard-proposals-state">
+                <h3>Loading proposals</h3>
+                <p>Pulling the latest proposal data into the dashboard.</p>
+              </div>
+            ) : proposals.length === 0 ? (
+              <div className="dashboard-proposals-state">
+                <h3>No proposals yet</h3>
+                <p>Create your first proposal to start building out this workspace.</p>
+                <button
+                  type="button"
+                  className="dashboard-empty-action"
+                  onClick={onCreateProposal}
+                >
+                  Create New Proposal
+                </button>
+              </div>
+            ) : filteredProposals.length === 0 ? (
+              <div className="dashboard-proposals-state">
+                <h3>No matches</h3>
+                <p>Adjust or clear the filters to bring proposals back into view.</p>
+                <button
+                  type="button"
+                  className="dashboard-empty-action dashboard-empty-action-secondary"
+                  onClick={clearFilters}
+                >
+                  Reset Filters
+                </button>
+              </div>
+            ) : (
+              <div className="dashboard-proposals-table-scroll">
+                <table className="dashboard-proposals-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <button type="button" onClick={() => handleSort('customerName')}>
+                          <span>Customer Name</span>
+                          <SortIndicator active={sortField === 'customerName'} direction={sortDirection} />
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" onClick={() => handleSort('lastModified')}>
+                          <span>Date Modified</span>
+                          <SortIndicator active={sortField === 'lastModified'} direction={sortDirection} />
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" onClick={() => handleSort('status')}>
+                          <span>Proposal Status</span>
+                          <SortIndicator active={sortField === 'status'} direction={sortDirection} />
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" onClick={() => handleSort('pricingModel')}>
+                          <span>Pricing Model</span>
+                          <SortIndicator active={sortField === 'pricingModel'} direction={sortDirection} />
+                        </button>
+                      </th>
+                      <th className="is-center">
+                        <button type="button" onClick={() => handleSort('proposalVersions')}>
+                          <span>Proposal Versions</span>
+                          <SortIndicator active={sortField === 'proposalVersions'} direction={sortDirection} />
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" onClick={() => handleSort('contractType')}>
+                          <span>Contract Type</span>
+                          <SortIndicator active={sortField === 'contractType'} direction={sortDirection} />
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProposals.map((proposal) => {
+                      const contractTypeLabel = getContractTypeLabel(proposal);
+                      const versionCount = getVersionCount(proposal);
+                      const pricingModelClass = getPricingModelClass(
+                        proposal,
+                        defaultModelMap,
+                        availableModelMap
+                      );
+                      const pricingModelName = proposal.pricingModelName || 'Pricing Model';
+                      const explicitRemoved = String(proposal.pricingModelName || '').toLowerCase().includes('(removed)');
+                      const shouldAppendRemoved =
+                        pricingModelClass.includes('is-removed') && !explicitRemoved;
+
+                      return (
+                        <tr
+                          key={proposal.proposalNumber}
+                          className="dashboard-proposals-row"
+                          onClick={() => onOpenProposal(proposal.proposalNumber)}
+                          onContextMenu={(event) => handleOpenContextMenu(event, proposal.proposalNumber)}
+                        >
+                          <td>
+                            <div className="dashboard-customer-cell">
+                              <span className="dashboard-customer-name">
+                                {proposal.customerInfo?.customerName || 'Untitled Proposal'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="dashboard-date-cell">
+                            {new Date(proposal.lastModified || proposal.createdDate || 0).toLocaleDateString()}
+                          </td>
+                          <td>
+                            <span className={getStatusBadgeClass(proposal.status)}>
+                              {formatStatusLabel(proposal.status)}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={pricingModelClass}>
+                              {pricingModelName}
+                              {shouldAppendRemoved ? ' (Removed)' : ''}
+                            </span>
+                          </td>
+                          <td className="dashboard-number-cell">{versionCount}</td>
+                          <td className="dashboard-contract-cell">{contractTypeLabel}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {contextMenu && (
+        <>
+          <div className="dashboard-context-menu-backdrop" onClick={() => setContextMenu(null)} />
+          <div
+            className="dashboard-context-menu"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button type="button" className="dashboard-context-menu-item delete" onClick={handleDeleteRequest}>
+              Delete Proposal
+            </button>
+          </div>
+        </>
+      )}
+
+      <ConfirmDialog
+        open={Boolean(proposalToDelete)}
+        title="Delete proposal?"
+        message="This proposal will be removed permanently."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        isLoading={Boolean(deletingProposalNumber)}
+        onConfirm={() => {
+          void handleConfirmDelete();
+        }}
+        onCancel={() => {
+          if (deletingProposalNumber) return;
+          setProposalToDelete(null);
+        }}
+      />
+    </section>
+  );
+}
+
+export default DashboardProposalsPanel;

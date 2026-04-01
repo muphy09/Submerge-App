@@ -122,6 +122,13 @@
   box-shadow: none;
 }
 
+.dashboard-content {
+  width: min(1600px, calc(100% - clamp(3rem, 6vw, 6rem)));
+  margin: 0 auto;
+  padding: 0 0 clamp(1.5rem, 3vh, 2rem);
+  box-sizing: border-box;
+}
+
 
 /* Dashboard Columns */
 .dashboard-columns {
@@ -584,6 +591,11 @@
     margin: clamp(0.75rem, 1.5vh, 1rem) clamp(1.25rem, 2.5vw, 2.25rem) clamp(0.75rem, 1.5vh, 1rem) clamp(1.25rem, 2.5vw, 2.25rem);
   }
 
+  .dashboard-content {
+    width: min(1600px, calc(100% - clamp(2.5rem, 5vw, 4rem)));
+    padding-bottom: clamp(1.25rem, 2vh, 1.75rem);
+  }
+
   .dashboard-columns {
     padding: 0 clamp(1.25rem, 2.5vw, 2rem) clamp(1.25rem, 2vh, 1.75rem);
     gap: clamp(0.85rem, 1.8vh, 1.1rem);
@@ -673,6 +685,10 @@
 }
 
 @media (max-width: 1200px) {
+  .dashboard-content {
+    width: calc(100% - 4rem);
+  }
+
   .dashboard-columns {
     grid-template-columns: 1fr;
     gap: clamp(1rem, 2vh, 1.5rem);
@@ -722,6 +738,11 @@
 }
 
 @media (max-width: 768px) {
+  .dashboard-content {
+    width: calc(100% - 2rem);
+    padding-bottom: clamp(1rem, 2vh, 1.5rem);
+  }
+
   .hero-section {
     margin: 1rem 1rem 0.75rem 1rem;
     height: clamp(180px, 26vh, 240px);
@@ -798,6 +819,11 @@
 }
 
 @media (max-width: 480px) {
+  .dashboard-content {
+    width: calc(100% - 1.5rem);
+    padding-bottom: 1rem;
+  }
+
   .hero-section {
     margin: 0.75rem 0.75rem 0.5rem 0.75rem;
     height: clamp(140px, 20vh, 190px);

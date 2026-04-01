@@ -64,14 +64,12 @@ interface AdminPanelPageProps {
   offsetSettingsLauncher?: boolean;
 }
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'draft': return '#ddc720ff';
-    case 'submitted': return '#04bc17ff';
-    case 'approved': return '#10b981';
-    case 'rejected': return '#ef4444';
-    default: return '#6b7280';
-  }
+const normalizeStatus = (status?: string | null) => String(status || '').trim().toLowerCase();
+
+const formatStatusLabel = (status?: string | null) => {
+  const normalized = normalizeStatus(status);
+  if (!normalized) return 'Draft';
+  return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
 };
 
 const getRoleLabel = (role?: string) => {
@@ -89,7 +87,7 @@ const formatDate = (value?: string) => {
 const normalizeDesignerName = (value?: string | null) => (value ?? '').trim();
 const normalizeUserEmail = (value?: string | null) => String(value || '').trim().toLowerCase();
 const isSubmittedStatus = (status?: string) => {
-  const normalized = (status || '').toLowerCase();
+  const normalized = normalizeStatus(status);
   return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
 };
 
@@ -1016,9 +1014,12 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                     ? 'proposal-model-pill removed'
                     : 'proposal-model-pill inactive';
                   const discountLimitExceeded =
-                    proposal.status === 'submitted' && hasExcessiveDiscount(proposal);
-                  const statusLabel = discountLimitExceeded ? `${proposal.status}*` : proposal.status;
-                  const statusColor = discountLimitExceeded ? '#ef4444' : getStatusColor(proposal.status);
+                    normalizeStatus(proposal.status) === 'submitted' && hasExcessiveDiscount(proposal);
+                  const normalizedStatus = normalizeStatus(proposal.status) || 'draft';
+                  const statusLabel = `${formatStatusLabel(proposal.status)}${discountLimitExceeded ? '*' : ''}`;
+                  const statusClassName = discountLimitExceeded
+                    ? 'status-badge-table is-alert'
+                    : `status-badge-table is-${normalizedStatus}`;
 
                   return (
                     <tr
@@ -1031,10 +1032,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                       <td>{new Date(proposal.lastModified || proposal.createdDate).toLocaleDateString()}</td>
                       <td>
                         <div className="proposal-status-cell">
-                          <span
-                            className="status-badge-table"
-                            style={{ backgroundColor: statusColor }}
-                          >
+                          <span className={statusClassName}>
                             {statusLabel}
                           </span>
                           {discountLimitExceeded && (

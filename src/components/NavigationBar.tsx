@@ -69,18 +69,6 @@ function NavigationBar({
           Dashboard
         </NavLink>
         <NavLink
-          to="/proposals"
-          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-        >
-          Proposals
-        </NavLink>
-        <NavLink
-          to="/templates"
-          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-        >
-          Templates
-        </NavLink>
-        <NavLink
           to="/settings"
           className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
         >

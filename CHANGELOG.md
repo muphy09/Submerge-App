@@ -14,6 +14,10 @@
 - Feedback Button
     - Leave feedback for improvements, issues, and feature requests all within the app
     - Feedback Button is located persistently in the bottom right corner of the app
+- Proposal Table UI
+    - Removed the Proposal Tab and replaced it with the Dashboard Proposal Table
+    - Filter Customer Name, Status, Pricing Mode, and Contract Type
+    - Ability to 'Hide Table' from view
 ### Requested Changes
 - Warranty Breakdown Update
     - Polished the look of the PDF when exporting & printing

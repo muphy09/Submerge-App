@@ -279,7 +279,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     return window.innerWidth >= 1100;
   };
   const [currentSection, setCurrentSection] = useState(0);
-  const [isLoading, setIsLoading] = useState(!!proposalNumber);
+  const [isLoading, setIsLoading] = useState(true);
   const loadRequestRef = useRef(0);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showLeftNav, setShowLeftNav] = useState<boolean>(getInitialLeftNav);
@@ -528,6 +528,30 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     }
   };
 
+  const buildStartingEquipment = (
+    poolSpecs?: Proposal['poolSpecs'],
+    currentEquipment?: Proposal['equipment']
+  ): Proposal['equipment'] => {
+    const hasSpa = (poolSpecs?.spaType ?? 'none') !== 'none';
+    const hasPool = hasPoolDefinition(poolSpecs);
+    const selectedPackage = getSelectedEquipmentPackage(currentEquipment as any);
+    const defaultCustomPackage =
+      getEnabledEquipmentPackageOptions().find((option) => option.id === CUSTOM_PACKAGE_ID) ||
+      getEnabledEquipmentPackageOptions().find((option) => option.mode === 'custom');
+
+    if (selectedPackage && isFixedEquipmentPackage(selectedPackage)) {
+      return createFreshEquipmentForPackage(selectedPackage, { hasPool, hasSpa });
+    }
+
+    return normalizeEquipmentLighting(
+      {
+        ...getDefaultEquipment(),
+        packageSelectionId: selectedPackage?.id || currentEquipment?.packageSelectionId || defaultCustomPackage?.id || CUSTOM_PACKAGE_ID,
+      } as Proposal['equipment'],
+      { poolSpecs, hasPool, hasSpa }
+    );
+  };
+
   useEffect(() => {
     // Ensure each section starts at top when navigating
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -582,9 +606,6 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     const designerCode = getSessionFranchiseCode();
     const modelMeta = getActivePricingModelMeta();
     const shouldUseActiveDefault = Boolean(modelMeta.isDefault && modelMeta.pricingModelId);
-    const defaultCustomPackage =
-      getEnabledEquipmentPackageOptions().find((option) => option.id === CUSTOM_PACKAGE_ID) ||
-      getEnabledEquipmentPackageOptions().find((option) => option.mode === 'custom');
     return {
       ...base,
       franchiseId,
@@ -600,10 +621,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       pricingModelName: shouldUseActiveDefault ? modelMeta.pricingModelName || undefined : undefined,
       pricingModelFranchiseId: shouldUseActiveDefault ? modelMeta.pricingModelFranchiseId || franchiseId : undefined,
       pricingModelIsDefault: shouldUseActiveDefault ? modelMeta.isDefault : undefined,
-      equipment: {
-        ...getDefaultEquipment(),
-        packageSelectionId: defaultCustomPackage?.id || CUSTOM_PACKAGE_ID,
-      },
+      equipment: buildStartingEquipment(base.poolSpecs),
     };
   };
 
@@ -955,18 +973,31 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       setIsLoading(true);
       loadProposal(proposalNumber, requestId);
     } else {
-      const freshProposal = getInitialProposal();
-      previousSpaTypeRef.current = freshProposal.poolSpecs?.spaType ?? 'none';
-      previousHasPoolRef.current = hasPoolDefinition(freshProposal.poolSpecs);
-      setProposal(freshProposal);
-      setVersionList([freshProposal as Proposal]);
-      setActiveVersionId((freshProposal as Proposal).activeVersionId || (freshProposal as Proposal).versionId || 'original');
-      setEditingVersionId((freshProposal as Proposal).versionId || 'original');
-      setSelectedPricingModelId(freshProposal.pricingModelId || null);
-      setSelectedPricingModelName(freshProposal.pricingModelName || null);
-      setCurrentSection(0);
-      setIsLoading(false);
-      setHasEdits(false);
+      setIsLoading(true);
+      const initializeNewProposal = async () => {
+        try {
+          const franchiseId = getSessionFranchiseId();
+          await initPricingDataStore(franchiseId);
+          await loadPricingModels(franchiseId);
+        } catch (error) {
+          console.warn('Unable to initialize pricing for new proposal', error);
+        } finally {
+          if (loadRequestRef.current !== requestId) return;
+          const freshProposal = getInitialProposal();
+          previousSpaTypeRef.current = freshProposal.poolSpecs?.spaType ?? 'none';
+          previousHasPoolRef.current = hasPoolDefinition(freshProposal.poolSpecs);
+          setProposal(freshProposal);
+          setVersionList([freshProposal as Proposal]);
+          setActiveVersionId((freshProposal as Proposal).activeVersionId || (freshProposal as Proposal).versionId || 'original');
+          setEditingVersionId((freshProposal as Proposal).versionId || 'original');
+          setSelectedPricingModelId(freshProposal.pricingModelId || null);
+          setSelectedPricingModelName(freshProposal.pricingModelName || null);
+          setCurrentSection(0);
+          setIsLoading(false);
+          setHasEdits(false);
+        }
+      };
+      void initializeNewProposal();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalNumber]);
@@ -1154,20 +1185,20 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     proposal.tileCopingDecking?.doubleBullnoseLnft,
   ]);
 
-  const calculateTotals = (): Proposal => {
-    const normalized = mergeWithDefaults(applySessionCommissionRates(proposal));
+  const calculateTotals = (input: Partial<Proposal> = proposal): Proposal => {
+    const normalized = mergeWithDefaults(applySessionCommissionRates(input));
     const result = MasterPricingEngine.calculateCompleteProposal(normalized, papDiscounts);
-    const versionId = proposal.versionId || editingVersionId || 'original';
+    const versionId = input.versionId || editingVersionId || 'original';
     const versionName =
-      proposal.versionName ||
-      (proposal.isOriginalVersion === false || versionId !== 'original' ? 'Version' : 'Original Version');
+      input.versionName ||
+      (input.isOriginalVersion === false || versionId !== 'original' ? 'Version' : 'Original Version');
 
     return {
       ...normalized,
       versionId,
       versionName,
       activeVersionId: activeVersionId || versionId,
-      isOriginalVersion: proposal.isOriginalVersion ?? versionId === 'original',
+      isOriginalVersion: input.isOriginalVersion ?? versionId === 'original',
       versions: [],
       franchiseId: normalized.franchiseId || getSessionFranchiseId(),
       designerName: normalized.designerName || getSessionUserName(),
@@ -1219,13 +1250,37 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
     setIsSaving(true);
     try {
-      if (!proposal.pricingModelId && defaultPricingModelId) {
+      let proposalToSave: Partial<Proposal> = proposal;
+
+      if (!proposalToSave.pricingModelId && defaultPricingModelId) {
         const def = pricingModels.find((m) => m.id === defaultPricingModelId);
         await applyPricingModelSelection(defaultPricingModelId, def?.name, def?.isDefault);
+        const activeModelMeta = getActivePricingModelMeta();
+        proposalToSave = {
+          ...proposalToSave,
+          pricingModelId: activeModelMeta.pricingModelId || def?.id || undefined,
+          pricingModelName: activeModelMeta.pricingModelName || def?.name || undefined,
+          pricingModelFranchiseId:
+            activeModelMeta.pricingModelId
+              ? activeModelMeta.pricingModelFranchiseId ||
+                proposalToSave.pricingModelFranchiseId ||
+                proposalToSave.franchiseId ||
+                getSessionFranchiseId()
+              : proposalToSave.pricingModelFranchiseId,
+          pricingModelIsDefault:
+            activeModelMeta.pricingModelId ? activeModelMeta.isDefault : proposalToSave.pricingModelIsDefault,
+        };
+      }
+
+      if (!proposalNumber && !proposalToSave.equipment?.hasBeenEdited) {
+        proposalToSave = {
+          ...proposalToSave,
+          equipment: buildStartingEquipment(proposalToSave.poolSpecs, proposalToSave.equipment),
+        };
       }
       // Validate if submitting
       if (effectiveMode === 'submit') {
-        const errors = validateProposal(proposal);
+        const errors = validateProposal(proposalToSave);
         if (errors.length > 0) {
           showToast({
             type: 'error',
@@ -1235,7 +1290,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         }
       }
 
-      const totals = calculateTotals();
+      const totals = calculateTotals(proposalToSave);
       const now = new Date().toISOString();
       const versionName =
         totals.versionName ||

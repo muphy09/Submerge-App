@@ -18,9 +18,9 @@
       "detail": "Runs the app via npm run dev (starts Vite + Electron). Stop the task to clean up processes."
     },
     {
-      "label": "Create EXE",
+      "label": "Create Installer",
       "type": "shell",
-      "command": "npm run build:exe",
+      "command": "npm run build:installer",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -31,7 +31,7 @@
       },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Builds a portable EXE named 'PPAS Proposal Builder v__' in the 'portable builds' folder"
+      "detail": "Builds a Windows installer EXE for Submerge Proposal Builder in the 'portable builds' folder. Close any running Submerge/Electron app instances first."
     },
     {
       "label": "_release:version:patch",
