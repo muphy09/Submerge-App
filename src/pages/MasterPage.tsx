@@ -83,6 +83,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   const [ledgerLoading, setLedgerLoading] = useState(true);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerFranchiseFilter, setLedgerFranchiseFilter] = useState('all');
+  const [hideInactiveLedgerFranchises, setHideInactiveLedgerFranchises] = useState(true);
   const [selectedLedgerEvent, setSelectedLedgerEvent] = useState<LedgerEvent | null>(null);
 
   const [franchiseName, setFranchiseName] = useState('');
@@ -178,6 +179,16 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     [pricingFranchiseOptions]
   );
 
+  const ledgerFranchiseOptions = useMemo(() => {
+    if (!hideInactiveLedgerFranchises) return franchiseOptions;
+    return franchiseOptions.filter((franchise) => !franchise.deletedAt && franchise.isActive !== false);
+  }, [franchiseOptions, hideInactiveLedgerFranchises]);
+
+  const ledgerFranchiseOptionIds = useMemo(
+    () => new Set(ledgerFranchiseOptions.map((franchise) => franchise.id)),
+    [ledgerFranchiseOptions]
+  );
+
   const visibleFranchises = useMemo(() => {
     if (!hideInactive) return franchises;
     return franchises.filter((franchise) => !franchise.deletedAt && franchise.isActive !== false);
@@ -267,17 +278,27 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   }, [filteredPricingModels.length, pricingModels.length]);
 
   const filteredLedgerEvents = useMemo(() => {
-    if (ledgerFranchiseFilter === 'all') return ledgerEvents;
-    return ledgerEvents.filter((event) => event.franchiseId === ledgerFranchiseFilter);
-  }, [ledgerEvents, ledgerFranchiseFilter]);
+    let rows = ledgerEvents;
+    if (hideInactiveLedgerFranchises) {
+      rows = rows.filter((event) => {
+        if (!event.franchiseId) return true;
+        const franchise = franchiseLookup.get(event.franchiseId);
+        return !franchise || (!franchise.deletedAt && franchise.isActive !== false);
+      });
+    }
+    if (ledgerFranchiseFilter !== 'all') {
+      rows = rows.filter((event) => event.franchiseId === ledgerFranchiseFilter);
+    }
+    return rows;
+  }, [ledgerEvents, ledgerFranchiseFilter, hideInactiveLedgerFranchises, franchiseLookup]);
 
   useEffect(() => {
     if (ledgerFranchiseFilter === 'all') return;
-    const selectedStillExists = franchiseOptions.some((franchise) => franchise.id === ledgerFranchiseFilter);
+    const selectedStillExists = ledgerFranchiseOptionIds.has(ledgerFranchiseFilter);
     if (!selectedStillExists) {
       setLedgerFranchiseFilter('all');
     }
-  }, [franchiseOptions, ledgerFranchiseFilter]);
+  }, [ledgerFranchiseFilter, ledgerFranchiseOptionIds]);
 
   const ledgerCountLabel = useMemo(() => {
     if (ledgerEvents.length === 0) return '0 total';
@@ -731,13 +752,21 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                 onChange={(e) => setLedgerFranchiseFilter(e.target.value)}
               >
                 <option value="all">All franchises</option>
-                {franchiseOptions.map((franchise) => (
+                {ledgerFranchiseOptions.map((franchise) => (
                   <option key={franchise.id} value={franchise.id}>
                     {franchise.name || franchise.franchiseCode || franchise.id}
                   </option>
                 ))}
               </select>
             </div>
+            <label className="master-toggle master-toggle--table">
+              <input
+                type="checkbox"
+                checked={hideInactiveLedgerFranchises}
+                onChange={(e) => setHideInactiveLedgerFranchises(e.target.checked)}
+              />
+              Hide Inactive Franchises
+            </label>
             <div className="master-table-meta">{ledgerCountLabel}</div>
           </div>
           {ledgerError && <div className="master-error">{ledgerError}</div>}
