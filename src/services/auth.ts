@@ -1,5 +1,11 @@
 import { getSupabaseClient, hasSupabaseConnection, isSupabaseEnabled } from './supabaseClient';
 import {
+  claimUserAppSession,
+  createAppSessionCredentials,
+  heartbeatUserAppSession,
+  releaseUserAppSession,
+} from './appSession';
+import {
   DEFAULT_FRANCHISE_ID,
   clearSession,
   clearMasterImpersonation,
@@ -30,12 +36,30 @@ type FranchiseUserRow = {
   closeout_commission_rate?: number | null;
 };
 
+type SignInSuccessResult = {
+  status: 'signed-in';
+  session: UserSession;
+  passwordResetRequired: boolean;
+};
+
+type SignInConflictResult = {
+  status: 'conflict';
+  session: UserSession;
+  passwordResetRequired: boolean;
+};
+
+export type SignInWithEmailResult = SignInSuccessResult | SignInConflictResult;
+
 function normalizeCode(code?: string | null) {
   return String(code || '').trim().toUpperCase();
 }
 
 function normalizeEmailAddress(email?: string | null) {
   return String(email || '').trim().toLowerCase();
+}
+
+function normalizeText(value?: string | null) {
+  return String(value || '').trim();
 }
 
 function normalizeDisplayName(name?: string | null) {
@@ -101,13 +125,13 @@ async function getUserProfileByAuthId(authUserId: string, email?: string | null)
   return (fallback.data as FranchiseUserRow) || null;
 }
 
-async function updateLastLogin(userId: string) {
+async function updateLastLogin(authUserId: string) {
   const supabase = assertSupabaseReady();
   const now = new Date().toISOString();
   await supabase
     .from('franchise_users')
     .update({ last_login_at: now })
-    .eq('id', userId);
+    .eq('auth_user_id', authUserId);
 }
 
 function buildSessionFromProfile(options: {
@@ -115,6 +139,10 @@ function buildSessionFromProfile(options: {
   email: string;
   profile: FranchiseUserRow;
   franchise?: FranchiseRow | null;
+  appSession?: {
+    appSessionId: string;
+    appSessionLeaseToken: string;
+  };
 }): UserSession {
   const displayName = normalizeDisplayName(options.profile.name) || options.email || 'User';
   const role = (options.profile.role || 'designer') as UserRole;
@@ -132,6 +160,8 @@ function buildSessionFromProfile(options: {
     franchiseCode: franchise?.franchise_code || undefined,
     role,
     passwordResetRequired: Boolean(options.profile.password_reset_required),
+    appSessionId: options.appSession?.appSessionId,
+    appSessionLeaseToken: options.appSession?.appSessionLeaseToken,
     ...commissionRates,
   };
 }
@@ -140,7 +170,7 @@ export async function signInWithEmail(payload: {
   email: string;
   password: string;
   franchiseCode?: string | null;
-}) {
+}): Promise<SignInWithEmailResult> {
   const supabase = assertSupabaseReady();
   const online = await hasSupabaseConnection(true);
   if (!online) {
@@ -161,7 +191,7 @@ export async function signInWithEmail(payload: {
   const authUser = data.user;
   const profile = await getUserProfileByAuthId(authUser.id, authUser.email);
   if (!profile) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     throw new Error('This account is not linked to a franchise.');
   }
 
@@ -170,7 +200,7 @@ export async function signInWithEmail(payload: {
   const allowedRoles = ['master', 'owner', 'admin', 'designer'];
   const isActive = profile.is_active !== false;
   if (!allowedRoles.includes(normalizedRole) || !isActive) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     throw new Error('This account is not active.');
   }
 
@@ -179,41 +209,87 @@ export async function signInWithEmail(payload: {
     clearMasterImpersonation();
     const inputCode = normalizeCode(payload.franchiseCode);
     if (!inputCode) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       throw new Error('Franchise code is required for this account.');
     }
     franchise = await getFranchiseByCode(inputCode);
     if (!franchise) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       throw new Error('Invalid franchise code.');
     }
     if (!profile.franchise_id || franchise.id !== profile.franchise_id) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       throw new Error('Invalid franchise code.');
     }
   } else if (profile.franchise_id) {
     franchise = await getFranchiseById(profile.franchise_id);
   }
 
+  const appSession = createAppSessionCredentials();
   const session = buildSessionFromProfile({
     authUserId: authUser.id,
     email: normalizeEmailAddress(authUser.email || email),
     profile,
     franchise,
+    appSession,
   });
+
+  const claimResult = await claimUserAppSession({
+    appSessionId: appSession.appSessionId,
+    appSessionLeaseToken: appSession.appSessionLeaseToken,
+    takeover: false,
+  });
+
+  if (claimResult.status === 'conflict') {
+    return {
+      status: 'conflict',
+      session,
+      passwordResetRequired: Boolean(profile.password_reset_required),
+    };
+  }
+
   saveSession(session);
-  if (profile.id) {
-    void updateLastLogin(profile.id);
+  if (session.userId) {
+    void updateLastLogin(session.userId);
   }
 
   return {
+    status: 'signed-in',
     session,
     passwordResetRequired: Boolean(profile.password_reset_required),
   };
 }
 
+export async function confirmSessionTakeover(session: UserSession) {
+  const appSessionId = normalizeText(session.appSessionId);
+  const appSessionLeaseToken = normalizeText(session.appSessionLeaseToken);
+  if (!appSessionId || !appSessionLeaseToken) {
+    throw new Error('Unable to continue this login attempt. Please try signing in again.');
+  }
+
+  const claimResult = await claimUserAppSession({
+    appSessionId,
+    appSessionLeaseToken,
+    takeover: true,
+  });
+  if (claimResult.status !== 'claimed') {
+    throw new Error('Unable to take over the existing session. Please try again.');
+  }
+
+  saveSession(session);
+  if (session.userId) {
+    void updateLastLogin(session.userId);
+  }
+
+  return {
+    session,
+    passwordResetRequired: Boolean(session.passwordResetRequired),
+  };
+}
+
 export async function loadSessionFromSupabase(): Promise<{ session: UserSession; passwordResetRequired: boolean } | null> {
-  if (!readSession()) return null;
+  const savedSession = readSession();
+  if (!savedSession) return null;
   const supabase = getSupabaseClient();
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getSession();
@@ -248,11 +324,43 @@ export async function loadSessionFromSupabase(): Promise<{ session: UserSession;
     franchise = await getFranchiseById(profile.franchise_id);
   }
 
+  let appSession = {
+    appSessionId: normalizeText(savedSession.appSessionId),
+    appSessionLeaseToken: normalizeText(savedSession.appSessionLeaseToken),
+  };
+
+  if (appSession.appSessionId && appSession.appSessionLeaseToken) {
+    const heartbeat = await heartbeatUserAppSession({
+      appSessionId: appSession.appSessionId,
+      appSessionLeaseToken: appSession.appSessionLeaseToken,
+    });
+    if (heartbeat.status !== 'active') {
+      await supabase.auth.signOut({ scope: 'local' });
+      clearMasterImpersonation();
+      clearSession();
+      return null;
+    }
+  } else {
+    appSession = createAppSessionCredentials();
+    const claimResult = await claimUserAppSession({
+      appSessionId: appSession.appSessionId,
+      appSessionLeaseToken: appSession.appSessionLeaseToken,
+      takeover: false,
+    });
+    if (claimResult.status !== 'claimed') {
+      await supabase.auth.signOut({ scope: 'local' });
+      clearMasterImpersonation();
+      clearSession();
+      return null;
+    }
+  }
+
   const session = buildSessionFromProfile({
     authUserId: authSession.user.id,
     email: normalizeEmailAddress(authSession.user.email || ''),
     profile,
     franchise,
+    appSession,
   });
   saveSession(session);
   return { session, passwordResetRequired: Boolean(profile.password_reset_required) };
@@ -294,6 +402,15 @@ export async function completePasswordReset(newPassword: string) {
 }
 
 export async function signOut() {
+  const currentSession = readSession();
+  const appSessionId = normalizeText(currentSession?.appSessionId);
+  const appSessionLeaseToken = normalizeText(currentSession?.appSessionLeaseToken);
+  if (appSessionId && appSessionLeaseToken) {
+    await releaseUserAppSession({
+      appSessionId,
+      appSessionLeaseToken,
+    });
+  }
   const supabase = getSupabaseClient();
   if (supabase) {
     await supabase.auth.signOut({ scope: 'local' });

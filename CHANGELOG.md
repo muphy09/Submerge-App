@@ -1,11 +1,26 @@
-## [2.0.18] What's New 3/31/26
+## [2.1.0] - 3/31/26
+### Security Changes
+- Only 1 logged in session can be active at a time
+    - Will prompt to sign other PC out if 2 active logins are detected
+- Moved Admin-only settings into the Admin Tab in the new 'Admin Settings' area
+    - Change App Name
+    - Change Franchise Code
+    - Change Admin PIN
+    - Hide COGS view from Proposal Builder
+- Active ledger logs milestone events per franchise
+    - Logs User, Role, Time, and Action conducted
+        - Action examples: Creating a new user, deleting a user, promoting a user to admin, etc
+### Requested Changes
+- Fiberglass
+-----
+## [2.0.18] - 3/31/26
 - App Name now updates to the Franchise name
 - Designer 'Customer Cost Breakdown' button aligned with Admins button
 -----
-## [2.0.17] What's New 3/31/26
+## [2.0.17] - 3/31/26
 - Exporting Contract & Warranty PDF fixed
 -----
-## [2.0.16] What's New 3/31/26
+## [2.0.16] - 3/31/26
 - Warranty Customization
     - Added ability to customize the Warranty section of the Job Cost Summary
     - Left click a category or line item to edit the field
@@ -13,12 +28,12 @@
 - Exporting Options
     - Job Cost Summary & Warranty export logic now matches the Contract export logic
 -----
-## [2.0.15] What's New 3/31/26
+## [2.0.15] - 3/31/26
 -  Aligned Additional Decking with intended use case
     - Ability to add multiple decking options
     - Changed Concrete Waste overhead to 0%
 -----
-## [2.0.14] What's New 3/31/26
+## [2.0.14] - 3/31/26
 - Additional Decking Options
     - Ability to add Additional Decking options
     - Independant 'Off Contract' & 'Remove Waste' logic
@@ -32,18 +47,18 @@
     - Configurable with Set Price or Price Per SQFT
         - Ability to include extra costs (Gates) per Subcategory
 -----
-## [2.0.13] What's New 3/30/26
+## [2.0.13] - 3/30/26
 - Master Tab Update
 - Commission Amount adjustable per user
     - Admins can configure default Commission Amount
 -----
-## [2.0.12] What's New
+## [2.0.12]
 - Off Contract Decking
     - Takes original decking cost and moves it straight to Total Retail, no increase
     - Marks the Decking as 'Off Contract' in the COGS and Contract
     - Includes itself in the Off Contract Addendum
 -----
-## [2.0.10] What's New
+## [2.0.10]
 - Auxillary Pump logic with Spa
     - Automatically adds Aux Pump with spa (default set by admin)
     - Populates in 'Blower' input of contract (page 2)
@@ -57,7 +72,7 @@
 - Admin Pricing Menu Redesign
     - Redesigned the UI of the Admin Pricing Model
 -----
-## [2.0.9] What's New
+## [2.0.9]
 - Spa Perimeter Autofill
     - Contract now properly autofills the Spa Perimeter
 - Rough Grading
@@ -65,7 +80,7 @@
 - Contract Payment Schedule
     - Math for Deposit Amount fixed to reflect correct logic
 -----
-## [2.0.6] What's New
+## [2.0.6]
 - Swapped Backside Facing from Exposed Pool Wall to RBB
 - Fixed Edit Proposal crash
 - Parched Concrete changed to Parged Concrete
@@ -77,7 +92,7 @@
     - Coping Size
     - Custom Features
 -----
-## [2.0.5] What's New
+## [2.0.5]
 - Valve Actuator toggle per Water Feature zone
     - Included a checkbox next to each added water feature to turn off the Valve Actuator cost
 - Wok Pot logic cleanup
@@ -93,7 +108,7 @@
     - Custom Features can now be marked Off-Contract
     - Grouped Custom Features can be created by an admin (sod, fencing)
 -----
-## [2.0.4] What's New
+## [2.0.4]
 - Zoom Toggle on contract preview
     - Can zoom the contract in and out while previewing
 - Price Model in proposal builder
@@ -104,13 +119,13 @@
 - Changelog
     - Admins and Owners are now greeted with the Changelog if the app was updated
 -----
-## [2.0.3] What's New
+## [2.0.3]
 - Equipment Package Options
     - Added the ability to create Equipment Packages
     - Can be customized in the admin menu
     - Aligned initial package options
 -----
-## [2.0.2] What's New
+## [2.0.2]
 - Plumbing Cost Update
     - Aligned with new prices and exposed options to edit in the Admin Panel
 - Exposed Pool Wall (Out of Ground Forming)
@@ -169,7 +184,7 @@
     - Added input field to adjust retail price % increase in the Admin Panel
         - COGS vs Retail Price Increase
 -----
-## [2.0.0] What's New
+## [2.0.0]
 - Admin Price Menu Update
     - Every input has a label and tooltip describing what the input does
         - If an input appears in a Red background, it is not currently used

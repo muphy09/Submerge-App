@@ -11,6 +11,8 @@ export type UserSession = Partial<UserCommissionRates> & {
   franchiseCode?: string;
   role?: UserRole;
   passwordResetRequired?: boolean;
+  appSessionId?: string;
+  appSessionLeaseToken?: string;
 };
 
 export type MasterImpersonation = {

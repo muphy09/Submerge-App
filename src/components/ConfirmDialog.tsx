@@ -6,6 +6,9 @@ interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  errorMessage?: string | null;
+  isLoading?: boolean;
+  hideCancel?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -16,6 +19,9 @@ function ConfirmDialog({
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  errorMessage = null,
+  isLoading = false,
+  hideCancel = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -29,13 +35,16 @@ function ConfirmDialog({
         </div>
         <div className="confirm-body">
           <p>{message}</p>
+          {errorMessage && <div className="confirm-error">{errorMessage}</div>}
         </div>
         <div className="confirm-actions">
-          <button className="btn btn-secondary" onClick={onCancel}>
-            {cancelLabel}
-          </button>
-          <button className="btn btn-primary" onClick={onConfirm}>
-            {confirmLabel}
+          {!hideCancel && (
+            <button className="btn btn-secondary" onClick={onCancel} disabled={isLoading}>
+              {cancelLabel}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={onConfirm} disabled={isLoading}>
+            {isLoading ? 'Working...' : confirmLabel}
           </button>
         </div>
       </div>

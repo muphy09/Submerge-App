@@ -1,5 +1,5 @@
 import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import HomePage from './pages/HomePage';
 import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
@@ -18,8 +18,16 @@ import { getSupabaseClient, getSupabaseReachability, isSupabaseEnabled } from '.
 import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
 import useKeyboardNavigation from './hooks/useKeyboardNavigation';
 import PasswordResetModal from './components/PasswordResetModal';
-import { completePasswordReset, loadSessionFromSupabase, signInWithEmail, signOut } from './services/auth';
+import ConfirmDialog from './components/ConfirmDialog';
+import {
+  completePasswordReset,
+  confirmSessionTakeover,
+  loadSessionFromSupabase,
+  signInWithEmail,
+  signOut,
+} from './services/auth';
 import { assertLoginAllowed, clearLoginAttempts, recordLoginFailure } from './services/loginRateLimiter';
+import { APP_SESSION_HEARTBEAT_INTERVAL_MS, heartbeatUserAppSession } from './services/appSession';
 import {
   DEFAULT_FRANCHISE_ID,
   type MasterImpersonation,
@@ -51,6 +59,10 @@ import {
 } from './services/adminPanelPin';
 import './App.css';
 
+type PendingSessionTakeover = {
+  session: UserSession;
+};
+
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,6 +75,10 @@ function AppContent() {
   const [showChangelogPrompt, setShowChangelogPrompt] = useState(false);
   const [cloudIssue, setCloudIssue] = useState<CloudConnectionIssue>(null);
   const [masterImpersonation, setMasterImpersonation] = useState<MasterImpersonation | null>(() => readMasterImpersonation());
+  const [pendingSessionTakeover, setPendingSessionTakeover] = useState<PendingSessionTakeover | null>(null);
+  const [pendingSessionTakeoverError, setPendingSessionTakeoverError] = useState('');
+  const [pendingSessionTakeoverLoading, setPendingSessionTakeoverLoading] = useState(false);
+  const [showLoggedOutElsewhereNotice, setShowLoggedOutElsewhereNotice] = useState(false);
   const [adminPanelPin, setAdminPanelPin] = useState('');
   const [adminPanelPinError, setAdminPanelPinError] = useState('');
   const [adminPanelPinPrompt, setAdminPanelPinPrompt] = useState<{
@@ -76,6 +92,7 @@ function AppContent() {
   });
   const [adminPanelAccessFranchiseId, setAdminPanelAccessFranchiseId] = useState<string | null>(null);
   const [adminPanelLockoutUntil, setAdminPanelLockoutUntil] = useState<number | null>(null);
+  const forcingRemoteLogoutRef = useRef(false);
   const appVersion = getCurrentAppVersion();
 
   const loadPricingForFranchise = useCallback(async (franchiseId: string) => {
@@ -85,6 +102,25 @@ function AppContent() {
       console.warn('Unable to load pricing for franchise', franchiseId, error);
     }
   }, []);
+
+  const resetSignedOutUiState = useCallback(() => {
+    clearSession();
+    clearMasterImpersonation();
+    setSession(null);
+    setShowLogin(true);
+    setShowPasswordReset(false);
+    setShowChangelogPrompt(false);
+    setMasterImpersonation(null);
+    setPendingSessionTakeover(null);
+    setPendingSessionTakeoverError('');
+    setPendingSessionTakeoverLoading(false);
+    setAdminPanelAccessFranchiseId(null);
+    setAdminPanelLockoutUntil(null);
+    setAdminPanelPin('');
+    setAdminPanelPinError('');
+    setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
+    void loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
+  }, [loadPricingForFranchise]);
 
   useEffect(() => {
     recordAppLaunch(appVersion);
@@ -98,26 +134,14 @@ function AppContent() {
       if (event !== 'SIGNED_OUT') return;
 
       window.setTimeout(() => {
-        clearSession();
-        clearMasterImpersonation();
-        setSession(null);
-        setShowLogin(true);
-        setShowPasswordReset(false);
-        setShowChangelogPrompt(false);
-        setMasterImpersonation(null);
-        setAdminPanelAccessFranchiseId(null);
-        setAdminPanelLockoutUntil(null);
-        setAdminPanelPin('');
-        setAdminPanelPinError('');
-        setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
-        void loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
+        resetSignedOutUiState();
       }, 0);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [loadPricingForFranchise]);
+  }, [resetSignedOutUiState]);
 
   useEffect(() => {
     // Restore session from Supabase Auth if possible
@@ -127,6 +151,10 @@ function AppContent() {
         const restored = await loadSessionFromSupabase();
         if (cancelled) return;
         if (restored?.session) {
+          setShowLoggedOutElsewhereNotice(false);
+          setPendingSessionTakeover(null);
+          setPendingSessionTakeoverError('');
+          setPendingSessionTakeoverLoading(false);
           setSession(restored.session);
           setShowLogin(false);
           setShowPasswordReset(restored.passwordResetRequired);
@@ -139,15 +167,14 @@ function AppContent() {
             DEFAULT_FRANCHISE_ID;
           void loadPricingForFranchise(targetId);
         } else {
-          setSession(null);
-          setMasterImpersonation(null);
+          setShowLoggedOutElsewhereNotice(false);
           void signOut();
-          setShowLogin(true);
+          resetSignedOutUiState();
         }
       } catch (error) {
         console.warn('Unable to restore saved session:', error);
-        setMasterImpersonation(null);
-        setShowLogin(true);
+        setShowLoggedOutElsewhereNotice(false);
+        resetSignedOutUiState();
       }
     };
 
@@ -182,7 +209,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, resetSignedOutUiState]);
 
   const isMaster = (session?.role || '').toLowerCase() === 'master';
   const effectiveSession = (() => {
@@ -208,6 +235,66 @@ function AppContent() {
     document.title = `${displayName} Proposal Builder`;
   }, [displayName]);
 
+  useEffect(() => {
+    const appSessionId = session?.appSessionId;
+    const appSessionLeaseToken = session?.appSessionLeaseToken;
+    if (!appSessionId || !appSessionLeaseToken || showLogin) return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const verifyActiveSession = async () => {
+      if (cancelled || inFlight || forcingRemoteLogoutRef.current) return;
+      inFlight = true;
+      try {
+        const result = await heartbeatUserAppSession({
+          appSessionId,
+          appSessionLeaseToken,
+        });
+        if (!cancelled && result.status === 'displaced') {
+          forcingRemoteLogoutRef.current = true;
+          setShowLoggedOutElsewhereNotice(true);
+          try {
+            await signOut();
+          } catch (error) {
+            console.warn('Unable to sign out displaced session:', error);
+          } finally {
+            resetSignedOutUiState();
+            forcingRemoteLogoutRef.current = false;
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Unable to verify active app session:', error);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const handleFocusCheck = () => {
+      if (document.visibilityState === 'hidden') return;
+      void verifyActiveSession();
+    };
+
+    void verifyActiveSession();
+    const intervalId = window.setInterval(() => {
+      void verifyActiveSession();
+    }, APP_SESSION_HEARTBEAT_INTERVAL_MS);
+
+    window.addEventListener('focus', handleFocusCheck);
+    window.addEventListener('online', handleFocusCheck);
+    document.addEventListener('visibilitychange', handleFocusCheck);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocusCheck);
+      window.removeEventListener('online', handleFocusCheck);
+      document.removeEventListener('visibilitychange', handleFocusCheck);
+    };
+  }, [resetSignedOutUiState, session?.appSessionId, session?.appSessionLeaseToken, showLogin]);
+
   const handleInstallUpdate = () => {
     if (window.electron) {
       window.electron.installUpdate();
@@ -227,6 +314,19 @@ function AppContent() {
     try {
       const result = await signInWithEmail({ email, password, franchiseCode });
       clearLoginAttempts(email, franchiseCode);
+      if (result.status === 'conflict') {
+        setPendingSessionTakeover({
+          session: result.session,
+        });
+        setPendingSessionTakeoverError('');
+        setPendingSessionTakeoverLoading(false);
+        return;
+      }
+
+      setShowLoggedOutElsewhereNotice(false);
+      setPendingSessionTakeover(null);
+      setPendingSessionTakeoverError('');
+      setPendingSessionTakeoverLoading(false);
       setSession(result.session);
       setShowLogin(false);
       setShowPasswordReset(result.passwordResetRequired);
@@ -249,23 +349,56 @@ function AppContent() {
     }
   };
 
-  const handleLogout = async () => {
-    await signOut();
-    setSession(null);
-    setShowLogin(true);
-    setShowPasswordReset(false);
-    setShowChangelogPrompt(false);
-    setAdminPanelAccessFranchiseId(null);
-    setAdminPanelLockoutUntil(null);
-    setAdminPanelPin('');
-    setAdminPanelPinError('');
-    setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
-    clearMasterImpersonation();
-    setMasterImpersonation(null);
+  const handleConfirmPendingSessionTakeover = useCallback(async () => {
+    if (!pendingSessionTakeover) return;
     try {
-      await loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
+      setPendingSessionTakeoverLoading(true);
+      setPendingSessionTakeoverError('');
+      const result = await confirmSessionTakeover(pendingSessionTakeover.session);
+      setShowLoggedOutElsewhereNotice(false);
+      setPendingSessionTakeover(null);
+      setPendingSessionTakeoverLoading(false);
+      setSession(result.session);
+      setShowLogin(false);
+      setShowPasswordReset(result.passwordResetRequired);
+      const normalizedRole = (result.session.role || '').toLowerCase();
+      if (normalizedRole === 'master') {
+        setMasterImpersonation(readMasterImpersonation());
+      } else {
+        clearMasterImpersonation();
+        setMasterImpersonation(null);
+      }
+      navigate('/', { replace: true });
+      const targetId =
+        (normalizedRole === 'master' ? readMasterImpersonation()?.franchiseId : null) ||
+        result.session.franchiseId ||
+        DEFAULT_FRANCHISE_ID;
+      await loadPricingForFranchise(targetId);
+    } catch (error: any) {
+      setPendingSessionTakeoverError(error?.message || 'Unable to take over the existing session.');
+      setPendingSessionTakeoverLoading(false);
+    }
+  }, [loadPricingForFranchise, navigate, pendingSessionTakeover]);
+
+  const handleCancelPendingSessionTakeover = useCallback(async () => {
+    setPendingSessionTakeover(null);
+    setPendingSessionTakeoverError('');
+    setPendingSessionTakeoverLoading(false);
+    try {
+      await signOut();
     } catch (error) {
-      console.warn('Unable to reset pricing to default on logout:', error);
+      console.warn('Unable to cancel pending session takeover:', error);
+    } finally {
+      resetSignedOutUiState();
+    }
+  }, [resetSignedOutUiState]);
+
+  const handleLogout = async () => {
+    setShowLoggedOutElsewhereNotice(false);
+    try {
+      await signOut();
+    } finally {
+      resetSignedOutUiState();
     }
   };
 
@@ -613,6 +746,30 @@ function AppContent() {
       {showPasswordReset && (
         <PasswordResetModal onSubmit={handlePasswordReset} onLogout={handleLogout} />
       )}
+      <ConfirmDialog
+        open={Boolean(pendingSessionTakeover)}
+        title="Account logged in on another device"
+        message="Account logged in on another device. Sign out the other device?"
+        confirmLabel="Yes, log me in"
+        cancelLabel="No, go back"
+        errorMessage={pendingSessionTakeoverError}
+        isLoading={pendingSessionTakeoverLoading}
+        onConfirm={() => {
+          void handleConfirmPendingSessionTakeover();
+        }}
+        onCancel={() => {
+          void handleCancelPendingSessionTakeover();
+        }}
+      />
+      <ConfirmDialog
+        open={showLoggedOutElsewhereNotice}
+        title="Account logged in elsewhere"
+        message="Account logged in elsewhere."
+        confirmLabel="OK"
+        hideCancel
+        onConfirm={() => setShowLoggedOutElsewhereNotice(false)}
+        onCancel={() => setShowLoggedOutElsewhereNotice(false)}
+      />
       <AdminPinModal
         isOpen={adminPanelPinPrompt.isOpen}
         pin={adminPanelPin}
