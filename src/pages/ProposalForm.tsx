@@ -1854,7 +1854,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               proposal={proposal}
               pricing={currentCostBreakdown.pricing}
               showWarranty
-              showZoomControl={canViewCostBreakdown}
+              showZoomControl={false}
+              initialZoomScale={0.9}
               allowRetailAdjustments
               editableWarranty
               onRetailAdjustmentsChange={(adjustments) => updateProposal('retailAdjustments', adjustments)}

@@ -11,6 +11,7 @@ interface Props {
   pricing?: PricingCalculations;
   showWarranty?: boolean;
   showZoomControl?: boolean;
+  initialZoomScale?: number;
   exportLayout?: boolean;
   allowRetailAdjustments?: boolean;
   onRetailAdjustmentsChange?: (adjustments: RetailAdjustment[]) => void;
@@ -47,6 +48,7 @@ function CostBreakdownView({
   pricing,
   showWarranty = true,
   showZoomControl = true,
+  initialZoomScale = showZoomControl ? 0.75 : 1,
   exportLayout = false,
   allowRetailAdjustments = false,
   onRetailAdjustmentsChange,
@@ -54,7 +56,9 @@ function CostBreakdownView({
   onWarrantySectionsChange,
 }: Props) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
-  const [zoomLevel, setZoomLevel] = useState(showZoomControl ? 0.5 : 1); // Start at 50% (0.5 scale) when slider is shown
+  const normalizedInitialZoomScale = Math.min(Math.max(initialZoomScale, 0.5), 1);
+  const initialZoomLevel = (normalizedInitialZoomScale - 0.5) / 0.5;
+  const [zoomLevel, setZoomLevel] = useState(showZoomControl ? initialZoomLevel : 1);
   const retailAdjustments = useMemo(
     () => normalizeRetailAdjustments(proposal?.retailAdjustments),
     [proposal?.retailAdjustments]
@@ -385,7 +389,7 @@ function CostBreakdownView({
   void expandAll;
   void collapseAll;
 
-  const scaleValue = showZoomControl ? 0.5 + (zoomLevel * 0.5) : 1; // Maps 0-1 slider to 0.5-1.0 scale
+  const scaleValue = showZoomControl ? 0.5 + (zoomLevel * 0.5) : normalizedInitialZoomScale;
   const scaleStyle = {
     transform: `scale(${scaleValue})`,
     transformOrigin: 'top center',
