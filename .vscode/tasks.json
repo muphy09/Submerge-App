@@ -34,7 +34,82 @@
       "detail": "Builds a Windows installer EXE for Submerge Proposal Builder in the 'portable builds' folder. Close any running Submerge/Electron app instances first."
     },
     {
-      "label": "Release Patch x.x.0",
+      "label": "_release:version:patch",
+      "type": "shell",
+      "command": "npm version patch",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "hide": true
+    },
+    {
+      "label": "_release:version:minor",
+      "type": "shell",
+      "command": "npm version minor",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "hide": true
+    },
+    {
+      "label": "_release:version:major",
+      "type": "shell",
+      "command": "npm version major",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "hide": true
+    },
+    {
+      "label": "_release:git:push",
+      "type": "shell",
+      "command": "git push",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "hide": true
+    },
+    {
+      "label": "_release:git:push-tags",
+      "type": "shell",
+      "command": "git push --tags",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false
+      },
+      "problemMatcher": [],
+      "hide": true
+    },
+    {
+      "label": "Release Patch",
       "dependsOrder": "sequence",
       "dependsOn": [
         "_release:version:patch",
@@ -48,10 +123,10 @@
       },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Increments patch version (1.0.9 → 1.0.10) and pushes tag to GitHub. GitHub Actions will automatically build Windows NSIS installer and Mac DMG, then publish to Releases."
+      "detail": "Increments the patch version (1.0.9 -> 1.0.10), pushes the release commit, and pushes the vX.Y.Z tag so GitHub Actions can publish the release."
     },
     {
-      "label": "Release Minor x.0.x",
+      "label": "Release Minor",
       "dependsOrder": "sequence",
       "dependsOn": [
         "_release:version:minor",
@@ -65,10 +140,10 @@
       },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Increments minor version (1.0.9 → 1.1.0) and pushes tag to GitHub. GitHub Actions will automatically build Windows NSIS installer and Mac DMG, then publish to Releases."
+      "detail": "Increments the minor version (1.0.9 -> 1.1.0), pushes the release commit, and pushes the vX.Y.Z tag so GitHub Actions can publish the release."
     },
     {
-      "label": "Release Major 0.x.x",
+      "label": "Release Major",
       "dependsOrder": "sequence",
       "dependsOn": [
         "_release:version:major",
@@ -82,7 +157,46 @@
       },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Increments major version (1.0.9 → 2.0.0) and pushes tag to GitHub. GitHub Actions will automatically build Windows NSIS installer and Mac DMG, then publish to Releases."
+      "detail": "Increments the major version (1.0.9 -> 2.0.0), pushes the release commit, and pushes the vX.Y.Z tag so GitHub Actions can publish the release."
+    },
+    {
+      "label": "Release Patch x.x.0",
+      "dependsOn": [
+        "Release Patch"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "hide": true
+    },
+    {
+      "label": "Release Minor x.0.x",
+      "dependsOn": [
+        "Release Minor"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "hide": true
+    },
+    {
+      "label": "Release Major 0.x.x",
+      "dependsOn": [
+        "Release Major"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "hide": true
     }
   ]
 }
