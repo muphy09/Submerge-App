@@ -1,3 +1,7 @@
+## [2.1.2] - 4/1/26
+### Improvements
+- Feedback Button Tutorial (1st time only)
+-----
 ## [2.1.1] - 3/31/26
 ### Security Changes
 - Only 1 logged in session per user can be active at a time
