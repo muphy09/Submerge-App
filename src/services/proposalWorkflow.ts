@@ -1153,9 +1153,9 @@ export function submitProposalForWorkflow(
     }
 
     return setVersionWorkflowState(entry, 'draft', {
-      locked: Boolean(currentApprovedVersionId && entry.versionLocked),
-      submittedAt: currentApprovedVersionId && entry.versionLocked ? entry.versionSubmittedAt || null : null,
-      submittedBy: currentApprovedVersionId && entry.versionLocked ? entry.versionSubmittedBy || null : null,
+      locked: false,
+      submittedAt: null,
+      submittedBy: null,
     });
   });
 

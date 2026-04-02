@@ -27,7 +27,7 @@
         - Shotcrete cost is forced to 0
         - Tile cost is forced to 0
         - Interior Finish cost is forced to 0
-        - Tile Coping adds Concrete Band (Fiber pool count * perimeter * 1.25)
+        - Coping adds Concrete Band Cost (Fiber pool count * perimeter * 1.25)
 -----
 ## [2.1.3] - 4/1/26
 ### Improvements
