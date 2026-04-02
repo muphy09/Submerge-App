@@ -322,7 +322,6 @@ export function collectApprovalReasons(
     reasons.push({
       code: 'manual_review',
       label: 'Designer requested manual review',
-      detail: normalizeText(options?.message) || undefined,
     });
   }
 

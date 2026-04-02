@@ -177,6 +177,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   );
   const selectedReviewVersionId = selectedProposal ? getReviewVersionId(selectedProposal) : null;
   const selectedUnreadCount = selectedProposal ? countUnreadWorkflowEvents(selectedProposal, session?.userId) : 0;
+  const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).map((reason) =>
+    reason.code === 'manual_review'
+      ? {
+          ...reason,
+          detail: undefined,
+        }
+      : reason
+  );
 
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
     setSavingAction(successMessage);
@@ -384,16 +392,9 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 </div>
               </div>
 
-              {selectedProposal.workflow?.manualReviewMessage && (
-                <div className="workflow-note-card">
-                  <div className="workflow-note-label">Submission Note</div>
-                  <div>{selectedProposal.workflow.manualReviewMessage}</div>
-                </div>
-              )}
-
-              {(selectedProposal.workflow?.approvalReasons || []).length > 0 && (
+              {selectedWorkflowReasons.length > 0 && (
                 <div className="workflow-reasons">
-                  {(selectedProposal.workflow?.approvalReasons || []).map((reason) => (
+                  {selectedWorkflowReasons.map((reason) => (
                     <div key={`${reason.code}-${reason.label}`} className="workflow-reason-row">
                       <strong>{reason.label}</strong>
                       {reason.detail ? ` - ${reason.detail}` : ''}

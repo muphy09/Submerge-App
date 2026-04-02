@@ -56,6 +56,7 @@ import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
+  addWorkflowNote,
   ensureProposalWorkflow,
   getWorkflowStatus,
   isSubmittedVersionLocked,
@@ -209,6 +210,8 @@ function ProposalView() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
+  const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
+  const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
   const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
@@ -233,6 +236,7 @@ function ProposalView() {
     Boolean(activeEditableVersion) &&
     !isSubmittedVersionLocked(activeEditableVersion) &&
     proposalWorkflowStatus !== 'completed';
+  const canSendWorkflowMessages = Boolean(proposal?.workflow?.submittedAt) && proposalWorkflowStatus !== 'completed';
   const editDisabledReason =
     isProposalEditingRestricted
       ? 'Master accounts acting as owner can view proposals but cannot edit them.'
@@ -1039,6 +1043,59 @@ function ProposalView() {
     });
   };
 
+  const handleSendWorkflowMessage = async () => {
+    const trimmedMessage = workflowMessageDraft.trim();
+    if (!proposal || !canSendWorkflowMessages || !trimmedMessage || workflowMessageSaving) return;
+
+    setWorkflowMessageSaving(true);
+    try {
+      const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+      const normalizedVersions = all.map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versions: [],
+      }));
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const container = buildContainerFromVersions(normalizedVersions, desiredActiveId);
+      if (!container) return;
+
+      const payload = addWorkflowNote(container, trimmedMessage);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
+      const saved = await saveProposalRemote(payload);
+      const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versionId: version.versionId || 'original',
+        versionName: version.versionName || (version.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: version.isOriginalVersion,
+        activeVersionId: version.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+      const isPending = (saved as any).syncStatus === 'pending';
+
+      setVersions(updatedVersions);
+      setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
+      setProposal(activeApplied as Proposal);
+      setWorkflowMessageDraft('');
+      showToast({
+        type: 'success',
+        message: isPending ? 'Message saved locally. Will sync when back online.' : 'Message sent.',
+      });
+    } catch (error) {
+      console.error('Failed to send workflow message', error);
+      showToast({ type: 'error', message: 'Could not send message.' });
+    } finally {
+      setWorkflowMessageSaving(false);
+    }
+  };
+
   const formatCurrency = (value: number): string =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1429,9 +1486,16 @@ function ProposalView() {
     versionMap.set(vm.proposal.versionId || 'original', vm);
   });
   const workflowHistory = [...(proposal?.workflow?.history || [])].sort(
-    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
   );
-  const workflowReasons = proposal?.workflow?.approvalReasons || [];
+  const workflowReasons = (proposal?.workflow?.approvalReasons || []).map((reason) =>
+    reason.code === 'manual_review'
+      ? {
+          ...reason,
+          detail: undefined,
+        }
+      : reason
+  );
   const workflowReviewVersionLabel =
     sortedVersions.find((entry) => (entry.versionId || 'original') === (proposal?.workflow?.reviewVersionId || ''))?.versionName ||
     proposal?.versionName ||
@@ -2114,13 +2178,6 @@ function ProposalView() {
             </div>
           </div>
 
-          {proposal.workflow.manualReviewMessage && (
-            <div className="workflow-summary-note">
-              <div className="workflow-summary-note-label">Submission Note</div>
-              <div>{proposal.workflow.manualReviewMessage}</div>
-            </div>
-          )}
-
           {workflowReasons.length > 0 && (
             <div className="workflow-summary-reasons">
               {workflowReasons.map((reason) => (
@@ -2132,10 +2189,10 @@ function ProposalView() {
             </div>
           )}
 
-          {workflowHistory.length > 0 && (
+          {(workflowHistory.length > 0 || canSendWorkflowMessages) && (
             <div className="workflow-summary-history">
               <div className="workflow-summary-history-title">Workflow Activity</div>
-              {workflowHistory.slice(0, 6).map((entry) => (
+              {workflowHistory.map((entry) => (
                 <div key={entry.id} className="workflow-summary-history-item">
                   <div className="workflow-summary-history-meta">
                     <span>{formatWorkflowStatusLabel(entry.type)}</span>
@@ -2145,6 +2202,30 @@ function ProposalView() {
                   {entry.message && <div className="workflow-summary-history-message">{entry.message}</div>}
                 </div>
               ))}
+              {canSendWorkflowMessages && (
+                <div className="workflow-summary-message-composer">
+                  <textarea
+                    className="workflow-summary-message-input"
+                    value={workflowMessageDraft}
+                    onChange={(event) => setWorkflowMessageDraft(event.target.value)}
+                    placeholder="Add a message here"
+                    disabled={workflowMessageSaving || loading}
+                    rows={4}
+                  />
+                  <div className="workflow-summary-message-actions">
+                    <button
+                      type="button"
+                      className="action-button primary workflow-summary-message-button"
+                      onClick={() => {
+                        void handleSendWorkflowMessage();
+                      }}
+                      disabled={!workflowMessageDraft.trim() || workflowMessageSaving || loading}
+                    >
+                      {workflowMessageSaving ? 'Sending...' : 'Send Message'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

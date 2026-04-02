@@ -52,7 +52,7 @@ function SubmitProposalModal({
               onChange={(event) => onManualReviewRequestedChange(event.target.checked)}
               disabled={isSubmitting}
             />
-            <span>Request manual review and attach a note</span>
+            <span>Attach a note for the reviewer</span>
           </label>
 
           {manualReviewRequested && (
@@ -61,7 +61,7 @@ function SubmitProposalModal({
               <textarea
                 value={note}
                 onChange={(event) => onNoteChange(event.target.value)}
-                placeholder="Add context for the reviewer"
+                placeholder="Add context here"
                 disabled={isSubmitting}
                 rows={5}
               />
