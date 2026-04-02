@@ -249,6 +249,12 @@
   overflow-x: auto;
 }
 
+.master-ledger-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+
 .master-table {
   width: 100%;
   border-collapse: collapse;

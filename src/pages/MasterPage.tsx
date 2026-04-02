@@ -37,6 +37,8 @@ type MasterPageProps = {
   onFranchiseUpdated?: (franchise: MasterFranchise) => void;
 };
 
+const LEDGER_PAGE_SIZE = 10;
+
 const formatDateTime = (value?: string) => {
   if (!value) return 'N/A';
   const date = new Date(value);
@@ -155,6 +157,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [ledgerFranchiseFilter, setLedgerFranchiseFilter] = useState('all');
   const [hideInactiveLedgerFranchises, setHideInactiveLedgerFranchises] = useState(true);
+  const [visibleLedgerCount, setVisibleLedgerCount] = useState(LEDGER_PAGE_SIZE);
   const [selectedLedgerEvent, setSelectedLedgerEvent] = useState<LedgerEvent | null>(null);
   const [feedbackEntries, setFeedbackEntries] = useState<FeedbackEntry[]>([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -405,6 +408,13 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     return rows;
   }, [ledgerEvents, ledgerFranchiseFilter, hideInactiveLedgerFranchises, franchiseLookup]);
 
+  const visibleLedgerEvents = useMemo(
+    () => filteredLedgerEvents.slice(0, visibleLedgerCount),
+    [filteredLedgerEvents, visibleLedgerCount]
+  );
+
+  const hasMoreLedgerEvents = visibleLedgerEvents.length < filteredLedgerEvents.length;
+
   useEffect(() => {
     if (ledgerFranchiseFilter === 'all') return;
     const selectedStillExists = ledgerFranchiseOptionIds.has(ledgerFranchiseFilter);
@@ -412,6 +422,10 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
       setLedgerFranchiseFilter('all');
     }
   }, [ledgerFranchiseFilter, ledgerFranchiseOptionIds]);
+
+  useEffect(() => {
+    setVisibleLedgerCount(LEDGER_PAGE_SIZE);
+  }, [filteredLedgerEvents]);
 
   useEffect(() => {
     if (feedbackFranchiseFilter === 'all') return;
@@ -429,11 +443,21 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
 
   const ledgerCountLabel = useMemo(() => {
     if (ledgerEvents.length === 0) return '0 total';
-    if (filteredLedgerEvents.length === ledgerEvents.length) {
-      return `${ledgerEvents.length} total`;
+    if (visibleLedgerEvents.length === filteredLedgerEvents.length) {
+      if (filteredLedgerEvents.length === ledgerEvents.length) {
+        return `${ledgerEvents.length} total`;
+      }
+      return `${filteredLedgerEvents.length} of ${ledgerEvents.length} total`;
     }
-    return `${filteredLedgerEvents.length} of ${ledgerEvents.length} total`;
-  }, [filteredLedgerEvents.length, ledgerEvents.length]);
+    if (filteredLedgerEvents.length === ledgerEvents.length) {
+      return `Showing ${visibleLedgerEvents.length} of ${filteredLedgerEvents.length}`;
+    }
+    return `Showing ${visibleLedgerEvents.length} of ${filteredLedgerEvents.length} (${ledgerEvents.length} total)`;
+  }, [filteredLedgerEvents.length, ledgerEvents.length, visibleLedgerEvents.length]);
+
+  const handleShowMoreLedgerEvents = () => {
+    setVisibleLedgerCount((current) => current + LEDGER_PAGE_SIZE);
+  };
 
   const activeFeedbackStatus = showArchivedFeedback ? 'archived' : feedbackStatusView;
   const activeFeedbackCount = showArchivedFeedback
@@ -1140,56 +1164,69 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                 : 'No ledger events match the selected franchise.'}
             </div>
           ) : (
-            <div className="master-table-wrapper">
-              <table className="master-table">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Franchise Name</th>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLedgerEvents.map((event) => {
-                    const userLabel = getLedgerUserLabel(event);
-                    const userEmail = String(event.actorEmail || '').trim();
-                    return (
-                      <tr
-                        key={event.id}
-                        className="master-ledger-row"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedLedgerEvent(event)}
-                        onKeyDown={(keyboardEvent) => {
-                          if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
-                            keyboardEvent.preventDefault();
-                            setSelectedLedgerEvent(event);
-                          }
-                        }}
-                      >
-                        <td>{renderDateTimeCell(event.createdAt)}</td>
-                        <td>
-                          <div className="master-table-primary">{getLedgerFranchiseLabel(event)}</div>
-                        </td>
-                        <td>
-                          <div className="master-table-primary">{userLabel}</div>
-                          {userEmail && userEmail !== userLabel && (
-                            <div className="master-table-secondary master-table-secondary--muted">{userEmail}</div>
-                          )}
-                        </td>
-                        <td>{getLedgerRoleLabel(event)}</td>
-                        <td>
-                          <div className="master-table-primary">{event.action}</div>
-                          <div className="master-table-secondary master-table-secondary--muted">View details</div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="master-table-wrapper">
+                <table className="master-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Franchise Name</th>
+                      <th>User</th>
+                      <th>Role</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleLedgerEvents.map((event) => {
+                      const userLabel = getLedgerUserLabel(event);
+                      const userEmail = String(event.actorEmail || '').trim();
+                      return (
+                        <tr
+                          key={event.id}
+                          className="master-ledger-row"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedLedgerEvent(event)}
+                          onKeyDown={(keyboardEvent) => {
+                            if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                              keyboardEvent.preventDefault();
+                              setSelectedLedgerEvent(event);
+                            }
+                          }}
+                        >
+                          <td>{renderDateTimeCell(event.createdAt)}</td>
+                          <td>
+                            <div className="master-table-primary">{getLedgerFranchiseLabel(event)}</div>
+                          </td>
+                          <td>
+                            <div className="master-table-primary">{userLabel}</div>
+                            {userEmail && userEmail !== userLabel && (
+                              <div className="master-table-secondary master-table-secondary--muted">{userEmail}</div>
+                            )}
+                          </td>
+                          <td>{getLedgerRoleLabel(event)}</td>
+                          <td>
+                            <div className="master-table-primary">{event.action}</div>
+                            <div className="master-table-secondary master-table-secondary--muted">View details</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {hasMoreLedgerEvents && (
+                <div className="master-ledger-load-more">
+                  <button
+                    className="master-primary-btn master-small-btn"
+                    type="button"
+                    onClick={handleShowMoreLedgerEvents}
+                  >
+                    Show 10 more
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
