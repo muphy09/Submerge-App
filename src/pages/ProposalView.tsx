@@ -514,6 +514,10 @@ function ProposalView() {
       : isSubmittedVersionLocked(activeEditableVersion)
       ? 'Submitted versions are locked. Create a new version to make changes.'
       : undefined;
+  const submitDisabledReason =
+    proposalWorkflowStatus === 'changes_requested' && isSubmittedVersionLocked(activeEditableVersion)
+      ? 'Returned proposals are locked. Build Another Version to resubmit a new Proposal.'
+      : editDisabledReason;
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
@@ -851,7 +855,7 @@ function ProposalView() {
       return;
     }
     const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
-    const defaultPrefix = getApprovedVersionId(proposal as Proposal) ? 'Proposal Addendum' : 'Version';
+    const defaultPrefix = proposalWorkflowStatus === 'approved' ? 'Proposal Addendum' : 'Version';
     setNewVersionName(`${defaultPrefix} ${count}`);
     setShowVersionNameModal(true);
   };
@@ -872,6 +876,7 @@ function ProposalView() {
         versions,
         activeVersionId,
       } as Proposal;
+      const containerWorkflowStatus = getWorkflowStatus(container);
       const approvedVersionId = getApprovedVersionId(container);
       const pendingReviewVersionId = getPendingReviewVersionId(container);
       const sourceVersionId =
@@ -879,7 +884,7 @@ function ProposalView() {
         approvedVersionId ||
         proposal.versionId ||
         activeVersionId;
-      const isAddendumDraft = Boolean(approvedVersionId);
+      const isAddendumDraft = containerWorkflowStatus === 'approved';
       const resolvedVersionName =
         explicitName && explicitName.trim()
           ? explicitName.trim()
@@ -2600,7 +2605,7 @@ function ProposalView() {
               <TooltipAnchor
                 tooltip={
                   !canEditProposal
-                    ? editDisabledReason
+                    ? submitDisabledReason
                     : !canSubmitProposal
                     ? 'Must include Customer Name'
                     : undefined
