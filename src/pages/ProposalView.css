@@ -2309,6 +2309,7 @@
 
 .workflow-summary-message-trigger {
   min-width: 160px;
+  justify-content: center;
 }
 
 @media (max-width: 1100px) {

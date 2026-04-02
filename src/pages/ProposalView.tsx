@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type MouseEventHandler, type ReactNode } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -183,6 +183,66 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
     autoFillSummary: summarizeSelectionWithQuantity(equipment.autoFillSystem?.name, autoFillQuantity, 'no auto'),
     poolLightSummary: summarizePoolLightSelection(equipment.poolLights),
   };
+};
+
+const resolveOverflowTooltipText = (children: ReactNode, tooltipText?: string): string => {
+  if (typeof tooltipText === 'string') {
+    return tooltipText.trim();
+  }
+
+  if (typeof children === 'string' || typeof children === 'number') {
+    return String(children).trim();
+  }
+
+  return '';
+};
+
+const setOverflowTooltip: MouseEventHandler<HTMLElement> = (event) => {
+  const target = event.currentTarget;
+  const isOverflowing = target.scrollWidth > target.clientWidth || target.scrollHeight > target.clientHeight;
+
+  if (!isOverflowing) {
+    target.removeAttribute('title');
+    return;
+  }
+
+  const fullText = target.dataset.fullText?.trim() || target.textContent?.trim() || '';
+  if (fullText) {
+    target.title = fullText;
+    return;
+  }
+
+  target.removeAttribute('title');
+};
+
+type OverflowTooltipTextProps = {
+  as?: 'span' | 'p';
+  className?: string;
+  children: ReactNode;
+  tooltipText?: string;
+};
+
+const OverflowTooltipText = ({
+  as = 'span',
+  className,
+  children,
+  tooltipText,
+}: OverflowTooltipTextProps) => {
+  const fullText = resolveOverflowTooltipText(children, tooltipText);
+
+  if (as === 'p') {
+    return (
+      <p className={className} data-full-text={fullText || undefined} onMouseEnter={setOverflowTooltip}>
+        {children}
+      </p>
+    );
+  }
+
+  return (
+    <span className={className} data-full-text={fullText || undefined} onMouseEnter={setOverflowTooltip}>
+      {children}
+    </span>
+  );
 };
 
 function ProposalView() {
@@ -1493,6 +1553,12 @@ function ProposalView() {
   const workflowReasons = (proposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
+  const workflowStatusTooltip =
+    proposalWorkflowStatus === 'needs_approval'
+      ? 'Proposal submitted and awaiting approval'
+      : proposal?.workflow?.approved && proposalWorkflowStatus === 'submitted'
+      ? 'Proposal was approved. Additional versions can still be made'
+      : undefined;
   const workflowReviewVersionLabel =
     sortedVersions.find((entry) => (entry.versionId || 'original') === (proposal?.workflow?.reviewVersionId || ''))?.versionName ||
     proposal?.versionName ||
@@ -1724,25 +1790,25 @@ function ProposalView() {
           <div className="tile-content-box">
             <div className="tile-metrics">
               <div className="metric-row">
-                <p className="metric-label">Retail Price:</p>
-                <p className="metric-value">{formatCurrency(vm.retailPriceBeforeDiscounts)}</p>
+                <OverflowTooltipText as="p" className="metric-label">Retail Price:</OverflowTooltipText>
+                <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.retailPriceBeforeDiscounts)}</OverflowTooltipText>
               </div>
               <div className="metric-divider"></div>
               <div className="metric-row">
-                <p className="metric-label">Retail Sale Price:</p>
-                <p className="metric-value">{formatCurrency(vm.retailSalePrice)}</p>
+                <OverflowTooltipText as="p" className="metric-label">Retail Sale Price:</OverflowTooltipText>
+                <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.retailSalePrice)}</OverflowTooltipText>
               </div>
               <div className="metric-divider"></div>
               <div className="metric-row">
-                <p className="metric-label">Total Savings:</p>
-                <p className="metric-value">{formatCurrency(vm.totalSavings)}</p>
+                <OverflowTooltipText as="p" className="metric-label">Total Savings:</OverflowTooltipText>
+                <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.totalSavings)}</OverflowTooltipText>
               </div>
               <div className="metric-divider"></div>
               <div className="metric-row">
-                <p className="metric-label">Total Savings %:</p>
-                <p className="metric-value">
+                <OverflowTooltipText as="p" className="metric-label">Total Savings %:</OverflowTooltipText>
+                <OverflowTooltipText as="p" className="metric-value">
                   {Number.isFinite(vm.totalSavingsPercent) ? `${vm.totalSavingsPercent.toFixed(1)}%` : 'N/A'}
-                </p>
+                </OverflowTooltipText>
               </div>
             </div>
           </div>
@@ -1767,25 +1833,25 @@ function ProposalView() {
             <div className="tile-content-box">
               <div className="tile-metrics">
                 <div className="metric-row">
-                  <p className="metric-label">Dig Commission:</p>
-                  <p className="metric-value">{formatCurrency(vm.pricing?.digCommission ?? 0)}</p>
+                  <OverflowTooltipText as="p" className="metric-label">Dig Commission:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.pricing?.digCommission ?? 0)}</OverflowTooltipText>
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Admin Fee:</p>
-                  <p className="metric-value">{formatCurrency(vm.pricing?.adminFee ?? 0)}</p>
+                  <OverflowTooltipText as="p" className="metric-label">Admin Fee:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.pricing?.adminFee ?? 0)}</OverflowTooltipText>
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Closeout Commission:</p>
-                  <p className="metric-value">{formatCurrency(vm.pricing?.closeoutCommission ?? 0)}</p>
+                  <OverflowTooltipText as="p" className="metric-label">Closeout Commission:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.pricing?.closeoutCommission ?? 0)}</OverflowTooltipText>
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Gross Profit:</p>
-                  <p className="metric-value">
+                  <OverflowTooltipText as="p" className="metric-label">Gross Profit:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">
                     {formatCurrency(vm.pricing?.grossProfit ?? 0)} ({Number.isFinite(vm.grossMargin) ? `${vm.grossMargin.toFixed(1)}%` : 'N/A'})
-                  </p>
+                  </OverflowTooltipText>
                 </div>
               </div>
             </div>
@@ -1819,18 +1885,18 @@ function ProposalView() {
             <div className="tile-content-box">
               <div className="tile-metrics">
                 <div className="metric-row">
-                  <p className="metric-label">Categories:</p>
-                  <p className="metric-value">{vm.offContractItemGroups.length}</p>
+                  <OverflowTooltipText as="p" className="metric-label">Categories:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">{vm.offContractItemGroups.length}</OverflowTooltipText>
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Items:</p>
-                  <p className="metric-value">{vm.offContractItemCount}</p>
+                  <OverflowTooltipText as="p" className="metric-label">Items:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">{vm.offContractItemCount}</OverflowTooltipText>
                 </div>
                 <div className="metric-divider"></div>
                 <div className="metric-row">
-                  <p className="metric-label">Off Contract Total:</p>
-                  <p className="metric-value">{formatCurrency(vm.offContractTotal)}</p>
+                  <OverflowTooltipText as="p" className="metric-label">Off Contract Total:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.offContractTotal)}</OverflowTooltipText>
                 </div>
               </div>
             </div>
@@ -1859,18 +1925,18 @@ function ProposalView() {
           <div className="tile-content-box">
             <div className="tile-metrics">
               <div className="metric-row">
-                <p className="metric-label">Retail Price:</p>
-                <p className="metric-value">{formatCurrency(vm.pricing?.retailPrice ?? vm.retailPriceBeforeDiscounts)}</p>
+                <OverflowTooltipText as="p" className="metric-label">Retail Price:</OverflowTooltipText>
+                <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.pricing?.retailPrice ?? vm.retailPriceBeforeDiscounts)}</OverflowTooltipText>
               </div>
               <div className="metric-divider"></div>
               <div className="metric-row">
-                <p className="metric-label">Pool Type:</p>
-                <p className="metric-value">{vm.poolTypeLabel}</p>
+                <OverflowTooltipText as="p" className="metric-label">Pool Type:</OverflowTooltipText>
+                <OverflowTooltipText as="p" className="metric-value">{vm.poolTypeLabel}</OverflowTooltipText>
               </div>
               <div className="metric-divider"></div>
               <div className="metric-row">
-                <p className="metric-label">Contract Type:</p>
-                <p className="metric-value">{contractTypeLabel}</p>
+                <OverflowTooltipText as="p" className="metric-label">Contract Type:</OverflowTooltipText>
+                <OverflowTooltipText as="p" className="metric-value">{contractTypeLabel}</OverflowTooltipText>
               </div>
             </div>
           </div>
@@ -1984,73 +2050,73 @@ function ProposalView() {
             <div className="hero-column">
               <div className="hero-line">
                 <span className="hero-label">Pool Type:</span>
-                <span>{vm.poolTypeLabel}</span>
+                <OverflowTooltipText>{vm.poolTypeLabel}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Max Width:</span>
-                <span>{vm.maxWidth}</span>
+                <OverflowTooltipText>{vm.maxWidth}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Shallow Depth:</span>
-                <span>{vm.shallowDepth}</span>
+                <OverflowTooltipText>{vm.shallowDepth}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Spa Length:</span>
-                <span>{vm.spaLength}</span>
+                <OverflowTooltipText>{vm.spaLength}</OverflowTooltipText>
               </div>
             </div>
             <div className="hero-column">
               <div className="hero-line">
                 <span className="hero-label">Approx. Gallons:</span>
-                <span>{vm.approximateGallons}</span>
+                <OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Max Length:</span>
-                <span>{vm.maxLength}</span>
+                <OverflowTooltipText>{vm.maxLength}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">End Depth:</span>
-                <span>{vm.endDepth}</span>
+                <OverflowTooltipText>{vm.endDepth}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Spa Width:</span>
-                <span>{vm.spaWidth}</span>
+                <OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText>
               </div>
             </div>
             <div className="hero-column">
               <div className="hero-line">
                 <span className="hero-label">Pump:</span>
-                <span>{vm.pumpSummary}</span>
+                <OverflowTooltipText>{vm.pumpSummary}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Filter:</span>
-                <span>{vm.filterSummary}</span>
+                <OverflowTooltipText>{vm.filterSummary}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Heater:</span>
-                <span>{vm.heaterSummary}</span>
+                <OverflowTooltipText>{vm.heaterSummary}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Cleaner:</span>
-                <span>{vm.cleanerSummary}</span>
+                <OverflowTooltipText>{vm.cleanerSummary}</OverflowTooltipText>
               </div>
             </div>
             <div className="hero-column">
               <div className="hero-line">
                 <span className="hero-label">Automation:</span>
-                <span>{vm.automationSummary}</span>
+                <OverflowTooltipText>{vm.automationSummary}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Sanitation:</span>
-                <span>{vm.sanitationSummary}</span>
+                <OverflowTooltipText>{vm.sanitationSummary}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Autofill:</span>
-                <span>{vm.autoFillSummary}</span>
+                <OverflowTooltipText>{vm.autoFillSummary}</OverflowTooltipText>
               </div>
               <div className="hero-line">
                 <span className="hero-label">Pool Light:</span>
-                <span>{vm.poolLightSummary}</span>
+                <OverflowTooltipText>{vm.poolLightSummary}</OverflowTooltipText>
               </div>
             </div>
           </div>
@@ -2125,7 +2191,10 @@ function ProposalView() {
           <div className="workflow-summary-header">
             <div className="workflow-summary-heading">
               <p className="workflow-summary-kicker">Submission Workflow</p>
-              <div className={`workflow-summary-pill is-${proposalWorkflowStatus}`}>
+              <div
+                className={`workflow-summary-pill is-${proposalWorkflowStatus}`}
+                title={workflowStatusTooltip}
+              >
                 {formatWorkflowStatusLabel(proposalWorkflowStatus)}
                 {proposal.workflow.approved ? ' *' : ''}
               </div>
