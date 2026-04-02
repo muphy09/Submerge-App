@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouse
 import HomePage from './pages/HomePage';
 import ProposalForm from './pages/ProposalForm';
 import ProposalView from './pages/ProposalView';
+import WorkflowPage from './pages/WorkflowPage';
 import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
@@ -75,6 +76,8 @@ import { hasSeenFeedbackTutorial, markFeedbackTutorialSeen } from './services/fe
 import FeedbackLauncher from './components/FeedbackLauncher';
 import FeedbackTutorialOverlay, { type FeedbackTutorialTargetRect } from './components/FeedbackTutorialOverlay';
 import FeedbackSubmissionModal from './components/FeedbackSubmissionModal';
+import { listProposals } from './services/proposalsAdapter';
+import { countUnreadWorkflowEvents } from './services/proposalWorkflow';
 import './App.css';
 
 type PendingSessionTakeover = {
@@ -136,6 +139,7 @@ function AppContent() {
   const [feedbackInboxOpen, setFeedbackInboxOpen] = useState(false);
   const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
   const [feedbackLauncherRect, setFeedbackLauncherRect] = useState<FeedbackTutorialTargetRect | null>(null);
+  const [workflowUnreadCount, setWorkflowUnreadCount] = useState(0);
   const forcingRemoteLogoutRef = useRef(false);
   const expectedLocalSignOutRef = useRef(false);
   const expectedLocalSignOutTimeoutRef = useRef<number | null>(null);
@@ -328,6 +332,9 @@ function AppContent() {
   })();
   const effectiveRole = (effectiveSession?.role || '').toLowerCase();
   const isAdmin = effectiveRole === 'admin' || effectiveRole === 'owner';
+  const canAccessWorkflow =
+    Boolean(effectiveSession?.franchiseId) &&
+    (effectiveRole === 'owner' || effectiveRole === 'admin' || effectiveRole === 'bookkeeper');
   const isMasterActingAsOwner =
     isMaster &&
     Boolean(masterImpersonation?.franchiseId) &&
@@ -353,6 +360,46 @@ function AppContent() {
       void loadPricingForFranchise(effectiveSession.franchiseId);
     }
   }, [effectiveSession?.franchiseId, loadPricingForFranchise]);
+
+  useEffect(() => {
+    if (!canAccessWorkflow || !effectiveSession?.franchiseId || !effectiveSession?.userId) {
+      setWorkflowUnreadCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadWorkflowUnreadCount = async () => {
+      try {
+        const proposals = await listProposals(effectiveSession.franchiseId);
+        if (cancelled) return;
+        const nextCount = proposals.reduce(
+          (sum, proposal) => sum + countUnreadWorkflowEvents(proposal, effectiveSession.userId),
+          0
+        );
+        setWorkflowUnreadCount(nextCount);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Unable to load workflow unread count:', error);
+        }
+      }
+    };
+
+    void loadWorkflowUnreadCount();
+    const intervalId = window.setInterval(() => {
+      void loadWorkflowUnreadCount();
+    }, 30000);
+    const handleOnline = () => {
+      void loadWorkflowUnreadCount();
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [canAccessWorkflow, effectiveSession?.franchiseId, effectiveSession?.userId]);
 
   useEffect(() => {
     document.title = `${displayName} Proposal Builder`;
@@ -919,6 +966,8 @@ function AppContent() {
           isAdmin={isAdmin}
           isMaster={isMaster}
           franchiseId={effectiveSession?.franchiseId}
+          showWorkflowTab={canAccessWorkflow}
+          workflowUnreadCount={workflowUnreadCount}
           onAdminPanelClick={handleAdminPanelTabClick}
         />
       )}
@@ -949,6 +998,8 @@ function AppContent() {
           path="/admin/pricing"
           element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
         />
+        <Route path="/workflow" element={<WorkflowPage session={effectiveSession} />} />
+        <Route path="/workflow/:proposalNumber" element={<WorkflowPage session={effectiveSession} />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route
           path="/master"

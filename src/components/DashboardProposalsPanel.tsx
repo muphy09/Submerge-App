@@ -77,6 +77,12 @@ function getStatusBadgeClass(status: string) {
   switch (String(status || '').toLowerCase()) {
     case 'submitted':
       return 'dashboard-status-pill is-submitted';
+    case 'needs_approval':
+      return 'dashboard-status-pill is-needs-approval';
+    case 'changes_requested':
+      return 'dashboard-status-pill is-changes-requested';
+    case 'completed':
+      return 'dashboard-status-pill is-completed';
     case 'approved':
       return 'dashboard-status-pill is-approved';
     case 'rejected':
@@ -94,7 +100,7 @@ function getStatusBadgeClass(status: string) {
 function formatStatusLabel(status?: string | null) {
   const normalized = String(status || '').trim().toLowerCase();
   if (!normalized) return 'Draft';
-  return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
+  return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function getPricingModelSourceFranchiseId(proposal: Proposal) {
@@ -509,6 +515,7 @@ function DashboardProposalsPanel({
                           <td>
                             <span className={getStatusBadgeClass(proposal.status)}>
                               {formatStatusLabel(proposal.status)}
+                              {proposal.workflow?.approved ? '*' : ''}
                             </span>
                           </td>
                           <td>

@@ -1,4 +1,17 @@
-## [2.1.2] - 4/1/26
+## [2.2.0] - 4/1/26
+### What's New
+- Proposal Submission Workflow
+    - Submitting a proposal now locks the original proposal from edits, and can be viewed by an Admin or Book Keeper
+    - Additional versions of the original proposal can still be created and submitted
+        - Submitting a new version of a proposal will replace the original 
+
+
+
+- New 'Book Keeper' Role
+    - Book Keeper role has the ability to see and review submitted proposals
+    - Book Keeper 
+-----
+## [2.1.3] - 4/1/26
 ### Improvements
 - Feedback Button Tutorial (1st time only)
 -----

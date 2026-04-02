@@ -19,11 +19,14 @@ export type MasterUser = UserCommissionRates & {
   franchiseId?: string | null;
   email: string;
   name?: string | null;
-  role: 'master' | 'owner' | 'admin' | 'designer';
+  role: 'master' | 'owner' | 'admin' | 'bookkeeper' | 'designer';
   isActive: boolean;
   passwordResetRequired?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  approvalMarginThresholdPercent?: number;
+  discountAllowanceThresholdPercent?: number;
+  alwaysRequireApproval?: boolean;
 };
 
 export type MasterPricingModel = {
@@ -109,7 +112,7 @@ export async function listAllFranchiseUsers(): Promise<MasterUser[]> {
   const { data, error } = await supabase
     .from('franchise_users')
     .select(
-      'id,franchise_id,email,name,role,is_active,password_reset_required,created_at,updated_at,dig_commission_rate,closeout_commission_rate'
+      'id,franchise_id,email,name,role,is_active,password_reset_required,created_at,updated_at,dig_commission_rate,closeout_commission_rate,approval_margin_threshold_percent,discount_allowance_threshold_percent,always_require_approval'
     )
     .order('name', { ascending: true });
   if (error) throw error;
@@ -123,6 +126,13 @@ export async function listAllFranchiseUsers(): Promise<MasterUser[]> {
     passwordResetRequired: Boolean(row.password_reset_required),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    approvalMarginThresholdPercent: Number.isFinite(Number(row.approval_margin_threshold_percent))
+      ? Number(row.approval_margin_threshold_percent)
+      : 18,
+    discountAllowanceThresholdPercent: Number.isFinite(Number(row.discount_allowance_threshold_percent))
+      ? Number(row.discount_allowance_threshold_percent)
+      : 18,
+    alwaysRequireApproval: row.always_require_approval === true,
     ...normalizeUserCommissionRates({
       digCommissionRate: row.dig_commission_rate,
       closeoutCommissionRate: row.closeout_commission_rate,

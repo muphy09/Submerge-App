@@ -69,12 +69,14 @@ export const applyActiveVersion = (proposal: Proposal): Proposal => {
 
   const mergedActive: Proposal = {
     ...active,
+    status: proposal.status || active.status || 'draft',
     versionId: active.versionId || targetId || ORIGINAL_VERSION_ID,
     versionName:
       active.versionName ||
       (active.isOriginalVersion ? 'Original Version' : 'Version'),
     activeVersionId: targetId || active.versionId || ORIGINAL_VERSION_ID,
     versions: otherVersions,
+    workflow: proposal.workflow || active.workflow,
   };
 
   // Preserve sync status/message from the container if the active version lacks it
@@ -114,6 +116,10 @@ export const createVersionFromProposal = (
     versionName: explicitName || nextVersionName(normalized),
     isOriginalVersion: false,
     status: 'draft',
+    versionLocked: false,
+    versionLockedAt: null,
+    versionSubmittedAt: null,
+    versionSubmittedBy: null,
   });
 
   const activeVersionId = normalized.activeVersionId || normalized.versionId || ORIGINAL_VERSION_ID;

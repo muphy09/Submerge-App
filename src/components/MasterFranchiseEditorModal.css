@@ -108,7 +108,8 @@
   font-weight: 700;
 }
 
-.master-editor-field input {
+.master-editor-field input,
+.master-editor-field select {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
@@ -118,7 +119,8 @@
   color: #0f2a4f;
 }
 
-.master-editor-field input:focus {
+.master-editor-field input:focus,
+.master-editor-field select:focus {
   outline: none;
   border-color: #1e88e5;
   box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.14);
@@ -126,7 +128,7 @@
 
 .master-editor-add-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 180px) auto;
   gap: 12px;
   align-items: end;
   padding: 14px;
@@ -162,6 +164,11 @@
   background: #fffdf3;
 }
 
+.master-editor-user-row.role-bookkeeper {
+  border-color: #bfdbfe;
+  background: #f5f9ff;
+}
+
 .master-editor-user-row.role-designer {
   border-color: #bbf7d0;
   background: #f4fff8;
@@ -182,6 +189,35 @@
   color: #60738a;
   font-size: 0.9rem;
   word-break: break-word;
+}
+
+.master-editor-user-transfer {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.master-editor-user-transfer-note {
+  color: #60738a;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.master-editor-user-transfer select {
+  width: 100%;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #c9d7e3;
+  background: #ffffff;
+  font-size: 0.95rem;
+  color: #0f2a4f;
+}
+
+.master-editor-user-transfer select:focus {
+  outline: none;
+  border-color: #1e88e5;
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.14);
 }
 
 .master-editor-user-actions {

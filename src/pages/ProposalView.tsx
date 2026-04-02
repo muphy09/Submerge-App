@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CostLineItem, Proposal, RetailAdjustment } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import { BreakdownCostExportPage, BreakdownWarrantyExportPages } from '../components/BreakdownExportPages';
@@ -10,6 +10,7 @@ import FranchiseLogo from '../components/FranchiseLogo';
 import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
 import RetiredEquipmentIndicator from '../components/RetiredEquipmentIndicator';
+import SubmitProposalModal from '../components/SubmitProposalModal';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
@@ -21,7 +22,7 @@ import {
   loadPricingSnapshotForFranchise,
   withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
-import { getSessionRole } from '../services/session';
+import { getSessionRole, readSession } from '../services/session';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 import {
   getDefaultProposal,
@@ -54,6 +55,13 @@ import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
+import {
+  ensureProposalWorkflow,
+  getWorkflowStatus,
+  isSubmittedVersionLocked,
+  markWorkflowRead,
+  submitProposalForWorkflow,
+} from '../services/proposalWorkflow';
 
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
@@ -178,6 +186,7 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
 
 function ProposalView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { proposalNumber } = useParams();
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [versions, setVersions] = useState<Proposal[]>([]);
@@ -197,6 +206,9 @@ function ProposalView() {
   const [contractSaving, setContractSaving] = useState(false);
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
+  const [submitNote, setSubmitNote] = useState('');
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
   const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
@@ -207,11 +219,24 @@ function ProposalView() {
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
   const canViewFullSummary =
-    sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
+    sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'bookkeeper';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
   const canViewCogsBreakdown = canViewFullSummary && !hideCogsFromProposalBuilder;
-  const canEditProposal = true;
-  const editDisabledReason = undefined;
+  const activeEditableVersion =
+    (versions.length
+      ? versions.find((entry) => (entry.versionId || 'original') === activeVersionId)
+      : proposal) || proposal;
+  const proposalWorkflowStatus = getWorkflowStatus(proposal);
+  const canEditProposal =
+    Boolean(activeEditableVersion) &&
+    !isSubmittedVersionLocked(activeEditableVersion) &&
+    proposalWorkflowStatus !== 'completed';
+  const editDisabledReason =
+    proposalWorkflowStatus === 'completed'
+      ? 'Completed proposals are locked.'
+      : isSubmittedVersionLocked(activeEditableVersion)
+      ? 'Submitted versions are locked. Create a new version to make changes.'
+      : undefined;
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
@@ -261,7 +286,17 @@ function ProposalView() {
         navigate('/', { replace: true });
         return;
       }
-      const sourceProposal = JSON.parse(JSON.stringify(data)) as Proposal;
+      let sourceProposal = ensureProposalWorkflow(JSON.parse(JSON.stringify(data)) as Proposal);
+      const currentUserId = readSession()?.userId;
+      const readUpdated = markWorkflowRead(sourceProposal, currentUserId);
+      if (JSON.stringify(readUpdated.workflow?.history || []) !== JSON.stringify(sourceProposal.workflow?.history || [])) {
+        try {
+          sourceProposal = await saveProposalRemote(readUpdated);
+        } catch (markReadError) {
+          console.warn('Failed to persist workflow read state', markReadError);
+          sourceProposal = readUpdated;
+        }
+      }
       const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
       const mergeWithPricingSnapshot = async (input: Partial<Proposal>): Promise<Partial<Proposal>> => {
         const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || 'default';
@@ -280,7 +315,7 @@ function ProposalView() {
         return withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(input));
       };
 
-      const activeApplied = applyActiveVersion(sourceProposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(sourceProposal));
       const allVersions = (
         await Promise.all(
           listAllVersions(sourceProposal).map(async (v) => ({
@@ -293,7 +328,8 @@ function ProposalView() {
           }))
         )
       ) as Proposal[];
-      const activeId = activeApplied.activeVersionId || activeApplied.versionId || 'original';
+      const requestedVersionId = (location.state as any)?.versionId as string | undefined;
+      const activeId = requestedVersionId || activeApplied.activeVersionId || activeApplied.versionId || 'original';
       const activeVersion =
         allVersions.find((v) => v.versionId === activeId) ||
         ((await mergeWithPricingSnapshot(activeApplied)) as Proposal);
@@ -306,7 +342,7 @@ function ProposalView() {
 
       setVersions(allVersions);
       setActiveVersionId(activeId);
-      setProposal({ ...(activeVersion as Proposal) });
+      setProposal(ensureProposalWorkflow({ ...(activeVersion as Proposal), workflow: sourceProposal.workflow, status: sourceProposal.status }));
     } catch (error) {
       console.error('Failed to load proposal:', error);
     } finally {
@@ -318,7 +354,7 @@ function ProposalView() {
     if (proposalNumber) {
       loadProposal(proposalNumber);
     }
-  }, [navigate, proposalNumber, showToast]);
+  }, [location.state, navigate, proposalNumber, showToast]);
 
   useEffect(() => {
     if (!breakdownExportOpen) return;
@@ -370,8 +406,32 @@ function ProposalView() {
     };
   }, []);
 
+  const buildContainerFromVersions = (
+    nextVersions: Proposal[],
+    desiredActiveId?: string,
+    statusOverride?: Proposal['status']
+  ): Proposal | null => {
+    if (!proposal) return null;
+    const resolvedActiveId =
+      desiredActiveId || activeVersionId || proposal.activeVersionId || proposal.versionId || 'original';
+    const active =
+      nextVersions.find((entry) => (entry.versionId || 'original') === resolvedActiveId) ||
+      nextVersions[0];
+    if (!active) return null;
+    const others = nextVersions.filter(
+      (entry) => (entry.versionId || 'original') !== (active.versionId || 'original')
+    );
+    return ensureProposalWorkflow({
+      ...(active as Proposal),
+      status: statusOverride || getWorkflowStatus(proposal),
+      activeVersionId: resolvedActiveId,
+      versions: others.map((entry) => ({ ...entry, versions: [] })),
+      workflow: proposal.workflow,
+    });
+  };
+
   const handleEdit = (version?: Proposal) => {
-    if (!canEditProposal) return;
+    if (!version || isSubmittedVersionLocked(version) || proposalWorkflowStatus === 'completed') return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
   };
@@ -383,15 +443,11 @@ function ProposalView() {
     if (!target) return;
 
     try {
-      const targetStatus = (target as Proposal).status || (proposal as Proposal).status || 'draft';
-      const container: Proposal = {
-        ...(target as Proposal),
-        activeVersionId: versionId,
-        status: targetStatus,
-        versions: all
-          .filter((v) => (v.versionId || 'original') !== versionId)
-          .map((v) => ({ ...v, versions: [] })),
-      };
+      const container = buildContainerFromVersions(
+        all.map((entry) => ({ ...entry, versions: [] })),
+        versionId
+      );
+      if (!container) return;
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
@@ -406,7 +462,7 @@ function ProposalView() {
         activeVersionId: v.activeVersionId,
         versions: [],
       }));
-      const activeApplied = applyActiveVersion(saved as Proposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setActiveVersionId(versionId);
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
@@ -429,17 +485,20 @@ function ProposalView() {
       showToast({ type: 'warning', message: 'The original version cannot be deleted.' });
       return;
     }
+    if (isSubmittedVersionLocked(target)) {
+      showToast({ type: 'warning', message: 'Submitted versions cannot be deleted.' });
+      return;
+    }
 
     const remaining = all.filter((v) => (v.versionId || 'original') !== versionId);
-    const nextActive =
-      remaining.find((v) => (v.versionId || 'original') === activeVersionId) || remaining[0];
+    const nextActive = remaining.find((v) => (v.versionId || 'original') === activeVersionId) || remaining[0];
 
     try {
-      const container: Proposal = {
-        ...(nextActive as Proposal),
-        activeVersionId: nextActive.versionId || 'original',
-        versions: remaining.filter((v) => (v.versionId || 'original') !== (nextActive.versionId || 'original')),
-      };
+      const container = buildContainerFromVersions(
+        remaining.map((entry) => ({ ...entry, versions: [] })),
+        nextActive.versionId || 'original'
+      );
+      if (!container) return;
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
@@ -454,7 +513,7 @@ function ProposalView() {
         activeVersionId: v.activeVersionId,
         versions: [],
       }));
-      const activeApplied = applyActiveVersion(saved as Proposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setActiveVersionId(activeApplied.activeVersionId || nextActive.versionId || 'original');
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
@@ -467,6 +526,10 @@ function ProposalView() {
 
   const handleBuildAnotherVersion = async () => {
     if (!proposal) return;
+    if (getWorkflowStatus(proposal) === 'completed') {
+      showToast({ type: 'warning', message: 'Completed proposals cannot create new versions.' });
+      return;
+    }
     const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
     setNewVersionName(`Version ${count}`);
     setShowVersionNameModal(true);
@@ -476,7 +539,7 @@ function ProposalView() {
     if (!proposal) return;
     try {
       const container = {
-        ...(proposal as Proposal),
+        ...ensureProposalWorkflow(proposal as Proposal),
         versions,
         activeVersionId,
       } as Proposal;
@@ -499,7 +562,7 @@ function ProposalView() {
         activeVersionId: v.activeVersionId,
         versions: [],
       }));
-      const activeApplied = applyActiveVersion(saved as Proposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
       setActiveVersionId(activeApplied.activeVersionId || activeVersionId);
@@ -530,18 +593,8 @@ function ProposalView() {
         (proposal as Proposal).activeVersionId ||
         (proposal as Proposal).versionId ||
         'original';
-      const active =
-        updated.find((v) => (v.versionId || 'original') === desiredActiveId) ||
-        updated[0];
-      if (!active) return;
-      const others = updated.filter(
-        (v) => (v.versionId || 'original') !== (active.versionId || 'original')
-      );
-
-      const container: Proposal = {
-        ...(active as Proposal),
-        versions: others,
-      };
+      const container = buildContainerFromVersions(updated, desiredActiveId);
+      if (!container) return;
 
       await initPricingDataStore(
         container.franchiseId,
@@ -557,7 +610,7 @@ function ProposalView() {
         activeVersionId: v.activeVersionId,
         versions: [],
       }));
-      const activeApplied = applyActiveVersion(saved as Proposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
       setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
@@ -602,14 +655,8 @@ function ProposalView() {
         normalizedVersions.find((v) => (v.versionId || 'original') === desiredActiveId) ||
         normalizedVersions[0];
       if (!active) return;
-      const others = normalizedVersions.filter(
-        (v) => (v.versionId || 'original') !== (active.versionId || 'original')
-      );
-      const container: Proposal = {
-        ...(active as Proposal),
-        activeVersionId: desiredActiveId,
-        versions: others,
-      };
+      const container = buildContainerFromVersions(normalizedVersions, desiredActiveId);
+      if (!container) return;
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
@@ -624,7 +671,7 @@ function ProposalView() {
         activeVersionId: v.activeVersionId,
         versions: [],
       }));
-      const activeApplied = applyActiveVersion(saved as Proposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setVersions(updated);
       setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
       setProposal(activeApplied as Proposal);
@@ -650,14 +697,8 @@ function ProposalView() {
         normalizedVersions.find((version) => (version.versionId || 'original') === desiredActiveId) ||
         normalizedVersions[0];
       if (!active) return;
-      const others = normalizedVersions.filter(
-        (version) => (version.versionId || 'original') !== (active.versionId || 'original')
-      );
-      const container: Proposal = {
-        ...(active as Proposal),
-        activeVersionId: desiredActiveId,
-        versions: others,
-      };
+      const container = buildContainerFromVersions(normalizedVersions, desiredActiveId);
+      if (!container) return;
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
@@ -672,7 +713,7 @@ function ProposalView() {
         activeVersionId: version.activeVersionId,
         versions: [],
       }));
-      const activeApplied = applyActiveVersion(saved as Proposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setVersions(updated);
       setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
       setProposal(activeApplied as Proposal);
@@ -879,7 +920,10 @@ function ProposalView() {
     void contractViewRef.current.exportPdf();
   };
 
-  const persistStatusChange = async (nextStatus: 'draft' | 'submitted') => {
+  const persistStatusChange = async (
+    nextStatus: 'draft' | 'submitted',
+    submissionRequest?: { manualReviewRequested: boolean; note: string }
+  ) => {
     if (!proposal) return;
     try {
       const all = versions.length ? versions : listAllVersions(proposal as Proposal);
@@ -897,23 +941,26 @@ function ProposalView() {
         normalizedVersions[0];
       if (!active) return;
 
-      const others = normalizedVersions.filter(
-        (v) => (v.versionId || 'original') !== (active.versionId || 'original')
+      const container = buildContainerFromVersions(
+        normalizedVersions,
+        active.versionId || 'original',
+        nextStatus === 'draft' ? 'draft' : getWorkflowStatus(proposal)
       );
-
-      const container: Proposal = {
-        ...(active as Proposal),
-        status: nextStatus,
-        activeVersionId: active.versionId || 'original',
-        versions: others,
-      };
+      if (!container) return;
+      const payload =
+        nextStatus === 'submitted'
+          ? submitProposalForWorkflow(container, active.versionId || 'original', {
+              manualReviewRequested: submissionRequest?.manualReviewRequested,
+              message: submissionRequest?.note,
+            })
+          : container;
 
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined
       );
-      const saved = await saveProposalRemote(container);
+      const saved = await saveProposalRemote(payload);
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
         versionId: v.versionId || 'original',
@@ -922,17 +969,20 @@ function ProposalView() {
         activeVersionId: v.activeVersionId,
         versions: [],
       }));
-      const activeApplied = applyActiveVersion(saved as Proposal);
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       const isPending = (saved as any).syncStatus === 'pending';
       setVersions(updatedVersions);
       setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
       setProposal(activeApplied as Proposal);
+      const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
       showToast({
         type: isPending ? 'warning' : 'success',
         message:
           nextStatus === 'submitted'
             ? isPending
               ? 'Saved locally. Will submit when back online.'
+              : savedWorkflowStatus === 'needs_approval'
+              ? 'Proposal submitted for approval.'
               : 'Proposal submitted successfully.'
             : isPending
             ? 'Saved locally. Will sync when back online.'
@@ -946,6 +996,13 @@ function ProposalView() {
 
   const handleSaveAsDraft = async () => {
     await persistStatusChange('draft');
+  };
+
+  const handleOpenSubmitModal = () => {
+    if (!proposal) return;
+    setSubmitManualReviewRequested(false);
+    setSubmitNote('');
+    setShowSubmitModal(true);
   };
 
   const handleSubmitProposal = async () => {
@@ -962,7 +1019,15 @@ function ProposalView() {
       });
       return;
     }
-    await persistStatusChange('submitted');
+    handleOpenSubmitModal();
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowSubmitModal(false);
+    await persistStatusChange('submitted', {
+      manualReviewRequested: submitManualReviewRequested,
+      note: submitNote,
+    });
   };
 
   const formatCurrency = (value: number): string =>
@@ -989,6 +1054,12 @@ function ProposalView() {
     const num = value ?? 0;
     const formatted = num.toLocaleString('en-US', { maximumFractionDigits: 2 });
     return suffix ? `${formatted} ${suffix}` : formatted;
+  };
+
+  const formatWorkflowStatusLabel = (value?: string | null) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return 'Draft';
+    return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
   };
 
   const getDisplayVersionLabel = (input: Proposal): string => {
@@ -1348,6 +1419,14 @@ function ProposalView() {
   viewModels.forEach((vm) => {
     versionMap.set(vm.proposal.versionId || 'original', vm);
   });
+  const workflowHistory = [...(proposal?.workflow?.history || [])].sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+  const workflowReasons = proposal?.workflow?.approvalReasons || [];
+  const workflowReviewVersionLabel =
+    sortedVersions.find((entry) => (entry.versionId || 'original') === (proposal?.workflow?.reviewVersionId || ''))?.versionName ||
+    proposal?.versionName ||
+    'Current Version';
 
   const primaryView = versionMap.get(activeVersionId) || viewModels[0];
   const customerModalView = customerBreakdownVersionId
@@ -1742,6 +1821,14 @@ function ProposalView() {
     const versionLabel = getDisplayVersionLabel(vm.proposal);
     const isActive = versionId === activeVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
+    const canEditVersion = !isSubmittedVersionLocked(vm.proposal) && proposalWorkflowStatus !== 'completed';
+    const canDeleteVersion = !isOriginal && !isSubmittedVersionLocked(vm.proposal) && proposalWorkflowStatus !== 'completed';
+    const versionActionReason =
+      proposalWorkflowStatus === 'completed'
+        ? 'Completed proposals are locked.'
+        : isSubmittedVersionLocked(vm.proposal)
+        ? 'Submitted versions are locked. Create a new version to make changes.'
+        : undefined;
 
     return (
       <div key={versionId} className={`version-section ${index > 0 ? 'has-divider' : ''}`}>
@@ -1789,8 +1876,8 @@ function ProposalView() {
               <button
                 className="action-button"
                 onClick={() => handleEdit(vm.proposal)}
-                disabled={!canEditProposal}
-                title={editDisabledReason}
+                disabled={!canEditVersion}
+                title={versionActionReason}
               >
                 Edit Proposal
               </button>
@@ -1798,8 +1885,8 @@ function ProposalView() {
                 <button
                   className="action-button danger"
                   onClick={() => handleDeleteVersion(versionId)}
-                  disabled={!canEditProposal}
-                  title={editDisabledReason}
+                  disabled={!canDeleteVersion}
+                  title={versionActionReason}
                 >
                   Delete Version
                 </button>
@@ -1936,8 +2023,8 @@ function ProposalView() {
             <button
               className="action-button"
               onClick={handleBuildAnotherVersion}
-              disabled={!canEditProposal}
-              title={editDisabledReason}
+              disabled={proposalWorkflowStatus === 'completed'}
+              title={proposalWorkflowStatus === 'completed' ? 'Completed proposals are locked.' : undefined}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -1978,6 +2065,80 @@ function ProposalView() {
         </div>
       </div>
 
+      {proposal?.workflow && (
+        <div className="workflow-summary-card no-print">
+          <div className="workflow-summary-header">
+            <div>
+              <p className="workflow-summary-kicker">Submission Workflow</p>
+              <h2 className="workflow-summary-title">{formatWorkflowStatusLabel(proposalWorkflowStatus)}</h2>
+            </div>
+            <div className={`workflow-summary-pill is-${proposalWorkflowStatus}`}>
+              {formatWorkflowStatusLabel(proposalWorkflowStatus)}
+              {proposal.workflow.approved ? ' *' : ''}
+            </div>
+          </div>
+
+          <div className="workflow-summary-grid">
+            <div className="workflow-summary-block">
+              <div className="workflow-summary-label">Review Version</div>
+              <div className="workflow-summary-value">{workflowReviewVersionLabel}</div>
+            </div>
+            <div className="workflow-summary-block">
+              <div className="workflow-summary-label">Submitted</div>
+              <div className="workflow-summary-value">
+                {proposal.workflow.submittedAt ? new Date(proposal.workflow.submittedAt).toLocaleString() : 'Not submitted'}
+              </div>
+            </div>
+            <div className="workflow-summary-block">
+              <div className="workflow-summary-label">Approved By</div>
+              <div className="workflow-summary-value">
+                {proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email || 'Not approved'}
+              </div>
+            </div>
+            <div className="workflow-summary-block">
+              <div className="workflow-summary-label">Completed By</div>
+              <div className="workflow-summary-value">
+                {proposal.workflow.completedBy?.name || proposal.workflow.completedBy?.email || 'Not completed'}
+              </div>
+            </div>
+          </div>
+
+          {proposal.workflow.manualReviewMessage && (
+            <div className="workflow-summary-note">
+              <div className="workflow-summary-note-label">Submission Note</div>
+              <div>{proposal.workflow.manualReviewMessage}</div>
+            </div>
+          )}
+
+          {workflowReasons.length > 0 && (
+            <div className="workflow-summary-reasons">
+              {workflowReasons.map((reason) => (
+                <div key={`${reason.code}-${reason.label}`} className="workflow-summary-reason">
+                  <strong>{reason.label}</strong>
+                  {reason.detail ? ` - ${reason.detail}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {workflowHistory.length > 0 && (
+            <div className="workflow-summary-history">
+              <div className="workflow-summary-history-title">Workflow Activity</div>
+              {workflowHistory.slice(0, 6).map((entry) => (
+                <div key={entry.id} className="workflow-summary-history-item">
+                  <div className="workflow-summary-history-meta">
+                    <span>{formatWorkflowStatusLabel(entry.type)}</span>
+                    <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                    <span>{entry.actor?.name || entry.actor?.email || 'User'}</span>
+                  </div>
+                  {entry.message && <div className="workflow-summary-history-message">{entry.message}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div ref={proposalRef} className="proposal-summary-page">
         <h1 className="page-title">Proposal Summary</h1>
         {viewModels.map((vm, index) => renderVersionSection(vm, index))}
@@ -2015,6 +2176,19 @@ function ProposalView() {
           </div>
         </div>
       )}
+      <SubmitProposalModal
+        isOpen={showSubmitModal}
+        versionName={proposal?.versionName || 'Current Version'}
+        manualReviewRequested={submitManualReviewRequested}
+        note={submitNote}
+        isSubmitting={loading}
+        onManualReviewRequestedChange={setSubmitManualReviewRequested}
+        onNoteChange={setSubmitNote}
+        onCancel={() => setShowSubmitModal(false)}
+        onConfirm={() => {
+          void handleConfirmSubmit();
+        }}
+      />
       {contractVersionId && contractModalView && (
         <div className="modal-overlay contract-printable" onClick={() => setContractVersionId(null)}>
           <div className="modal-content contract-modal" onClick={(e) => e.stopPropagation()}>

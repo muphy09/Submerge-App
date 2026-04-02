@@ -12,6 +12,7 @@ import {
   deleteFranchiseUser,
   listFranchiseUsers,
   resetFranchiseUserPassword,
+  updateFranchiseUserApprovalSettings,
   updateFranchiseUserCommissionRates,
   updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
@@ -42,15 +43,13 @@ import AdminSettingsModal from '../components/AdminSettingsModal';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 
 const DEFAULT_FRANCHISE_ID = 'default';
-const FRANCHISE_MARGIN_LIMIT = 18;
-
 type SessionInfo = {
   userName?: string;
   userEmail?: string;
   franchiseId?: string;
   franchiseName?: string;
   franchiseCode?: string;
-  role?: 'master' | 'owner' | 'admin' | 'designer';
+  role?: 'master' | 'owner' | 'admin' | 'bookkeeper' | 'designer';
 };
 
 type SelectedUserStatus = {
@@ -69,12 +68,13 @@ const normalizeStatus = (status?: string | null) => String(status || '').trim().
 const formatStatusLabel = (status?: string | null) => {
   const normalized = normalizeStatus(status);
   if (!normalized) return 'Draft';
-  return normalized.replace(/\b\w/g, (character) => character.toUpperCase());
+  return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 };
 
 const getRoleLabel = (role?: string) => {
   if (role === 'owner') return 'Owner';
   if (role === 'admin') return 'Admin';
+  if (role === 'bookkeeper') return 'Book Keeper';
   return 'Designer';
 };
 
@@ -86,16 +86,22 @@ const formatDate = (value?: string) => {
 
 const normalizeDesignerName = (value?: string | null) => (value ?? '').trim();
 const normalizeUserEmail = (value?: string | null) => String(value || '').trim().toLowerCase();
-const isSubmittedStatus = (status?: string) => {
-  const normalized = normalizeStatus(status);
-  return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
+
+const parseThresholdPercentInput = (value: string, label: string) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    throw new Error(`${label} is required.`);
+  }
+  const numeric = Number(trimmed);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    throw new Error(`${label} must be 0 or greater.`);
+  }
+  return numeric;
 };
 
-const hasExcessiveDiscount = (proposal: Proposal) => {
-  const adjustments = proposal.retailAdjustments || [];
-  const hasNegativeAdjustment = adjustments.some((adj) => (Number(adj?.amount) || 0) < 0);
-  const grossMargin = proposal.pricing?.grossProfitMargin ?? 0;
-  return hasNegativeAdjustment && Number.isFinite(grossMargin) && grossMargin < FRANCHISE_MARGIN_LIMIT;
+const isSubmittedStatus = (status?: string) => {
+  const normalized = normalizeStatus(status);
+  return normalized === 'submitted' || normalized === 'needs_approval' || normalized === 'changes_requested';
 };
 
 function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = false }: AdminPanelPageProps) {
@@ -110,26 +116,37 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
       id: string;
       name?: string | null;
       email: string;
-      role: 'owner' | 'admin' | 'designer';
+      role: 'owner' | 'admin' | 'bookkeeper' | 'designer';
       isActive: boolean;
       digCommissionRate: number;
       closeoutCommissionRate: number;
+      approvalMarginThresholdPercent: number;
+      discountAllowanceThresholdPercent: number;
+      alwaysRequireApproval: boolean;
     }[]
   >([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [addingUser, setAddingUser] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'designer' | 'bookkeeper'>('designer');
   const [userError, setUserError] = useState<string | null>(null);
   const [showAddUserForm, setShowAddUserForm] = useState(false);
-  const [promotingUserId, setPromotingUserId] = useState<string | null>(null);
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUserStatus, setSelectedUserStatus] = useState<SelectedUserStatus>(null);
   const [selectedDigCommissionPercent, setSelectedDigCommissionPercent] = useState('');
   const [selectedCloseoutCommissionPercent, setSelectedCloseoutCommissionPercent] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'owner' | 'admin' | 'bookkeeper' | 'designer'>('designer');
+  const [selectedApprovalMarginThresholdPercent, setSelectedApprovalMarginThresholdPercent] = useState('18');
+  const [selectedDiscountAllowanceThresholdPercent, setSelectedDiscountAllowanceThresholdPercent] = useState('18');
+  const [selectedAlwaysRequireApproval, setSelectedAlwaysRequireApproval] = useState(false);
+  const [selectedTransferUserId, setSelectedTransferUserId] = useState('');
   const [savingCommissionUserId, setSavingCommissionUserId] = useState<string | null>(null);
+  const [savingApprovalSettingsUserId, setSavingApprovalSettingsUserId] = useState<string | null>(null);
   const [designerFilter, setDesignerFilter] = useState('all');
   const [showAdminSettings, setShowAdminSettings] = useState(false);
   const userListRef = useRef<HTMLDivElement | null>(null);
@@ -265,6 +282,9 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
           isActive: Boolean(row.isActive),
           digCommissionRate: Number(row.digCommissionRate) || 0,
           closeoutCommissionRate: Number(row.closeoutCommissionRate) || 0,
+          approvalMarginThresholdPercent: Number(row.approvalMarginThresholdPercent) || 18,
+          discountAllowanceThresholdPercent: Number(row.discountAllowanceThresholdPercent) || 18,
+          alwaysRequireApproval: row.alwaysRequireApproval === true,
         }))
       );
     } catch (error) {
@@ -291,12 +311,22 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
       setSelectedUserStatus(null);
       setSelectedDigCommissionPercent('');
       setSelectedCloseoutCommissionPercent('');
+      setSelectedRole('designer');
+      setSelectedApprovalMarginThresholdPercent('18');
+      setSelectedDiscountAllowanceThresholdPercent('18');
+      setSelectedAlwaysRequireApproval(false);
+      setSelectedTransferUserId('');
       return;
     }
 
     setSelectedUserStatus(null);
     setSelectedDigCommissionPercent(formatCommissionRatePercent(selectedUser.digCommissionRate));
     setSelectedCloseoutCommissionPercent(formatCommissionRatePercent(selectedUser.closeoutCommissionRate));
+    setSelectedRole(selectedUser.role);
+    setSelectedApprovalMarginThresholdPercent(String(selectedUser.approvalMarginThresholdPercent ?? 18));
+    setSelectedDiscountAllowanceThresholdPercent(String(selectedUser.discountAllowanceThresholdPercent ?? 18));
+    setSelectedAlwaysRequireApproval(selectedUser.alwaysRequireApproval === true);
+    setSelectedTransferUserId('');
   }, [selectedUser?.id]);
 
   const handleSetActiveModel = async (modelId: string) => {
@@ -333,10 +363,11 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
         franchiseId,
         email: newUserEmail.trim().toLowerCase(),
         name: trimmedName,
-        role: 'designer',
+        role: newUserRole,
       });
       setNewUserName('');
       setNewUserEmail('');
+      setNewUserRole('designer');
       setShowAddUserForm(false);
       if (result?.tempPassword) {
         setTempPassword(result.tempPassword);
@@ -350,45 +381,87 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
     }
   };
 
-  const handleRemoveUser = async (userId: string, role: string) => {
-    if (role === 'admin' || role === 'owner') {
-      console.warn('Skipping removal of elevated user to prevent lockout.');
-      return;
-    }
+  const handleChangeUserRole = async (
+    userId: string,
+    nextRole: 'owner' | 'admin' | 'bookkeeper' | 'designer'
+  ) => {
+    setSelectedUserStatus(null);
+    setUpdatingRoleUserId(userId);
     try {
-      await deleteFranchiseUser(userId);
+      await updateFranchiseUserRole(userId, nextRole);
+      if (selectedUser && normalizeUserEmail(selectedUser.email) === normalizeUserEmail(session?.userEmail)) {
+        updateSession({ role: nextRole });
+      }
       await loadUsers(franchiseId);
-      await loadProposals(franchiseId);
-      setSelectedUserId(null);
-    } catch (error) {
-      console.error('Failed to remove user:', error);
+      setSelectedUserStatus({ type: 'success', message: 'Role updated.' });
+    } catch (error: any) {
+      console.error('Failed to update user role:', error);
+      setSelectedUserStatus({
+        type: 'error',
+        message: error?.message || 'Unable to update the user role.',
+      });
+    } finally {
+      setUpdatingRoleUserId(null);
     }
   };
 
-  const handlePromoteUser = async (userId: string) => {
-    setPromotingUserId(userId);
+  const handleRemoveUser = async (userId: string, role: string) => {
+    if (role !== 'designer' && role !== 'bookkeeper') {
+      setSelectedUserStatus({
+        type: 'error',
+        message: 'Only designers and book keepers can be removed from this workspace.',
+      });
+      return;
+    }
+    setSelectedUserStatus(null);
+    setRemovingUserId(userId);
     try {
-      await updateFranchiseUserRole(userId, 'admin');
+      const selectedProposalCount = role === 'designer' ? selectedUserProposalCount : 0;
+      const transferToUserId = selectedProposalCount > 0 ? selectedTransferUserId || null : null;
+      if (selectedProposalCount > 0 && transferTargetOptions.length === 0) {
+        throw new Error('Add or promote another owner, admin, or designer before removing this designer.');
+      }
+      if (selectedProposalCount > 0 && !transferToUserId) {
+        throw new Error('Select a transfer user before removing this designer.');
+      }
+      await deleteFranchiseUser(userId, transferToUserId);
       await loadUsers(franchiseId);
-    } catch (error) {
-      console.error('Failed to promote user to admin:', error);
+      await loadProposals(franchiseId);
+      setSelectedUserId(null);
+    } catch (error: any) {
+      console.error('Failed to remove user:', error);
+      setSelectedUserStatus({
+        type: 'error',
+        message: error?.message || 'Unable to remove the user.',
+      });
     } finally {
-      setPromotingUserId(null);
+      setRemovingUserId(null);
     }
   };
 
   const handleResetPassword = async (userId: string) => {
     setResettingUserId(userId);
+    setSelectedUserStatus(null);
     try {
       const result = await resetFranchiseUserPassword(userId);
       if (result?.tempPassword) {
         setTempPassword(result.tempPassword);
       }
-    } catch (error) {
+      setSelectedUserStatus({ type: 'success', message: 'Temporary password generated.' });
+    } catch (error: any) {
       console.error('Failed to reset password:', error);
+      setSelectedUserStatus({
+        type: 'error',
+        message: error?.message || 'Unable to reset the user password.',
+      });
     } finally {
       setResettingUserId(null);
     }
+  };
+
+  const promotingUserId = updatingRoleUserId;
+  const handlePromoteUser = async (userId: string) => {
+    await handleChangeUserRole(userId, 'admin');
   };
 
   const handleSaveCommissionRates = async (userId: string) => {
@@ -426,6 +499,44 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
     }
   };
 
+  const handleSaveApprovalSettings = async (userId: string) => {
+    setSelectedUserStatus(null);
+    setSavingApprovalSettingsUserId(userId);
+    try {
+      const approvalMarginThresholdPercent = parseThresholdPercentInput(
+        selectedApprovalMarginThresholdPercent,
+        'Approval margin threshold'
+      );
+      const discountAllowanceThresholdPercent = parseThresholdPercentInput(
+        selectedDiscountAllowanceThresholdPercent,
+        'Discount allowance threshold'
+      );
+      const saved = await updateFranchiseUserApprovalSettings(userId, {
+        approvalMarginThresholdPercent,
+        discountAllowanceThresholdPercent,
+        alwaysRequireApproval: selectedAlwaysRequireApproval,
+      });
+      if (selectedUser && normalizeUserEmail(selectedUser.email) === normalizeUserEmail(session?.userEmail)) {
+        updateSession({
+          approvalMarginThresholdPercent: saved?.approvalMarginThresholdPercent ?? approvalMarginThresholdPercent,
+          discountAllowanceThresholdPercent:
+            saved?.discountAllowanceThresholdPercent ?? discountAllowanceThresholdPercent,
+          alwaysRequireApproval: saved?.alwaysRequireApproval ?? selectedAlwaysRequireApproval,
+        });
+      }
+      await loadUsers(franchiseId);
+      setSelectedUserStatus({ type: 'success', message: 'Workflow approval settings updated.' });
+    } catch (error: any) {
+      console.error('Failed to update workflow approval settings:', error);
+      setSelectedUserStatus({
+        type: 'error',
+        message: error?.message || 'Unable to update workflow approval settings.',
+      });
+    } finally {
+      setSavingApprovalSettingsUserId(null);
+    }
+  };
+
   const handleCloseSelectedUser = () => {
     setSelectedUserId(null);
     setSelectedUserStatus(null);
@@ -441,8 +552,41 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
     setShowAddUserForm(false);
     setNewUserName('');
     setNewUserEmail('');
+    setNewUserRole('designer');
     setUserError(null);
   };
+
+  const proposalBelongsToSelectedUser = (proposal: Proposal, user: NonNullable<typeof selectedUser>) => {
+    const proposalDesigner = normalizeDesignerName(proposal.designerName).toLowerCase();
+    if (!proposalDesigner) return false;
+    const candidates = [normalizeDesignerName(user.name), normalizeDesignerName(user.email)]
+      .map((value) => value.toLowerCase())
+      .filter(Boolean);
+    return candidates.some((candidate) => candidate === proposalDesigner);
+  };
+
+  const selectedUserProposalCount = selectedUser
+    ? proposals.filter((proposal) => proposalBelongsToSelectedUser(proposal, selectedUser)).length
+    : 0;
+
+  const transferTargetOptions = useMemo(
+    () =>
+      franchiseUsers.filter(
+        (user) =>
+          user.id !== selectedUserId &&
+          user.isActive &&
+          (user.role === 'designer' || user.role === 'admin' || user.role === 'owner')
+      ),
+    [franchiseUsers, selectedUserId]
+  );
+
+  useEffect(() => {
+    if (!selectedTransferUserId) return;
+    const selectedTargetStillAvailable = transferTargetOptions.some((user) => user.id === selectedTransferUserId);
+    if (!selectedTargetStillAvailable) {
+      setSelectedTransferUserId('');
+    }
+  }, [selectedTransferUserId, transferTargetOptions]);
 
   const modalRoot = typeof document !== 'undefined' ? document.body : null;
 
@@ -458,8 +602,8 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
             >
               <div className="admin-user-modal-header">
                 <div>
-                  <p className="admin-user-modal-kicker">Designers</p>
-                  <h3 className="admin-user-modal-title">Add a New Designer</h3>
+                  <p className="admin-user-modal-kicker">Franchise Users</p>
+                  <h3 className="admin-user-modal-title">Add a New User</h3>
                 </div>
                 <button
                   className="admin-user-modal-close"
@@ -474,7 +618,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                 <div className="admin-users-add-card">
                   <div className="admin-users-add-field">
                     <label className="admin-users-add-label" htmlFor="designer-name-input">
-                      Designer Name
+                      User Name
                     </label>
                     <input
                       id="designer-name-input"
@@ -487,8 +631,22 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                     />
                   </div>
                   <div className="admin-users-add-field">
+                    <label className="admin-users-add-label" htmlFor="designer-role-input">
+                      Role
+                    </label>
+                    <select
+                      id="designer-role-input"
+                      value={newUserRole}
+                      onChange={(event) => setNewUserRole(event.target.value as 'designer' | 'bookkeeper')}
+                      disabled={addingUser}
+                    >
+                      <option value="designer">Designer</option>
+                      <option value="bookkeeper">Book Keeper</option>
+                    </select>
+                  </div>
+                  <div className="admin-users-add-field">
                     <label className="admin-users-add-label" htmlFor="designer-email-input">
-                      Designer Email
+                      User Email
                     </label>
                     <div className="admin-users-add-email">
                       <input
@@ -552,6 +710,41 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                   <span className="admin-user-detail-value">{selectedUser.email}</span>
                 </div>
               </div>
+              {selectedUser.role !== 'owner' && (
+                <div className="admin-user-commission-section">
+                  <div className="admin-user-commission-header">
+                    <div className="admin-user-commission-title">Access Role</div>
+                    <div className="admin-user-commission-subtitle">Admin, Book Keeper, or designer access</div>
+                  </div>
+                  <div className="admin-user-commission-grid">
+                    <label className="admin-user-commission-field" htmlFor="selected-user-role">
+                      <span>Role</span>
+                      <select
+                        id="selected-user-role"
+                        value={selectedRole}
+                        onChange={(event) =>
+                          setSelectedRole(
+                            event.target.value as 'owner' | 'admin' | 'bookkeeper' | 'designer'
+                          )
+                        }
+                        disabled={updatingRoleUserId === selectedUser.id}
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="bookkeeper">Book Keeper</option>
+                        <option value="designer">Designer</option>
+                      </select>
+                    </label>
+                  </div>
+                  <button
+                    className="admin-primary-btn"
+                    type="button"
+                    onClick={() => handleChangeUserRole(selectedUser.id, selectedRole)}
+                    disabled={updatingRoleUserId === selectedUser.id || selectedRole === selectedUser.role}
+                  >
+                    {updatingRoleUserId === selectedUser.id ? 'Saving...' : 'Save Role'}
+                  </button>
+                </div>
+              )}
               <div className="admin-user-commission-section">
                 <div className="admin-user-commission-header">
                   <div className="admin-user-commission-title">Commission Settings</div>
@@ -601,6 +794,63 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                 >
                   {savingCommissionUserId === selectedUser.id ? 'Saving...' : 'Save Commission Settings'}
                 </button>
+              </div>
+              <div className="admin-user-commission-section">
+                <div className="admin-user-commission-header">
+                  <div className="admin-user-commission-title">Workflow Approval Settings</div>
+                  <div className="admin-user-commission-subtitle">Per-user submission review thresholds</div>
+                </div>
+                <div className="admin-user-commission-grid">
+                  <label className="admin-user-commission-field" htmlFor="approval-threshold-input">
+                    <span>Approval Margin Threshold</span>
+                    <div className="admin-user-commission-input">
+                      <input
+                        id="approval-threshold-input"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        value={selectedApprovalMarginThresholdPercent}
+                        onChange={(event) => setSelectedApprovalMarginThresholdPercent(event.target.value)}
+                        disabled={savingApprovalSettingsUserId === selectedUser.id}
+                      />
+                      <span>%</span>
+                    </div>
+                  </label>
+                  <label className="admin-user-commission-field" htmlFor="discount-threshold-input">
+                    <span>Discount Allowance Threshold</span>
+                    <div className="admin-user-commission-input">
+                      <input
+                        id="discount-threshold-input"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        value={selectedDiscountAllowanceThresholdPercent}
+                        onChange={(event) => setSelectedDiscountAllowanceThresholdPercent(event.target.value)}
+                        disabled={savingApprovalSettingsUserId === selectedUser.id}
+                      />
+                      <span>%</span>
+                    </div>
+                  </label>
+                </div>
+                <label className="admin-toggle">
+                  <input
+                    type="checkbox"
+                    checked={selectedAlwaysRequireApproval}
+                    onChange={(event) => setSelectedAlwaysRequireApproval(event.target.checked)}
+                    disabled={savingApprovalSettingsUserId === selectedUser.id}
+                  />
+                  <span>Always require approval for this user</span>
+                </label>
+                <button
+                  className="admin-primary-btn"
+                  type="button"
+                  onClick={() => handleSaveApprovalSettings(selectedUser.id)}
+                  disabled={savingApprovalSettingsUserId === selectedUser.id}
+                >
+                  {savingApprovalSettingsUserId === selectedUser.id ? 'Saving...' : 'Save Workflow Settings'}
+                </button>
                 {selectedUserStatus?.type === 'error' && (
                   <div className="admin-error">{selectedUserStatus.message}</div>
                 )}
@@ -608,17 +858,39 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                   <div className="admin-success">{selectedUserStatus.message}</div>
                 )}
               </div>
+              {selectedUser.role === 'designer' && selectedUserProposalCount > 0 && (
+                <div className="admin-user-commission-section">
+                  <div className="admin-user-commission-header">
+                    <div className="admin-user-commission-title">Proposal Transfer Required</div>
+                    <div className="admin-user-commission-subtitle">
+                      {selectedUserProposalCount} saved proposal{selectedUserProposalCount === 1 ? '' : 's'} must be reassigned before removal
+                    </div>
+                  </div>
+                  {transferTargetOptions.length > 0 ? (
+                    <label className="admin-user-commission-field" htmlFor="designer-transfer-select">
+                      <span>Transfer proposals to</span>
+                      <select
+                        id="designer-transfer-select"
+                        value={selectedTransferUserId}
+                        onChange={(event) => setSelectedTransferUserId(event.target.value)}
+                        disabled={removingUserId === selectedUser.id}
+                      >
+                        <option value="">Select a transfer user...</option>
+                        {transferTargetOptions.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {(user.name || user.email) + ` (${getRoleLabel(user.role)})`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <div className="admin-user-commission-subtitle">
+                      No active owner, admin, or designer is available to receive these proposals yet.
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="admin-user-modal-actions">
-                {selectedUser.role === 'designer' && (
-                  <button
-                    className="admin-primary-btn ghost"
-                    type="button"
-                    onClick={() => handlePromoteUser(selectedUser.id)}
-                    disabled={promotingUserId === selectedUser.id}
-                  >
-                    {promotingUserId === selectedUser.id ? 'Promoting...' : 'Make Admin'}
-                  </button>
-                )}
                 {selectedUser.role !== 'owner' && (
                   <button
                     className="admin-primary-btn ghost"
@@ -629,13 +901,19 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                     {resettingUserId === selectedUser.id ? 'Resetting...' : 'Reset Password'}
                   </button>
                 )}
-                {selectedUser.role === 'designer' && (
+                {(selectedUser.role === 'designer' || selectedUser.role === 'bookkeeper') && (
                   <button
                     className="admin-remove-btn"
                     type="button"
                     onClick={() => handleRemoveUser(selectedUser.id, selectedUser.role)}
+                    disabled={
+                      removingUserId === selectedUser.id ||
+                      (selectedUser.role === 'designer' &&
+                        selectedUserProposalCount > 0 &&
+                        (transferTargetOptions.length === 0 || !selectedTransferUserId))
+                    }
                   >
-                    Remove User
+                    {removingUserId === selectedUser.id ? 'Removing...' : 'Remove User'}
                   </button>
                 )}
               </div>
@@ -660,7 +938,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
       counts[name] = (counts[name] || 0) + 1;
     });
     const performanceUserNames = franchiseUsers
-      .filter((user) => user.role === 'designer' || user.role === 'admin')
+              .filter((user) => user.role === 'designer' || user.role === 'admin')
       .map((user) => normalizeDesignerName(user.name) || normalizeDesignerName(user.email))
       .filter((name) => name.length > 0);
     const allNames = new Set<string>(performanceUserNames);
@@ -871,8 +1149,8 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
         <div className="admin-card">
           <div className="admin-card-header">
             <div>
-              <h2 className="admin-card-title">Designers</h2>
-              <p className="admin-kicker">Allowed users for this franchise</p>
+            <h2 className="admin-card-title">Users</h2>
+            <p className="admin-kicker">Franchise users and workflow permissions</p>
             </div>
             <button
               className="admin-primary-btn ghost admin-add-designer-btn"
@@ -880,7 +1158,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
               onClick={handleOpenAddUserForm}
               aria-expanded={showAddUserForm}
             >
-              Add a New Designer
+              Add a New User
             </button>
           </div>
           <div className="admin-divider" />
@@ -888,7 +1166,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
             {loadingUsers ? (
               <div className="admin-empty">Loading designers...</div>
             ) : franchiseUsers.length === 0 ? (
-              <div className="admin-empty">No designers added yet.</div>
+              <div className="admin-empty">No users added yet.</div>
             ) : (
               <div
                 className="admin-users-list"
@@ -929,7 +1207,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
         <div className="admin-table-header">
           <div>
             <h2 className="admin-card-title">Franchise Proposals</h2>
-            <p className="admin-kicker">All Franchise Proposals</p>
+            <p className="admin-kicker">Active Proposals</p>
           </div>
           <div className="admin-table-actions">
             <div className="admin-filter">
@@ -1013,13 +1291,9 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                     : isRemoved
                     ? 'proposal-model-pill removed'
                     : 'proposal-model-pill inactive';
-                  const discountLimitExceeded =
-                    normalizeStatus(proposal.status) === 'submitted' && hasExcessiveDiscount(proposal);
                   const normalizedStatus = normalizeStatus(proposal.status) || 'draft';
-                  const statusLabel = `${formatStatusLabel(proposal.status)}${discountLimitExceeded ? '*' : ''}`;
-                  const statusClassName = discountLimitExceeded
-                    ? 'status-badge-table is-alert'
-                    : `status-badge-table is-${normalizedStatus}`;
+                  const statusLabel = `${formatStatusLabel(proposal.status)}${proposal.workflow?.approved ? '*' : ''}`;
+                  const statusClassName = `status-badge-table is-${normalizedStatus}`;
 
                   return (
                     <tr
@@ -1035,34 +1309,6 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                           <span className={statusClassName}>
                             {statusLabel}
                           </span>
-                          {discountLimitExceeded && (
-                            <span
-                              className="status-warning-icon"
-                              title="Discount applied that exceeds 18% threshold"
-                              aria-label="Discount applied that exceeds 18% threshold"
-                              role="img"
-                            >
-                              <svg width="16" height="14" viewBox="0 0 24 20" aria-hidden="true">
-                                <path
-                                  d="M12 1.5 23 19.5H1L12 1.5Z"
-                                  fill="#facc15"
-                                  stroke="#b45309"
-                                  strokeWidth="1.2"
-                                />
-                                <text
-                                  x="12"
-                                  y="15"
-                                  textAnchor="middle"
-                                  fontSize="12"
-                                  fontWeight="700"
-                                  fill="#7c2d12"
-                                  fontFamily="Arial, sans-serif"
-                                >
-                                  !
-                                </text>
-                              </svg>
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td>

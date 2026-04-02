@@ -147,6 +147,16 @@
   width: 100%;
 }
 
+.admin-users-add select,
+.admin-user-commission-field select {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 0.95rem;
+  width: 100%;
+  background: #ffffff;
+}
+
 .admin-users-add-email {
   display: flex;
   gap: 0.5rem;
@@ -235,6 +245,12 @@
   --role-bg-selected: #fde047;
 }
 
+.admin-user-row.role-bookkeeper {
+  --role-bg: #dbeafe;
+  --role-bg-hover: #bfdbfe;
+  --role-bg-selected: #93c5fd;
+}
+
 .admin-user-row.role-designer {
   --role-bg: #dcfce7;
   --role-bg-hover: #bbf7d0;
@@ -255,6 +271,14 @@
 .admin-user-role {
   color: #6b7280;
   font-size: 0.9rem;
+}
+
+.admin-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #1e3a5f;
+  font-weight: 700;
 }
 
 .admin-user-status {
@@ -878,6 +902,24 @@
 .admin-table .proposal-model-pill.active {
   background: #0f9a6a;
   border-color: #0f9a6a;
+  color: #ffffff;
+}
+
+.admin-table .status-badge-table.is-needs_approval {
+  background: #f59e0b;
+  border-color: #d97706;
+  color: #ffffff;
+}
+
+.admin-table .status-badge-table.is-changes_requested {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.admin-table .status-badge-table.is-completed {
+  background: #2563eb;
+  border-color: #2563eb;
   color: #ffffff;
 }
 

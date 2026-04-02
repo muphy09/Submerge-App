@@ -33,6 +33,9 @@ type FranchiseUserRow = {
   password_reset_required?: boolean | null;
   dig_commission_rate?: number | null;
   closeout_commission_rate?: number | null;
+  approval_margin_threshold_percent?: number | null;
+  discount_allowance_threshold_percent?: number | null;
+  always_require_approval?: boolean | null;
 };
 
 type SignInSuccessResult = {
@@ -128,7 +131,7 @@ async function getUserProfileByAuthId(authUserId: string, email?: string | null)
   const { data, error } = await supabase
     .from('franchise_users')
     .select(
-      'id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required,dig_commission_rate,closeout_commission_rate'
+      'id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required,dig_commission_rate,closeout_commission_rate,approval_margin_threshold_percent,discount_allowance_threshold_percent,always_require_approval'
     )
     .eq('auth_user_id', authUserId)
     .maybeSingle();
@@ -141,7 +144,7 @@ async function getUserProfileByAuthId(authUserId: string, email?: string | null)
   const fallback = await supabase
     .from('franchise_users')
     .select(
-      'id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required,dig_commission_rate,closeout_commission_rate'
+      'id,franchise_id,auth_user_id,email,name,role,is_active,password_reset_required,dig_commission_rate,closeout_commission_rate,approval_margin_threshold_percent,discount_allowance_threshold_percent,always_require_approval'
     )
     .eq('email', fallbackEmail)
     .maybeSingle();
@@ -186,6 +189,13 @@ function buildSessionFromProfile(options: {
     passwordResetRequired: Boolean(options.profile.password_reset_required),
     appSessionId: options.appSession?.appSessionId,
     appSessionLeaseToken: options.appSession?.appSessionLeaseToken,
+    approvalMarginThresholdPercent: Number.isFinite(Number(options.profile.approval_margin_threshold_percent))
+      ? Number(options.profile.approval_margin_threshold_percent)
+      : 18,
+    discountAllowanceThresholdPercent: Number.isFinite(Number(options.profile.discount_allowance_threshold_percent))
+      ? Number(options.profile.discount_allowance_threshold_percent)
+      : 18,
+    alwaysRequireApproval: options.profile.always_require_approval === true,
     ...commissionRates,
   };
 }
@@ -221,7 +231,7 @@ export async function signInWithEmail(payload: {
 
   const role = (profile.role || 'designer') as UserRole;
   const normalizedRole = String(role || '').toLowerCase();
-  const allowedRoles = ['master', 'owner', 'admin', 'designer'];
+  const allowedRoles = ['master', 'owner', 'admin', 'bookkeeper', 'designer'];
   const isActive = profile.is_active !== false;
   if (!allowedRoles.includes(normalizedRole) || !isActive) {
     await supabase.auth.signOut({ scope: 'local' });
@@ -331,7 +341,7 @@ export async function loadSessionFromSupabase(): Promise<{ session: UserSession;
 
   const role = (profile.role || 'designer') as UserRole;
   const normalizedRole = String(role || '').toLowerCase();
-  const allowedRoles = ['master', 'owner', 'admin', 'designer'];
+  const allowedRoles = ['master', 'owner', 'admin', 'bookkeeper', 'designer'];
   if (!allowedRoles.includes(normalizedRole) || profile.is_active === false) {
     return null;
   }

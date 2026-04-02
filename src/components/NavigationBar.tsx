@@ -11,6 +11,8 @@ interface NavigationBarProps {
   isAdmin?: boolean;
   isMaster?: boolean;
   franchiseId?: string;
+  showWorkflowTab?: boolean;
+  workflowUnreadCount?: number;
   onAdminPanelClick?: (event: ReactMouseEvent<HTMLAnchorElement>) => void;
 }
 
@@ -21,6 +23,8 @@ function NavigationBar({
   isAdmin = false,
   isMaster = false,
   franchiseId,
+  showWorkflowTab = false,
+  workflowUnreadCount = 0,
   onAdminPanelClick,
 }: NavigationBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -52,35 +56,59 @@ function NavigationBar({
       </div>
 
       <div className="nav-center">
+        <div className="nav-links-primary">
+          {showWorkflowTab && (
+            <NavLink
+              to="/workflow"
+              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+            >
+              <span className="nav-link-content">
+                <span>Book Keeper</span>
+                {workflowUnreadCount > 0 && <span className="nav-unread-pill">{workflowUnreadCount}</span>}
+              </span>
+            </NavLink>
+          )}
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            <span className="nav-link-content">
+              <span>Dashboard</span>
+            </span>
+          </NavLink>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+          >
+            <span className="nav-link-content">
+              <span>Settings</span>
+            </span>
+          </NavLink>
+          {isMaster && (
+            <NavLink
+              to="/master"
+              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+            >
+              <span className="nav-link-content">
+                <span>Master</span>
+              </span>
+            </NavLink>
+          )}
+        </div>
+
         {isAdmin && (
-          <NavLink
-            to="/admin"
-            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-            onClick={onAdminPanelClick}
-          >
-            Admin Panel
-          </NavLink>
-        )}
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-        >
-          Dashboard
-        </NavLink>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-        >
-          Settings
-        </NavLink>
-        {isMaster && (
-          <NavLink
-            to="/master"
-            className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-          >
-            Master
-          </NavLink>
+          <div className="nav-links-admin">
+            <NavLink
+              to="/admin"
+              className={({ isActive }) => (isActive ? 'nav-link nav-link-admin active' : 'nav-link nav-link-admin')}
+              onClick={onAdminPanelClick}
+            >
+              <span className="nav-link-content">
+                <span>Admin Panel</span>
+              </span>
+            </NavLink>
+          </div>
         )}
       </div>
 

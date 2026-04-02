@@ -47,7 +47,7 @@ declare global {
         franchiseId: string;
         franchiseName: string;
         franchiseCode: string;
-        role?: 'master' | 'owner' | 'admin' | 'designer';
+        role?: 'master' | 'owner' | 'admin' | 'bookkeeper' | 'designer';
         isActive: boolean;
       }>;
       listPricingModels: (

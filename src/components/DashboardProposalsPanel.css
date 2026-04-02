@@ -336,6 +336,24 @@
   color: #17643b;
 }
 
+.dashboard-status-pill.is-needs-approval {
+  background: #ffe7c2;
+  border-color: #f0b55d;
+  color: #8a5100;
+}
+
+.dashboard-status-pill.is-changes-requested {
+  background: #fde0df;
+  border-color: #f0a8a6;
+  color: #8f1f27;
+}
+
+.dashboard-status-pill.is-completed {
+  background: #d9ebf8;
+  border-color: #93bddf;
+  color: #184f78;
+}
+
 .dashboard-status-pill.is-approved {
   background: #cdece7;
   border-color: #7ccac0;

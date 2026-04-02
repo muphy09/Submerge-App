@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { Proposal } from '../types/proposal-new';
 import TempPasswordModal from './TempPasswordModal';
 import './MasterFranchiseEditorModal.css';
 import {
@@ -13,6 +14,7 @@ import {
   resetFranchiseUserPassword,
   updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
+import { listProposals } from '../services/proposalsAdapter';
 
 type StatusMessage = {
   type: 'success' | 'error';
@@ -49,6 +51,8 @@ const getDisplayName = (user: Pick<MasterUser, 'name' | 'email'>) => {
   return trimmedName || user.email;
 };
 
+const normalizeComparableText = (value?: string | null) => String(value || '').trim().toLowerCase();
+
 const formatPricingModelDate = (value?: string) => {
   if (!value) return 'N/A';
   const date = new Date(value);
@@ -77,6 +81,7 @@ function MasterFranchiseEditorModal({
   const [pendingCode, setPendingCode] = useState(franchise.franchiseCode || '');
   const [newDesignerName, setNewDesignerName] = useState('');
   const [newDesignerEmail, setNewDesignerEmail] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'designer' | 'bookkeeper'>('designer');
   const [status, setStatus] = useState<StatusMessage>(null);
   const [savingSettings, setSavingSettings] = useState(false);
   const [addingDesigner, setAddingDesigner] = useState(false);
@@ -86,6 +91,9 @@ function MasterFranchiseEditorModal({
   const [demotingUserId, setDemotingUserId] = useState<string | null>(null);
   const [makingOwnerId, setMakingOwnerId] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<TempPasswordState>(null);
+  const [proposalCountsByUserId, setProposalCountsByUserId] = useState<Record<string, number>>({});
+  const [loadingProposalCounts, setLoadingProposalCounts] = useState(false);
+  const [transferTargetsByUserId, setTransferTargetsByUserId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setPendingName(franchise.name || '');
@@ -93,10 +101,31 @@ function MasterFranchiseEditorModal({
     setStatus(null);
     setNewDesignerName('');
     setNewDesignerEmail('');
+    setNewUserRole('designer');
+    setTransferTargetsByUserId({});
   }, [franchise.franchiseCode, franchise.id, franchise.name]);
 
+  useEffect(() => {
+    setTransferTargetsByUserId((current) => {
+      const nextEntries = Object.entries(current).filter(([userId, transferUserId]) => {
+        if (!transferUserId) return false;
+        const sourceUser = users.find((user) => user.id === userId && user.isActive !== false);
+        const targetUser = users.find((user) => user.id === transferUserId && user.isActive !== false);
+        if (!sourceUser || !targetUser) return false;
+        if (sourceUser.franchiseId !== targetUser.franchiseId) return false;
+        return targetUser.role === 'owner' || targetUser.role === 'admin' || targetUser.role === 'designer';
+      });
+
+      if (nextEntries.length === Object.keys(current).length) {
+        return current;
+      }
+
+      return Object.fromEntries(nextEntries);
+    });
+  }, [users]);
+
   const activeUsers = useMemo(() => {
-    const roleWeight = { owner: 3, admin: 2, designer: 1, master: 0 } as Record<string, number>;
+    const roleWeight = { owner: 4, admin: 3, bookkeeper: 2, designer: 1, master: 0 } as Record<string, number>;
     return [...users]
       .filter((user) => user.isActive !== false)
       .sort(
@@ -109,7 +138,11 @@ function MasterFranchiseEditorModal({
 
   const owners = activeUsers.filter((user) => user.role === 'owner');
   const admins = activeUsers.filter((user) => user.role === 'admin');
+  const bookkeepers = activeUsers.filter((user) => user.role === 'bookkeeper');
   const designers = activeUsers.filter((user) => user.role === 'designer');
+  const transferEligibleUsers = activeUsers.filter(
+    (user) => user.role === 'owner' || user.role === 'admin' || user.role === 'designer'
+  );
   const isInactive = Boolean(franchise.deletedAt || franchise.isActive === false);
   const sortedPricingModels = useMemo(() => {
     const rows = [...pricingModels];
@@ -128,6 +161,46 @@ function MasterFranchiseEditorModal({
   const normalizedCurrentCode = String(franchise.franchiseCode || '').trim().toUpperCase();
   const hasSettingsChange =
     normalizedPendingName !== normalizedCurrentName || normalizedPendingCode !== normalizedCurrentCode;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProposalCounts = async () => {
+      setLoadingProposalCounts(true);
+      try {
+        const franchiseProposals = await listProposals(franchise.id);
+        if (cancelled) return;
+
+        const nextCounts = activeUsers.reduce<Record<string, number>>((counts, user) => {
+          const identifiers = new Set(
+            [normalizeComparableText(user.name), normalizeComparableText(user.email)].filter(Boolean)
+          );
+          counts[user.id] = franchiseProposals.filter((proposal: Proposal) => {
+            const proposalDesigner = normalizeComparableText(proposal.designerName);
+            return Boolean(proposalDesigner) && identifiers.has(proposalDesigner);
+          }).length;
+          return counts;
+        }, {});
+
+        setProposalCountsByUserId(nextCounts);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to load franchise proposal counts:', error);
+          setProposalCountsByUserId({});
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingProposalCounts(false);
+        }
+      }
+    };
+
+    void loadProposalCounts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUsers, franchise.id]);
 
   const handleSaveSettings = async () => {
     if (!normalizedPendingName) {
@@ -183,17 +256,21 @@ function MasterFranchiseEditorModal({
         franchiseId: franchise.id,
         email: trimmedEmail,
         name: trimmedName,
-        role: 'designer',
+        role: newUserRole,
       });
       setNewDesignerName('');
       setNewDesignerEmail('');
+      setNewUserRole('designer');
       await onRefresh();
-      setStatus({ type: 'success', message: 'Designer created.' });
+      setStatus({
+        type: 'success',
+        message: `${newUserRole === 'bookkeeper' ? 'Book Keeper' : 'Designer'} created.`,
+      });
       if (result?.tempPassword) {
         setTempPassword({
           password: result.tempPassword,
-          title: 'Designer Temporary Password',
-          description: 'Copy this password for the new designer. It will only be shown once.',
+          title: `${newUserRole === 'bookkeeper' ? 'Book Keeper' : 'Designer'} Temporary Password`,
+          description: `Copy this password for the new ${newUserRole === 'bookkeeper' ? 'book keeper' : 'designer'}. It will only be shown once.`,
         });
       }
     } catch (error: any) {
@@ -204,6 +281,24 @@ function MasterFranchiseEditorModal({
       });
     } finally {
       setAddingDesigner(false);
+    }
+  };
+
+  const handleMakeBookkeeper = async (user: MasterUser) => {
+    setPromotingUserId(user.id);
+    setStatus(null);
+    try {
+      await updateFranchiseUserRole(user.id, 'bookkeeper');
+      await onRefresh();
+      setStatus({ type: 'success', message: `${getDisplayName(user)} is now a book keeper.` });
+    } catch (error: any) {
+      console.error('Failed to make user a bookkeeper:', error);
+      setStatus({
+        type: 'error',
+        message: error?.message || 'Unable to update this user to Book Keeper.',
+      });
+    } finally {
+      setPromotingUserId(null);
     }
   };
 
@@ -250,20 +345,42 @@ function MasterFranchiseEditorModal({
   };
 
   const handleRemoveDesigner = async (user: MasterUser) => {
-    const confirmDelete = window.confirm(`Remove ${getDisplayName(user)} from this franchise?`);
+    const proposalCount = proposalCountsByUserId[user.id] || 0;
+    const transferToUserId = transferTargetsByUserId[user.id] || '';
+    const transferOptions = transferEligibleUsers.filter((candidate) => candidate.id !== user.id);
+    if (user.role === 'designer' && proposalCount > 0 && transferOptions.length === 0) {
+      setStatus({
+        type: 'error',
+        message: `Add or promote another owner, admin, or designer before removing ${getDisplayName(user)}.`,
+      });
+      return;
+    }
+    if (user.role === 'designer' && proposalCount > 0 && !transferToUserId) {
+      setStatus({
+        type: 'error',
+        message: `Choose a transfer user before removing ${getDisplayName(user)}.`,
+      });
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      user.role === 'designer' && proposalCount > 0
+        ? `Remove ${getDisplayName(user)} and transfer ${proposalCount} proposal${proposalCount === 1 ? '' : 's'}?`
+        : `Remove ${getDisplayName(user)} from this franchise?`
+    );
     if (!confirmDelete) return;
 
     setRemovingUserId(user.id);
     setStatus(null);
     try {
-      await deleteFranchiseUser(user.id);
+      await deleteFranchiseUser(user.id, proposalCount > 0 ? transferToUserId : null);
       await onRefresh();
       setStatus({ type: 'success', message: `${getDisplayName(user)} was removed.` });
     } catch (error: any) {
       console.error('Failed to remove designer:', error);
       setStatus({
         type: 'error',
-        message: error?.message || 'Unable to remove the designer.',
+        message: error?.message || 'Unable to remove the user.',
       });
     } finally {
       setRemovingUserId(null);
@@ -337,20 +454,90 @@ function MasterFranchiseEditorModal({
     }
   };
 
+  const handleDemoteBookkeeper = async (user: MasterUser) => {
+    const confirmDemote = window.confirm(
+      `Demote ${getDisplayName(user)} to designer? They will lose Book Keeper workflow access until promoted again.`
+    );
+    if (!confirmDemote) return;
+
+    setDemotingUserId(user.id);
+    setStatus(null);
+    try {
+      await updateFranchiseUserRole(user.id, 'designer');
+      await onRefresh();
+      setStatus({ type: 'success', message: `${getDisplayName(user)} is now a designer.` });
+    } catch (error: any) {
+      console.error('Failed to demote bookkeeper:', error);
+      setStatus({
+        type: 'error',
+        message: error?.message || 'Unable to demote this Book Keeper.',
+      });
+    } finally {
+      setDemotingUserId(null);
+    }
+  };
+
   const renderUserRow = (
     user: MasterUser,
     options: {
       canMakeOwner?: boolean;
       canPromoteDesigner?: boolean;
+      canMakeBookkeeper?: boolean;
       canDemoteOwner?: boolean;
       canDemoteAdmin?: boolean;
+      canDemoteBookkeeper?: boolean;
       canRemoveDesigner?: boolean;
     }
-  ) => (
+  ) => {
+    const proposalCount = proposalCountsByUserId[user.id] || 0;
+    const requiresTransfer = user.role === 'designer' && proposalCount > 0;
+    const transferOptions = transferEligibleUsers.filter((candidate) => candidate.id !== user.id);
+    const hasTransferOptions = transferOptions.length > 0;
+    const isTransferBlocked = requiresTransfer && !hasTransferOptions;
+
+    return (
     <div className={`master-editor-user-row role-${user.role}`} key={user.id}>
       <div className="master-editor-user-meta">
         <div className="master-editor-user-name">{getDisplayName(user)}</div>
         <div className="master-editor-user-email">{user.email}</div>
+        {options.canRemoveDesigner && (
+          <div className="master-editor-user-transfer">
+            {loadingProposalCounts ? (
+              <div className="master-editor-user-transfer-note">Checking saved proposals...</div>
+            ) : requiresTransfer ? (
+              <>
+                <div className="master-editor-user-transfer-note">
+                  {proposalCount} proposal{proposalCount === 1 ? '' : 's'} must be transferred before removal
+                </div>
+                {hasTransferOptions ? (
+                  <select
+                    value={transferTargetsByUserId[user.id] || ''}
+                    onChange={(event) =>
+                      setTransferTargetsByUserId((current) => ({
+                        ...current,
+                        [user.id]: event.target.value,
+                      }))
+                    }
+                    disabled={removingUserId === user.id || isInactive}
+                  >
+                    <option value="">Transfer proposals to...</option>
+                    {transferOptions.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {`${getDisplayName(candidate)} (${candidate.role})`}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="master-editor-user-transfer-note">
+                    No active owner, admin, or designer is available to receive these proposals yet.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="master-editor-user-transfer-note">No saved proposals to transfer.</div>
+            )}
+          </div>
+        )}
       </div>
       <div className="master-editor-user-actions">
         {options.canMakeOwner && (
@@ -371,6 +558,16 @@ function MasterFranchiseEditorModal({
             disabled={promotingUserId === user.id || isInactive}
           >
             {promotingUserId === user.id ? 'Saving...' : 'Make Admin'}
+          </button>
+        )}
+        {options.canMakeBookkeeper && (
+          <button
+            className="master-secondary-btn"
+            type="button"
+            onClick={() => handleMakeBookkeeper(user)}
+            disabled={promotingUserId === user.id || isInactive}
+          >
+            {promotingUserId === user.id ? 'Saving...' : 'Make Book Keeper'}
           </button>
         )}
         <button
@@ -401,19 +598,35 @@ function MasterFranchiseEditorModal({
             {demotingUserId === user.id ? 'Saving...' : 'Demote to Designer'}
           </button>
         )}
+        {options.canDemoteBookkeeper && (
+          <button
+            className="master-secondary-btn"
+            type="button"
+            onClick={() => handleDemoteBookkeeper(user)}
+            disabled={demotingUserId === user.id || isInactive}
+          >
+            {demotingUserId === user.id ? 'Saving...' : 'Make Designer'}
+          </button>
+        )}
         {options.canRemoveDesigner && (
           <button
             className="master-danger-btn"
             type="button"
             onClick={() => handleRemoveDesigner(user)}
-            disabled={removingUserId === user.id || isInactive}
+            disabled={
+              removingUserId === user.id ||
+              isInactive ||
+              isTransferBlocked ||
+              (requiresTransfer && !transferTargetsByUserId[user.id])
+            }
           >
-            {removingUserId === user.id ? 'Removing...' : 'Remove'}
+            {removingUserId === user.id ? 'Removing...' : 'Remove User'}
           </button>
         )}
       </div>
     </div>
   );
+  };
 
   return (
     <>
@@ -592,29 +805,40 @@ function MasterFranchiseEditorModal({
           <div className="master-editor-section">
             <div className="master-editor-section-header">
               <div>
-                <h3>Designers</h3>
+                <h3>Create User</h3>
               </div>
             </div>
             <div className="master-editor-add-card">
               <label className="master-editor-field">
-                <span>Designer Name</span>
+                <span>User Name</span>
                 <input
                   type="text"
                   value={newDesignerName}
                   onChange={(event) => setNewDesignerName(event.target.value)}
-                  placeholder="Enter designer name"
+                  placeholder="Enter user name"
                   disabled={addingDesigner || isInactive}
                 />
               </label>
               <label className="master-editor-field">
-                <span>Designer Email</span>
+                <span>User Email</span>
                 <input
                   type="email"
                   value={newDesignerEmail}
                   onChange={(event) => setNewDesignerEmail(event.target.value)}
-                  placeholder="Enter designer email"
+                  placeholder="Enter user email"
                   disabled={addingDesigner || isInactive}
                 />
+              </label>
+              <label className="master-editor-field">
+                <span>Role</span>
+                <select
+                  value={newUserRole}
+                  onChange={(event) => setNewUserRole(event.target.value as 'designer' | 'bookkeeper')}
+                  disabled={addingDesigner || isInactive}
+                >
+                  <option value="designer">Designer</option>
+                  <option value="bookkeeper">Book Keeper</option>
+                </select>
               </label>
               <button
                 className="master-primary-btn master-small-btn"
@@ -622,8 +846,16 @@ function MasterFranchiseEditorModal({
                 onClick={handleAddDesigner}
                 disabled={addingDesigner || isInactive}
               >
-                {addingDesigner ? 'Adding...' : 'Add Designer'}
+                {addingDesigner ? 'Adding...' : 'Add User'}
               </button>
+            </div>
+          </div>
+
+          <div className="master-editor-section">
+            <div className="master-editor-section-header">
+              <div>
+                <h3>Designers</h3>
+              </div>
             </div>
             {designers.length === 0 ? (
               <div className="master-empty">No active designers found.</div>
@@ -632,6 +864,27 @@ function MasterFranchiseEditorModal({
                 {designers.map((user) =>
                   renderUserRow(user, {
                     canPromoteDesigner: true,
+                    canMakeBookkeeper: true,
+                    canRemoveDesigner: true,
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="master-editor-section">
+            <div className="master-editor-section-header">
+              <div>
+                <h3>Book Keepers</h3>
+              </div>
+            </div>
+            {bookkeepers.length === 0 ? (
+              <div className="master-empty">No active book keepers found.</div>
+            ) : (
+              <div className="master-editor-user-list">
+                {bookkeepers.map((user) =>
+                  renderUserRow(user, {
+                    canDemoteBookkeeper: true,
                     canRemoveDesigner: true,
                   })
                 )}

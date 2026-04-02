@@ -2,7 +2,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { getAdminClient, getRequesterProfile } from '../_shared/auth.ts';
 import { insertLedgerEvent } from '../_shared/ledger.ts';
 
-const ALLOWED_ROLES = new Set(['owner', 'admin', 'designer']);
+const ALLOWED_ROLES = new Set(['owner', 'admin', 'bookkeeper', 'designer']);
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -72,8 +72,8 @@ Deno.serve(async (req) => {
         });
       }
 
-      if (nextRole !== 'admin' || targetRole !== 'designer') {
-        return new Response(JSON.stringify({ error: 'Only master can change owner or admin assignments.' }), {
+      if (targetRole === 'owner' || nextRole === 'owner') {
+        return new Response(JSON.stringify({ error: 'Only master can change owner assignments.' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

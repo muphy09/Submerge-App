@@ -1,5 +1,6 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
+- Admin configurable % threshold amount for approval required; per user
 
 Fiberglass Pools:
     - 3 Levels- Small, Medium, Large (Datasheet)
@@ -19,12 +20,13 @@ Mid Term -
         - Franchise Proposals on admin menu needs to change to 'Active Proposals' displaying only submitted proposals
         - Proposals that do not meet requirements need to have another workflow 'Needs Approval'
             - Needs approval can also be a setting marked by an admin per user - all proposals would 'need approval' on submit if that setting is enabled for that user (regardless if the profit % is good)
-            - Admin / Bookkeeper should be notified somehow that there is a proposal needed for approval
-                - Approval proposal section
-                    - Approved proposals still need to be marked as 'Completed' by an admin or BK. It essentially puts it back into the 'Submitted' phase
+            - Admin / Bookkeeper should be notified somehow that there is a proposal needed for approval (maybe an indicator similar to the Feedback messages for the Master)
+                - Approval proposal section (seperate page that opens, not a modal)
+                    - Breakdown of why the proposal needs approval, and how much money is being lost by not being at the threshold
                     - Admin/BK has ability to add notes and send back, or just approve it
+                        - Approved proposals still need to be marked as 'Completed' by an admin or BK. It essentially puts it back into the 'Submitted' phase
                         - Designer would be notified and can 'resubmit', or be notified it was approved
-                    - Asterik would appear with proposals that were approved in the archive and active proposals list next to the proposal status pill
+                    - Asterik would appear with proposals that were approved in the archive and active proposals list (admin menu) next to the proposal status pill
                     - Ability to see what admin approved it and when (also ability to see what Admin / BK marked as completed after submitting)
 -----
 - Deleting a user workflow

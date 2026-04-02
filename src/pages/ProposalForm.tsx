@@ -48,6 +48,7 @@ import customIconImg from '../../docs/img/custom.png';
 import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import SubmitProposalModal from '../components/SubmitProposalModal';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import {
   getActivePricingModelMeta,
@@ -88,6 +89,12 @@ import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '.
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
+import {
+  ensureProposalWorkflow,
+  getWorkflowStatus,
+  isSubmittedVersionLocked,
+  submitProposalForWorkflow,
+} from '../services/proposalWorkflow';
 
 const normalizeWaterFeatureSelections = (selections: any): WaterFeatureSelection[] => {
   if (!Array.isArray(selections)) return [];
@@ -292,6 +299,9 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
+  const [submitNote, setSubmitNote] = useState('');
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const readPapDiscountsFromModel = (): PAPDiscounts => {
     const snapshot = getPricingDataSnapshot();
@@ -1069,8 +1079,8 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       freshData.createdDate = freshData.createdDate || new Date().toISOString();
       freshData.lastModified = freshData.lastModified || new Date().toISOString();
 
-      const versioned = applyActiveVersion(freshData as Proposal);
-      const allVersions = listAllVersions(freshData as Proposal);
+      const versioned = ensureProposalWorkflow(applyActiveVersion(freshData as Proposal));
+      const allVersions = listAllVersions(ensureProposalWorkflow(freshData as Proposal));
       const allVersionsWithDefaults = (
         await Promise.all(
           allVersions.map(async (v) => ({
@@ -1091,8 +1101,18 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         allVersionsWithDefaults.find((v) => v.versionId === versioned.versionId) ||
         allVersionsWithDefaults[0] ||
         ((await mergeWithPricingSnapshot(versioned)) as Proposal);
-      const sanitizedTarget: Proposal = { ...(targetVersion as Proposal), versions: [] };
+      const sanitizedTarget: Proposal = ensureProposalWorkflow({ ...(targetVersion as Proposal), versions: [] });
       const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
+
+      if (isSubmittedVersionLocked(sanitizedTarget) || getWorkflowStatus(versioned) === 'completed') {
+        showToast({
+          type: 'warning',
+          message:
+            'This version is locked from editing. Create a new version from the proposal summary to make changes.',
+        });
+        navigate(`/proposal/view/${num}`, { replace: true });
+        return;
+      }
 
       if (loadRequestRef.current === requestId) {
         previousSpaTypeRef.current = sanitizedTarget.poolSpecs?.spaType ?? 'none';
@@ -1266,13 +1286,17 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
 
   const handleSave = async (
     mode: 'draft' | 'submit',
-    options?: { navigateToSummary?: boolean; forceDraftStatus?: boolean }
+    options?: {
+      navigateToSummary?: boolean;
+      forceDraftStatus?: boolean;
+      submissionRequest?: { manualReviewRequested: boolean; note: string };
+    }
   ): Promise<boolean> => {
     if (isSaving) return false;
 
     const currentVersionId = proposal.versionId || editingVersionId || 'original';
     const isVersionEdit = !(proposal.isOriginalVersion ?? currentVersionId === 'original');
-    const effectiveMode = isVersionEdit ? 'draft' : mode;
+    const effectiveMode = mode;
     const supabaseConnected = await hasSupabaseConnection(true);
     if (!supabaseConnected) {
       showToast({
@@ -1330,16 +1354,10 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
         totals.versionName ||
         versionNameFromState ||
         (currentVersionId === 'original' ? 'Original Version' : `Version ${versionList.length}`);
-      const nextStatus =
-        effectiveMode === 'submit'
-          ? 'submitted'
-          : options?.forceDraftStatus
-          ? 'draft'
-          : proposal.status || 'draft';
       const finalProposal: Proposal = {
         ...totals,
         proposalNumber: proposal.proposalNumber || proposalNumber || `PROP-${Date.now()}`,
-        status: nextStatus,
+        status: effectiveMode === 'submit' ? 'submitted' : 'draft',
         versionId: currentVersionId,
         versionName,
         isOriginalVersion: totals.isOriginalVersion ?? currentVersionId === 'original',
@@ -1365,30 +1383,47 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
       );
       const containerToSave = upsertVersionInContainer(
         {
+          ...ensureProposalWorkflow(proposal as Proposal),
           ...finalProposal,
           versions: withoutTarget,
           activeVersionId: activeVersionId || finalProposal.versionId || currentVersionId,
+          status: options?.forceDraftStatus ? 'draft' : getWorkflowStatus(proposal as Proposal),
         } as Proposal,
         finalProposal as Proposal,
         activeVersionId || finalProposal.versionId || currentVersionId
       );
 
+      const workflowReady =
+        effectiveMode === 'submit'
+          ? submitProposalForWorkflow(
+              ensureProposalWorkflow(containerToSave as Proposal),
+              currentVersionId,
+              {
+                manualReviewRequested: options?.submissionRequest?.manualReviewRequested,
+                message: options?.submissionRequest?.note,
+              }
+            )
+          : ensureProposalWorkflow(containerToSave as Proposal);
+
       const saved = await saveProposalRemote(
-        containerToSave,
+        workflowReady,
         effectiveMode === 'submit' ? { ledgerAction: 'proposal_submitted' } : undefined
       );
 
-      const savedActive = applyActiveVersion(saved as Proposal);
+      const savedActive = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setProposal({ ...(savedActive as Proposal) });
       setVersionList(listAllVersions(saved as Proposal));
       setActiveVersionId(savedActive.activeVersionId || currentVersionId);
       setEditingVersionId(savedActive.versionId || currentVersionId);
       setHasEdits(false);
+      const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
       showToast({
         type: 'success',
         message:
           effectiveMode === 'submit'
-            ? 'Proposal submitted successfully!'
+            ? savedWorkflowStatus === 'needs_approval'
+              ? 'Proposal submitted for approval.'
+              : 'Proposal submitted successfully.'
             : options?.forceDraftStatus
             ? 'Proposal saved as draft.'
             : 'Proposal saved successfully!',
@@ -1768,9 +1803,27 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
     void handleSave('draft', { navigateToSummary: true, forceDraftStatus: true });
   };
 
-  const handleCompleteClick = () => {
+  const handleOpenSubmitModal = () => {
     if (!canSubmit || isSaving || isOffline) return;
-    void handleSave('draft', { navigateToSummary: true });
+    setSubmitManualReviewRequested(false);
+    setSubmitNote('');
+    setShowSubmitModal(true);
+  };
+
+  const handleConfirmSubmit = () => {
+    if (!canSubmit || isSaving || isOffline) return;
+    setShowSubmitModal(false);
+    void handleSave('submit', {
+      navigateToSummary: true,
+      submissionRequest: {
+        manualReviewRequested: submitManualReviewRequested,
+        note: submitNote,
+      },
+    });
+  };
+
+  const handleCompleteClick = () => {
+    handleOpenSubmitModal();
   };
 
   return (
@@ -1904,7 +1957,7 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
                   disabled={!canSubmit || isSaving || isOffline}
                   title={submitTooltip}
                 >
-                  Complete Proposal
+                  Submit Proposal
                 </button>
               </div>
             </div>
@@ -1991,6 +2044,17 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
           setHasEdits(false);
           navigate('/');
         }}
+      />
+      <SubmitProposalModal
+        isOpen={showSubmitModal}
+        versionName={proposal.versionName || 'Current Version'}
+        manualReviewRequested={submitManualReviewRequested}
+        note={submitNote}
+        isSubmitting={isSaving}
+        onManualReviewRequestedChange={setSubmitManualReviewRequested}
+        onNoteChange={setSubmitNote}
+        onCancel={() => setShowSubmitModal(false)}
+        onConfirm={handleConfirmSubmit}
       />
     </div>
   );

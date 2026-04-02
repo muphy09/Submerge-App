@@ -93,6 +93,7 @@ const getUserNameLabel = (user: Pick<MasterUser, 'name'>) => {
 const formatRoleLabel = (value?: string | null) => {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return 'Unknown';
+  if (normalized === 'bookkeeper') return 'Book Keeper';
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 };
 
@@ -760,6 +761,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                 const franchiseUsers = (usersByFranchise.get(franchise.id) || []).filter((user) => user.isActive !== false);
                 const owners = franchiseUsers.filter((u) => u.role === 'owner');
                 const admins = franchiseUsers.filter((u) => u.role === 'admin');
+                const bookkeepers = franchiseUsers.filter((u) => u.role === 'bookkeeper');
                 const designers = franchiseUsers.filter((u) => u.role === 'designer');
                 const designerNames = designers
                   .map((designer) => (designer.name || '').trim())
@@ -801,6 +803,10 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
                       <div>
                         <strong>Admins:</strong>{' '}
                         {admins.length ? admins.map((u) => getUserNameLabel(u)).join(', ') : 'None'}
+                      </div>
+                      <div>
+                        <strong>Book Keepers:</strong>{' '}
+                        {bookkeepers.length ? bookkeepers.map((u) => getUserNameLabel(u)).join(', ') : 'None'}
                       </div>
                       <div>
                         <strong>Designers:</strong>{' '}

@@ -6,6 +6,59 @@ function normalizeText(value?: string | null) {
   return String(value || '').trim();
 }
 
+function normalizeComparableText(value?: string | null) {
+  return normalizeText(value).toLowerCase();
+}
+
+function buildDesignerIdentifiers(user: { name?: string | null; email?: string | null }) {
+  return new Set(
+    [normalizeComparableText(user.name), normalizeComparableText(user.email)].filter(Boolean)
+  );
+}
+
+function proposalMatchesDesigner(
+  row: { designer_name?: string | null; proposal_json?: Record<string, unknown> | null },
+  identifiers: Set<string>
+) {
+  const rowDesignerName = normalizeComparableText(row.designer_name);
+  const jsonDesignerName = normalizeComparableText(
+    typeof row.proposal_json === 'object' && row.proposal_json
+      ? String((row.proposal_json as Record<string, unknown>).designerName || '')
+      : ''
+  );
+  return identifiers.has(rowDesignerName) || identifiers.has(jsonDesignerName);
+}
+
+function canOwnTransferredProposals(role?: string | null) {
+  const normalized = normalizeComparableText(role);
+  return normalized === 'owner' || normalized === 'admin' || normalized === 'designer';
+}
+
+function applyDesignerTransferToProposal(
+  proposal: Record<string, unknown>,
+  nextDesigner: {
+    name: string;
+    role: string;
+  }
+): Record<string, unknown> {
+  const walk = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object') return value;
+    const record = value as Record<string, unknown>;
+    const versions = Array.isArray(record.versions)
+      ? record.versions.map((entry) => walk(entry) as Record<string, unknown>)
+      : record.versions;
+
+    return {
+      ...record,
+      designerName: nextDesigner.name,
+      designerRole: nextDesigner.role,
+      versions,
+    };
+  };
+
+  return walk(proposal) as Record<string, unknown>;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -24,11 +77,13 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const userId = String(body?.userId || '').trim();
+    const userId = normalizeText(body?.userId);
+    const transferToUserId = normalizeText(body?.transferToUserId);
     const effectiveRole =
       requesterRole === 'master'
-        ? String(body?.actingAsRole || '').trim().toLowerCase() || requesterRole
+        ? normalizeComparableText(body?.actingAsRole) || requesterRole
         : requesterRole;
+
     if (!userId) {
       return new Response(JSON.stringify({ error: 'userId is required.' }), {
         status: 400,
@@ -49,9 +104,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const targetRole = String(target.role || '').toLowerCase();
-    if (targetRole !== 'designer') {
-      return new Response(JSON.stringify({ error: 'Only designers can be removed here.' }), {
+    const targetRole = normalizeComparableText(target.role);
+    if (!['designer', 'bookkeeper'].includes(targetRole)) {
+      return new Response(JSON.stringify({ error: 'Only designers and bookkeepers can be removed here.' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -64,6 +119,112 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: proposalRows, error: proposalsError } = await supabase
+      .from('franchise_proposals')
+      .select('proposal_number,proposal_json,designer_name,designer_role,designer_code')
+      .eq('franchise_id', target.franchise_id);
+    if (proposalsError) throw proposalsError;
+
+    const designerIdentifiers = buildDesignerIdentifiers(target);
+    const matchedProposals =
+      (proposalRows || []).filter((row: any) => proposalMatchesDesigner(row, designerIdentifiers)) || [];
+
+    let transferUser:
+      | {
+          id: string;
+          franchise_id: string;
+          role: string;
+          is_active: boolean;
+          name?: string | null;
+          email?: string | null;
+        }
+      | null = null;
+
+    if (matchedProposals.length > 0) {
+      if (!transferToUserId) {
+        return new Response(
+          JSON.stringify({ error: 'This designer has proposals. Transfer them before removing the user.' }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      if (transferToUserId === userId) {
+        return new Response(JSON.stringify({ error: 'Transfer user must be different from the designer being removed.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: nextUser, error: transferUserError } = await supabase
+        .from('franchise_users')
+        .select('id,franchise_id,role,is_active,name,email')
+        .eq('id', transferToUserId)
+        .maybeSingle();
+      if (transferUserError && transferUserError.code !== 'PGRST116') throw transferUserError;
+      if (!nextUser) {
+        return new Response(JSON.stringify({ error: 'Transfer user not found.' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (nextUser.franchise_id !== target.franchise_id) {
+        return new Response(JSON.stringify({ error: 'Transfer user must belong to the same franchise.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (nextUser.is_active === false) {
+        return new Response(JSON.stringify({ error: 'Transfer user must be active.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (!canOwnTransferredProposals(nextUser.role)) {
+        return new Response(JSON.stringify({ error: 'Transfer user must be an owner, admin, or designer.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      transferUser = nextUser;
+    }
+
+    let proposalsUpdated = 0;
+    if (matchedProposals.length > 0 && transferUser) {
+      const nextDesignerName = normalizeText(transferUser.name) || normalizeText(transferUser.email);
+      const nextDesignerRole = normalizeComparableText(transferUser.role) || 'designer';
+      const updates = matchedProposals
+        .map((row: any) => {
+          const proposalJson =
+            row?.proposal_json && typeof row.proposal_json === 'object'
+              ? row.proposal_json as Record<string, unknown>
+              : {};
+
+          return {
+            proposal_number: row.proposal_number,
+            franchise_id: target.franchise_id,
+            designer_name: nextDesignerName,
+            designer_role: nextDesignerRole,
+            designer_code: row?.designer_code || null,
+            proposal_json: applyDesignerTransferToProposal(proposalJson, {
+              name: nextDesignerName,
+              role: nextDesignerRole,
+            }),
+          };
+        })
+        .filter((row: any) => Boolean(row?.proposal_number));
+
+      if (updates.length > 0) {
+        const { error: transferError } = await supabase
+          .from('franchise_proposals')
+          .upsert(updates, { onConflict: 'proposal_number' });
+        if (transferError) throw transferError;
+        proposalsUpdated = updates.length;
+      }
+    }
+
     const now = new Date().toISOString();
     const { data: updated, error: updateError } = await supabase
       .from('franchise_users')
@@ -74,46 +235,6 @@ Deno.serve(async (req) => {
     if (updateError) throw updateError;
     if (!updated || updated.is_active !== false) {
       throw new Error('User removal did not persist.');
-    }
-
-    const designerName = normalizeText(target.name) || normalizeText(target.email);
-    let proposalsUpdated = 0;
-
-    if (designerName) {
-      const { data: proposals, error: proposalsError } = await supabase
-        .from('franchise_proposals')
-        .select('proposal_number,proposal_json,designer_name')
-        .eq('franchise_id', target.franchise_id)
-        .ilike('designer_name', designerName);
-      if (proposalsError) throw proposalsError;
-
-      const updates =
-        proposals
-          ?.map((row: any) => {
-            const currentName = normalizeText(row?.designer_name) || designerName;
-            const nextName = /\(deleted\)$/i.test(currentName) ? currentName : `${currentName} (Deleted)`;
-            const proposalJson =
-              row?.proposal_json && typeof row.proposal_json === 'object' ? row.proposal_json : {};
-
-            return {
-              proposal_number: row.proposal_number,
-              franchise_id: target.franchise_id,
-              designer_name: nextName,
-              proposal_json: {
-                ...proposalJson,
-                designerName: nextName,
-              },
-            };
-          })
-          .filter((row: any) => Boolean(row?.proposal_number)) || [];
-
-      if (updates.length > 0) {
-        const { error: proposalsUpdateError } = await supabase
-          .from('franchise_proposals')
-          .upsert(updates, { onConflict: 'proposal_number' });
-        if (proposalsUpdateError) throw proposalsUpdateError;
-        proposalsUpdated = updates.length;
-      }
     }
 
     try {
@@ -134,6 +255,10 @@ Deno.serve(async (req) => {
           targetEmail: target.email || null,
           targetRole,
           proposalsUpdated,
+          transferredToUserId: transferUser?.id || null,
+          transferredToName: transferUser?.name || null,
+          transferredToEmail: transferUser?.email || null,
+          transferredToRole: transferUser?.role || null,
         },
       });
     } catch (ledgerError) {

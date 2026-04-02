@@ -57,10 +57,26 @@
 .nav-center {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.nav-links-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 2.5rem;
   flex: 1;
-  justify-content: center;
-  height: 100%;
+  min-width: 0;
+}
+
+.nav-links-admin {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  padding-left: 2rem;
 }
 
 .nav-link {
@@ -75,6 +91,25 @@
   border-bottom: 4px solid transparent;
   transition: all 0.25s ease;
   position: relative;
+}
+
+.nav-link-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.nav-unread-pill {
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0 0.38rem;
+  border-radius: 999px;
+  background: #f4d03f;
+  color: #3e2d00;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
 }
 
 .nav-link:hover {
@@ -152,7 +187,7 @@
     height: auto;
   }
 
-  .nav-center {
+  .nav-links-primary {
     gap: 1.25rem;
   }
 
@@ -181,9 +216,21 @@
 
   .nav-center {
     width: 100%;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .nav-links-primary {
+    width: 100%;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+
+  .nav-links-admin {
+    width: 100%;
+    justify-content: flex-end;
+    padding-left: 0;
   }
 
   .nav-link {
@@ -202,7 +249,8 @@
 }
 
 @media (max-width: 560px) {
-  .nav-center {
+  .nav-links-primary,
+  .nav-links-admin {
     justify-content: flex-start;
   }
 
@@ -293,7 +341,7 @@
     padding: 0.5rem 1rem;
   }
 
-  .nav-center {
+  .nav-links-primary {
     gap: 1.5rem;
   }
 }
@@ -321,7 +369,7 @@
     padding: 0.5rem 0.75rem;
   }
 
-  .nav-center {
+  .nav-links-primary {
     gap: 1rem;
   }
 
@@ -375,7 +423,7 @@
     padding: 0.5rem;
   }
 
-  .nav-center {
+  .nav-links-primary {
     gap: 0.5rem;
   }
 
@@ -422,7 +470,18 @@
     border-bottom-width: 3px;
   }
 
+  .nav-unread-pill {
+    min-width: 18px;
+    min-height: 18px;
+    line-height: 18px;
+    font-size: 0.68rem;
+  }
+
   .nav-center {
+    gap: 0.25rem;
+  }
+
+  .nav-links-primary {
     gap: 0.25rem;
   }
 }

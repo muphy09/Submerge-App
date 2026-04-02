@@ -733,6 +733,72 @@ export interface PricingCalculations {
   retailAdjustmentsTotal?: number;
 }
 
+export type ProposalWorkflowStatus =
+  | 'draft'
+  | 'submitted'
+  | 'needs_approval'
+  | 'changes_requested'
+  | 'completed';
+
+export type ProposalActorRole = 'master' | 'owner' | 'admin' | 'bookkeeper' | 'designer';
+
+export type ProposalWorkflowReasonCode =
+  | 'margin_below_threshold'
+  | 'discount_above_allowance'
+  | 'always_require_approval'
+  | 'manual_review';
+
+export interface ProposalWorkflowReason {
+  code: ProposalWorkflowReasonCode;
+  label: string;
+  detail?: string;
+}
+
+export interface ProposalWorkflowActor {
+  userId?: string;
+  name?: string | null;
+  email?: string | null;
+  role?: ProposalActorRole;
+}
+
+export type ProposalWorkflowEventType =
+  | 'submitted'
+  | 'approved'
+  | 'changes_requested'
+  | 'completed'
+  | 'note';
+
+export interface ProposalWorkflowEvent {
+  id: string;
+  type: ProposalWorkflowEventType;
+  createdAt: string;
+  actor?: ProposalWorkflowActor;
+  message?: string;
+  versionId?: string;
+  fromStatus?: ProposalWorkflowStatus | null;
+  toStatus?: ProposalWorkflowStatus | null;
+  readByUserIds?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ProposalWorkflowState {
+  status: ProposalWorkflowStatus;
+  reviewVersionId?: string | null;
+  submittedVersionId?: string | null;
+  submittedAt?: string | null;
+  submittedBy?: ProposalWorkflowActor | null;
+  manualReviewRequested?: boolean;
+  manualReviewMessage?: string | null;
+  needsApproval?: boolean;
+  approvalReasons?: ProposalWorkflowReason[];
+  approved?: boolean;
+  approvedAt?: string | null;
+  approvedBy?: ProposalWorkflowActor | null;
+  completedAt?: string | null;
+  completedBy?: ProposalWorkflowActor | null;
+  history?: ProposalWorkflowEvent[];
+}
+
 // ============================================================================
 // COMPLETE PROPOSAL
 // ============================================================================
@@ -742,7 +808,7 @@ export interface Proposal {
   proposalNumber: string;
   createdDate: string;
   lastModified: string;
-  status: 'draft' | 'submitted' | 'approved' | 'rejected';
+  status: ProposalWorkflowStatus;
   /**
    * Versioning metadata
    */
@@ -753,7 +819,7 @@ export interface Proposal {
   isOriginalVersion?: boolean;
   franchiseId?: string;
   designerName?: string;
-  designerRole?: 'master' | 'owner' | 'admin' | 'designer';
+  designerRole?: ProposalActorRole;
   designerCode?: string;
   pricingModelId?: string;
   pricingModelName?: string;
@@ -761,6 +827,11 @@ export interface Proposal {
   pricingModelIsDefault?: boolean;
   syncStatus?: 'synced' | 'pending' | 'error';
   syncMessage?: string;
+  versionLocked?: boolean;
+  versionLockedAt?: string | null;
+  versionSubmittedAt?: string | null;
+  versionSubmittedBy?: ProposalWorkflowActor | null;
+  workflow?: ProposalWorkflowState;
 
   // Main sections
   customerInfo: CustomerInfo;

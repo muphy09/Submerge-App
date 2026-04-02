@@ -13,6 +13,7 @@ import { isEnvFlagTrue } from './env';
 import { applyActiveVersion } from '../utils/proposalVersions';
 import { logLedgerEventSafe } from './ledger';
 import { upgradeProposalContractTemplateRevision } from './contractTemplateUpgrade';
+import { ensureProposalWorkflow, getWorkflowStatus } from './proposalWorkflow';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
@@ -71,7 +72,7 @@ function isOwnProposal(proposal: Proposal, session?: UserSession | null) {
 
 function isSubmittedStatus(status?: string | null) {
   const normalized = normalizeIdentity(status);
-  return normalized === 'submitted' || normalized === 'approved' || normalized === 'rejected';
+  return normalized === 'submitted' || normalized === 'needs_approval' || normalized === 'changes_requested';
 }
 
 function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | null, franchiseId?: string) {
@@ -100,7 +101,11 @@ function canReadProposal(proposal: Proposal, session?: UserSession | null) {
   if (role === 'master') return true;
   if (isOwnProposal(proposal, session)) return true;
   if (role === 'owner' || role === 'admin') {
-    return isSubmittedStatus(proposal.status);
+    return isSubmittedStatus(getWorkflowStatus(proposal)) || getWorkflowStatus(proposal) === 'completed';
+  }
+  if (role === 'bookkeeper') {
+    const status = getWorkflowStatus(proposal);
+    return status === 'submitted' || status === 'needs_approval' || status === 'completed';
   }
   return false;
 }
@@ -210,7 +215,7 @@ function ensureProposalReadMetadata(
 ): Proposal {
   const currentSession = session ?? readSession();
   const franchiseId = proposal.franchiseId || stored?.franchise_id || currentSession?.franchiseId || DEFAULT_FRANCHISE_ID;
-  const status = proposal.status || stored?.status || 'draft';
+  const status = getWorkflowStatus(proposal) || (stored?.status as any) || 'draft';
   const designerName = (proposal as any).designerName || stored?.designer_name || undefined;
   const designerRole = (proposal as any).designerRole || stored?.designer_role || undefined;
   const designerCode = (proposal as any).designerCode || stored?.designer_code || undefined;
@@ -243,10 +248,12 @@ function ensureProposalWriteMetadata(proposal: Proposal, session?: UserSession |
 
 function normalizeForConsumption(proposal: Proposal, session?: UserSession | null, stored?: StoredProposalRow): Proposal {
   const withMeta = upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(proposal, session, stored));
-  const active = applyActiveVersion(withMeta);
-  const normalizedActive = upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(active, session, stored));
+  const active = ensureProposalWorkflow(applyActiveVersion(withMeta));
+  const normalizedActive = ensureProposalWorkflow(
+    upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(active, session, stored))
+  );
   const normalizedVersions = (normalizedActive.versions || []).map((v) =>
-    upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(v, session, stored))
+    ensureProposalWorkflow(upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(v, session, stored)))
   );
   return {
     ...normalizedActive,
@@ -356,7 +363,9 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase not configured');
 
-  const normalized = upgradeProposalContractTemplateRevision(ensureProposalWriteMetadata(applyActiveVersion(proposal)));
+  const normalized = ensureProposalWorkflow(
+    upgradeProposalContractTemplateRevision(ensureProposalWriteMetadata(applyActiveVersion(proposal)))
+  );
   const now = nowIso();
 
   const { error } = await supabase
@@ -368,7 +377,7 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
         designer_name: normalized.designerName,
         designer_role: normalized.designerRole,
         designer_code: normalized.designerCode,
-        status: normalized.status,
+        status: getWorkflowStatus(normalized),
         pricing_model_id: normalized.pricingModelId || null,
         pricing_model_name: normalized.pricingModelName || null,
         last_modified: normalized.lastModified || now,
@@ -676,14 +685,14 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
   const session = readSession();
   clearDeletedTombstone(proposal.proposalNumber);
   const normalized = ensureProposalWriteMetadata(
-    applyActiveVersion({
+    ensureProposalWorkflow(applyActiveVersion({
       ...proposal,
       franchiseId: proposal.franchiseId || getSessionFranchiseId(),
       designerName: (proposal as any).designerName || getSessionUserName(),
       designerRole: (proposal as any).designerRole || getSessionRole(),
       designerCode: (proposal as any).designerCode || getSessionFranchiseCode(),
       lastModified: proposal.lastModified || now,
-    } as Proposal),
+    } as Proposal)),
     session
   );
   const normalizedWithVersions: Proposal = {

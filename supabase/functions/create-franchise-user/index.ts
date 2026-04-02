@@ -13,6 +13,8 @@ function generateTempPassword(length = 12) {
 
 const DEFAULT_DIG_COMMISSION_RATE = 0.0275;
 const DEFAULT_CLOSEOUT_COMMISSION_RATE = 0.0275;
+const DEFAULT_APPROVAL_MARGIN_THRESHOLD_PERCENT = 18;
+const DEFAULT_DISCOUNT_ALLOWANCE_THRESHOLD_PERCENT = 18;
 
 function isEmailConflict(error: any) {
   const code = String(error?.code || '').trim();
@@ -67,8 +69,12 @@ Deno.serve(async (req) => {
     }
 
     const role = requesterRole === 'master'
-      ? (requestedRole === 'owner' || requestedRole === 'admin' ? requestedRole : 'designer')
-      : 'designer';
+      ? (requestedRole === 'owner' || requestedRole === 'admin' || requestedRole === 'bookkeeper'
+        ? requestedRole
+        : 'designer')
+      : requestedRole === 'bookkeeper'
+        ? 'bookkeeper'
+        : 'designer';
 
     const tempPassword = generateTempPassword();
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -97,6 +103,9 @@ Deno.serve(async (req) => {
       password_reset_required: true,
       dig_commission_rate: DEFAULT_DIG_COMMISSION_RATE,
       closeout_commission_rate: DEFAULT_CLOSEOUT_COMMISSION_RATE,
+      approval_margin_threshold_percent: DEFAULT_APPROVAL_MARGIN_THRESHOLD_PERCENT,
+      discount_allowance_threshold_percent: DEFAULT_DISCOUNT_ALLOWANCE_THRESHOLD_PERCENT,
+      always_require_approval: false,
       created_at: now,
       updated_at: now,
     });

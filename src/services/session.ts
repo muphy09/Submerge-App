@@ -1,6 +1,6 @@
 import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
 
-export type UserRole = 'master' | 'owner' | 'admin' | 'designer';
+export type UserRole = 'master' | 'owner' | 'admin' | 'bookkeeper' | 'designer';
 
 export type UserSession = Partial<UserCommissionRates> & {
   userId?: string;
@@ -13,6 +13,9 @@ export type UserSession = Partial<UserCommissionRates> & {
   passwordResetRequired?: boolean;
   appSessionId?: string;
   appSessionLeaseToken?: string;
+  approvalMarginThresholdPercent?: number;
+  discountAllowanceThresholdPercent?: number;
+  alwaysRequireApproval?: boolean;
 };
 
 export type MasterImpersonation = {
@@ -159,6 +162,7 @@ export function getSessionRole(
   }
   if (role === 'owner') return 'owner';
   if (role === 'admin') return 'admin';
+  if (role === 'bookkeeper') return 'bookkeeper';
   if (role === 'designer') return 'designer';
   return defaultRole;
 }
@@ -178,4 +182,19 @@ export function getSessionUserEmail(defaultEmail = '') {
 
 export function getSessionCommissionRates(): UserCommissionRates {
   return normalizeUserCommissionRates(readSession());
+}
+
+export function getSessionApprovalMarginThreshold(defaultValue = 18) {
+  const value = Number(readSession()?.approvalMarginThresholdPercent);
+  return Number.isFinite(value) ? value : defaultValue;
+}
+
+export function getSessionDiscountAllowanceThreshold(defaultValue = 18) {
+  const value = Number(readSession()?.discountAllowanceThresholdPercent);
+  return Number.isFinite(value) ? value : defaultValue;
+}
+
+export function getSessionAlwaysRequireApproval(defaultValue = false) {
+  const value = readSession()?.alwaysRequireApproval;
+  return typeof value === 'boolean' ? value : defaultValue;
 }

@@ -9,11 +9,14 @@ export type FranchiseUser = UserCommissionRates & {
   franchiseId: string;
   email: string;
   name?: string | null;
-  role: 'owner' | 'admin' | 'designer';
+  role: 'owner' | 'admin' | 'bookkeeper' | 'designer';
   isActive: boolean;
   passwordResetRequired?: boolean;
   createdAt?: string;
   updatedAt?: string;
+  approvalMarginThresholdPercent: number;
+  discountAllowanceThresholdPercent: number;
+  alwaysRequireApproval: boolean;
 };
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
@@ -24,6 +27,11 @@ function normalizeName(name?: string | null) {
 
 function normalizeEmail(email?: string | null) {
   return String(email || '').trim().toLowerCase();
+}
+
+function normalizeThresholdPercent(value: unknown, fallback = 18) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
 }
 
 function requireSupabase() {
@@ -68,7 +76,7 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
   const { data, error } = await supabase
     .from('franchise_users')
     .select(
-      'id,franchise_id,name,email,role,is_active,password_reset_required,created_at,updated_at,dig_commission_rate,closeout_commission_rate'
+      'id,franchise_id,name,email,role,is_active,password_reset_required,created_at,updated_at,dig_commission_rate,closeout_commission_rate,approval_margin_threshold_percent,discount_allowance_threshold_percent,always_require_approval'
     )
     .eq('franchise_id', franchiseId)
     .order('name', { ascending: true });
@@ -83,13 +91,16 @@ export async function listFranchiseUsers(franchiseId: string): Promise<Franchise
     passwordResetRequired: Boolean(row.password_reset_required),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    approvalMarginThresholdPercent: normalizeThresholdPercent(row.approval_margin_threshold_percent),
+    discountAllowanceThresholdPercent: normalizeThresholdPercent(row.discount_allowance_threshold_percent),
+    alwaysRequireApproval: row.always_require_approval === true,
     ...normalizeUserCommissionRates({
       digCommissionRate: row.dig_commission_rate,
       closeoutCommissionRate: row.closeout_commission_rate,
     }),
   }));
   const activeRows = rows.filter((row) => row.isActive);
-  const weight = { owner: 2, admin: 1, designer: 0 } as Record<string, number>;
+  const weight = { owner: 3, admin: 2, bookkeeper: 1, designer: 0 } as Record<string, number>;
   return activeRows.sort(
     (a, b) =>
       weight[b.role] - weight[a.role] ||
@@ -102,7 +113,7 @@ export async function createFranchiseUser(payload: {
   franchiseId: string;
   email: string;
   name?: string | null;
-  role?: 'owner' | 'admin' | 'designer';
+  role?: 'owner' | 'admin' | 'bookkeeper' | 'designer';
 }) {
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -132,7 +143,10 @@ export async function createFranchiseUser(payload: {
   return data as { tempPassword?: string; userId?: string };
 }
 
-export async function updateFranchiseUserRole(userId: string, role: 'owner' | 'admin' | 'designer') {
+export async function updateFranchiseUserRole(
+  userId: string,
+  role: 'owner' | 'admin' | 'bookkeeper' | 'designer'
+) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
@@ -149,6 +163,74 @@ export async function updateFranchiseUserRole(userId: string, role: 'owner' | 'a
     throw error;
   }
   return data as { success?: boolean; user?: Pick<FranchiseUser, 'id' | 'franchiseId' | 'role' | 'isActive'> };
+}
+
+export async function updateFranchiseUserApprovalSettings(
+  userId: string,
+  settings: {
+    approvalMarginThresholdPercent: number;
+    discountAllowanceThresholdPercent: number;
+    alwaysRequireApproval: boolean;
+  }
+) {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    requireSupabase();
+    return null;
+  }
+
+  const nextApprovalMarginThresholdPercent = normalizeThresholdPercent(
+    settings.approvalMarginThresholdPercent
+  );
+  const nextDiscountAllowanceThresholdPercent = normalizeThresholdPercent(
+    settings.discountAllowanceThresholdPercent
+  );
+  const nextAlwaysRequireApproval = settings.alwaysRequireApproval === true;
+
+  const { data: currentUser, error: currentUserError } = await supabase
+    .from('franchise_users')
+    .select(
+      'id,franchise_id,name,email,role,approval_margin_threshold_percent,discount_allowance_threshold_percent,always_require_approval'
+    )
+    .eq('id', userId)
+    .maybeSingle();
+  if (currentUserError) throw currentUserError;
+
+  const { error } = await supabase
+    .from('franchise_users')
+    .update({
+      approval_margin_threshold_percent: nextApprovalMarginThresholdPercent,
+      discount_allowance_threshold_percent: nextDiscountAllowanceThresholdPercent,
+      always_require_approval: nextAlwaysRequireApproval,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+  if (error) throw error;
+
+  await logLedgerEventSafe({
+    franchiseId: currentUser?.franchise_id || null,
+    action: 'User approval settings updated',
+    targetType: 'user',
+    targetId: userId,
+    details: {
+      targetUserId: userId,
+      targetName: currentUser?.name || null,
+      targetEmail: currentUser?.email || null,
+      targetRole: currentUser?.role || null,
+      previousApprovalMarginThresholdPercent: currentUser?.approval_margin_threshold_percent ?? null,
+      nextApprovalMarginThresholdPercent,
+      previousDiscountAllowanceThresholdPercent: currentUser?.discount_allowance_threshold_percent ?? null,
+      nextDiscountAllowanceThresholdPercent,
+      previousAlwaysRequireApproval: currentUser?.always_require_approval ?? null,
+      nextAlwaysRequireApproval,
+    },
+  });
+
+  return {
+    approvalMarginThresholdPercent: nextApprovalMarginThresholdPercent,
+    discountAllowanceThresholdPercent: nextDiscountAllowanceThresholdPercent,
+    alwaysRequireApproval: nextAlwaysRequireApproval,
+  };
 }
 
 export async function updateFranchiseUserCommissionRates(
@@ -224,14 +306,14 @@ export async function setFranchiseUserActive(userId: string, isActive: boolean) 
   return true;
 }
 
-export async function deleteFranchiseUser(userId: string) {
+export async function deleteFranchiseUser(userId: string, transferToUserId?: string | null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
     return null;
   }
   const { data, error } = await supabase.functions.invoke('delete-franchise-user', {
-    body: { userId, ...getLedgerContextPayload() },
+    body: { userId, transferToUserId: transferToUserId || null, ...getLedgerContextPayload() },
   });
   if (error) {
     const message = await extractFunctionErrorMessage(error);

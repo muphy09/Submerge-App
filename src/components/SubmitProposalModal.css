@@ -1,0 +1,124 @@
+.submit-proposal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 36, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  z-index: 1400;
+}
+
+.submit-proposal-modal {
+  width: min(640px, 100%);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 32px 80px rgba(8, 20, 38, 0.28);
+  overflow: hidden;
+}
+
+.submit-proposal-header {
+  padding: 1.2rem 1.35rem 0.6rem;
+}
+
+.submit-proposal-kicker {
+  margin: 0 0 0.25rem;
+  color: #946c1d;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.submit-proposal-header h2 {
+  margin: 0;
+  color: #16324d;
+  font-size: 1.35rem;
+}
+
+.submit-proposal-body {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.4rem 1.35rem 1rem;
+}
+
+.submit-proposal-message {
+  margin: 0;
+  color: #35526d;
+  line-height: 1.55;
+}
+
+.submit-proposal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: #16324d;
+  font-weight: 600;
+}
+
+.submit-proposal-checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
+.submit-proposal-note {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.submit-proposal-note span {
+  color: #16324d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.submit-proposal-note textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid rgba(22, 50, 77, 0.18);
+  padding: 0.85rem 0.95rem;
+  font: inherit;
+  color: #16324d;
+  background: #fbfcfe;
+}
+
+.submit-proposal-note textarea:focus {
+  outline: none;
+  border-color: rgba(95, 175, 197, 0.88);
+  box-shadow: 0 0 0 4px rgba(95, 175, 197, 0.18);
+}
+
+.submit-proposal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0 1.35rem 1.35rem;
+}
+
+.submit-proposal-button {
+  min-width: 130px;
+  min-height: 42px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submit-proposal-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.submit-proposal-button--ghost {
+  background: #eff3f7;
+  border-color: rgba(22, 50, 77, 0.1);
+  color: #16324d;
+}
+
+.submit-proposal-button--primary {
+  background: #16324d;
+  color: #ffffff;
+}
