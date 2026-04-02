@@ -316,6 +316,18 @@
   border-color: #fecdd3;
 }
 
+.version-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #d1d5db;
+  font-weight: 600;
+  font-size: 14px;
+}
+
 .hero-title-separator {
   color: #475569;
   font-weight: 600;

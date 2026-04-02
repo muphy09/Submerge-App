@@ -506,7 +506,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
 
                   <div className="workflow-diff-intro">
                     <div className="workflow-diff-intro-title">
-                      {`Original -> ${selectedDiff.reviewVersionName} Differences`}
+                      {`${selectedDiff.compareVersionName} -> ${selectedDiff.reviewVersionName} Differences`}
                     </div>
                   </div>
 

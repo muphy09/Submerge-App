@@ -97,7 +97,7 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass }: Prop
             className="info-box"
             style={{ marginBottom: '12px', background: '#eff6ff', borderColor: '#93c5fd', color: '#1d4ed8' }}
           >
-            Interior finish pricing does not apply to fiberglass shells. Water truck charges still calculate from pool gallons.
+            Interior finish pricing does not apply to Fiberglass Shells.
           </div>
         )}
 

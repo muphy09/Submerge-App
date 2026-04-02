@@ -152,6 +152,33 @@ function normalizeHistory(history?: ProposalWorkflowEvent[] | null) {
     }));
 }
 
+function hasRevokedApproval(
+  history: ProposalWorkflowEvent[] | null | undefined,
+  versionId?: string | null
+) {
+  const targetId = normalizeText(versionId);
+  if (!targetId) return false;
+
+  let lastApprovedIndex = -1;
+  let lastChangesRequestedIndex = -1;
+  normalizeHistory(history).forEach((entry, index) => {
+    const entryVersionId = normalizeText(entry.versionId) || ORIGINAL_VERSION_ID;
+    if (entryVersionId !== targetId) return;
+    if (entry.type === 'approved') lastApprovedIndex = index;
+    if (entry.type === 'changes_requested') lastChangesRequestedIndex = index;
+  });
+
+  return lastApprovedIndex >= 0 && lastChangesRequestedIndex > lastApprovedIndex;
+}
+
+function getEffectiveApprovedVersionIds(
+  history: ProposalWorkflowEvent[] | null | undefined,
+  ids?: Array<string | null | undefined>,
+  fallbackId?: string | null
+) {
+  return dedupeVersionIds(ids, fallbackId).filter((versionId) => !hasRevokedApproval(history, versionId));
+}
+
 function getNonPapDiscountTotal(proposal: Partial<Proposal>) {
   const retailAdjustments = Array.isArray(proposal.retailAdjustments) ? proposal.retailAdjustments : [];
   const retailDiscountTotal = retailAdjustments.reduce((sum, adjustment) => {
@@ -715,7 +742,7 @@ export function buildWorkflowActor(session?: UserSession | null): ProposalWorkfl
 
 export function getWorkflowStatus(proposal?: Partial<Proposal> | null): ProposalWorkflowStatus {
   const status = normalizeText(proposal?.workflow?.status || proposal?.status).toLowerCase();
-  const hasApprovedBaseline = Boolean(proposal?.workflow?.approved === true || proposal?.workflow?.approvedVersionId);
+  const hasApprovedBaseline = Boolean(proposal?.workflow?.approved === true || getApprovedVersionId(proposal));
   const hasPendingReview = Boolean(normalizeText(proposal?.workflow?.reviewVersionId));
   if (status === 'completed') return 'completed';
   if (status === 'needs_approval') return 'needs_approval';
@@ -729,6 +756,8 @@ export function getWorkflowStatus(proposal?: Partial<Proposal> | null): Proposal
 
 export function ensureProposalWorkflow(proposal: Proposal): Proposal {
   const rawStatus = normalizeText(proposal.status).toLowerCase();
+  const workflow = proposal.workflow || ({} as ProposalWorkflowState);
+  const history = normalizeHistory(workflow.history);
   const hasWorkflowState = Boolean(
     proposal.workflow &&
       (
@@ -742,7 +771,6 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
   const shouldResetLegacySubmittedProposal =
     !hasWorkflowState &&
     (rawStatus === 'submitted' || rawStatus === 'approved' || rawStatus === 'rejected');
-  const workflow = proposal.workflow || ({} as ProposalWorkflowState);
   const currentVersionId = proposal.activeVersionId || proposal.versionId || ORIGINAL_VERSION_ID;
   let normalizedStatus = shouldResetLegacySubmittedProposal ? 'draft' : getWorkflowStatus(proposal);
   let approvedVersionId = shouldResetLegacySubmittedProposal
@@ -755,7 +783,10 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
       ) || null;
   let approvedVersionIds = shouldResetLegacySubmittedProposal
     ? []
-    : dedupeVersionIds(workflow.approvedVersionIds, approvedVersionId);
+    : getEffectiveApprovedVersionIds(history, workflow.approvedVersionIds, approvedVersionId);
+  if (!approvedVersionId || !approvedVersionIds.includes(approvedVersionId)) {
+    approvedVersionId = approvedVersionIds[approvedVersionIds.length - 1] || null;
+  }
   let pendingReviewVersionId = shouldResetLegacySubmittedProposal
     ? null
     : isPendingReviewStatus(normalizedStatus)
@@ -776,10 +807,9 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
 
   if (!approvedVersionId && normalizedStatus === 'completed') {
     approvedVersionId = normalizeText(workflow.submittedVersionId || workflow.reviewVersionId || currentVersionId) || null;
-    approvedVersionIds = dedupeVersionIds(approvedVersionIds, approvedVersionId);
+    approvedVersionIds = getEffectiveApprovedVersionIds(history, approvedVersionIds, approvedVersionId);
   }
 
-  const history = normalizeHistory(workflow.history);
   const approved = Boolean(approvedVersionId);
   const submittedVersionId = pendingReviewVersionId || approvedVersionId || normalizeText(workflow.submittedVersionId) || null;
 
@@ -803,8 +833,8 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
       needsApproval: shouldResetLegacySubmittedProposal ? false : isPendingReviewStatus(normalizedStatus),
       approvalReasons: shouldResetLegacySubmittedProposal ? [] : Array.isArray(workflow.approvalReasons) ? workflow.approvalReasons : [],
       approved,
-      approvedAt: shouldResetLegacySubmittedProposal ? null : workflow.approvedAt || null,
-      approvedBy: shouldResetLegacySubmittedProposal ? null : workflow.approvedBy || null,
+      approvedAt: shouldResetLegacySubmittedProposal || !approved ? null : workflow.approvedAt || null,
+      approvedBy: shouldResetLegacySubmittedProposal || !approved ? null : workflow.approvedBy || null,
       completedAt: shouldResetLegacySubmittedProposal ? null : workflow.completedAt || null,
       completedBy: shouldResetLegacySubmittedProposal ? null : workflow.completedBy || null,
       history: shouldResetLegacySubmittedProposal ? [] : history,
@@ -819,7 +849,12 @@ export function getPendingReviewVersionId(proposal?: Partial<Proposal> | null) {
 }
 
 export function getApprovedVersionId(proposal?: Partial<Proposal> | null) {
-  return normalizeText(proposal?.workflow?.approvedVersionId) || null;
+  const approvedVersionIds = getEffectiveApprovedVersionIds(
+    proposal?.workflow?.history,
+    proposal?.workflow?.approvedVersionIds,
+    proposal?.workflow?.approvedVersionId
+  );
+  return approvedVersionIds[approvedVersionIds.length - 1] || null;
 }
 
 export function getReviewVersionId(proposal?: Partial<Proposal> | null) {
@@ -1275,11 +1310,25 @@ export function requestWorkflowChanges(
     { message, toStatus: 'changes_requested' },
     session
   );
+  const currentStatus = getWorkflowStatus(normalized);
+  const currentReviewVersionId = getPendingReviewVersionId(normalized) || getReviewVersionId(normalized);
+  const currentApprovedVersionId = getApprovedVersionId(normalized);
+  const shouldRevokeApproval =
+    currentStatus === 'approved' &&
+    Boolean(currentApprovedVersionId) &&
+    currentApprovedVersionId === currentReviewVersionId;
   const updatedVersions = updateReviewVersionStatus(normalized, 'changes_requested');
   const nextWorkflow: ProposalWorkflowState = {
     ...workflow,
     status: 'changes_requested',
+    reviewVersionId: currentReviewVersionId,
+    submittedVersionId: currentReviewVersionId,
+    approvedVersionId: shouldRevokeApproval ? null : currentApprovedVersionId,
+    approvedVersionIds: shouldRevokeApproval ? [] : dedupeVersionIds(workflow.approvedVersionIds, currentApprovedVersionId),
     needsApproval: false,
+    approved: shouldRevokeApproval ? false : Boolean(currentApprovedVersionId),
+    approvedAt: shouldRevokeApproval ? null : workflow.approvedAt || null,
+    approvedBy: shouldRevokeApproval ? null : workflow.approvedBy || null,
   };
   return mergeVersionsIntoContainer(
     normalized,
@@ -1373,6 +1422,24 @@ function getVersionName(version?: Partial<Proposal> | null) {
   return id === ORIGINAL_VERSION_ID ? 'Original Version' : 'Version';
 }
 
+function getSubmittedReviewKind(proposal: Proposal) {
+  const normalized = ensureProposalWorkflow(proposal);
+  const reviewVersionId = getPendingReviewVersionId(normalized);
+  if (!reviewVersionId) return null;
+
+  const matchingSubmission = [...normalizeHistory(normalized.workflow?.history)]
+    .reverse()
+    .find((entry) => {
+      if (entry.type !== 'submitted') return false;
+      return (entry.versionId || ORIGINAL_VERSION_ID) === reviewVersionId;
+    });
+  const reviewKind = normalizeText(String(matchingSubmission?.metadata?.reviewKind || ''));
+  if (reviewKind === 'proposal_addendum' || reviewKind === 'initial_submission') {
+    return reviewKind as VersionDiffSummary['comparisonKind'];
+  }
+  return null;
+}
+
 export function getChangedSections(current?: Partial<Proposal> | null, previous?: Partial<Proposal> | null) {
   if (!current || !previous) return [];
   const categories = buildDetailedDiffCategories(current as Proposal, previous as Proposal);
@@ -1395,6 +1462,9 @@ function getWorkflowComparisonVersions(proposal: Proposal) {
 
 export function buildVersionDiffSummary(proposal: Proposal): VersionDiffSummary | null {
   const normalized = ensureProposalWorkflow(proposal);
+  if (getSubmittedReviewKind(normalized) !== 'proposal_addendum') {
+    return null;
+  }
   const comparison = getWorkflowComparisonVersions(normalized);
   if (!comparison) return null;
 

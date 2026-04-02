@@ -903,11 +903,25 @@ function ProposalView() {
           : isAddendumDraft
           ? getNextAddendumName(container)
           : undefined;
-      const { container: nextContainer } = createVersionFromProposal(
+      const hasSubmissionHistory =
+        Boolean(container.workflow?.submittedVersionId || container.workflow?.submittedAt) ||
+        (container.workflow?.history || []).some((entry) => entry.type === 'submitted');
+      const preservedActiveVersionId =
+        container.activeVersionId || container.versionId || activeVersionId || 'original';
+      const { container: createdContainer } = createVersionFromProposal(
         container,
         sourceVersionId,
         resolvedVersionName
       );
+      const nextContainer =
+        hasSubmissionHistory &&
+        (createdContainer.activeVersionId || createdContainer.versionId || 'original') !== preservedActiveVersionId
+          ? buildContainerFromVersions(
+              listAllVersions(createdContainer).map((entry) => ({ ...entry, versions: [] })),
+              preservedActiveVersionId,
+              createdContainer.status
+            ) || createdContainer
+          : createdContainer;
       await initPricingDataStore(
         nextContainer.franchiseId,
         nextContainer.pricingModelId || undefined,
@@ -1575,6 +1589,9 @@ function ProposalView() {
     return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
   };
 
+  const formatSubmittedVersionLabel = (submissionCount: number) =>
+    submissionCount > 1 ? 'Resubmitted' : 'Submitted';
+
   const getDisplayVersionLabel = (input: Proposal): string => {
     const name = input.versionName?.trim() || '';
     const versionId = input.versionId || 'original';
@@ -1981,8 +1998,13 @@ function ProposalView() {
   const workflowHistory = [...(proposal?.workflow?.history || [])].sort(
     (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
   );
-  const hasResubmission =
-    workflowHistory.filter((entry) => entry.type === 'submitted').length > 1;
+  const submissionCount = workflowHistory.filter((entry) => entry.type === 'submitted').length;
+  const submittedVersionId =
+    proposal?.workflow?.submittedVersionId ||
+    getPendingReviewVersionId(proposal as Proposal) ||
+    getApprovedVersionId(proposal as Proposal) ||
+    null;
+  const submittedVersionLabel = formatSubmittedVersionLabel(submissionCount);
   const workflowReasons = (proposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
@@ -2397,6 +2419,7 @@ function ProposalView() {
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
     const versionLabel = getDisplayVersionLabel(vm.proposal);
     const isActive = versionId === activeVersionId;
+    const isSubmittedVersion = Boolean(submittedVersionId) && versionId === submittedVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
     const canEditVersion =
       canManageVersionDrafts &&
@@ -2436,6 +2459,7 @@ function ProposalView() {
                 <span className={`version-pill ${isActive ? 'active' : 'inactive'}`}>
                   {versionLabel}
                 </span>
+                {isSubmittedVersion && <span className="version-status-pill">{submittedVersionLabel}</span>}
                 {vm.hasRetiredEquipment && <RetiredEquipmentIndicator />}
               </h2>
             </div>
@@ -2722,7 +2746,7 @@ function ProposalView() {
               <div className="workflow-summary-value">{workflowReviewVersionLabel}</div>
             </div>
             <div className="workflow-summary-block">
-              <div className="workflow-summary-label">{hasResubmission ? 'Resubmitted' : 'Submitted'}</div>
+              <div className="workflow-summary-label">{submittedVersionLabel}</div>
               <div className="workflow-summary-value">
                 {proposal.workflow.submittedAt
                   ? `${
