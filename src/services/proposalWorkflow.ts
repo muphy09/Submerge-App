@@ -910,6 +910,57 @@ export function isSubmittedVersionLocked(proposal?: Partial<Proposal> | null) {
   return proposal?.versionLocked === true || Boolean(proposal?.versionSubmittedAt);
 }
 
+export function reconcileWorkflowVersionStates(proposal: Proposal): Proposal {
+  const normalized = ensureProposalWorkflow(proposal);
+  const status = getWorkflowStatus(normalized);
+  const pendingReviewVersionId = getPendingReviewVersionId(normalized);
+  const approvedVersionId = getApprovedVersionId(normalized);
+  const allVersions = listAllVersions(normalized);
+
+  const updatedVersions = allVersions.map((entry) => {
+    const entryId = entry.versionId || ORIGINAL_VERSION_ID;
+
+    if (pendingReviewVersionId && entryId === pendingReviewVersionId) {
+      return setVersionWorkflowState(entry, status, {
+        locked: true,
+        submittedAt: entry.versionSubmittedAt || normalized.workflow?.submittedAt || null,
+        submittedBy: entry.versionSubmittedBy || normalized.workflow?.submittedBy || null,
+      });
+    }
+
+    if (approvedVersionId && entryId === approvedVersionId) {
+      const baselineStatus = status === 'completed' && !pendingReviewVersionId ? 'completed' : 'approved';
+      return setVersionWorkflowState(entry, baselineStatus, {
+        locked: true,
+        submittedAt:
+          entry.versionSubmittedAt ||
+          normalized.workflow?.approvedAt ||
+          normalized.workflow?.submittedAt ||
+          null,
+        submittedBy:
+          entry.versionSubmittedBy ||
+          normalized.workflow?.approvedBy ||
+          normalized.workflow?.submittedBy ||
+          null,
+      });
+    }
+
+    return setVersionWorkflowState(entry, 'draft', {
+      locked: false,
+      submittedAt: null,
+      submittedBy: null,
+    });
+  });
+
+  return mergeVersionsIntoContainer(
+    normalized,
+    updatedVersions,
+    normalized.activeVersionId,
+    status,
+    normalized.workflow as ProposalWorkflowState
+  );
+}
+
 export function collapseApprovedProposalVersions(proposal: Proposal): Proposal {
   const normalized = ensureProposalWorkflow(proposal);
   const status = getWorkflowStatus(normalized);
@@ -1038,7 +1089,7 @@ function setVersionWorkflowState(
     ...version,
     status: nextStatus,
     versionLocked: options.locked,
-    versionLockedAt: options.locked ? nowIso() : null,
+    versionLockedAt: options.locked ? version.versionLockedAt || nowIso() : null,
     versionSubmittedAt: options.submittedAt ?? null,
     versionSubmittedBy: options.submittedBy ?? null,
     versions: [],

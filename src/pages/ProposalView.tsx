@@ -78,6 +78,7 @@ import {
   getWorkflowStatus,
   isSubmittedVersionLocked,
   markWorkflowRead,
+  reconcileWorkflowVersionStates,
   requestWorkflowChanges,
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
@@ -580,6 +581,9 @@ function ProposalView() {
         return;
       }
       let sourceProposal = ensureProposalWorkflow(JSON.parse(JSON.stringify(data)) as Proposal);
+      const versionStateCleanup = reconcileWorkflowVersionStates(sourceProposal);
+      const needsVersionStateCleanup = JSON.stringify(versionStateCleanup) !== JSON.stringify(sourceProposal);
+      sourceProposal = versionStateCleanup;
       const approvedVersionCleanup = collapseApprovedProposalVersions(sourceProposal);
       const needsApprovedCleanup = JSON.stringify(approvedVersionCleanup) !== JSON.stringify(sourceProposal);
       sourceProposal = approvedVersionCleanup;
@@ -592,11 +596,11 @@ function ProposalView() {
           console.warn('Failed to persist workflow read state', markReadError);
           sourceProposal = readUpdated;
         }
-      } else if (needsApprovedCleanup) {
+      } else if (needsVersionStateCleanup || needsApprovedCleanup) {
         try {
           sourceProposal = await saveProposalRemote(sourceProposal);
         } catch (cleanupError) {
-          console.warn('Failed to persist approved proposal cleanup', cleanupError);
+          console.warn('Failed to persist workflow version cleanup', cleanupError);
         }
       }
       const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
