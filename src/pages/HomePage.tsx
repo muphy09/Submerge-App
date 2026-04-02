@@ -7,7 +7,7 @@ import DashboardProposalsPanel from '../components/DashboardProposalsPanel';
 import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
 import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, type UserSession } from '../services/session';
+import { getSessionFranchiseId, isMasterActingAsOwnerSession, type UserSession } from '../services/session';
 import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import {
@@ -53,6 +53,9 @@ function HomePage({
   const [acknowledgingFeedbackId, setAcknowledgingFeedbackId] = useState<string | null>(null);
   const { showToast } = useToast();
   const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
+  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const proposalEditingRestrictedReason =
+    'Master accounts acting as owner can view proposals but cannot create or edit them.';
 
   const loadProposals = useCallback(async () => {
     setLoading(true);
@@ -210,6 +213,13 @@ function HomePage({
   );
 
   const handleNewProposal = () => {
+    if (isProposalEditingRestricted) {
+      showToast({
+        type: 'warning',
+        message: proposalEditingRestrictedReason,
+      });
+      return;
+    }
     navigate('/proposal/new');
   };
 
@@ -241,6 +251,8 @@ function HomePage({
             <button
               className="btn-create-proposal"
               onClick={handleNewProposal}
+              disabled={isProposalEditingRestricted}
+              title={isProposalEditingRestricted ? proposalEditingRestrictedReason : undefined}
             >
               Create New Proposal
             </button>
@@ -255,6 +267,8 @@ function HomePage({
           onCreateProposal={handleNewProposal}
           onDeleteProposal={handleDeleteProposal}
           onOpenProposal={handleOpenProposal}
+          disableCreateProposal={isProposalEditingRestricted}
+          createProposalDisabledReason={proposalEditingRestrictedReason}
         />
       </div>
       <FeedbackReplyInboxModal

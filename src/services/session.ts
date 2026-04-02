@@ -127,6 +127,12 @@ export function isMasterSession(): boolean {
   return (readSession()?.role || '').toLowerCase() === 'master';
 }
 
+export function isMasterActingAsOwnerSession(): boolean {
+  if (!isMasterSession()) return false;
+  const impersonation = readMasterImpersonation();
+  return Boolean(impersonation?.franchiseId) && (impersonation?.actingRole || 'owner') === 'owner';
+}
+
 export function updateSession(partial: Partial<UserSession>): UserSession | null {
   const current = readSession() || {};
   const next = { ...current, ...partial };

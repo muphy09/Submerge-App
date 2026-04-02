@@ -365,6 +365,7 @@ function defaultFromLabel(label: string): string {
   if (/by builder/i.test(label)) return 'BY BUILDER';
   if (/by buyer/i.test(label)) return 'BY BUYER';
   if (/none/i.test(label)) return 'None';
+  if (/responsibility/i.test(label)) return '';
   const qty = label.match(/qty:\s*([\d.-]+)/i);
   if (qty) return qty[1];
   if (/\$0\.00/.test(label)) return '$0.00';

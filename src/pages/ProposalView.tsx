@@ -22,7 +22,7 @@ import {
   loadPricingSnapshotForFranchise,
   withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
-import { getSessionRole, readSession } from '../services/session';
+import { getSessionRole, isMasterActingAsOwnerSession, readSession } from '../services/session';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 import {
   getDefaultProposal,
@@ -218,6 +218,7 @@ function ProposalView() {
   const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
+  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const canViewFullSummary =
     sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'bookkeeper';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
@@ -228,11 +229,14 @@ function ProposalView() {
       : proposal) || proposal;
   const proposalWorkflowStatus = getWorkflowStatus(proposal);
   const canEditProposal =
+    !isProposalEditingRestricted &&
     Boolean(activeEditableVersion) &&
     !isSubmittedVersionLocked(activeEditableVersion) &&
     proposalWorkflowStatus !== 'completed';
   const editDisabledReason =
-    proposalWorkflowStatus === 'completed'
+    isProposalEditingRestricted
+      ? 'Master accounts acting as owner can view proposals but cannot edit them.'
+      : proposalWorkflowStatus === 'completed'
       ? 'Completed proposals are locked.'
       : isSubmittedVersionLocked(activeEditableVersion)
       ? 'Submitted versions are locked. Create a new version to make changes.'
@@ -431,12 +435,14 @@ function ProposalView() {
   };
 
   const handleEdit = (version?: Proposal) => {
+    if (isProposalEditingRestricted) return;
     if (!version || isSubmittedVersionLocked(version) || proposalWorkflowStatus === 'completed') return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
   };
 
   const handleSetActiveVersion = async (versionId: string) => {
+    if (isProposalEditingRestricted) return;
     if (!proposal) return;
     const all = versions.length ? versions : listAllVersions(proposal as Proposal);
     const target = all.find((v) => (v.versionId || 'original') === versionId);
@@ -474,6 +480,7 @@ function ProposalView() {
   };
 
   const handleDeleteVersion = async (versionId: string) => {
+    if (isProposalEditingRestricted) return;
     if (!proposal) return;
     const all = versions.length ? versions : listAllVersions(proposal as Proposal);
     if (all.length <= 1) {
@@ -525,6 +532,10 @@ function ProposalView() {
   };
 
   const handleBuildAnotherVersion = async () => {
+    if (isProposalEditingRestricted) {
+      showToast({ type: 'warning', message: editDisabledReason || 'This proposal is view only.' });
+      return;
+    }
     if (!proposal) return;
     if (getWorkflowStatus(proposal) === 'completed') {
       showToast({ type: 'warning', message: 'Completed proposals cannot create new versions.' });
@@ -536,6 +547,7 @@ function ProposalView() {
   };
 
   const handleConfirmCreateVersion = async () => {
+    if (isProposalEditingRestricted) return;
     if (!proposal) return;
     try {
       const container = {
@@ -575,6 +587,7 @@ function ProposalView() {
   };
 
   const handleSaveContractOverrides = async (versionId: string, overrides: ContractOverrides) => {
+    if (isProposalEditingRestricted) return;
     if (!proposal) return;
     try {
       const all = versions.length ? versions : listAllVersions(proposal as Proposal);
@@ -992,10 +1005,6 @@ function ProposalView() {
       console.error('Failed to update proposal status', error);
       showToast({ type: 'error', message: 'Could not update proposal status.' });
     }
-  };
-
-  const handleSaveAsDraft = async () => {
-    await persistStatusChange('draft');
   };
 
   const handleOpenSubmitModal = () => {
@@ -1821,10 +1830,19 @@ function ProposalView() {
     const versionLabel = getDisplayVersionLabel(vm.proposal);
     const isActive = versionId === activeVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
-    const canEditVersion = !isSubmittedVersionLocked(vm.proposal) && proposalWorkflowStatus !== 'completed';
-    const canDeleteVersion = !isOriginal && !isSubmittedVersionLocked(vm.proposal) && proposalWorkflowStatus !== 'completed';
+    const canEditVersion =
+      !isProposalEditingRestricted &&
+      !isSubmittedVersionLocked(vm.proposal) &&
+      proposalWorkflowStatus !== 'completed';
+    const canDeleteVersion =
+      !isProposalEditingRestricted &&
+      !isOriginal &&
+      !isSubmittedVersionLocked(vm.proposal) &&
+      proposalWorkflowStatus !== 'completed';
     const versionActionReason =
-      proposalWorkflowStatus === 'completed'
+      isProposalEditingRestricted
+        ? editDisabledReason
+        : proposalWorkflowStatus === 'completed'
         ? 'Completed proposals are locked.'
         : isSubmittedVersionLocked(vm.proposal)
         ? 'Submitted versions are locked. Create a new version to make changes.'
@@ -2023,28 +2041,36 @@ function ProposalView() {
             <button
               className="action-button action-button-version"
               onClick={handleBuildAnotherVersion}
-              disabled={proposalWorkflowStatus === 'completed'}
-              title={proposalWorkflowStatus === 'completed' ? 'Completed proposals are locked.' : undefined}
+              disabled={proposalWorkflowStatus === 'completed' || isProposalEditingRestricted}
+              title={
+                isProposalEditingRestricted
+                  ? editDisabledReason
+                  : proposalWorkflowStatus === 'completed'
+                  ? 'Completed proposals are locked.'
+                  : undefined
+              }
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
               Build Another Version
             </button>
+          </div>
+        </div>
+      </div>
+
+      {proposal?.workflow && (
+        <div className="workflow-summary-card no-print">
+          <div className="workflow-summary-header">
+            <div className="workflow-summary-heading">
+              <p className="workflow-summary-kicker">Submission Workflow</p>
+              <div className={`workflow-summary-pill is-${proposalWorkflowStatus}`}>
+                {formatWorkflowStatusLabel(proposalWorkflowStatus)}
+                {proposal.workflow.approved ? ' *' : ''}
+              </div>
+            </div>
             <button
-              className="action-button action-button-draft"
-              onClick={handleSaveAsDraft}
-              disabled={!canEditProposal || loading}
-              title={!canEditProposal ? editDisabledReason : undefined}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Save as Draft
-            </button>
-            <button
-              className="action-button primary"
+              className="action-button primary workflow-summary-submit-button"
               onClick={handleSubmitProposal}
               disabled={!canEditProposal || loading || !canSubmitProposal}
               title={
@@ -2061,21 +2087,6 @@ function ProposalView() {
               </svg>
               Submit Proposal
             </button>
-          </div>
-        </div>
-      </div>
-
-      {proposal?.workflow && (
-        <div className="workflow-summary-card no-print">
-          <div className="workflow-summary-header">
-            <div>
-              <p className="workflow-summary-kicker">Submission Workflow</p>
-              <h2 className="workflow-summary-title">{formatWorkflowStatusLabel(proposalWorkflowStatus)}</h2>
-            </div>
-            <div className={`workflow-summary-pill is-${proposalWorkflowStatus}`}>
-              {formatWorkflowStatusLabel(proposalWorkflowStatus)}
-              {proposal.workflow.approved ? ' *' : ''}
-            </div>
           </div>
 
           <div className="workflow-summary-grid">

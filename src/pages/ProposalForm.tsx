@@ -48,7 +48,6 @@ import customIconImg from '../../docs/img/custom.png';
 import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import SubmitProposalModal from '../components/SubmitProposalModal';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import {
   getActivePricingModelMeta,
@@ -83,6 +82,7 @@ import {
   getSessionFranchiseId,
   getSessionRole,
   getSessionUserName,
+  isMasterActingAsOwnerSession,
   isMasterSession,
 } from '../services/session';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
@@ -279,6 +279,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const location = useLocation();
   const sessionRole = getSessionRole();
   const isMasterUser = isMasterSession();
+  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const canViewCostBreakdown =
     sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
@@ -301,9 +302,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
-  const [submitNote, setSubmitNote] = useState('');
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const readPapDiscountsFromModel = (): PAPDiscounts => {
     const snapshot = getPricingDataSnapshot();
@@ -330,6 +328,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [versionList, setVersionList] = useState<Proposal[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
   const [editingVersionId, setEditingVersionId] = useState<string>('original');
+  const restrictedRedirectHandledRef = useRef(false);
   const sessionCommissionRates = getSessionCommissionRates();
   const applySessionCommissionRates = (input: Partial<Proposal>): Partial<Proposal> => ({
     ...input,
@@ -651,6 +650,18 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
   const previousSpaTypeRef = useRef<string>(proposal.poolSpecs?.spaType ?? 'none');
   const previousHasPoolRef = useRef<boolean>(hasPoolDefinition(proposal.poolSpecs));
+
+  useEffect(() => {
+    if (!isProposalEditingRestricted || restrictedRedirectHandledRef.current) return;
+    restrictedRedirectHandledRef.current = true;
+    showToast({
+      type: 'warning',
+      message: proposalNumber
+        ? 'Master accounts acting as owner can view proposals but cannot edit them.'
+        : 'Master accounts acting as owner cannot create proposals.',
+    });
+    navigate(proposalNumber ? `/proposal/view/${proposalNumber}` : '/', { replace: true });
+  }, [isProposalEditingRestricted, navigate, proposalNumber, showToast]);
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
@@ -992,6 +1003,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   useEffect(() => {
     const requestId = ++loadRequestRef.current;
+    if (isProposalEditingRestricted) {
+      setIsLoading(false);
+      return;
+    }
     if (proposalNumber) {
       setIsLoading(true);
       loadProposal(proposalNumber, requestId);
@@ -1023,16 +1038,24 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       void initializeNewProposal();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proposalNumber]);
+  }, [isProposalEditingRestricted, proposalNumber]);
 
   useEffect(() => {
+    if (isProposalEditingRestricted) return;
     if (proposalNumber && isLoading) return;
     const franchiseId = proposal.franchiseId || getSessionFranchiseId();
     const desiredModelId = proposal.pricingModelId || null;
     const desiredModelFranchiseId = proposal.pricingModelFranchiseId || null;
     void initPricingDataStore(franchiseId, desiredModelId || undefined, desiredModelFranchiseId || undefined);
     void loadPricingModels(franchiseId, desiredModelId, desiredModelFranchiseId);
-  }, [proposal.franchiseId, proposal.pricingModelId, proposal.pricingModelFranchiseId, proposalNumber, isLoading]);
+  }, [
+    isProposalEditingRestricted,
+    proposal.franchiseId,
+    proposal.pricingModelId,
+    proposal.pricingModelFranchiseId,
+    proposalNumber,
+    isLoading,
+  ]);
 
   const loadProposal = async (num: string, requestId: number) => {
     try {
@@ -1294,6 +1317,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       submissionRequest?: { manualReviewRequested: boolean; note: string };
     }
   ): Promise<boolean> => {
+    if (isProposalEditingRestricted) return false;
     if (isSaving) return false;
 
     const currentVersionId = proposal.versionId || editingVersionId || 'original';
@@ -1657,18 +1681,16 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     );
   }
 
+  if (isProposalEditingRestricted) {
+    return null;
+  }
+
   const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(
     mergeWithDefaults(applySessionCommissionRates(proposal)),
     papDiscounts
   );
-  const canSubmit = Boolean(proposal.customerInfo?.customerName?.trim());
-  const saveDraftTooltip = isOffline
+  const proposalSummaryTooltip = isOffline
     ? 'No internet connection. Connect to save.'
-    : undefined;
-  const submitTooltip = isOffline
-    ? 'No internet connection. Connect to save.'
-    : !canSubmit
-    ? 'Must include Customer Name'
     : undefined;
   const isCompactLayout = viewportWidth < 1300;
   const isMobileLayout = viewportWidth < 1024;
@@ -1800,32 +1822,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     </label>
   );
 
-  const handleSaveDraftClick = () => {
+  const handleProposalSummaryClick = () => {
     if (isSaving || isOffline) return;
     void handleSave('draft', { navigateToSummary: true, forceDraftStatus: true });
-  };
-
-  const handleOpenSubmitModal = () => {
-    if (!canSubmit || isSaving || isOffline) return;
-    setSubmitManualReviewRequested(false);
-    setSubmitNote('');
-    setShowSubmitModal(true);
-  };
-
-  const handleConfirmSubmit = () => {
-    if (!canSubmit || isSaving || isOffline) return;
-    setShowSubmitModal(false);
-    void handleSave('submit', {
-      navigateToSummary: true,
-      submissionRequest: {
-        manualReviewRequested: submitManualReviewRequested,
-        note: submitNote,
-      },
-    });
-  };
-
-  const handleCompleteClick = () => {
-    handleOpenSubmitModal();
   };
 
   return (
@@ -1946,20 +1945,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               <h2 className="section-title">{sections[currentSection]?.label}</h2>
               <div className="section-title-actions">
                 <button
-                  className="btn btn-secondary"
-                  onClick={handleSaveDraftClick}
-                  disabled={isSaving || isOffline}
-                  title={saveDraftTooltip}
-                >
-                  Save Draft
-                </button>
-                <button
                   className="btn btn-success"
-                  onClick={handleCompleteClick}
-                  disabled={!canSubmit || isSaving || isOffline}
-                  title={submitTooltip}
+                  onClick={handleProposalSummaryClick}
+                  disabled={isSaving || isOffline}
+                  title={proposalSummaryTooltip}
                 >
-                  Submit Proposal
+                  Proposal Summary
                 </button>
               </div>
             </div>
@@ -2051,17 +2042,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           setHasEdits(false);
           navigate('/');
         }}
-      />
-      <SubmitProposalModal
-        isOpen={showSubmitModal}
-        versionName={proposal.versionName || 'Current Version'}
-        manualReviewRequested={submitManualReviewRequested}
-        note={submitNote}
-        isSubmitting={isSaving}
-        onManualReviewRequestedChange={setSubmitManualReviewRequested}
-        onNoteChange={setSubmitNote}
-        onCancel={() => setShowSubmitModal(false)}
-        onConfirm={handleConfirmSubmit}
       />
     </div>
   );

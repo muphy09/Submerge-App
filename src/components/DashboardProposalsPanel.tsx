@@ -12,6 +12,8 @@ type DashboardProposalsPanelProps = {
   onCreateProposal: () => void;
   onDeleteProposal: (proposalNumber: string) => Promise<void> | void;
   onOpenProposal: (proposalNumber: string) => void;
+  disableCreateProposal?: boolean;
+  createProposalDisabledReason?: string;
 };
 
 type SortField =
@@ -169,6 +171,8 @@ function DashboardProposalsPanel({
   onCreateProposal,
   onDeleteProposal,
   onOpenProposal,
+  disableCreateProposal = false,
+  createProposalDisabledReason,
 }: DashboardProposalsPanelProps) {
   const [sortField, setSortField] = useState<SortField>('lastModified');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -343,6 +347,8 @@ function DashboardProposalsPanel({
             type="button"
             className="dashboard-proposals-header-btn dashboard-proposals-header-btn-primary"
             onClick={onCreateProposal}
+            disabled={disableCreateProposal}
+            title={disableCreateProposal ? createProposalDisabledReason : undefined}
           >
             New Proposal
           </button>
@@ -422,6 +428,8 @@ function DashboardProposalsPanel({
                   type="button"
                   className="dashboard-empty-action"
                   onClick={onCreateProposal}
+                  disabled={disableCreateProposal}
+                  title={disableCreateProposal ? createProposalDisabledReason : undefined}
                 >
                   Create New Proposal
                 </button>

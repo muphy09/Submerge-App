@@ -84,17 +84,6 @@
   border-color: #3d6aa3;
 }
 
-.action-button.action-button-draft {
-  background: #fef3c7;
-  border-color: #facc15;
-  color: #854d0e;
-}
-
-.action-button.action-button-draft:hover {
-  background: #fde68a;
-  border-color: #eab308;
-}
-
 .action-button.action-button-version {
   background: #fed7aa;
   border-color: #fb923c;
@@ -2148,10 +2137,10 @@
   text-transform: uppercase;
 }
 
-.workflow-summary-title {
-  margin: 0;
-  color: #16324d;
-  font-size: 1.3rem;
+.workflow-summary-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .workflow-summary-pill {
@@ -2165,6 +2154,10 @@
   border: 1px solid transparent;
   font-size: 0.78rem;
   font-weight: 800;
+}
+
+.workflow-summary-submit-button {
+  flex-shrink: 0;
 }
 
 .workflow-summary-pill.is-draft {
