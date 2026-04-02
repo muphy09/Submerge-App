@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SESSION_STALE_MS = 3 * 60 * 1000;
-const ALLOWED_ROLES = new Set(['master', 'owner', 'admin', 'designer']);
+const ALLOWED_ROLES = new Set(['master', 'owner', 'admin', 'bookkeeper', 'designer']);
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
