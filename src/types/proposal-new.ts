@@ -785,6 +785,8 @@ export interface ProposalWorkflowState {
   status: ProposalWorkflowStatus;
   reviewVersionId?: string | null;
   submittedVersionId?: string | null;
+  approvedVersionId?: string | null;
+  approvedVersionIds?: string[];
   submittedAt?: string | null;
   submittedBy?: ProposalWorkflowActor | null;
   manualReviewRequested?: boolean;

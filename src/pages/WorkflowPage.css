@@ -322,6 +322,108 @@
   font-size: 1rem;
 }
 
+.workflow-diff-categories {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.workflow-diff-category {
+  border: 1px solid rgba(22, 50, 77, 0.08);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.workflow-diff-category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.workflow-diff-category-title {
+  color: #16324d;
+  font-size: 0.96rem;
+  font-weight: 800;
+}
+
+.workflow-diff-category-meta {
+  margin-top: 0.2rem;
+  color: #5a7188;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.workflow-diff-block {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.workflow-diff-block-title {
+  color: #5a7188;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workflow-diff-row,
+.workflow-cost-row {
+  display: grid;
+  gap: 0.6rem;
+  border-radius: 12px;
+  background: #f7fafc;
+  border: 1px solid rgba(22, 50, 77, 0.06);
+  padding: 0.7rem 0.8rem;
+}
+
+.workflow-diff-row {
+  grid-template-columns: minmax(150px, 180px) minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.workflow-diff-label,
+.workflow-cost-row-title {
+  color: #16324d;
+  font-weight: 800;
+}
+
+.workflow-diff-before,
+.workflow-diff-after,
+.workflow-cost-row-meta,
+.workflow-cost-row-values span {
+  color: #35526d;
+  font-size: 0.86rem;
+}
+
+.workflow-diff-arrow {
+  color: #7f97ac;
+  font-weight: 800;
+}
+
+.workflow-cost-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.workflow-cost-row-copy {
+  min-width: 0;
+}
+
+.workflow-cost-row-values {
+  display: grid;
+  justify-items: end;
+  gap: 0.18rem;
+}
+
+.workflow-cost-row-values strong {
+  color: #16324d;
+  font-size: 0.92rem;
+}
+
 .workflow-note-input {
   width: 100%;
   min-height: 120px;
@@ -403,6 +505,15 @@
   .workflow-detail-grid,
   .workflow-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-diff-row,
+  .workflow-cost-row {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-cost-row-values {
+    justify-items: start;
   }
 }
 

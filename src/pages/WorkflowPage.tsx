@@ -9,6 +9,10 @@ import {
   completeWorkflowProposal,
   countUnreadWorkflowEvents,
   ensureProposalWorkflow,
+  getApprovedVersion,
+  getApprovedVersionId,
+  getPendingReviewVersion,
+  getPendingReviewVersionId,
   getReviewVersionId,
   getWorkflowStatus,
   hasUnreadWorkflowEvents,
@@ -150,7 +154,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     const needsApproval = proposals.filter((entry) => getWorkflowStatus(entry) === 'needs_approval').length;
     const active = proposals.filter((entry) => {
       const status = getWorkflowStatus(entry);
-      return status === 'submitted' || status === 'needs_approval';
+      return status === 'submitted' || status === 'needs_approval' || status === 'changes_requested';
     }).length;
     const archive = proposals.filter((entry) => getWorkflowStatus(entry) === 'completed').length;
     return { needsApproval, active, archive };
@@ -162,7 +166,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
         const status = getWorkflowStatus(entry);
         if (selectedFilter === 'needs_approval') return status === 'needs_approval';
         if (selectedFilter === 'archive') return status === 'completed';
-        return status === 'submitted' || status === 'needs_approval';
+        return status === 'submitted' || status === 'needs_approval' || status === 'changes_requested';
       })
       .sort((a, b) => {
         const aTs = new Date(a.workflow?.submittedAt || a.lastModified || a.createdDate || 0).getTime();
@@ -175,7 +179,10 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     () => (selectedProposal ? buildVersionDiffSummary(selectedProposal) : null),
     [selectedProposal]
   );
-  const selectedReviewVersionId = selectedProposal ? getReviewVersionId(selectedProposal) : null;
+  const selectedReviewVersionId = selectedProposal ? getPendingReviewVersionId(selectedProposal) || getReviewVersionId(selectedProposal) : null;
+  const selectedApprovedVersionId = selectedProposal ? getApprovedVersionId(selectedProposal) : null;
+  const selectedReviewVersion = selectedProposal ? getPendingReviewVersion(selectedProposal) : null;
+  const selectedApprovedVersion = selectedProposal ? getApprovedVersion(selectedProposal) : null;
   const selectedUnreadCount = selectedProposal ? countUnreadWorkflowEvents(selectedProposal, session?.userId) : 0;
   const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
@@ -299,6 +306,13 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 const diff = buildVersionDiffSummary(entry);
                 const unread = hasUnreadWorkflowEvents(entry, session?.userId);
                 const status = getWorkflowStatus(entry);
+                const reviewVersion = getPendingReviewVersion(entry);
+                const approvedVersion = getApprovedVersion(entry);
+                const queueVersionLabel =
+                  reviewVersion?.versionName ||
+                  approvedVersion?.versionName ||
+                  entry.versionName ||
+                  'Current Version';
                 return (
                   <button
                     key={entry.proposalNumber}
@@ -322,14 +336,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                       </div>
                     </div>
                     <div className="workflow-queue-item-meta">
-                      <span>{entry.versionName || 'Current Version'}</span>
+                      <span>{queueVersionLabel}</span>
                       <span>{formatDateTime(entry.workflow?.submittedAt || entry.lastModified)}</span>
                       {unread && <span className="workflow-unread-pill">{countUnreadWorkflowEvents(entry, session?.userId)} New</span>}
                     </div>
                     {diff && (
                       <div className="workflow-queue-diff">
-                        <span>{diff.reviewVersionName}</span>
-                        {diff.compareVersionName ? <span>vs {diff.compareVersionName}</span> : <span>First submission</span>}
+                        <span>Addendum Review</span>
+                        {diff.compareVersionName ? <span>{diff.compareVersionName} vs {diff.reviewVersionName}</span> : null}
                         <span>{formatSignedCurrency(diff.retailDelta)} retail</span>
                         <span>{formatSignedPercent(diff.grossMarginDelta)} GP</span>
                       </div>
@@ -382,8 +396,16 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                   <div className="workflow-detail-value">{selectedUnreadCount}</div>
                 </div>
                 <div className="workflow-detail-card">
-                  <div className="workflow-detail-label">Review Version</div>
-                  <div className="workflow-detail-value">{selectedDiff?.reviewVersionName || selectedProposal.versionName || 'Current Version'}</div>
+                  <div className="workflow-detail-label">
+                    {selectedDiff ? 'Pending Addendum' : selectedReviewVersion ? 'Review Version' : 'Approved Proposal'}
+                  </div>
+                  <div className="workflow-detail-value">
+                    {selectedDiff?.reviewVersionName ||
+                      selectedReviewVersion?.versionName ||
+                      selectedApprovedVersion?.versionName ||
+                      selectedProposal.versionName ||
+                      'Current Version'}
+                  </div>
                 </div>
               </div>
 
@@ -402,10 +424,9 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 <div className="workflow-compare-card">
                   <div className="workflow-compare-header">
                     <div>
-                      <div className="workflow-detail-label">Version Comparison</div>
+                      <div className="workflow-detail-label">Approved Proposal vs Proposal Addendum</div>
                       <div className="workflow-detail-value">
-                        {selectedDiff.reviewVersionName}
-                        {selectedDiff.compareVersionName ? ` vs ${selectedDiff.compareVersionName}` : ''}
+                        {selectedDiff.compareVersionName} vs {selectedDiff.reviewVersionName}
                       </div>
                     </div>
                     <div className="workflow-compare-actions">
@@ -418,19 +439,19 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                           })
                         }
                       >
-                        Open Review Version
+                        Open Addendum
                       </button>
-                      {selectedDiff.compareVersionId && (
+                      {selectedApprovedVersionId && (
                         <button
                           type="button"
                           className="workflow-secondary-btn"
                           onClick={() =>
                             navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
-                              state: { versionId: selectedDiff.compareVersionId },
+                              state: { versionId: selectedApprovedVersionId },
                             })
                           }
                         >
-                          Open Prior Version
+                          Open Approved Proposal
                         </button>
                       )}
                     </div>
@@ -472,6 +493,55 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                       ))}
                     </div>
                   )}
+
+                  <div className="workflow-diff-categories">
+                    {selectedDiff.categories.map((category) => (
+                      <div key={category.key} className="workflow-diff-category">
+                        <div className="workflow-diff-category-header">
+                          <div>
+                            <div className="workflow-diff-category-title">{category.label}</div>
+                            <div className="workflow-diff-category-meta">
+                              {category.changeCount} change{category.changeCount === 1 ? '' : 's'} | {formatSignedCurrency(category.totalDelta)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {category.fieldChanges.length > 0 && (
+                          <div className="workflow-diff-block">
+                            <div className="workflow-diff-block-title">Proposal Changes</div>
+                            {category.fieldChanges.map((change) => (
+                              <div key={`${category.key}-${change.label}`} className="workflow-diff-row">
+                                <span className="workflow-diff-label">{change.label}</span>
+                                <span className="workflow-diff-before">{change.before || 'None'}</span>
+                                <span className="workflow-diff-arrow">{'->'}</span>
+                                <span className="workflow-diff-after">{change.after || 'None'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {category.costChanges.length > 0 && (
+                          <div className="workflow-diff-block">
+                            <div className="workflow-diff-block-title">Cost Breakdown Impact</div>
+                            {category.costChanges.map((change) => (
+                              <div key={`${category.key}-${change.category}-${change.label}`} className="workflow-cost-row">
+                                <div className="workflow-cost-row-copy">
+                                  <div className="workflow-cost-row-title">{change.label}</div>
+                                  <div className="workflow-cost-row-meta">
+                                    {change.beforeQuantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} {'->'} {change.afterQuantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} qty
+                                  </div>
+                                </div>
+                                <div className="workflow-cost-row-values">
+                                  <span>{formatCurrency(change.beforeTotal)} {'->'} {formatCurrency(change.afterTotal)}</span>
+                                  <strong>{formatSignedCurrency(change.delta)}</strong>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

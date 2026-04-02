@@ -36,6 +36,7 @@ export const listAllVersions = (proposal: Proposal): Proposal[] => {
     const normalizedEntry = ensureVersionDefaults(entry);
     return stripNestedVersions({
       ...normalizedEntry,
+      workflow: normalizedEntry.workflow || normalized.workflow,
       isOriginalVersion: normalizedEntry.isOriginalVersion ?? false,
     });
   });
@@ -122,16 +123,20 @@ export const createVersionFromProposal = (
     versionSubmittedBy: null,
   });
 
-  const activeVersionId = normalized.activeVersionId || normalized.versionId || ORIGINAL_VERSION_ID;
+  const currentActiveVersionId = normalized.activeVersionId || normalized.versionId || ORIGINAL_VERSION_ID;
   const active =
-    allVersions.find((v) => v.versionId === activeVersionId) ||
-    stripNestedVersions({ ...normalized, versionId: activeVersionId });
+    allVersions.find((v) => v.versionId === currentActiveVersionId) ||
+    stripNestedVersions({ ...normalized, versionId: currentActiveVersionId });
   const remaining = allVersions.filter((v) => v.versionId !== active.versionId);
+  const nextActiveVersionId = newVersion.versionId || ORIGINAL_VERSION_ID;
 
   const container: Proposal = {
-    ...active,
-    activeVersionId,
-    versions: [...remaining, newVersion],
+    ...normalized,
+    ...newVersion,
+    status: normalized.status,
+    workflow: normalized.workflow,
+    activeVersionId: nextActiveVersionId,
+    versions: [...remaining, active],
   };
 
   return { container, newVersion };
@@ -165,7 +170,10 @@ export const upsertVersionInContainer = (
   const others = nextVersions.filter((v) => v.versionId !== active.versionId);
 
   return {
+    ...normalizedContainer,
     ...active,
+    status: normalizedContainer.status,
+    workflow: normalizedContainer.workflow,
     activeVersionId: desiredActiveId,
     versions: others,
   };

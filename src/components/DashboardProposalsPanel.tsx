@@ -3,6 +3,7 @@ import { Proposal } from '../types/proposal-new';
 import ConfirmDialog from './ConfirmDialog';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
+import { getReviewerVisibleVersions } from '../services/proposalWorkflow';
 import { listAllVersions } from '../utils/proposalVersions';
 import './DashboardProposalsPanel.css';
 
@@ -14,6 +15,7 @@ type DashboardProposalsPanelProps = {
   onOpenProposal: (proposalNumber: string) => void;
   disableCreateProposal?: boolean;
   createProposalDisabledReason?: string;
+  viewerRole?: string | null;
 };
 
 type SortField =
@@ -52,11 +54,19 @@ function getContractTypeLabel(proposal: Proposal): string {
   return `${String(state || '').toUpperCase()} ${typeLabel}`;
 }
 
-function getVersionCount(proposal: Proposal) {
+function isReviewerRole(role?: string | null) {
+  const normalized = String(role || '').trim().toLowerCase();
+  return normalized === 'owner' || normalized === 'admin' || normalized === 'bookkeeper';
+}
+
+function getVersionCount(proposal: Proposal, viewerRole?: string | null) {
+  if (isReviewerRole(viewerRole)) {
+    return Math.max(getReviewerVisibleVersions(proposal).length, 1);
+  }
   return listAllVersions(proposal).length;
 }
 
-function getSortValue(proposal: Proposal, field: SortField) {
+function getSortValue(proposal: Proposal, field: SortField, viewerRole?: string | null) {
   switch (field) {
     case 'customerName':
       return String(proposal.customerInfo?.customerName || '').toLowerCase();
@@ -67,7 +77,7 @@ function getSortValue(proposal: Proposal, field: SortField) {
     case 'pricingModel':
       return String(proposal.pricingModelName || '').toLowerCase();
     case 'proposalVersions':
-      return getVersionCount(proposal);
+      return getVersionCount(proposal, viewerRole);
     case 'contractType':
       return getContractTypeLabel(proposal).toLowerCase();
     default:
@@ -173,6 +183,7 @@ function DashboardProposalsPanel({
   onOpenProposal,
   disableCreateProposal = false,
   createProposalDisabledReason,
+  viewerRole,
 }: DashboardProposalsPanelProps) {
   const [sortField, setSortField] = useState<SortField>('lastModified');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -262,8 +273,8 @@ function DashboardProposalsPanel({
       return matchesSearch && matchesStatus && matchesPricingModel && matchesContractType;
     })
     .sort((a, b) => {
-      const aValue = getSortValue(a, sortField);
-      const bValue = getSortValue(b, sortField);
+      const aValue = getSortValue(a, sortField, viewerRole);
+      const bValue = getSortValue(b, sortField, viewerRole);
 
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
@@ -492,7 +503,7 @@ function DashboardProposalsPanel({
                   <tbody>
                     {filteredProposals.map((proposal) => {
                       const contractTypeLabel = getContractTypeLabel(proposal);
-                      const versionCount = getVersionCount(proposal);
+                      const versionCount = getVersionCount(proposal, viewerRole);
                       const pricingModelClass = getPricingModelClass(
                         proposal,
                         defaultModelMap,

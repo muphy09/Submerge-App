@@ -105,7 +105,7 @@ function canReadProposal(proposal: Proposal, session?: UserSession | null) {
   }
   if (role === 'bookkeeper') {
     const status = getWorkflowStatus(proposal);
-    return status === 'submitted' || status === 'needs_approval' || status === 'completed';
+    return status === 'submitted' || status === 'needs_approval' || status === 'changes_requested' || status === 'completed';
   }
   return false;
 }

@@ -58,6 +58,10 @@ import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   addWorkflowNote,
   ensureProposalWorkflow,
+  getApprovedVersionId,
+  getPendingReviewVersionId,
+  getReviewerPrimaryVersionId,
+  getReviewerVisibleVersions,
   getWorkflowStatus,
   isSubmittedVersionLocked,
   markWorkflowRead,
@@ -268,7 +272,6 @@ function ProposalView() {
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
   const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
@@ -283,6 +286,8 @@ function ProposalView() {
   const { showToast } = useToast();
   const sessionRole = getSessionRole();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
+  const isReadOnlyReviewerView = isReviewerRole;
   const canViewFullSummary =
     sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'bookkeeper';
   const { hideCogsFromProposalBuilder } = useAdminCogsView();
@@ -292,15 +297,20 @@ function ProposalView() {
       ? versions.find((entry) => (entry.versionId || 'original') === activeVersionId)
       : proposal) || proposal;
   const proposalWorkflowStatus = getWorkflowStatus(proposal);
-  const canEditProposal =
+  const canManageVersionDrafts =
     !isProposalEditingRestricted &&
-    Boolean(activeEditableVersion) &&
-    !isSubmittedVersionLocked(activeEditableVersion) &&
+    !isReadOnlyReviewerView &&
     proposalWorkflowStatus !== 'completed';
+  const canEditProposal =
+    canManageVersionDrafts &&
+    Boolean(activeEditableVersion) &&
+    !isSubmittedVersionLocked(activeEditableVersion);
   const canSendWorkflowMessages = Boolean(proposal?.workflow?.submittedAt) && proposalWorkflowStatus !== 'completed';
   const editDisabledReason =
     isProposalEditingRestricted
       ? 'Master accounts acting as owner can view proposals but cannot edit them.'
+      : isReadOnlyReviewerView
+      ? 'Reviewer accounts can review submitted proposals but cannot edit their versions.'
       : proposalWorkflowStatus === 'completed'
       ? 'Completed proposals are locked.'
       : isSubmittedVersionLocked(activeEditableVersion)
@@ -398,7 +408,23 @@ function ProposalView() {
         )
       ) as Proposal[];
       const requestedVersionId = (location.state as any)?.versionId as string | undefined;
-      const activeId = requestedVersionId || activeApplied.activeVersionId || activeApplied.versionId || 'original';
+      const reviewerVisibleVersionIds = isReadOnlyReviewerView
+        ? new Set(getReviewerVisibleVersions(sourceProposal).map((entry) => entry.versionId || 'original'))
+        : null;
+      const reviewerPrimaryVersionId = isReadOnlyReviewerView
+        ? getReviewerPrimaryVersionId(sourceProposal)
+        : null;
+      const requestedVisibleVersionId =
+        requestedVersionId &&
+        (!reviewerVisibleVersionIds || reviewerVisibleVersionIds.has(requestedVersionId))
+          ? requestedVersionId
+          : undefined;
+      const activeId =
+        requestedVisibleVersionId ||
+        reviewerPrimaryVersionId ||
+        activeApplied.activeVersionId ||
+        activeApplied.versionId ||
+        'original';
       const activeVersion =
         allVersions.find((v) => v.versionId === activeId) ||
         ((await mergeWithPricingSnapshot(activeApplied)) as Proposal);
@@ -500,14 +526,14 @@ function ProposalView() {
   };
 
   const handleEdit = (version?: Proposal) => {
-    if (isProposalEditingRestricted) return;
+    if (!canManageVersionDrafts) return;
     if (!version || isSubmittedVersionLocked(version) || proposalWorkflowStatus === 'completed') return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
   };
 
   const handleSetActiveVersion = async (versionId: string) => {
-    if (isProposalEditingRestricted) return;
+    if (!canManageVersionDrafts) return;
     if (!proposal) return;
     const all = versions.length ? versions : listAllVersions(proposal as Proposal);
     const target = all.find((v) => (v.versionId || 'original') === versionId);
@@ -545,7 +571,7 @@ function ProposalView() {
   };
 
   const handleDeleteVersion = async (versionId: string) => {
-    if (isProposalEditingRestricted) return;
+    if (!canManageVersionDrafts) return;
     if (!proposal) return;
     const all = versions.length ? versions : listAllVersions(proposal as Proposal);
     if (all.length <= 1) {
@@ -597,7 +623,7 @@ function ProposalView() {
   };
 
   const handleBuildAnotherVersion = async () => {
-    if (isProposalEditingRestricted) {
+    if (!canManageVersionDrafts) {
       showToast({ type: 'warning', message: editDisabledReason || 'This proposal is view only.' });
       return;
     }
@@ -607,12 +633,13 @@ function ProposalView() {
       return;
     }
     const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
-    setNewVersionName(`Version ${count}`);
+    const defaultPrefix = getApprovedVersionId(proposal as Proposal) ? 'Proposal Addendum' : 'Version';
+    setNewVersionName(`${defaultPrefix} ${count}`);
     setShowVersionNameModal(true);
   };
 
   const handleConfirmCreateVersion = async () => {
-    if (isProposalEditingRestricted) return;
+    if (!canManageVersionDrafts) return;
     if (!proposal) return;
     try {
       const container = {
@@ -620,9 +647,16 @@ function ProposalView() {
         versions,
         activeVersionId,
       } as Proposal;
+      const approvedVersionId = getApprovedVersionId(container);
+      const pendingReviewVersionId = getPendingReviewVersionId(container);
+      const sourceVersionId =
+        pendingReviewVersionId ||
+        approvedVersionId ||
+        proposal.versionId ||
+        activeVersionId;
       const { container: nextContainer } = createVersionFromProposal(
         container,
-        proposal.versionId,
+        sourceVersionId,
         newVersionName && newVersionName.trim() ? newVersionName.trim() : undefined
       );
       await initPricingDataStore(
@@ -1074,7 +1108,6 @@ function ProposalView() {
 
   const handleOpenSubmitModal = () => {
     if (!proposal) return;
-    setSubmitManualReviewRequested(false);
     setSubmitNote('');
     setShowSubmitModal(true);
   };
@@ -1099,8 +1132,8 @@ function ProposalView() {
   const handleConfirmSubmit = async () => {
     setShowSubmitModal(false);
     await persistStatusChange('submitted', {
-      manualReviewRequested: submitManualReviewRequested,
-      note: submitManualReviewRequested ? submitNote : '',
+      manualReviewRequested: false,
+      note: submitNote,
     });
   };
 
@@ -1528,11 +1561,23 @@ function ProposalView() {
     );
   }
 
-  const versionsForRender = versions.length
+  const allVersionsForRender = versions.length
     ? versions
     : proposal
     ? listAllVersions(proposal as Proposal)
     : [];
+
+  const displayVersionContainer =
+    proposal && allVersionsForRender.length
+      ? buildContainerFromVersions(
+          allVersionsForRender.map((entry) => ({ ...(entry as Proposal), versions: [] })),
+          (proposal as Proposal).activeVersionId || activeVersionId
+        ) || (proposal as Proposal)
+      : proposal;
+
+  const versionsForRender = isReadOnlyReviewerView && displayVersionContainer
+    ? getReviewerVisibleVersions(displayVersionContainer as Proposal)
+    : allVersionsForRender;
 
   const sortedVersions = [...versionsForRender].sort((a, b) => {
     const aIsOriginal = a.isOriginalVersion ?? (a.versionId || 'original') === 'original';
@@ -1557,14 +1602,20 @@ function ProposalView() {
     proposalWorkflowStatus === 'needs_approval'
       ? 'Proposal submitted and awaiting approval'
       : proposal?.workflow?.approved && proposalWorkflowStatus === 'submitted'
-      ? 'Proposal was approved. Additional versions can still be made'
+      ? 'Proposal was approved. Future changes must be submitted as addendums.'
       : undefined;
   const workflowReviewVersionLabel =
-    sortedVersions.find((entry) => (entry.versionId || 'original') === (proposal?.workflow?.reviewVersionId || ''))?.versionName ||
+    sortedVersions.find(
+      (entry) =>
+        (entry.versionId || 'original') ===
+        (getPendingReviewVersionId(proposal as Proposal) || getApprovedVersionId(proposal as Proposal) || '')
+    )?.versionName ||
     proposal?.versionName ||
     'Current Version';
-
-  const primaryView = versionMap.get(activeVersionId) || viewModels[0];
+  const displayPrimaryVersionId =
+    (isReadOnlyReviewerView ? getReviewerPrimaryVersionId(displayVersionContainer as Proposal) : activeVersionId) ||
+    activeVersionId;
+  const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
   const customerModalView = customerBreakdownVersionId
     ? versionMap.get(customerBreakdownVersionId) || primaryView
     : null;
@@ -1958,16 +2009,16 @@ function ProposalView() {
     const isActive = versionId === activeVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
     const canEditVersion =
-      !isProposalEditingRestricted &&
+      canManageVersionDrafts &&
       !isSubmittedVersionLocked(vm.proposal) &&
       proposalWorkflowStatus !== 'completed';
     const canDeleteVersion =
-      !isProposalEditingRestricted &&
+      canManageVersionDrafts &&
       !isOriginal &&
       !isSubmittedVersionLocked(vm.proposal) &&
       proposalWorkflowStatus !== 'completed';
     const versionActionReason =
-      isProposalEditingRestricted
+      !canManageVersionDrafts
         ? editDisabledReason
         : proposalWorkflowStatus === 'completed'
         ? 'Completed proposals are locked.'
@@ -2150,9 +2201,9 @@ function ProposalView() {
                 <label htmlFor="active-version">Active Version:</label>
                 <select
                   id="active-version"
-                  value={activeVersionId}
+                  value={isReadOnlyReviewerView ? displayPrimaryVersionId : activeVersionId}
                   onChange={(e) => handleSetActiveVersion(e.target.value)}
-                  disabled={!canEditProposal}
+                  disabled={!canManageVersionDrafts}
                   title={editDisabledReason}
                 >
                   {viewModels.map((vm) => (
@@ -2168,13 +2219,9 @@ function ProposalView() {
             <button
               className="action-button action-button-version"
               onClick={handleBuildAnotherVersion}
-              disabled={proposalWorkflowStatus === 'completed' || isProposalEditingRestricted}
+              disabled={!canManageVersionDrafts}
               title={
-                isProposalEditingRestricted
-                  ? editDisabledReason
-                  : proposalWorkflowStatus === 'completed'
-                  ? 'Completed proposals are locked.'
-                  : undefined
+                !canManageVersionDrafts ? editDisabledReason : undefined
               }
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2360,10 +2407,8 @@ function ProposalView() {
       <SubmitProposalModal
         isOpen={showSubmitModal}
         versionName={proposal?.versionName || 'Current Version'}
-        manualReviewRequested={submitManualReviewRequested}
         note={submitNote}
         isSubmitting={loading}
-        onManualReviewRequestedChange={setSubmitManualReviewRequested}
         onNoteChange={setSubmitNote}
         onCancel={() => setShowSubmitModal(false)}
         onConfirm={() => {

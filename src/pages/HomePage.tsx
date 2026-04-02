@@ -269,6 +269,7 @@ function HomePage({
           onOpenProposal={handleOpenProposal}
           disableCreateProposal={isProposalEditingRestricted}
           createProposalDisabledReason={proposalEditingRestrictedReason}
+          viewerRole={session?.role}
         />
       </div>
       <FeedbackReplyInboxModal

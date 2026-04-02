@@ -37,7 +37,7 @@ import {
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
-import { listAllVersions } from '../utils/proposalVersions';
+import { getReviewerPrimaryVersionId, getReviewerVisibleVersions } from '../services/proposalWorkflow';
 import TempPasswordModal from '../components/TempPasswordModal';
 import AdminSettingsModal from '../components/AdminSettingsModal';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
@@ -1288,17 +1288,25 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
               </thead>
               <tbody>
                 {filteredProposals.map((proposal) => {
-                  const retailPrice = proposal.pricing?.retailPrice || proposal.totalCost || 0;
-                  const totalCOGS = proposal.pricing?.totalCOGS || 0;
-                  const grossProfitAmount = getGrossProfitAmount(proposal);
-                  const grossProfitPercent = getGrossProfitPercent(proposal);
+                  const reviewerVisibleVersions = getReviewerVisibleVersions(proposal);
+                  const reviewerPrimaryVersionId = getReviewerPrimaryVersionId(proposal);
+                  const displayProposal =
+                    reviewerVisibleVersions.find(
+                      (entry) => (entry.versionId || 'original') === (reviewerPrimaryVersionId || 'original')
+                    ) ||
+                    reviewerVisibleVersions[0] ||
+                    proposal;
+                  const retailPrice = displayProposal.pricing?.retailPrice || displayProposal.totalCost || 0;
+                  const totalCOGS = displayProposal.pricing?.totalCOGS || 0;
+                  const grossProfitAmount = getGrossProfitAmount(displayProposal);
+                  const grossProfitPercent = getGrossProfitPercent(displayProposal);
                   const designerName =
                     normalizeDesignerName(proposal.designerName) ||
                     normalizeDesignerName(session?.userName) ||
                     'Designer';
-                  const proposalVersionCount = listAllVersions(proposal).length;
-                  const modelId = proposal.pricingModelId || '';
-                  const explicitRemoved = (proposal.pricingModelName || '').toLowerCase().includes('(removed)');
+                  const proposalVersionCount = reviewerVisibleVersions.length || 1;
+                  const modelId = displayProposal.pricingModelId || '';
+                  const explicitRemoved = (displayProposal.pricingModelName || '').toLowerCase().includes('(removed)');
                   const isRemoved = Boolean(modelId) && (!availablePricingModelIds.has(modelId) || explicitRemoved);
                   const isActive =
                     Boolean(modelId) &&
@@ -1322,8 +1330,8 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                       className="proposal-row"
                     >
                       <td className="designer-cell">{designerName}</td>
-                      <td className="customer-name">{proposal.customerInfo.customerName}</td>
-                      <td>{new Date(proposal.lastModified || proposal.createdDate).toLocaleDateString()}</td>
+                      <td className="customer-name">{displayProposal.customerInfo.customerName}</td>
+                      <td>{new Date(displayProposal.lastModified || displayProposal.createdDate).toLocaleDateString()}</td>
                       <td>
                         <div className="proposal-status-cell">
                           <span className={statusClassName}>
@@ -1333,7 +1341,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                       </td>
                       <td>
                         <span className={modelClass}>
-                          {(proposal.pricingModelName || 'Pricing Model') +
+                          {(displayProposal.pricingModelName || 'Pricing Model') +
                             (isRemoved && !explicitRemoved ? ' (Removed)' : '')}
                         </span>
                       </td>

@@ -3,10 +3,8 @@ import './SubmitProposalModal.css';
 type SubmitProposalModalProps = {
   isOpen: boolean;
   versionName?: string;
-  manualReviewRequested: boolean;
   note: string;
   isSubmitting?: boolean;
-  onManualReviewRequestedChange: (value: boolean) => void;
   onNoteChange: (value: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -15,10 +13,8 @@ type SubmitProposalModalProps = {
 function SubmitProposalModal({
   isOpen,
   versionName,
-  manualReviewRequested,
   note,
   isSubmitting = false,
-  onManualReviewRequestedChange,
   onNoteChange,
   onCancel,
   onConfirm,
@@ -37,36 +33,24 @@ function SubmitProposalModal({
 
         <div className="submit-proposal-body">
           <p className="submit-proposal-message">
-            Submitting this version will lock it from further edits. You can still create another version later and
-            resubmit that new version before an admin or book keeper marks the proposal as completed.
+            Every proposal submission requires admin or book keeper approval before it becomes the active approved
+            proposal.
           </p>
           <p className="submit-proposal-message">
-            If additional changes are needed after submission, create a new version, update it, and submit that new
-            version in place of the current review version.
+            This version will lock once submitted. If there is already a pending review version, this submission will
+            replace it. After approval, it becomes the next approved proposal addendum baseline.
           </p>
 
-          <label className="submit-proposal-checkbox">
-            <input
-              type="checkbox"
-              checked={manualReviewRequested}
-              onChange={(event) => onManualReviewRequestedChange(event.target.checked)}
+          <label className="submit-proposal-note">
+            <span>Reviewer note</span>
+            <textarea
+              value={note}
+              onChange={(event) => onNoteChange(event.target.value)}
+              placeholder="Add context here"
               disabled={isSubmitting}
+              rows={5}
             />
-            <span>Attach a note for the reviewer</span>
           </label>
-
-          {manualReviewRequested && (
-            <label className="submit-proposal-note">
-              <span>Submission note</span>
-              <textarea
-                value={note}
-                onChange={(event) => onNoteChange(event.target.value)}
-                placeholder="Add context here"
-                disabled={isSubmitting}
-                rows={5}
-              />
-            </label>
-          )}
         </div>
 
         <div className="submit-proposal-actions">
