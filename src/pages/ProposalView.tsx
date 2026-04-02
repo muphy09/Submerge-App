@@ -2217,17 +2217,22 @@ function ProposalView() {
           </div>
           <div className="action-bar-right">
             <button
-              className="action-button action-button-version"
-              onClick={handleBuildAnotherVersion}
-              disabled={!canManageVersionDrafts}
+              className="action-button primary workflow-summary-submit-button"
+              onClick={handleSubmitProposal}
+              disabled={!canEditProposal || loading || !canSubmitProposal}
               title={
-                !canManageVersionDrafts ? editDisabledReason : undefined
+                !canEditProposal
+                  ? editDisabledReason
+                  : !canSubmitProposal
+                  ? 'Must include Customer Name'
+                  : undefined
               }
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              Build Another Version
+              Submit Proposal
             </button>
           </div>
         </div>
@@ -2246,24 +2251,19 @@ function ProposalView() {
                 {proposal.workflow.approved ? ' *' : ''}
               </div>
             </div>
-            <button
-              className="action-button primary workflow-summary-submit-button"
-              onClick={handleSubmitProposal}
-              disabled={!canEditProposal || loading || !canSubmitProposal}
-              title={
-                !canEditProposal
-                  ? editDisabledReason
-                  : !canSubmitProposal
-                  ? 'Must include Customer Name'
-                  : undefined
-              }
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Submit Proposal
-            </button>
+            <div className="workflow-summary-header-actions">
+              <button
+                className="action-button action-button-version workflow-summary-version-button"
+                onClick={handleBuildAnotherVersion}
+                disabled={!canManageVersionDrafts}
+                title={!canManageVersionDrafts ? editDisabledReason : undefined}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                Build Another Version
+              </button>
+            </div>
           </div>
 
           <div className="workflow-summary-grid">
