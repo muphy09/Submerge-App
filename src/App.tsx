@@ -117,6 +117,7 @@ function AppContent() {
   const [pendingSessionTakeoverError, setPendingSessionTakeoverError] = useState('');
   const [pendingSessionTakeoverLoading, setPendingSessionTakeoverLoading] = useState(false);
   const [showLoggedOutElsewhereNotice, setShowLoggedOutElsewhereNotice] = useState(() => shouldShowRemoteSignoutNotice());
+  const [showSessionEndedNotice, setShowSessionEndedNotice] = useState(false);
   const [adminPanelPin, setAdminPanelPin] = useState('');
   const [adminPanelPinError, setAdminPanelPinError] = useState('');
   const [adminPanelPinPrompt, setAdminPanelPinPrompt] = useState<{
@@ -188,6 +189,42 @@ function AppContent() {
     }, 5000);
   }, []);
 
+  const applySessionUiState = useCallback(
+    async (
+      nextSession: UserSession,
+      options?: {
+        passwordResetRequired?: boolean;
+        navigateHome?: boolean;
+      }
+    ) => {
+      clearRemoteSignoutNotice();
+      setShowLoggedOutElsewhereNotice(false);
+      setShowSessionEndedNotice(false);
+      setPendingSessionTakeover(null);
+      setPendingSessionTakeoverError('');
+      setPendingSessionTakeoverLoading(false);
+      setSession(nextSession);
+      setShowLogin(false);
+      setShowPasswordReset(Boolean(options?.passwordResetRequired));
+      const normalizedRole = (nextSession.role || '').toLowerCase();
+      if (normalizedRole === 'master') {
+        setMasterImpersonation(readMasterImpersonation());
+      } else {
+        clearMasterImpersonation();
+        setMasterImpersonation(null);
+      }
+      if (options?.navigateHome) {
+        navigate('/', { replace: true });
+      }
+      const targetId =
+        (normalizedRole === 'master' ? readMasterImpersonation()?.franchiseId : null) ||
+        nextSession.franchiseId ||
+        DEFAULT_FRANCHISE_ID;
+      await loadPricingForFranchise(targetId);
+    },
+    [loadPricingForFranchise, navigate]
+  );
+
   useEffect(() => {
     recordAppLaunch(appVersion);
   }, [appVersion]);
@@ -216,8 +253,10 @@ function AppContent() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event !== 'SIGNED_OUT') return;
+      const shouldShowNotice = !expectedLocalSignOutRef.current && Boolean(sessionRef.current?.userId);
       const shouldShowRemoteLogoutNotice =
-        !expectedLocalSignOutRef.current && Boolean(sessionRef.current?.userId);
+        shouldShowNotice && (forcingRemoteLogoutRef.current || shouldShowRemoteSignoutNotice());
+      const shouldShowSessionEndedMessage = shouldShowNotice && !shouldShowRemoteLogoutNotice;
       if (expectedLocalSignOutTimeoutRef.current) {
         window.clearTimeout(expectedLocalSignOutTimeoutRef.current);
         expectedLocalSignOutTimeoutRef.current = null;
@@ -228,6 +267,11 @@ function AppContent() {
         if (shouldShowRemoteLogoutNotice) {
           markRemoteSignoutNotice();
           setShowLoggedOutElsewhereNotice(true);
+          setShowSessionEndedNotice(false);
+        } else if (shouldShowSessionEndedMessage) {
+          clearRemoteSignoutNotice();
+          setShowLoggedOutElsewhereNotice(false);
+          setShowSessionEndedNotice(true);
         }
         resetSignedOutUiState();
       }, 0);
@@ -242,45 +286,45 @@ function AppContent() {
     // Restore session from Supabase Auth if possible
     let cancelled = false;
     const restoreSession = async () => {
-      const hadSavedSession = Boolean(readSession()?.userId);
+      const savedSession = readSession();
+      const hadSavedSession = Boolean(savedSession?.userId);
       try {
         const restored = await loadSessionFromSupabase();
         if (cancelled) return;
-        if (restored?.session) {
-          clearRemoteSignoutNotice();
-          setShowLoggedOutElsewhereNotice(false);
-          setPendingSessionTakeover(null);
-          setPendingSessionTakeoverError('');
-          setPendingSessionTakeoverLoading(false);
-          setSession(restored.session);
-          setShowLogin(false);
-          setShowPasswordReset(restored.passwordResetRequired);
-          const isMaster = (restored.session.role || '').toLowerCase() === 'master';
-          const activeImpersonation = isMaster ? readMasterImpersonation() : null;
-          setMasterImpersonation(activeImpersonation);
-          const targetId =
-            activeImpersonation?.franchiseId ||
-            restored.session.franchiseId ||
-            DEFAULT_FRANCHISE_ID;
-          void loadPricingForFranchise(targetId);
-        } else {
-          if (hadSavedSession) {
-            markRemoteSignoutNotice();
-            setShowLoggedOutElsewhereNotice(true);
-          } else {
-            clearRemoteSignoutNotice();
-            setShowLoggedOutElsewhereNotice(false);
-          }
-          markExpectedLocalSignOut();
-          void signOut();
-          resetSignedOutUiState();
+        if (restored.status === 'restored' || restored.status === 'unverified') {
+          void applySessionUiState(restored.session, {
+            passwordResetRequired: restored.passwordResetRequired,
+          });
+          return;
         }
-      } catch (error) {
-        console.warn('Unable to restore saved session:', error);
-        if (hadSavedSession) {
+
+        if (hadSavedSession && restored.reason === 'displaced') {
           markRemoteSignoutNotice();
           setShowLoggedOutElsewhereNotice(true);
+          setShowSessionEndedNotice(false);
+        } else if (hadSavedSession) {
+          clearRemoteSignoutNotice();
+          setShowLoggedOutElsewhereNotice(false);
+          setShowSessionEndedNotice(true);
+        } else {
+          clearRemoteSignoutNotice();
+          setShowLoggedOutElsewhereNotice(false);
+          setShowSessionEndedNotice(false);
         }
+        markExpectedLocalSignOut();
+        void signOut();
+        resetSignedOutUiState();
+      } catch (error) {
+        console.warn('Unable to restore saved session:', error);
+        if (savedSession?.userId) {
+          void applySessionUiState(savedSession, {
+            passwordResetRequired: Boolean(savedSession.passwordResetRequired),
+          });
+          return;
+        }
+        clearRemoteSignoutNotice();
+        setShowLoggedOutElsewhereNotice(false);
+        setShowSessionEndedNotice(false);
         resetSignedOutUiState();
       }
     };
@@ -316,7 +360,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [markExpectedLocalSignOut, navigate, resetSignedOutUiState]);
+  }, [applySessionUiState, markExpectedLocalSignOut, navigate, resetSignedOutUiState]);
 
   const isMaster = (session?.role || '').toLowerCase() === 'master';
   const effectiveSession = (() => {
@@ -494,27 +538,10 @@ function AppContent() {
         return;
       }
 
-      clearRemoteSignoutNotice();
-      setShowLoggedOutElsewhereNotice(false);
-      setPendingSessionTakeover(null);
-      setPendingSessionTakeoverError('');
-      setPendingSessionTakeoverLoading(false);
-      setSession(result.session);
-      setShowLogin(false);
-      setShowPasswordReset(result.passwordResetRequired);
-      const normalizedRole = (result.session.role || '').toLowerCase();
-      if (normalizedRole === 'master') {
-        setMasterImpersonation(readMasterImpersonation());
-      } else {
-        clearMasterImpersonation();
-        setMasterImpersonation(null);
-      }
-      navigate('/', { replace: true });
-      const targetId =
-        (normalizedRole === 'master' ? readMasterImpersonation()?.franchiseId : null) ||
-        result.session.franchiseId ||
-        DEFAULT_FRANCHISE_ID;
-      await loadPricingForFranchise(targetId);
+      await applySessionUiState(result.session, {
+        passwordResetRequired: result.passwordResetRequired,
+        navigateHome: true,
+      });
     } catch (error) {
       recordLoginFailure(email, franchiseCode);
       throw error;
@@ -527,35 +554,21 @@ function AppContent() {
       setPendingSessionTakeoverLoading(true);
       setPendingSessionTakeoverError('');
       const result = await confirmSessionTakeover(pendingSessionTakeover.session);
-      setShowLoggedOutElsewhereNotice(false);
-      setPendingSessionTakeover(null);
-      setPendingSessionTakeoverLoading(false);
-      setSession(result.session);
-      setShowLogin(false);
-      setShowPasswordReset(result.passwordResetRequired);
-      const normalizedRole = (result.session.role || '').toLowerCase();
-      if (normalizedRole === 'master') {
-        setMasterImpersonation(readMasterImpersonation());
-      } else {
-        clearMasterImpersonation();
-        setMasterImpersonation(null);
-      }
-      navigate('/', { replace: true });
-      const targetId =
-        (normalizedRole === 'master' ? readMasterImpersonation()?.franchiseId : null) ||
-        result.session.franchiseId ||
-        DEFAULT_FRANCHISE_ID;
-      await loadPricingForFranchise(targetId);
+      await applySessionUiState(result.session, {
+        passwordResetRequired: result.passwordResetRequired,
+        navigateHome: true,
+      });
     } catch (error: any) {
       setPendingSessionTakeoverError(error?.message || 'Unable to take over the existing session.');
       setPendingSessionTakeoverLoading(false);
     }
-  }, [loadPricingForFranchise, navigate, pendingSessionTakeover]);
+  }, [applySessionUiState, pendingSessionTakeover]);
 
   const handleCancelPendingSessionTakeover = useCallback(async () => {
     setPendingSessionTakeover(null);
     setPendingSessionTakeoverError('');
     setPendingSessionTakeoverLoading(false);
+    setShowSessionEndedNotice(false);
     try {
       markExpectedLocalSignOut();
       await signOut();
@@ -569,6 +582,7 @@ function AppContent() {
   const handleLogout = async () => {
     clearRemoteSignoutNotice();
     setShowLoggedOutElsewhereNotice(false);
+    setShowSessionEndedNotice(false);
     setShowProfileSettings(false);
     try {
       markExpectedLocalSignOut();
@@ -1116,6 +1130,19 @@ function AppContent() {
         onCancel={() => {
           clearRemoteSignoutNotice();
           setShowLoggedOutElsewhereNotice(false);
+        }}
+      />
+      <ConfirmDialog
+        open={showSessionEndedNotice}
+        title="Session ended"
+        message="Your session ended. Please sign in again."
+        confirmLabel="OK"
+        hideCancel
+        onConfirm={() => {
+          setShowSessionEndedNotice(false);
+        }}
+        onCancel={() => {
+          setShowSessionEndedNotice(false);
         }}
       />
       <AdminPinModal

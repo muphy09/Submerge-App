@@ -52,6 +52,22 @@ type SignInConflictResult = {
 
 export type SignInWithEmailResult = SignInSuccessResult | SignInConflictResult;
 
+export type LoadSessionFromSupabaseResult =
+  | {
+      status: 'restored';
+      session: UserSession;
+      passwordResetRequired: boolean;
+    }
+  | {
+      status: 'unverified';
+      session: UserSession;
+      passwordResetRequired: boolean;
+    }
+  | {
+      status: 'signed-out';
+      reason: 'missing-session' | 'displaced';
+    };
+
 function normalizeCode(code?: string | null) {
   return String(code || '').trim().toUpperCase();
 }
@@ -66,6 +82,18 @@ function normalizeText(value?: string | null) {
 
 function normalizeDisplayName(name?: string | null) {
   return String(name || '').trim();
+}
+
+function buildSignedOutRestoreResult(reason: 'missing-session' | 'displaced'): LoadSessionFromSupabaseResult {
+  return { status: 'signed-out', reason };
+}
+
+function buildUnverifiedRestoreResult(savedSession: UserSession): LoadSessionFromSupabaseResult {
+  return {
+    status: 'unverified',
+    session: savedSession,
+    passwordResetRequired: Boolean(savedSession.passwordResetRequired),
+  };
 }
 
 function assertSupabaseReady() {
@@ -321,29 +349,34 @@ export async function confirmSessionTakeover(session: UserSession) {
   };
 }
 
-export async function loadSessionFromSupabase(): Promise<{ session: UserSession; passwordResetRequired: boolean } | null> {
+export async function loadSessionFromSupabase(): Promise<LoadSessionFromSupabaseResult> {
   const savedSession = readSession();
-  if (!savedSession) return null;
+  if (!savedSession) return buildSignedOutRestoreResult('missing-session');
   const supabase = getSupabaseClient();
-  if (!supabase) return null;
+  if (!supabase) return buildUnverifiedRestoreResult(savedSession);
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     await supabase.auth.signOut({ scope: 'local' });
     clearMasterImpersonation();
     clearSession();
-    return null;
+    return buildSignedOutRestoreResult('missing-session');
   }
   const authSession = data?.session;
-  if (!authSession?.user) return null;
+  if (!authSession?.user) return buildSignedOutRestoreResult('missing-session');
 
-  const profile = await getUserProfileByAuthId(authSession.user.id, authSession.user.email);
-  if (!profile) return null;
+  let profile: FranchiseUserRow | null = null;
+  try {
+    profile = await getUserProfileByAuthId(authSession.user.id, authSession.user.email);
+  } catch (error) {
+    return buildUnverifiedRestoreResult(savedSession);
+  }
+  if (!profile) return buildSignedOutRestoreResult('missing-session');
 
   const role = (profile.role || 'designer') as UserRole;
   const normalizedRole = String(role || '').toLowerCase();
   const allowedRoles = ['master', 'owner', 'admin', 'bookkeeper', 'designer'];
   if (!allowedRoles.includes(normalizedRole) || profile.is_active === false) {
-    return null;
+    return buildSignedOutRestoreResult('missing-session');
   }
   if (normalizedRole !== 'master') {
     clearMasterImpersonation();
@@ -351,11 +384,19 @@ export async function loadSessionFromSupabase(): Promise<{ session: UserSession;
   let franchise: FranchiseRow | null = null;
   if (normalizedRole !== 'master') {
     if (!profile.franchise_id) {
-      return null;
+      return buildSignedOutRestoreResult('missing-session');
     }
-    franchise = await getFranchiseById(profile.franchise_id);
+    try {
+      franchise = await getFranchiseById(profile.franchise_id);
+    } catch (error) {
+      return buildUnverifiedRestoreResult(savedSession);
+    }
   } else if (profile.franchise_id) {
-    franchise = await getFranchiseById(profile.franchise_id);
+    try {
+      franchise = await getFranchiseById(profile.franchise_id);
+    } catch (error) {
+      return buildUnverifiedRestoreResult(savedSession);
+    }
   }
 
   let appSession = {
@@ -364,28 +405,38 @@ export async function loadSessionFromSupabase(): Promise<{ session: UserSession;
   };
 
   if (appSession.appSessionId && appSession.appSessionLeaseToken) {
-    const heartbeat = await heartbeatUserAppSession({
-      appSessionId: appSession.appSessionId,
-      appSessionLeaseToken: appSession.appSessionLeaseToken,
-    });
+    let heartbeat;
+    try {
+      heartbeat = await heartbeatUserAppSession({
+        appSessionId: appSession.appSessionId,
+        appSessionLeaseToken: appSession.appSessionLeaseToken,
+      });
+    } catch (error) {
+      return buildUnverifiedRestoreResult(savedSession);
+    }
     if (heartbeat.status !== 'active') {
       await supabase.auth.signOut({ scope: 'local' });
       clearMasterImpersonation();
       clearSession();
-      return null;
+      return buildSignedOutRestoreResult('displaced');
     }
   } else {
     appSession = createAppSessionCredentials();
-    const claimResult = await claimUserAppSession({
-      appSessionId: appSession.appSessionId,
-      appSessionLeaseToken: appSession.appSessionLeaseToken,
-      takeover: false,
-    });
+    let claimResult;
+    try {
+      claimResult = await claimUserAppSession({
+        appSessionId: appSession.appSessionId,
+        appSessionLeaseToken: appSession.appSessionLeaseToken,
+        takeover: false,
+      });
+    } catch (error) {
+      return buildUnverifiedRestoreResult(savedSession);
+    }
     if (claimResult.status !== 'claimed') {
       await supabase.auth.signOut({ scope: 'local' });
       clearMasterImpersonation();
       clearSession();
-      return null;
+      return buildSignedOutRestoreResult('missing-session');
     }
   }
 
@@ -397,7 +448,11 @@ export async function loadSessionFromSupabase(): Promise<{ session: UserSession;
     appSession,
   });
   saveSession(session);
-  return { session, passwordResetRequired: Boolean(profile.password_reset_required) };
+  return {
+    status: 'restored',
+    session,
+    passwordResetRequired: Boolean(profile.password_reset_required),
+  };
 }
 
 async function updateCurrentUserPasswordInternal(
