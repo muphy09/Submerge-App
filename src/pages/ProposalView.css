@@ -2173,9 +2173,9 @@
 }
 
 .workflow-summary-pill.is-needs_approval {
-  background: #ffe7c2;
-  border-color: #f0b55d;
-  color: #8a5100;
+  background: #ead9c5;
+  border-color: #c7a884;
+  color: #6e4a2f;
 }
 
 .workflow-summary-pill.is-changes_requested {
@@ -2300,10 +2300,15 @@
 .workflow-summary-message-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 0.65rem;
 }
 
 .workflow-summary-message-button {
   min-width: 132px;
+}
+
+.workflow-summary-message-trigger {
+  min-width: 160px;
 }
 
 @media (max-width: 1100px) {

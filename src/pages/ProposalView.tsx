@@ -210,6 +210,7 @@ function ProposalView() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
+  const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
   const proposalRef = useRef<HTMLDivElement>(null);
@@ -1084,6 +1085,7 @@ function ProposalView() {
       setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
       setProposal(activeApplied as Proposal);
       setWorkflowMessageDraft('');
+      setShowWorkflowMessageComposer(false);
       showToast({
         type: 'success',
         message: isPending ? 'Message saved locally. Will sync when back online.' : 'Message sent.',
@@ -1488,13 +1490,8 @@ function ProposalView() {
   const workflowHistory = [...(proposal?.workflow?.history || [])].sort(
     (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
   );
-  const workflowReasons = (proposal?.workflow?.approvalReasons || []).map((reason) =>
-    reason.code === 'manual_review'
-      ? {
-          ...reason,
-          detail: undefined,
-        }
-      : reason
+  const workflowReasons = (proposal?.workflow?.approvalReasons || []).filter(
+    (reason) => reason.code !== 'manual_review'
   );
   const workflowReviewVersionLabel =
     sortedVersions.find((entry) => (entry.versionId || 'original') === (proposal?.workflow?.reviewVersionId || ''))?.versionName ||
@@ -2202,7 +2199,19 @@ function ProposalView() {
                   {entry.message && <div className="workflow-summary-history-message">{entry.message}</div>}
                 </div>
               ))}
-              {canSendWorkflowMessages && (
+              {canSendWorkflowMessages && !showWorkflowMessageComposer && (
+                <div className="workflow-summary-message-actions">
+                  <button
+                    type="button"
+                    className="action-button workflow-summary-message-trigger"
+                    onClick={() => setShowWorkflowMessageComposer(true)}
+                    disabled={workflowMessageSaving || loading}
+                  >
+                    Send Another Note
+                  </button>
+                </div>
+              )}
+              {canSendWorkflowMessages && showWorkflowMessageComposer && (
                 <div className="workflow-summary-message-composer">
                   <textarea
                     className="workflow-summary-message-input"
@@ -2213,6 +2222,17 @@ function ProposalView() {
                     rows={4}
                   />
                   <div className="workflow-summary-message-actions">
+                    <button
+                      type="button"
+                      className="action-button"
+                      onClick={() => {
+                        setWorkflowMessageDraft('');
+                        setShowWorkflowMessageComposer(false);
+                      }}
+                      disabled={workflowMessageSaving}
+                    >
+                      Cancel
+                    </button>
                     <button
                       type="button"
                       className="action-button primary workflow-summary-message-button"

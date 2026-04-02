@@ -967,9 +967,9 @@
 }
 
 .admin-table .status-badge-table.is-needs_approval {
-  background: #f59e0b;
-  border-color: #d97706;
-  color: #ffffff;
+  background: #ead9c5;
+  border-color: #c7a884;
+  color: #6e4a2f;
 }
 
 .admin-table .status-badge-table.is-changes_requested {

@@ -177,13 +177,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   );
   const selectedReviewVersionId = selectedProposal ? getReviewVersionId(selectedProposal) : null;
   const selectedUnreadCount = selectedProposal ? countUnreadWorkflowEvents(selectedProposal, session?.userId) : 0;
-  const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).map((reason) =>
-    reason.code === 'manual_review'
-      ? {
-          ...reason,
-          detail: undefined,
-        }
-      : reason
+  const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).filter(
+    (reason) => reason.code !== 'manual_review'
   );
 
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
