@@ -17,8 +17,8 @@
     - Book Keeper Tab gives a quick comparison view of Proposal differences
     - Book Keeper Role has the ability to review and process Submitted Proposals
         - *This section will continue to be improved*
-### Fiberglass Introduction - *Rolling*
-    - Fiberglass Pool Models introduced into the workflow and engine (excel reference)
+### Fiberglass Introduction
+    - Fiberglass Pool Models, Spa Models, and Tanning Ledges introduced into the engine
         - Options can be configured by the Admin
     - Contract correctly updates with Deposit breakdown and Fiberglass selection
     - Important Excel Notes:
@@ -28,6 +28,9 @@
         - Tile cost is forced to 0
         - Interior Finish cost is forced to 0
         - Coping adds Concrete Band Cost (Fiber pool count * perimeter * 1.25)
+        - Spillover cost always adds $1000 (configured by admin)
+            - Spillover 'Yes' also adds an increased cost depending on the selected shell
+            - ^^^ Essentially 2 cost increases for Spillover
 -----
 ## [2.1.3] - 4/1/26
 ### Improvements

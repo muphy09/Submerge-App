@@ -9,6 +9,8 @@ import {
   type MasonryFacingOption,
 } from '../utils/masonryFacing';
 import {
+  fiberglassSpaOptionSupportsSpillover,
+  findFiberglassNamedOption,
   findFiberglassPoolModel,
   getFiberglassNamedOptions,
   getFiberglassPoolModelsBySize,
@@ -157,6 +159,8 @@ function PoolSpecsSectionNew({
     ? getFiberglassPoolModelsBySize(selectedFiberglassSize)
     : [];
   const fiberglassSpaOptions = getFiberglassNamedOptions('spaOptions');
+  const selectedFiberglassSpaOption =
+    data.spaFiberglassModelName ? findFiberglassNamedOption('spaOptions', data.spaFiberglassModelName) : undefined;
   const fiberglassTanningOptions = getFiberglassNamedOptions('tanningLedgeOptions');
   const fiberglassFinishUpgrades = getFiberglassNamedOptions('finishUpgrades');
   const isGuniteSpa = data.spaType === 'gunite';
@@ -166,12 +170,24 @@ function PoolSpecsSectionNew({
   const doubleBullnoseDisabled = !hasSpaDimensions || !tileCopingDecking || !onChangeTileCopingDecking;
   const doubleBullnoseSelectValue = !doubleBullnoseDisabled && isDoubleBullnoseIncluded ? 'yes' : 'none';
   const spilloverSelectValue = data.hasSpillover ? 'yes' : 'none';
+  const fiberglassSpaSpilloverUnavailable =
+    Boolean(selectedFiberglassSpaOption) && !fiberglassSpaOptionSupportsSpillover(selectedFiberglassSpaOption);
+  const fiberglassSpaSpilloverDisabled =
+    data.spaType === 'fiberglass' && (!selectedFiberglassSpaOption || fiberglassSpaSpilloverUnavailable);
+  const fiberglassSpaSpilloverDisabledMessage = !selectedFiberglassSpaOption
+    ? 'Select a fiberglass spa option first'
+    : 'Spillover is not available for this fiberglass spa option';
   const raisedSpaSelectValue = data.isRaisedSpa ? 'yes' : 'none';
 
   useEffect(() => {
     if (!isFiberglass || data.poolShape === 'geometric') return;
     onChange({ ...data, poolShape: 'geometric' });
   }, [data, isFiberglass, onChange]);
+
+  useEffect(() => {
+    if (data.spaType !== 'fiberglass' || !data.hasSpillover || !fiberglassSpaSpilloverUnavailable) return;
+    onChange({ ...data, hasSpillover: false });
+  }, [data, fiberglassSpaSpilloverUnavailable, onChange]);
 
   const handleDoubleBullnoseSelect = (value: string) => {
     if (doubleBullnoseDisabled || !tileCopingDecking || !onChangeTileCopingDecking) {
@@ -551,6 +567,8 @@ function PoolSpecsSectionNew({
                 <select
                   className="compact-input"
                   value={spilloverSelectValue}
+                  disabled={fiberglassSpaSpilloverDisabled}
+                  title={fiberglassSpaSpilloverDisabled ? fiberglassSpaSpilloverDisabledMessage : undefined}
                   onChange={(e) => handleChange('hasSpillover', e.target.value === 'yes')}
                 >
                   <option value="none">None</option>

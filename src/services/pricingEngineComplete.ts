@@ -30,8 +30,10 @@ import {
   OFF_CONTRACT_GROUP_DECKING,
 } from '../utils/offContractLineItems';
 import {
+  fiberglassSpaOptionSupportsSpillover,
   findFiberglassNamedOption,
   findFiberglassPoolModel,
+  getFiberglassSpaSpilloverSelectedPrice,
 } from '../utils/fiberglass';
 import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
 
@@ -1649,13 +1651,22 @@ export class FiberglassCalculations {
       });
     }
 
-    if (spaIsFiberglass && poolSpecs.hasSpillover && Number(prices.spillover) > 0) {
+    const spilloverSelectedPrice =
+      spaIsFiberglass && spaOption && fiberglassSpaOptionSupportsSpillover(spaOption)
+        ? getFiberglassSpaSpilloverSelectedPrice(spaOption)
+        : undefined;
+    const spilloverAdjustment =
+      spaOption && Number.isFinite(Number(spilloverSelectedPrice))
+        ? roundCurrency(Number(spilloverSelectedPrice) - Number(spaOption.price || 0))
+        : 0;
+
+    if (spaIsFiberglass && poolSpecs.hasSpillover && spaOption && spilloverAdjustment !== 0) {
       items.push({
         category: 'Fiberglass Shell',
         description: 'Spillover',
-        unitPrice: Number(prices.spillover),
+        unitPrice: spilloverAdjustment,
         quantity: 1,
-        total: Number(prices.spillover),
+        total: spilloverAdjustment,
         details: { fiberglassLineType: 'spillover' },
       });
     }

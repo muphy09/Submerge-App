@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import type { Proposal } from '../types/proposal-new';
 import {
@@ -93,6 +94,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const [selectedFilter, setSelectedFilter] = useState<QueueFilter>('needs_approval');
   const [noteDraft, setNoteDraft] = useState('');
   const [showNoteComposer, setShowNoteComposer] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const [expandedCostCategories, setExpandedCostCategories] = useState<string[]>([]);
 
@@ -173,6 +175,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   useEffect(() => {
     setNoteDraft('');
     setShowNoteComposer(false);
+    setShowCompleteConfirm(false);
   }, [selectedProposal?.proposalNumber]);
 
   useEffect(() => {
@@ -606,7 +609,11 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 <div className="workflow-action-header">
                   <div>
                     <div className="workflow-detail-label">Reviewer Actions</div>
-                    <div className="workflow-detail-value">Approve or request changes</div>
+                    <div className="workflow-detail-value">
+                      {getWorkflowStatus(selectedProposal) === 'approved'
+                        ? 'Mark Complete or Request Changes'
+                        : 'Approve or Request Changes'}
+                    </div>
                   </div>
                 </div>
                 <div className="workflow-action-stack">
@@ -652,11 +659,9 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                         type="button"
                         className="workflow-primary-btn"
                         disabled={Boolean(savingAction)}
-                        onClick={() => {
-                          void handleComplete();
-                        }}
+                        onClick={() => setShowCompleteConfirm(true)}
                       >
-                        Mark Completed
+                        Mark Complete
                       </button>
                     )}
                   </div>
@@ -693,6 +698,19 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                   </>
                 )}
               </div>
+              <ConfirmDialog
+                open={showCompleteConfirm}
+                title="Are you sure?"
+                message="Marking as complete will not allow any edits to be made afterwards. This should be done after the pool is complete"
+                confirmLabel="Yes, I'm sure"
+                cancelLabel="No, take me back"
+                isLoading={Boolean(savingAction)}
+                onConfirm={() => {
+                  setShowCompleteConfirm(false);
+                  void handleComplete();
+                }}
+                onCancel={() => setShowCompleteConfirm(false)}
+              />
             </>
           )}
         </section>

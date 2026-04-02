@@ -65,6 +65,7 @@ type ListField = {
   tooltip?: string;
   options?: ListFieldOption[] | ListFieldOptionsResolver;
   defaultValue?: string | number | boolean;
+  allowBlank?: boolean;
   hidden?: (entry: any) => boolean;
 };
 
@@ -131,7 +132,9 @@ const emptyFromFields = (fields: ListField[]) =>
       field.defaultValue !== undefined
         ? field.defaultValue
         : field.type === 'number'
-          ? 0
+          ? field.allowBlank
+            ? undefined
+            : 0
           : field.type === 'boolean'
             ? false
             : '';
@@ -438,7 +441,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
   const handleListChange = (list: ListConfig, index: number, field: ListField, raw: any) => {
     const parsed =
-      field.type === 'number' ? toNumber(String(raw)) : field.type === 'boolean' ? Boolean(raw) : String(raw);
+      field.type === 'number'
+        ? field.allowBlank && String(raw).trim() === ''
+          ? undefined
+          : toNumber(String(raw))
+        : field.type === 'boolean'
+          ? Boolean(raw)
+          : String(raw);
     const isDefaultLightChoice =
       field.key === 'defaultLightChoice' &&
       list.path[0] === 'equipment' &&
@@ -897,6 +906,36 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         placeholder: '0',
         prefix: '$',
         tooltip: 'Applied once when this fiberglass option is selected.',
+      },
+    ],
+    []
+  );
+  const fiberglassSpaOptionFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Name',
+        type: 'text',
+        placeholder: 'Mystic',
+        tooltip: 'Label shown in the fiberglass spa dropdown on the proposal builder.',
+      },
+      {
+        key: 'price',
+        label: 'Base Cost',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Used when fiberglass spa spillover is set to None.',
+      },
+      {
+        key: 'spilloverPrice',
+        label: 'Spillover Cost',
+        type: 'number',
+        placeholder: 'Blank = no spillover option',
+        prefix: '$',
+        allowBlank: true,
+        tooltip:
+          'Total fiberglass spa shell cost when spillover is set to Yes. Leave blank to disable spillover for this spa option.',
       },
     ],
     []
@@ -2939,7 +2978,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Spillover',
                 path: ['fiberglass', 'spillover'],
                 type: 'number',
-                tooltip: 'Applied once when a fiberglass spa is selected with spillover enabled.',
+                tooltip:
+                  'Legacy fallback add-on used only when fiberglass spa options do not define their own spillover shell price.',
                 prefix: '$',
               },
               {
@@ -3025,7 +3065,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   name: '',
                   price: 0,
                 }),
-                fields: fiberglassNamedPriceFields,
+                fields: fiberglassSpaOptionFields,
               },
             ],
           },
@@ -3591,6 +3631,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       return selected?.label || String(fieldValue || '—');
     }
     if (field.type === 'number') {
+      if (field.allowBlank && (fieldValue === undefined || fieldValue === null || fieldValue === '')) {
+        return '—';
+      }
       return formatPrefixedValue(field.prefix, formatNumericValue(Number(fieldValue) || 0));
     }
     const normalized = String(fieldValue ?? '').trim();
@@ -3981,7 +4024,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   <input
                     type={field.type === 'number' ? 'number' : 'text'}
                     className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
-                    value={field.type === 'number' ? fieldValue ?? 0 : fieldValue ?? ''}
+                    value={
+                      field.type === 'number'
+                        ? field.allowBlank && (fieldValue === undefined || fieldValue === null)
+                          ? ''
+                          : fieldValue ?? 0
+                        : fieldValue ?? ''
+                    }
                     placeholder={field.placeholder}
                     onChange={(e) => handleListChange(list, index, field, e.target.value)}
                   />

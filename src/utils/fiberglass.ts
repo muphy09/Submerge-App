@@ -16,6 +16,7 @@ export interface FiberglassNamedPriceOption {
   id?: string;
   name: string;
   price: number;
+  spilloverPrice?: number;
 }
 
 type FiberglassPricingSource = {
@@ -24,6 +25,7 @@ type FiberglassPricingSource = {
     spaOptions?: FiberglassNamedPriceOption[];
     tanningLedgeOptions?: FiberglassNamedPriceOption[];
     finishUpgrades?: FiberglassNamedPriceOption[];
+    spillover?: number;
   };
 };
 
@@ -86,3 +88,42 @@ export const findFiberglassNamedOption = (
   source: FiberglassPricingSource = pricingData
 ): FiberglassNamedPriceOption | undefined =>
   getFiberglassNamedOptions(optionType, source).find((option) => option.name === optionName);
+
+const hasOwnSpilloverPrice = (option?: FiberglassNamedPriceOption | null) =>
+  Boolean(option) && Object.prototype.hasOwnProperty.call(option, 'spilloverPrice');
+
+export const hasConfiguredFiberglassSpaSpilloverPricing = (
+  source: FiberglassPricingSource = pricingData
+): boolean => getFiberglassNamedOptions('spaOptions', source).some((option) => hasOwnSpilloverPrice(option));
+
+export const getFiberglassSpaSpilloverSelectedPrice = (
+  option?: FiberglassNamedPriceOption | null,
+  source: FiberglassPricingSource = pricingData
+): number | undefined => {
+  if (!option) return undefined;
+
+  if (hasOwnSpilloverPrice(option)) {
+    const configured = Number(option.spilloverPrice);
+    return Number.isFinite(configured) && configured > 0 ? configured : undefined;
+  }
+
+  if (hasConfiguredFiberglassSpaSpilloverPricing(source)) {
+    return undefined;
+  }
+
+  const basePrice = Number(option.price);
+  const legacySpillover = Number(source?.fiberglass?.spillover);
+  if (!Number.isFinite(basePrice) || !Number.isFinite(legacySpillover) || legacySpillover <= 0) {
+    return undefined;
+  }
+
+  return basePrice + legacySpillover;
+};
+
+export const fiberglassSpaOptionSupportsSpillover = (
+  option?: FiberglassNamedPriceOption | null,
+  source: FiberglassPricingSource = pricingData
+): boolean => {
+  const selectedPrice = getFiberglassSpaSpilloverSelectedPrice(option, source);
+  return Number.isFinite(selectedPrice) && Number(selectedPrice) > 0;
+};
