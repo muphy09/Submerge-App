@@ -15,6 +15,7 @@ const DEFAULT_DIG_COMMISSION_RATE = 0.0275;
 const DEFAULT_CLOSEOUT_COMMISSION_RATE = 0.0275;
 const DEFAULT_APPROVAL_MARGIN_THRESHOLD_PERCENT = 18;
 const DEFAULT_DISCOUNT_ALLOWANCE_THRESHOLD_PERCENT = 18;
+const MASTER_ALLOWED_ROLES = new Set(['owner', 'admin', 'bookkeeper', 'designer']);
 
 function isEmailConflict(error: any) {
   const code = String(error?.code || '').trim();
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
     const franchiseId = String(body?.franchiseId || '').trim();
     const email = String(body?.email || '').trim().toLowerCase();
     const name = body?.name ? String(body.name).trim() : null;
-    const requestedRole = String(body?.role || 'designer').trim();
+    const requestedRole = String(body?.role || 'designer').trim().toLowerCase();
 
     if (!franchiseId || !email) {
       return new Response(JSON.stringify({ error: 'franchiseId and email are required.' }), {
@@ -68,13 +69,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const role = requesterRole === 'master'
-      ? (requestedRole === 'owner' || requestedRole === 'admin' || requestedRole === 'bookkeeper'
-        ? requestedRole
-        : 'designer')
-      : requestedRole === 'bookkeeper'
-        ? 'bookkeeper'
-        : 'designer';
+    const role =
+      requesterRole === 'master'
+        ? MASTER_ALLOWED_ROLES.has(requestedRole)
+          ? requestedRole
+          : 'designer'
+        : requestedRole === 'bookkeeper'
+          ? 'bookkeeper'
+          : 'designer';
 
     const tempPassword = generateTempPassword();
     const { data: created, error: createError } = await supabase.auth.admin.createUser({
@@ -93,22 +95,26 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date().toISOString();
-    const { error: insertError } = await supabase.from('franchise_users').insert({
-      franchise_id: franchiseId,
-      auth_user_id: created.user.id,
-      email,
-      name,
-      role,
-      is_active: true,
-      password_reset_required: true,
-      dig_commission_rate: DEFAULT_DIG_COMMISSION_RATE,
-      closeout_commission_rate: DEFAULT_CLOSEOUT_COMMISSION_RATE,
-      approval_margin_threshold_percent: DEFAULT_APPROVAL_MARGIN_THRESHOLD_PERCENT,
-      discount_allowance_threshold_percent: DEFAULT_DISCOUNT_ALLOWANCE_THRESHOLD_PERCENT,
-      always_require_approval: false,
-      created_at: now,
-      updated_at: now,
-    });
+    const { data: insertedUser, error: insertError } = await supabase
+      .from('franchise_users')
+      .insert({
+        franchise_id: franchiseId,
+        auth_user_id: created.user.id,
+        email,
+        name,
+        role,
+        is_active: true,
+        password_reset_required: true,
+        dig_commission_rate: DEFAULT_DIG_COMMISSION_RATE,
+        closeout_commission_rate: DEFAULT_CLOSEOUT_COMMISSION_RATE,
+        approval_margin_threshold_percent: DEFAULT_APPROVAL_MARGIN_THRESHOLD_PERCENT,
+        discount_allowance_threshold_percent: DEFAULT_DISCOUNT_ALLOWANCE_THRESHOLD_PERCENT,
+        always_require_approval: false,
+        created_at: now,
+        updated_at: now,
+      })
+      .select('id,auth_user_id,role,franchise_id,is_active')
+      .single();
     if (insertError) {
       await supabase.auth.admin.deleteUser(created.user.id);
       if (isEmailConflict(insertError)) {
@@ -118,6 +124,25 @@ Deno.serve(async (req) => {
         });
       }
       throw insertError;
+    }
+
+    let createdProfile = insertedUser;
+    if (!createdProfile || String(createdProfile.role || '').toLowerCase() !== role) {
+      const { data: correctedUser, error: correctedUserError } = await supabase
+        .from('franchise_users')
+        .update({ role, updated_at: now })
+        .eq('auth_user_id', created.user.id)
+        .eq('franchise_id', franchiseId)
+        .select('id,auth_user_id,role,franchise_id,is_active')
+        .single();
+      if (correctedUserError) {
+        throw correctedUserError;
+      }
+      createdProfile = correctedUser;
+    }
+
+    if (!createdProfile || String(createdProfile.role || '').toLowerCase() !== role) {
+      throw new Error('User was created, but the selected role did not persist.');
     }
 
     try {
@@ -131,12 +156,13 @@ Deno.serve(async (req) => {
         effectiveRole,
         action: 'User created',
         targetType: 'user',
-        targetId: created.user.id,
+        targetId: createdProfile.id,
         details: {
-          targetUserId: created.user.id,
+          targetUserId: createdProfile.id,
+          targetAuthUserId: created.user.id,
           targetEmail: email,
           targetName: name,
-          targetRole: role,
+          targetRole: createdProfile.role,
           passwordResetRequired: true,
         },
       });
@@ -144,9 +170,17 @@ Deno.serve(async (req) => {
       console.error('Unable to write ledger event for create-franchise-user:', ledgerError);
     }
 
-    return new Response(JSON.stringify({ tempPassword, userId: created.user.id }), {
+    return new Response(
+      JSON.stringify({
+        tempPassword,
+        userId: createdProfile.id,
+        authUserId: created.user.id,
+        role: createdProfile.role,
+      }),
+      {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+      }
+    );
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error?.message || 'Unexpected error.' }), {
       status: 500,

@@ -507,6 +507,67 @@
   font-weight: 700;
 }
 
+.admin-user-commission-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+}
+
+.admin-inline-tooltip-trigger {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+  padding: 0;
+}
+
+.admin-inline-tooltip-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  width: min(260px, 70vw);
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: #0f2a4f;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  box-shadow: 0 12px 28px rgba(15, 42, 79, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+  z-index: 20;
+}
+
+.admin-inline-tooltip-trigger:hover::after,
+.admin-inline-tooltip-trigger:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.admin-inline-tooltip-trigger:focus-visible {
+  outline: none;
+  border-color: #1e88e5;
+  box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.14);
+}
+
 .admin-user-commission-input {
   display: flex;
   align-items: center;

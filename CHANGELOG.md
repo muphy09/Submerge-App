@@ -1,9 +1,12 @@
 ## [2.2.0] - 4/1/26
 ### What's New
 - Proposal Submission Workflow
-    - Submitting a proposal now locks the original proposal from edits, and can be viewed by an Admin or Book Keeper
+    - Submitting a proposal now locks the original proposal from edits, and can then be viewed by an Admin or Book Keeper for Approval
     - Additional versions of the original proposal can still be created and submitted
-        - Submitting a new version of a proposal will replace the original 
+        - Submitting a new version of a proposal will replace the original
+    - Approved Proposals still need to be marked as 'Completed' by an Admin or Book Keeper
+        - Approved Proposals can still inqure changes and will be shown in an Addendum
+        - Completed Proposals are reconsiled in the Archive
 
 
 

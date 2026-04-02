@@ -123,13 +123,14 @@ export async function createFranchiseUser(payload: {
   const email = normalizeEmail(payload.email);
   if (!email) throw new Error('Email is required');
   const displayName = normalizeName(payload.name || '') || null;
+  const requestedRole = payload.role || 'designer';
 
   const { data, error } = await supabase.functions.invoke('create-franchise-user', {
     body: {
       franchiseId: payload.franchiseId,
       email,
       name: displayName,
-      role: payload.role || 'designer',
+      role: requestedRole,
       ...getLedgerContextPayload(),
     },
   });
@@ -140,7 +141,35 @@ export async function createFranchiseUser(payload: {
     }
     throw error;
   }
-  return data as { tempPassword?: string; userId?: string };
+
+  const createdUser = data as {
+    tempPassword?: string;
+    userId?: string;
+    authUserId?: string;
+    role?: 'owner' | 'admin' | 'bookkeeper' | 'designer';
+  };
+
+  if (requestedRole !== 'designer') {
+    const { data: createdProfile, error: createdProfileError } = await supabase
+      .from('franchise_users')
+      .select('id,role')
+      .eq('franchise_id', payload.franchiseId)
+      .eq('email', email)
+      .maybeSingle();
+    if (createdProfileError) throw createdProfileError;
+
+    const createdRole = normalizeName(createdProfile?.role).toLowerCase();
+    if (createdProfile?.id && createdRole !== requestedRole) {
+      await updateFranchiseUserRole(createdProfile.id, requestedRole);
+      createdUser.userId = createdProfile.id;
+      createdUser.role = requestedRole;
+    } else if (createdProfile?.id) {
+      createdUser.userId = createdProfile.id;
+      createdUser.role = requestedRole;
+    }
+  }
+
+  return createdUser;
 }
 
 export async function updateFranchiseUserRole(

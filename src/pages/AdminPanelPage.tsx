@@ -802,7 +802,17 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                 </div>
                 <div className="admin-user-commission-grid">
                   <label className="admin-user-commission-field" htmlFor="approval-threshold-input">
-                    <span>Approval Margin Threshold</span>
+                    <span className="admin-user-commission-label">
+                      <span>Approval Margin Threshold</span>
+                      <button
+                        type="button"
+                        className="admin-inline-tooltip-trigger"
+                        data-tooltip="Triggers approval when the proposal gross profit margin falls below this percent."
+                        aria-label="Approval Margin Threshold help"
+                      >
+                        ?
+                      </button>
+                    </span>
                     <div className="admin-user-commission-input">
                       <input
                         id="approval-threshold-input"
@@ -818,7 +828,17 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                     </div>
                   </label>
                   <label className="admin-user-commission-field" htmlFor="discount-threshold-input">
-                    <span>Discount Allowance Threshold</span>
+                    <span className="admin-user-commission-label">
+                      <span>Discount Allowance Threshold</span>
+                      <button
+                        type="button"
+                        className="admin-inline-tooltip-trigger"
+                        data-tooltip="Triggers approval when non-PAP discounts exceed this percent of the proposal retail price."
+                        aria-label="Discount Allowance Threshold help"
+                      >
+                        ?
+                      </button>
+                    </span>
                     <div className="admin-user-commission-input">
                       <input
                         id="discount-threshold-input"
