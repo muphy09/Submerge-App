@@ -829,6 +829,78 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     []
   );
+  const fiberglassPoolModelFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Name',
+        type: 'text',
+        placeholder: 'Belvedere',
+        tooltip: 'Shown in the fiberglass model dropdown for this size bucket.',
+      },
+      {
+        key: 'shellPrice',
+        label: 'Shell Price',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Base fiberglass shell cost before freight, finish upgrades, tax, and PAP.',
+      },
+      {
+        key: 'freight',
+        label: 'Freight',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Added to the Fiberglass Shell category for the selected model.',
+      },
+      {
+        key: 'crane',
+        label: 'Crane',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Used only when the proposal marks crane required for this fiberglass model.',
+      },
+      {
+        key: 'install',
+        label: 'Install',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Fiberglass install labor cost for this model.',
+      },
+      {
+        key: 'gravel',
+        label: 'Gravel',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Fiberglass gravel cost for this model.',
+      },
+    ],
+    []
+  );
+  const fiberglassNamedPriceFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Name',
+        type: 'text',
+        placeholder: 'Crystite G3',
+        tooltip: 'Label shown in the fiberglass dropdown on the proposal builder.',
+      },
+      {
+        key: 'price',
+        label: 'Cost',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Applied once when this fiberglass option is selected.',
+      },
+    ],
+    []
+  );
 
   const isRenamableAddCostField = (field: ListField) => /^addCost\d+$/.test(field.key);
   const getListFieldOverrideKey = (list: ListConfig, field: ListField) =>
@@ -1245,6 +1317,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               { label: 'Equipment (Pre-Tax)', path: ['papDiscountRates', 'equipment'], type: 'number', tooltip: 'Applies % discount to equipment subtotal before tax (tax recalculated).', prefix: '%', isPercent: true },
               { label: 'Interior Finish Labor', path: ['papDiscountRates', 'interiorFinish'], type: 'number', tooltip: 'Applies % discount to Interior Finish labor items.', prefix: '%', isPercent: true },
               { label: 'Startup/Orientation', path: ['papDiscountRates', 'startup'], type: 'number', tooltip: 'Applies % discount to Start-Up / Orientation items.', prefix: '%', isPercent: true },
+              { label: 'Fiberglass Shell', path: ['papDiscountRates', 'fiberglassShell'], type: 'number', tooltip: 'Applies % discount to the fiberglass pool shell only before fiberglass shell tax is calculated.', prefix: '%', isPercent: true },
             ],
           },
           {
@@ -1494,6 +1567,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 type: 'number',
                 tooltip: 'Added once when a shotcrete spa exists.',
                 prefix: '$',
+              },
+              {
+                label: 'Fiberglass plumbing multiplier',
+                path: ['plumbing', 'fiberglassMultiplier'],
+                type: 'number',
+                tooltip: 'Multiplier applied to the full plumbing subtotal for fiberglass pool proposals after any PAP plumbing discount. Enter 40 for 40% of standard plumbing.',
+                prefix: '%',
+                isPercent: true,
               },
               {
                 label: 'Pool overrun per ft',
@@ -2852,22 +2933,171 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Fiberglass Shells',
         groups: [
           {
-            title: 'Pool shells',
+            title: 'Shell settings',
             scalars: [
-              { label: 'Small shell', path: ['fiberglass', 'small'], type: 'number' },
-              { label: 'Medium shell', path: ['fiberglass', 'medium'], type: 'number' },
-              { label: 'Large shell', path: ['fiberglass', 'large'], type: 'number' },
-              { label: 'Crystite upgrade', path: ['fiberglass', 'crystite'], type: 'number' },
+              {
+                label: 'Spillover',
+                path: ['fiberglass', 'spillover'],
+                type: 'number',
+                tooltip: 'Applied once when a fiberglass spa is selected with spillover enabled.',
+                prefix: '$',
+              },
+              {
+                label: 'Shell tax rate',
+                path: ['fiberglass', 'shellTaxRate'],
+                type: 'number',
+                tooltip: 'Applied to the fiberglass shell subtotal after the fiberglass shell PAP discount.',
+                prefix: '%',
+                isPercent: true,
+              },
+              {
+                label: 'Equipment pad cost',
+                path: ['fiberglass', 'equipmentPadCost'],
+                type: 'number',
+                tooltip: 'Added to Equipment Ordered for fiberglass shells at a quantity of 1 + heater quantity.',
+                prefix: '$',
+              },
             ],
           },
           {
-            title: 'Spa shells & options',
+            title: 'Pool shell catalogs',
+            lists: [
+              {
+                title: 'Small fiberglass pool models',
+                path: ['fiberglass', 'poolModels', 'small'],
+                addLabel: 'Add small model',
+                variant: 'table',
+                emptyMessage: 'No small fiberglass models yet. Add one to show it in the proposal builder.',
+                defaultItem: () => ({
+                  name: '',
+                  shellPrice: 0,
+                  freight: 0,
+                  crane: 0,
+                  install: 0,
+                  gravel: 0,
+                }),
+                fields: fiberglassPoolModelFields,
+              },
+              {
+                title: 'Medium fiberglass pool models',
+                path: ['fiberglass', 'poolModels', 'medium'],
+                addLabel: 'Add medium model',
+                variant: 'table',
+                emptyMessage: 'No medium fiberglass models yet. Add one to show it in the proposal builder.',
+                defaultItem: () => ({
+                  name: '',
+                  shellPrice: 0,
+                  freight: 0,
+                  crane: 0,
+                  install: 0,
+                  gravel: 0,
+                }),
+                fields: fiberglassPoolModelFields,
+              },
+              {
+                title: 'Large fiberglass pool models',
+                path: ['fiberglass', 'poolModels', 'large'],
+                addLabel: 'Add large model',
+                variant: 'table',
+                emptyMessage: 'No large fiberglass models yet. Add one to show it in the proposal builder.',
+                defaultItem: () => ({
+                  name: '',
+                  shellPrice: 0,
+                  freight: 0,
+                  crane: 0,
+                  install: 0,
+                  gravel: 0,
+                }),
+                fields: fiberglassPoolModelFields,
+              },
+            ],
+          },
+          {
+            title: 'Spa options',
+            lists: [
+              {
+                title: 'Fiberglass spa options',
+                path: ['fiberglass', 'spaOptions'],
+                addLabel: 'Add spa option',
+                variant: 'table',
+                emptyMessage: 'No fiberglass spa options yet. Add one to show it in the proposal builder.',
+                defaultItem: () => ({
+                  name: '',
+                  price: 0,
+                }),
+                fields: fiberglassNamedPriceFields,
+              },
+            ],
+          },
+          {
+            title: 'Tanning ledges',
+            lists: [
+              {
+                title: 'Fiberglass tanning ledge options',
+                path: ['fiberglass', 'tanningLedgeOptions'],
+                addLabel: 'Add tanning ledge option',
+                variant: 'table',
+                emptyMessage: 'No tanning ledge options yet. Add one to show it in the proposal builder.',
+                defaultItem: () => ({
+                  name: '',
+                  price: 0,
+                }),
+                fields: fiberglassNamedPriceFields,
+              },
+            ],
+          },
+          {
+            title: 'Finish upgrades',
+            lists: [
+              {
+                title: 'Fiberglass finish upgrades',
+                path: ['fiberglass', 'finishUpgrades'],
+                addLabel: 'Add finish upgrade',
+                variant: 'table',
+                emptyMessage: 'No finish upgrades yet. Add one to show it in the proposal builder.',
+                defaultItem: () => ({
+                  name: '',
+                  price: 0,
+                }),
+                fields: fiberglassNamedPriceFields,
+              },
+            ],
+          },
+          {
+            title: 'Contract payment schedule',
             scalars: [
-              { label: 'Small spa shell', path: ['fiberglass', 'spaSmall'], type: 'number' },
-              { label: 'Medium spa shell', path: ['fiberglass', 'spaMedium'], type: 'number' },
-              { label: 'Large spa shell', path: ['fiberglass', 'spaLarge'], type: 'number' },
-              { label: 'Spillover', path: ['fiberglass', 'spillover'], type: 'number' },
-              { label: 'Crane allowance', path: ['fiberglass', 'crane'], type: 'number' },
+              {
+                label: 'Permitting',
+                path: ['misc', 'contractPaymentSchedule', 'fiberglass', 'permitting'],
+                type: 'number',
+                tooltip: 'Percent of remaining cash price due at permitting for fiberglass contracts.',
+                prefix: '%',
+                isPercent: true,
+              },
+              {
+                label: 'Shell Delivery',
+                path: ['misc', 'contractPaymentSchedule', 'fiberglass', 'shellDelivery'],
+                type: 'number',
+                tooltip: 'Percent of remaining cash price due at shell delivery for fiberglass contracts.',
+                prefix: '%',
+                isPercent: true,
+              },
+              {
+                label: 'Equipment Set',
+                path: ['misc', 'contractPaymentSchedule', 'fiberglass', 'equipmentSet'],
+                type: 'number',
+                tooltip: 'Percent of remaining cash price due at equipment set for fiberglass contracts.',
+                prefix: '%',
+                isPercent: true,
+              },
+              {
+                label: 'Balance at Decking',
+                path: ['misc', 'contractPaymentSchedule', 'fiberglass', 'decking'],
+                type: 'number',
+                tooltip: 'Percent of remaining cash price due at decking for fiberglass contracts.',
+                prefix: '%',
+                isPercent: true,
+              },
             ],
           },
         ],

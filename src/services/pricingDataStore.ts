@@ -34,8 +34,84 @@ const listeners = new Set<(data: PricingData) => void>();
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
   const normalized = deepClone(snapshot);
   ensureMasonryFacingCatalogs(normalized, source, defaultSnapshot);
+  syncLegacyFiberglassPricing(normalized, source);
   syncLegacyMiscPricing(normalized, source);
   return normalized;
+}
+
+function syncLegacyFiberglassPricing(target: PricingData, source?: any) {
+  const legacyFiberglass = source?.fiberglass;
+  if (!legacyFiberglass || typeof legacyFiberglass !== 'object') {
+    return;
+  }
+
+  const targetFiberglass = (target as any).fiberglass;
+  if (!targetFiberglass || typeof targetFiberglass !== 'object') {
+    return;
+  }
+
+  const hasSourcePoolModels = ['small', 'medium', 'large'].some((size) =>
+    Array.isArray(legacyFiberglass?.poolModels?.[size])
+  );
+
+  if (!hasSourcePoolModels && Array.isArray(legacyFiberglass.models)) {
+    const nextPoolModels: Record<'small' | 'medium' | 'large', any[]> = {
+      small: [],
+      medium: [],
+      large: [],
+    };
+
+    legacyFiberglass.models.forEach((model: any) => {
+      const size = String(model?.size || '').trim();
+      if (size !== 'small' && size !== 'medium' && size !== 'large') {
+        return;
+      }
+
+      const seededDefaults = Array.isArray(targetFiberglass.poolModels?.[size]) ? targetFiberglass.poolModels[size][0] : null;
+      nextPoolModels[size].push({
+        name: model?.name || '',
+        shellPrice: Number(model?.price) || 0,
+        freight: Number(seededDefaults?.freight) || 0,
+        crane: Number(seededDefaults?.crane) || 0,
+        install: Number(seededDefaults?.install) || 0,
+        gravel: Number(seededDefaults?.gravel) || 0,
+      });
+    });
+
+    targetFiberglass.poolModels = nextPoolModels;
+  }
+
+  const hasSourceSpaOptions = Array.isArray(legacyFiberglass.spaOptions);
+  if (!hasSourceSpaOptions) {
+    const legacySpaOptions = Array.isArray(legacyFiberglass.spaModels)
+      ? legacyFiberglass.spaModels
+      : Array.isArray(legacyFiberglass.spas)
+        ? legacyFiberglass.spas
+        : [];
+
+    if (legacySpaOptions.length > 0) {
+      targetFiberglass.spaOptions = legacySpaOptions.map((option: any) => ({
+        name: option?.name || '',
+        price: Number(option?.price) || 0,
+      }));
+    }
+  }
+
+  if (
+    (!Array.isArray(legacyFiberglass.finishUpgrades) || legacyFiberglass.finishUpgrades.length === 0) &&
+    Number.isFinite(Number(legacyFiberglass.crystite))
+  ) {
+    targetFiberglass.finishUpgrades = [
+      {
+        name: 'Crystite',
+        price: Number(legacyFiberglass.crystite) || 0,
+      },
+    ];
+  }
+
+  if (!Number.isFinite(Number(legacyFiberglass.shellTaxRate)) && Number.isFinite(Number(legacyFiberglass.taxRate))) {
+    targetFiberglass.shellTaxRate = Number(legacyFiberglass.taxRate) || 0;
+  }
 }
 
 function syncLegacyMiscPricing(target: PricingData, source?: any) {

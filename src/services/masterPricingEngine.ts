@@ -41,8 +41,7 @@ const hasPoolDefinition = (poolSpecs: any): boolean => {
     (poolSpecs.perimeter ?? 0) > 0 ||
     ((poolSpecs.maxLength ?? 0) > 0 && (poolSpecs.maxWidth ?? 0) > 0);
   const hasFiberglassSelection =
-    poolSpecs.poolType === 'fiberglass' &&
-    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+    poolSpecs.poolType === 'fiberglass' && (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName);
   const hasSpaDefinition =
     ((poolSpecs.spaLength ?? 0) > 0 && (poolSpecs.spaWidth ?? 0) > 0) ||
     (poolSpecs.spaPerimeter ?? 0) > 0;
@@ -57,6 +56,8 @@ import {
   SteelCalculations,
   ShotcreteCalculations,
 } from './pricingEngine';
+
+const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
 function rebuildEquipmentTax(equipmentItems: CostLineItem[]): CostLineItem[] {
   const taxRate = pricingData.equipment.taxRate ?? 0;
@@ -188,6 +189,8 @@ export class MasterPricingEngine {
     const interiorFinish = proposal.interiorFinish!;
     const county = proposal.customerInfo?.county;
     const isFiberglass = CalculationModules.Pool.isFiberglassPool(poolSpecs);
+    const appliedPapDiscounts: PAPDiscounts | undefined =
+      papDiscounts || proposal.papDiscounts || pricingData.papDiscountRates;
 
     // Calculate all sections
     const plansItems = this.calculatePlansEngineering(poolSpecs, excavation, waterFeatures);
@@ -243,7 +246,10 @@ export class MasterPricingEngine {
     const interiorFinishItems = [...interior.labor, ...interior.material]
       .concat(buildCustomOptionItems(interiorFinish.customOptions, 'Interior Finish'));
     const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, normalizedExcavation, tileCopingDecking);
-    const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(poolSpecs);
+    const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(
+      poolSpecs,
+      appliedPapDiscounts?.fiberglassShell ?? 0
+    );
     const fiberglassInstallItems = CalculationModules.Fiberglass.calculateFiberglassInstallCost(poolSpecs);
     const masonryCalc = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, normalizedExcavation);
     const rockworkLabor = masonryCalc.labor.concat(tileCoping.labor.filter(i => i.category.includes('Rockwork')));
@@ -261,9 +267,6 @@ export class MasterPricingEngine {
 
     // Startup & Orientation
     let startupItems = this.calculateStartupOrientation(poolSpecs, equipment);
-
-    const appliedPapDiscounts: PAPDiscounts | undefined =
-      papDiscounts || proposal.papDiscounts || pricingData.papDiscountRates;
 
     // Apply PAP Discounts if provided
     if (appliedPapDiscounts) {
@@ -289,6 +292,20 @@ export class MasterPricingEngine {
           quantity: 1,
           total: -(subtotal * appliedPapDiscounts.plumbing),
         });
+      }
+      const fiberglassPlumbingMultiplier = Number((pricingData as any)?.plumbing?.fiberglassMultiplier ?? 1);
+      if (isFiberglass && fiberglassPlumbingMultiplier >= 0 && fiberglassPlumbingMultiplier !== 1) {
+        const subtotal = plumbingItems.reduce((sum, item) => sum + item.total, 0);
+        const adjustment = roundCurrency(subtotal * (fiberglassPlumbingMultiplier - 1));
+        if (adjustment !== 0) {
+          plumbingItems.push({
+            category: 'Plumbing',
+            description: `Fiberglass Plumbing Multiplier (${Math.round(fiberglassPlumbingMultiplier * 100)}%)`,
+            unitPrice: adjustment,
+            quantity: 1,
+            total: adjustment,
+          });
+        }
       }
 
       // Steel
@@ -568,7 +585,7 @@ export class MasterPricingEngine {
       offContractTotal;
 
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
-    const g3UpgradeCost = 1250;
+    const g3UpgradeCost = 0;
 
     // Step 1: Total costs before overhead
     // Negative custom features are retail-only adjustments (do not reduce COGS).

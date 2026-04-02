@@ -42,8 +42,7 @@ const hasPoolDefinition = (poolSpecs?: PoolSpecs): boolean => {
     (poolSpecs.perimeter ?? 0) > 0 ||
     ((poolSpecs.maxLength ?? 0) > 0 && (poolSpecs.maxWidth ?? 0) > 0);
   const hasFiberglassSelection =
-    poolSpecs.poolType === 'fiberglass' &&
-    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+    poolSpecs.poolType === 'fiberglass' && (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName);
   return hasGuniteDimensions || hasFiberglassSelection;
 };
 

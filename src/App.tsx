@@ -912,12 +912,6 @@ function AppContent() {
   }, [adminPanelLockoutUntil]);
 
   useEffect(() => {
-    if (!isAdminRoute) {
-      setAdminPanelAccessFranchiseId(null);
-    }
-  }, [isAdminRoute]);
-
-  useEffect(() => {
     if (!adminPanelPinPrompt.isOpen || isAdminPanelLocked || adminPanelPinLoading) return;
     if (adminPanelPin.length !== ADMIN_PANEL_PIN_LENGTH) return;
     submitAdminPanelPin();

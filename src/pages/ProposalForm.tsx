@@ -222,8 +222,7 @@ const hasPoolDefinition = (poolSpecs?: Proposal['poolSpecs']) => {
     (poolSpecs.perimeter ?? 0) > 0 ||
     ((poolSpecs.maxLength ?? 0) > 0 && (poolSpecs.maxWidth ?? 0) > 0);
   const hasFiberglassSelection =
-    poolSpecs.poolType === 'fiberglass' &&
-    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+    poolSpecs.poolType === 'fiberglass' && (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName);
   return hasGuniteDimensions || hasFiberglassSelection;
 };
 
@@ -1629,6 +1628,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               data={proposal.interiorFinish!}
               onChange={(data) => updateProposal('interiorFinish', data)}
               hasSpa={hasSpa}
+              isFiberglass={isFiberglass}
             />
           );
         case 'customFeatures':

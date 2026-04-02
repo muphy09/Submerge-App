@@ -8,6 +8,12 @@ import {
   normalizeMasonryFacingId,
   type MasonryFacingOption,
 } from '../utils/masonryFacing';
+import {
+  findFiberglassPoolModel,
+  getFiberglassNamedOptions,
+  getFiberglassPoolModelsBySize,
+  normalizeFiberglassSize,
+} from '../utils/fiberglass';
 import './SectionStyles.css';
 
 interface Props {
@@ -146,6 +152,13 @@ function PoolSpecsSectionNew({
   };
 
   const isFiberglass = data.poolType === 'fiberglass';
+  const selectedFiberglassSize = normalizeFiberglassSize(data.fiberglassSize);
+  const fiberglassPoolModels = selectedFiberglassSize
+    ? getFiberglassPoolModelsBySize(selectedFiberglassSize)
+    : [];
+  const fiberglassSpaOptions = getFiberglassNamedOptions('spaOptions');
+  const fiberglassTanningOptions = getFiberglassNamedOptions('tanningLedgeOptions');
+  const fiberglassFinishUpgrades = getFiberglassNamedOptions('finishUpgrades');
   const isGuniteSpa = data.spaType === 'gunite';
   const hasSpaDimensions = isGuniteSpa && data.spaLength > 0 && data.spaWidth > 0;
   const doubleBullnoseLnft = tileCopingDecking?.doubleBullnoseLnft ?? 0;
@@ -231,173 +244,190 @@ function PoolSpecsSectionNew({
           </button>
         </div>
 
-        {/* Fiberglass Size & Model Selection */}
+        <div className="spec-grid-4">
+          <div className="spec-field">
+            <label className="spec-label required">Perimeter</label>
+            <CompactInput
+              value={data.perimeter}
+              onChange={(e) => handleChange('perimeter', parseFloat(e.target.value) || 0)}
+              unit="ft"
+              min="0"
+              step="1"
+            />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label required">Surface Area</label>
+            <CompactInput
+              value={data.surfaceArea}
+              onChange={(e) => handleChange('surfaceArea', parseFloat(e.target.value) || 0)}
+              unit="sqft"
+              min="0"
+              step="1"
+            />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label required">Shallow Depth</label>
+            <CompactInput
+              value={data.shallowDepth}
+              onChange={(e) => handleChange('shallowDepth', parseFloat(e.target.value) || 0)}
+              unit="ft"
+              min="0"
+              step="0.5"
+            />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label required">End Depth</label>
+            <CompactInput
+              value={data.endDepth}
+              onChange={(e) => handleChange('endDepth', parseFloat(e.target.value) || 0)}
+              unit="ft"
+              min="0"
+              step="0.5"
+            />
+          </div>
+        </div>
+
+        <div className="spec-grid-4">
+          <div className="spec-field">
+            <label className="spec-label">Max Width</label>
+            <CompactInput
+              value={data.maxWidth}
+              onChange={(e) => handleChange('maxWidth', parseFloat(e.target.value) || 0)}
+              unit="ft"
+              min="0"
+              step="0.5"
+            />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label">Max Length</label>
+            <CompactInput
+              value={data.maxLength}
+              onChange={(e) => handleChange('maxLength', parseFloat(e.target.value) || 0)}
+              unit="ft"
+              min="0"
+              step="0.5"
+            />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label">Total Steps & Bench</label>
+            <CompactInput
+              value={data.totalStepsAndBench}
+              onChange={(e) => handleChange('totalStepsAndBench', parseFloat(e.target.value) || 0)}
+              unit="ft"
+              min="0"
+              step="1"
+            />
+          </div>
+          <div className="spec-field">
+            <label className="spec-label">Decking Area</label>
+            <CompactInput
+              value={data.deckingArea}
+              onChange={(e) => handleChange('deckingArea', parseFloat(e.target.value) || 0)}
+              unit="sqft"
+              min="0"
+              step="1"
+            />
+          </div>
+        </div>
+
         {isFiberglass && (
           <>
-            <div className="spec-grid-2">
+            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
                 <label className="spec-label required">Fiberglass Size</label>
                 <select
                   className="compact-input"
-                  value={data.fiberglassSize || ''}
-                  onChange={(e) => handleChange('fiberglassSize', e.target.value)}
+                  value={selectedFiberglassSize || ''}
+                  onChange={(e) => {
+                    const nextSize = normalizeFiberglassSize(e.target.value);
+                    const nextModel =
+                      nextSize && data.fiberglassModelName
+                        ? findFiberglassPoolModel(data.fiberglassModelName, nextSize)
+                        : undefined;
+                    onChange({
+                      ...data,
+                      fiberglassSize: nextSize,
+                      fiberglassModelName: nextModel ? data.fiberglassModelName : undefined,
+                    });
+                  }}
                 >
                   <option value="">Select size</option>
                   <option value="small">Small</option>
                   <option value="medium">Medium</option>
                   <option value="large">Large</option>
-                  <option value="crystite">Crystite</option>
                 </select>
               </div>
-
               <div className="spec-field">
-                <label className="spec-label">Fiberglass Model</label>
+                <label className="spec-label required">Fiberglass Model</label>
                 <select
                   className="compact-input"
                   value={data.fiberglassModelName || ''}
-                  onChange={(e) => {
-                    const model = pricingData.fiberglass.models.find(m => m.name === e.target.value);
-                    if (model) {
-                      onChange({
-                        ...data,
-                        fiberglassModelName: model.name,
-                        fiberglassModelPrice: model.price,
-                        fiberglassPerimeter: model.perimeter,
-                        fiberglassSize: model.size as any,
-                        perimeter: model.perimeter || data.perimeter,
-                      });
-                    } else {
-                      onChange({
-                        ...data,
-                        fiberglassModelName: undefined,
-                        fiberglassModelPrice: undefined,
-                        fiberglassPerimeter: undefined,
-                      });
-                    }
-                  }}
+                  onChange={(e) => handleChange('fiberglassModelName', e.target.value || undefined)}
+                  disabled={!selectedFiberglassSize}
+                  title={!selectedFiberglassSize ? 'Select a fiberglass size first' : undefined}
                 >
                   <option value="">Select model</option>
-                  {pricingData.fiberglass.models
-                    .filter(m => !data.fiberglassSize || m.size === data.fiberglassSize)
-                    .map(model => (
-                      <option key={model.name} value={model.name}>
-                        {model.name} ({model.size})
-                      </option>
-                    ))}
+                  {fiberglassPoolModels.map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
-            <small className="form-help" style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '-10px', marginBottom: '15px', display: 'block' }}>
-              Selecting a model will also set the perimeter from the spreadsheet.
-            </small>
 
-            <div className="spec-grid-2">
+            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
-                <label className="spec-label">Crane Option (Fiberglass)</label>
+                <label className="spec-label">Finish Upgrade</label>
                 <select
                   className="compact-input"
-                  value={data.fiberglassCraneOption || 'no-crane'}
-                  onChange={(e) => handleChange('fiberglassCraneOption', e.target.value)}
+                  value={data.fiberglassFinishUpgradeName || ''}
+                  onChange={(e) => handleChange('fiberglassFinishUpgradeName', e.target.value || undefined)}
                 >
-                  <option value="no-crane">No Crane</option>
-                  <option value="crane-small">Crane - Small</option>
-                  <option value="crane-medium">Crane - Medium</option>
-                  <option value="crane-large">Crane - Large</option>
+                  <option value="">No Finish Upgrade</option>
+                  {fiberglassFinishUpgrades.map((option) => (
+                    <option key={option.name} value={option.name}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="spec-field">
+                <label className="spec-label">Crane Required</label>
+                <select
+                  className="compact-input"
+                  value={data.needsFiberglassCrane ? 'yes' : 'no'}
+                  onChange={(e) => handleChange('needsFiberglassCrane', e.target.value === 'yes')}
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
                 </select>
               </div>
             </div>
-          </>
-        )}
 
-        {/* Shotcrete Pool Dimensions */}
-        {!isFiberglass && (
-          <>
-            <div className="spec-grid-4">
+            <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
-                <label className="spec-label required">Perimeter</label>
-                <CompactInput
-                  value={data.perimeter}
-                  onChange={(e) => handleChange('perimeter', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="1"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label required">Surface Area</label>
-                <CompactInput
-                  value={data.surfaceArea}
-                  onChange={(e) => handleChange('surfaceArea', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="1"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label required">Shallow Depth</label>
-                <CompactInput
-                  value={data.shallowDepth}
-                  onChange={(e) => handleChange('shallowDepth', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="0.5"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label required">End Depth</label>
-                <CompactInput
-                  value={data.endDepth}
-                  onChange={(e) => handleChange('endDepth', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="0.5"
-                />
+                <label className="spec-label">Fiberglass Tanning Ledge</label>
+                <select
+                  className="compact-input"
+                  value={data.fiberglassTanningLedgeName || ''}
+                  onChange={(e) =>
+                    onChange({
+                      ...data,
+                      fiberglassTanningLedgeName: e.target.value || undefined,
+                      hasTanningShelf: Boolean(e.target.value),
+                    })
+                  }
+                >
+                  <option value="">No Tanning Ledge</option>
+                  {fiberglassTanningOptions.map((option) => (
+                    <option key={option.name} value={option.name}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-
-            <div className="spec-grid-4">
-              <div className="spec-field">
-                <label className="spec-label">Max Width</label>
-                <CompactInput
-                  value={data.maxWidth}
-                  onChange={(e) => handleChange('maxWidth', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="0.5"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Max Length</label>
-                <CompactInput
-                  value={data.maxLength}
-                  onChange={(e) => handleChange('maxLength', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="0.5"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Total Steps & Bench</label>
-                <CompactInput
-                  value={data.totalStepsAndBench}
-                  onChange={(e) => handleChange('totalStepsAndBench', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="1"
-                />
-              </div>
-              <div className="spec-field">
-                <label className="spec-label">Decking Area</label>
-                <CompactInput
-                  value={data.deckingArea}
-                  onChange={(e) => handleChange('deckingArea', parseFloat(e.target.value) || 0)}
-                  unit="ft"
-                  min="0"
-                  step="1"
-                />
-              </div>
-            </div>
-
           </>
         )}
 
@@ -485,31 +515,23 @@ function PoolSpecsSectionNew({
           <>
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
-                <label className="spec-label required">Fiberglass Spa Model</label>
+                <label className="spec-label required">Fiberglass Spa Option</label>
                 <select
                   className="compact-input"
                   value={data.spaFiberglassModelName || ''}
                   onChange={(e) => {
-                    const model = pricingData.fiberglass.spaModels.find(m => m.name === e.target.value);
-                    if (model) {
-                      onChange({
-                        ...data,
-                        spaFiberglassModelName: model.name,
-                        spaFiberglassModelPrice: model.price,
-                      });
-                    } else {
-                      onChange({
-                        ...data,
-                        spaFiberglassModelName: undefined,
-                        spaFiberglassModelPrice: undefined,
-                      });
-                    }
+                    const nextValue = e.target.value || undefined;
+                    onChange({
+                      ...data,
+                      spaFiberglassModelName: nextValue,
+                      spaFiberglassModelPrice: undefined,
+                    });
                   }}
                 >
                   <option value="">Select model</option>
-                  {pricingData.fiberglass.spaModels.map(model => (
-                    <option key={model.name} value={model.name}>
-                      {model.name}
+                  {fiberglassSpaOptions.map((option) => (
+                    <option key={option.name} value={option.name}>
+                      {option.name}
                     </option>
                   ))}
                 </select>
@@ -691,7 +713,7 @@ function PoolSpecsSectionNew({
           {[
             { key: 'hasSiltFence', label: 'Silt Fence Required' },
             { key: 'hasAutomaticCover', label: 'Automatic Cover' },
-            { key: 'hasTanningShelf', label: 'Tanning Shelf' },
+            ...(!isFiberglass ? [{ key: 'hasTanningShelf', label: 'Tanning Shelf' }] : []),
           ].map(option => (
             <div className="spec-field" key={option.key}>
               <div className={`pool-type-buttons ${option.key === 'hasAutomaticCover' ? 'auto-cover-toggle' : ''}`}>

@@ -1332,7 +1332,14 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                   return (
                     <tr
                       key={proposal.proposalNumber}
-                      onClick={() => navigate(`/proposal/view/${proposal.proposalNumber}`)}
+                      onClick={() =>
+                        navigate(`/proposal/view/${proposal.proposalNumber}`, {
+                          state: {
+                            reviewerReturnTo: 'admin-panel',
+                            reviewerReturnPath: '/admin',
+                          },
+                        })
+                      }
                       className="proposal-row"
                     >
                       <td className="designer-cell">{designerName}</td>

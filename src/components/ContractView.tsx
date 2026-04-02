@@ -17,11 +17,13 @@ import {
   ContractOverrides,
   ContractFieldRender,
   getContractDepositFieldAutoValue,
+  getContractDepositSchedulePercentages,
   getContractTotalCashPrice,
   getEditableContractFields,
   validateContractInputs,
 } from '../services/contractGenerator';
 import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
+import { buildContractTextOverlays } from '../services/contractOverlays';
 import { ContractTemplateId, getContractTemplateIdForProposal } from '../services/contractTemplates';
 import { useToast } from './Toast';
 import './ContractView.css';
@@ -262,6 +264,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   const latestSavePromiseRef = useRef<Promise<boolean> | null>(null);
   const previousIncomingOverridesRef = useRef<ContractOverrides>(incomingOverrides || {});
   const previousProposalVersionIdRef = useRef(proposal.versionId || 'original');
+  const contractTextOverlays = useMemo(() => buildContractTextOverlays(fields, proposal), [fields, proposal]);
 
   useEffect(() => {
     const nextIncomingOverrides = incomingOverrides || {};
@@ -304,6 +307,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
           includeFormFields: false,
           flatten: false,
           templateId: resolvedTemplateId,
+          textOverlays: contractTextOverlays,
         });
         if (!canceled) {
           setPdfBytes(result.pdfBytes);
@@ -320,7 +324,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     return () => {
       canceled = true;
     };
-  }, [fields, resolvedTemplateId, showToast]);
+  }, [contractTextOverlays, fields, resolvedTemplateId, showToast]);
 
   useEffect(() => {
     if (!pdfBytes || !pageSizes.length) return;
@@ -396,6 +400,10 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   }, [fields]);
 
   const totalCashPrice = useMemo(() => getContractTotalCashPrice(proposal), [proposal]);
+  const contractDepositSchedulePercentages = useMemo(
+    () => getContractDepositSchedulePercentages(proposal),
+    [proposal]
+  );
 
   const handleCellChange = useCallback(
     (cellAddress: string, value: string) => {
@@ -420,7 +428,12 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
         setFields((prev) =>
           prev.map((field) => {
             if (CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(field.id)) {
-              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue, totalCashPrice);
+              const nextAutoValue = getContractDepositFieldAutoValue(
+                field.id,
+                normalizedValue,
+                totalCashPrice,
+                contractDepositSchedulePercentages
+              );
               return {
                 ...field,
                 value: normalizedValue,
@@ -431,7 +444,12 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
             }
 
             if (CONTRACT_DEPOSIT_SCHEDULE_FIELD_ID_SET.has(field.id)) {
-              const nextAutoValue = getContractDepositFieldAutoValue(field.id, normalizedValue, totalCashPrice);
+              const nextAutoValue = getContractDepositFieldAutoValue(
+                field.id,
+                normalizedValue,
+                totalCashPrice,
+                contractDepositSchedulePercentages
+              );
               return {
                 ...field,
                 value: nextAutoValue,
@@ -474,7 +492,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       );
       onOverridesChange?.(next);
     },
-    [fields, onOverridesChange, overrides, totalCashPrice]
+    [contractDepositSchedulePercentages, fields, onOverridesChange, overrides, totalCashPrice]
   );
 
   const handleBinaryChoice = useCallback(
@@ -545,6 +563,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
         flatten: true,
         includeFormFields: true,
         templateId: resolvedTemplateId,
+        textOverlays: contractTextOverlays,
       });
 
       const customerName = proposal.customerInfo.customerName || 'Proposal';
@@ -569,7 +588,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     } finally {
       setExporting(false);
     }
-  }, [exporting, fields, handleSave, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
+  }, [contractTextOverlays, exporting, fields, handleSave, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
 
   const printContract = useCallback(async (): Promise<boolean> => {
     const saveSucceeded = await handleSave();

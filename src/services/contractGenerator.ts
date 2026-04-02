@@ -87,12 +87,63 @@ export const CONTRACT_DEPOSIT_SCHEDULE_FIELD_IDS = [
   'p1_pay_interior_finish',
 ] as const;
 const CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET = new Set<string>(CONTRACT_DEPOSIT_SOURCE_FIELD_IDS);
-const CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES: Record<string, number> = {
+const DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES: Record<string, number> = {
   p1_pay_excavation: 0.3,
   p1_pay_shotcete: 0.3,
   p1_pay_decking: 0.3,
   p1_pay_interior_finish: 0.1,
 };
+
+export function getContractDepositSchedulePercentages(
+  proposal?: Partial<Proposal>
+): Record<string, number> {
+  const guniteSchedule = (pricingData as any)?.misc?.contractPaymentSchedule?.gunite || {};
+  const fiberglassSchedule = (pricingData as any)?.misc?.contractPaymentSchedule?.fiberglass || {};
+  const resolvePercentage = (value: unknown, fallback: number) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  };
+
+  if (proposal?.poolSpecs?.poolType === 'fiberglass') {
+    return {
+      p1_pay_excavation: resolvePercentage(
+        fiberglassSchedule.permitting,
+        DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_excavation
+      ),
+      p1_pay_shotcete: resolvePercentage(
+        fiberglassSchedule.shellDelivery,
+        DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_shotcete
+      ),
+      p1_pay_decking: resolvePercentage(
+        fiberglassSchedule.equipmentSet,
+        DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_decking
+      ),
+      p1_pay_interior_finish: resolvePercentage(
+        fiberglassSchedule.decking,
+        DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_interior_finish
+      ),
+    };
+  }
+
+  return {
+    p1_pay_excavation: resolvePercentage(
+      guniteSchedule.excavation,
+      DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_excavation
+    ),
+    p1_pay_shotcete: resolvePercentage(
+      guniteSchedule.shotcrete,
+      DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_shotcete
+    ),
+    p1_pay_decking: resolvePercentage(
+      guniteSchedule.decking,
+      DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_decking
+    ),
+    p1_pay_interior_finish: resolvePercentage(
+      guniteSchedule.interiorFinish,
+      DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_interior_finish
+    ),
+  };
+}
 
 function normalizeProposal(pr: Proposal): ProposalWithPricing {
   try {
@@ -165,7 +216,8 @@ function getRemainingCashPriceForContractSchedule(
 export function getContractDepositFieldAutoValue(
   fieldId: string,
   depositValue: string | number | null | undefined,
-  totalCashPrice?: string | number | null
+  totalCashPrice?: string | number | null,
+  schedulePercentages: Record<string, number> = DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES
 ): string {
   const normalizedDepositValue = normalizeContractMonetaryInput(depositValue);
 
@@ -173,7 +225,7 @@ export function getContractDepositFieldAutoValue(
     return normalizedDepositValue;
   }
 
-  const percentage = CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES[fieldId];
+  const percentage = schedulePercentages[fieldId];
   if (!percentage) return '';
 
   const remainingCashPrice = getRemainingCashPriceForContractSchedule(totalCashPrice, normalizedDepositValue);
@@ -607,7 +659,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
 
   if (/spa perimeter/.test(label)) return specs.spaPerimeter ? String(specs.spaPerimeter) : '';
   if (/perimeter/.test(label) && /surface area/.test(label)) return String(specs.surfaceArea || '');
-  if (/perimeter/.test(label)) return String(specs.perimeter || specs.fiberglassPerimeter || '');
+  if (/perimeter/.test(label)) return String(specs.perimeter || '');
   if (/surface area/.test(label)) return String(specs.surfaceArea || '');
   if (/pool size/.test(label) && field.id === 'p1_12') return String(specs.maxLength || '');
   if (/pool size/.test(label) && field.id === 'p1_13') return String(specs.maxWidth || '');
@@ -734,7 +786,9 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     const finishLabel = finishType
       ? getInteriorFinishLabel(finishType)
       : specs.poolType === 'fiberglass'
-      ? 'Fiberglass'
+      ? specs.fiberglassFinishUpgradeName
+        ? `Fiberglass - ${specs.fiberglassFinishUpgradeName}`
+        : 'Fiberglass'
       : 'Interior Finish';
     const color = proposal.interiorFinish?.color;
     return color ? `${finishLabel}: ${color}` : finishLabel;
@@ -769,6 +823,7 @@ export async function getEditableContractFields(
   const templateFields = getContractTemplate(resolvedTemplateId).fields;
   const depositSourceValue = resolveContractDepositSourceValue(overrides);
   const totalCashPrice = getRetailPrice(normalized);
+  const schedulePercentages = getContractDepositSchedulePercentages(normalized);
   const fields: ContractFieldRender[] = templateFields
     .filter((field) => (field.label || '').trim().length > 0)
     .map((field) => {
@@ -794,9 +849,9 @@ export async function getEditableContractFields(
       );
       if (
         CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(field.id) ||
-        Object.prototype.hasOwnProperty.call(CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES, field.id)
+        Object.prototype.hasOwnProperty.call(schedulePercentages, field.id)
       ) {
-        autoValue = getContractDepositFieldAutoValue(field.id, depositSourceValue, totalCashPrice);
+        autoValue = getContractDepositFieldAutoValue(field.id, depositSourceValue, totalCashPrice, schedulePercentages);
       }
       if (field.id === 'p1_30') autoValue = '1';
       const hasOverride = overrides ? Object.prototype.hasOwnProperty.call(overrides, field.id) : false;

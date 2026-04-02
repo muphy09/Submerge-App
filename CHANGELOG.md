@@ -1,18 +1,33 @@
 ## [2.2.0] - 4/1/26
-### What's New
-- Proposal Submission Workflow
-    - Submitting a proposal now locks the original proposal from edits, and can then be viewed by an Admin or Book Keeper for Approval
-    - Additional versions of the original proposal can still be created and submitted
-        - Submitting a new version of a proposal will replace the original
-    - Approved Proposals still need to be marked as 'Completed' by an Admin or Book Keeper
-        - Approved Proposals can still inqure changes and will be shown in an Addendum
-        - Completed Proposals are reconsiled in the Archive
-
-
-
-- New 'Book Keeper' Role
-    - Book Keeper role has the ability to see and review submitted proposals
-    - Book Keeper 
+### Proposal Submission Workflow
+    - Submitting a Proposal now locks the Submited Proposal from edits, and can then be viewed by an Admin or Book Keeper for Approval
+    - All Proposals are saved in a 'Draft' until they are manually Submitted
+        - Additional versions of the Submitted Proposal can still be created and replace the current submission
+        - Designers can still create multiple versions before submitting their intended version
+    - A Sumbitted Proposal can be 'Approved' or 'Returned with Notes' by an Admin / Book Keeper
+        - If a Proposal is 'Approved': Any changes made by the designer afterwards are separated into a new version; Proposal Addendum
+            - A Proposal Addendum allows the Admin / Book Keeper to quickly see changes made to the originally Approved Proposal
+            - Proposal Addendum must also be Approved after it is submitted
+        - If a Proposal is 'Returned with Notes': Designers can resubmit a new version after changes are made
+    - Approved Proposals (and Proposal Addendums) still need to be marked as 'Completed' by an Admin or Book Keeper
+        - Completed Proposals cannot be modified after marking as 'Complete'. This should be done after the build
+        - Completed Proposals are reconsiled in the Archive of the Book Keeper tab
+### New 'Book Keeper' Role
+    - Book Keeper Role can be assigned by an Admin or Owner in the Admin Tab
+    - Book Keeper Tab gives a quick comparison view of Proposal differences
+    - Book Keeper Role has the ability to review and process Submitted Proposals
+        - *This section will continue to be improved*
+### Fiberglass Introduction - *Rolling*
+    - Fiberglass Pool Models introduced into the workflow and engine (excel reference)
+        - Options can be configured by the Admin
+    - Contract correctly updates with Deposit breakdown and Fiberglass selection
+    - Important Excel Notes:
+        - Plumbing cost was always reduced to 40% of the normal subtotal cost
+        - Steel cost is forced to 0
+        - Shotcrete cost is forced to 0
+        - Tile cost is forced to 0
+        - Interior Finish cost is forced to 0
+        - Tile Coping adds Concrete Band (Fiber pool count * perimeter * 1.25)
 -----
 ## [2.1.3] - 4/1/26
 ### Improvements

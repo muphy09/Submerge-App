@@ -122,12 +122,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
         }
       }
 
-      const preferredRow = rows.find((entry) => matchesQueueFilter(entry, selectedFilter));
-      if (preferredRow) {
-        await loadSelectedProposal(preferredRow.proposalNumber, rows);
-      } else {
-        setSelectedProposal(null);
-      }
+      setSelectedProposal(null);
     } catch (error) {
       console.error('Failed to load workflow workspace', error);
       showToast({ type: 'error', message: 'Unable to load the workflow workspace.' });
@@ -223,6 +218,11 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const selectedTotalCogs = Number(selectedDisplayVersion?.pricing?.totalCOGS || 0);
   const selectedGrossProfitPercent = Number(selectedDisplayVersion?.pricing?.grossProfitMargin || 0);
   const selectedDiscountAmount = getNonPapDiscountTotal(selectedDisplayVersion);
+  const selectedWorkflowPath = selectedProposal ? `/workflow/${selectedProposal.proposalNumber}` : '/workflow';
+  const emptyDetailMessage =
+    selectedFilter === 'needs_approval' && filteredProposals.length > 0
+      ? 'Select a Proposal that is Awaiting Approval on the left'
+      : 'Select a proposal to review its workflow.';
 
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
     setSavingAction(successMessage);
@@ -243,6 +243,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
       setShowNoteComposer(false);
       if (nextSelected) {
         navigate(`/workflow/${nextSelected.proposalNumber}`, { replace: true });
+      } else {
+        navigate('/workflow', { replace: true });
       }
       showToast({ type: 'success', message: successMessage });
     } catch (error) {
@@ -404,7 +406,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
 
         <section className="workflow-detail">
           {!selectedProposal ? (
-            <div className="workflow-empty workflow-empty-detail">Select a proposal to review its workflow.</div>
+            <div className="workflow-empty workflow-empty-detail">{emptyDetailMessage}</div>
           ) : (
             <>
               <div className="workflow-detail-header">
@@ -472,7 +474,11 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                         className="workflow-secondary-btn"
                         onClick={() =>
                           navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
-                            state: { versionId: selectedReviewVersionId },
+                            state: {
+                              versionId: selectedReviewVersionId,
+                              reviewerReturnTo: 'workflow',
+                              reviewerReturnPath: selectedWorkflowPath,
+                            },
                           })
                         }
                       >
@@ -484,7 +490,11 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                           className="workflow-secondary-btn"
                           onClick={() =>
                             navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
-                              state: { versionId: selectedApprovedVersionId },
+                              state: {
+                                versionId: selectedApprovedVersionId,
+                                reviewerReturnTo: 'workflow',
+                                reviewerReturnPath: selectedWorkflowPath,
+                              },
                             })
                           }
                         >
@@ -603,7 +613,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                   <button
                     type="button"
                     className="workflow-open-summary-btn"
-                    onClick={() => navigate(`/proposal/view/${selectedProposal.proposalNumber}`)}
+                    onClick={() =>
+                      navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
+                        state: {
+                          reviewerReturnTo: 'workflow',
+                          reviewerReturnPath: selectedWorkflowPath,
+                        },
+                      })
+                    }
                   >
                     Open Proposal Summary
                   </button>

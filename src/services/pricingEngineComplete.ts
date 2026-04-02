@@ -29,6 +29,10 @@ import {
   isOffContractEligibleLineItem,
   OFF_CONTRACT_GROUP_DECKING,
 } from '../utils/offContractLineItems';
+import {
+  findFiberglassNamedOption,
+  findFiberglassPoolModel,
+} from '../utils/fiberglass';
 import { flattenWaterFeatures, getWaterFeatureCogs } from '../utils/waterFeatureCost';
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
@@ -37,8 +41,7 @@ const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
     poolSpecs.perimeter > 0 ||
     (poolSpecs.maxLength > 0 && poolSpecs.maxWidth > 0);
   const hasFiberglassSelection =
-    poolSpecs.poolType === 'fiberglass' &&
-    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+    poolSpecs.poolType === 'fiberglass' && (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName);
   return hasGuniteDimensions || hasFiberglassSelection;
 };
 
@@ -67,38 +70,10 @@ const getDeckingSelectionKey = (item?: CostLineItem | null): string =>
 
 export class PoolCalculations {
   static calculateGallons(poolSpecs: PoolSpecs): number {
-    if (poolSpecs.poolType === 'fiberglass') {
-      // Fiberglass pools have fixed gallons based on size
-      const fiberglassGallons: Record<string, number> = {
-        small: 8000,
-        medium: 12000,
-        large: 16000,
-        crystite: 10000,
-      };
-      return poolSpecs.fiberglassSize ? fiberglassGallons[poolSpecs.fiberglassSize] : 0;
-    }
-
     const avgDepth = (poolSpecs.shallowDepth + poolSpecs.endDepth) / 2;
     const baseGallons = poolSpecs.surfaceArea * avgDepth * 7.6;
     const tanningShelfDeduction = poolSpecs.hasTanningShelf ? 850 : 0;
-
-    let spaGallons = 0;
-    if (this.hasSpa(poolSpecs)) {
-      if (poolSpecs.spaType === 'gunite') {
-        const spaAvgDepth = 3; // Excel sheet does not capture depth, assume 3ft working depth
-        spaGallons = poolSpecs.spaLength * poolSpecs.spaWidth * spaAvgDepth * 7.6;
-      } else {
-        const mapping: Record<string, number> = {
-          'fiberglass-small': 1000,
-          'fiberglass-medium': 1200,
-          'fiberglass-large': 1500,
-          crystite: 1200,
-        };
-        spaGallons = mapping[poolSpecs.spaType] || 1000;
-      }
-    }
-
-    const gallons = ceilToStep(baseGallons + spaGallons, 10) - tanningShelfDeduction;
+    const gallons = ceilToStep(baseGallons, 10) - tanningShelfDeduction;
     return Math.max(0, gallons);
   }
 
@@ -1224,6 +1199,16 @@ export class EquipmentCalculations {
       }
     }
 
+    const fiberglassPoolModel =
+      poolSpecs.poolType === 'fiberglass'
+        ? findFiberglassPoolModel(poolSpecs.fiberglassModelName, poolSpecs.fiberglassSize)
+        : undefined;
+    const equipmentPadCost = Number((pricingData as any)?.fiberglass?.equipmentPadCost || 0);
+    const equipmentPadQuantity = fiberglassPoolModel ? 1 + heaterQty : 0;
+    if (equipmentPadCost > 0 && equipmentPadQuantity > 0) {
+      pushItem('Equipment Pad', equipmentPadCost, equipmentPadQuantity);
+    }
+
     // Equipment tax (7.25% in sheet) - shown as separate line item
     const subtotal = items.reduce((sum, i) => sum + i.total, 0);
     if (subtotal > 0 && prices.taxRate) {
@@ -1346,156 +1331,148 @@ export class InteriorFinishCalculations {
       return { labor: laborItems, material: materialItems, waterTruck: waterTruckItems };
     }
 
-    if (isFiberglass) {
-      return { labor: laborItems, material: materialItems, waterTruck: waterTruckItems };
-    }
+    if (!isFiberglass) {
+      // Interior area from sheet: ((shallow+end)/2 * perimeter) + surfaceArea
+      const interiorArea =
+        ((poolSpecs.shallowDepth + poolSpecs.endDepth) / 2) * poolSpecs.perimeter + poolSpecs.surfaceArea;
+      const chargeArea = Math.max(interiorArea, prices.minimumChargeSqft ?? 850);
+      const finish = this.getFinish(prices, interiorFinish.finishType);
+      const finishName = finish?.name || interiorFinish.finishType || 'Interior Finish';
+      const materialRate = finish?.costPerSqft ?? 0;
+      const baseCost = Math.ceil(materialRate * chargeArea);
 
-    // Interior area from sheet: ((shallow+end)/2 * perimeter) + surfaceArea
-    const interiorArea =
-      ((poolSpecs.shallowDepth + poolSpecs.endDepth) / 2) * poolSpecs.perimeter + poolSpecs.surfaceArea;
-    const chargeArea = Math.max(interiorArea, prices.minimumChargeSqft ?? 850);
-    const finish = this.getFinish(prices, interiorFinish.finishType);
-    const finishName = finish?.name || interiorFinish.finishType || 'Interior Finish';
-    const materialRate = finish?.costPerSqft ?? 0;
-    const baseCost = Math.ceil(materialRate * chargeArea); // Excel uses ROUNDUP with 0 decimals (COST-NEW!D285)
-
-    // Base finish line
-    laborItems.push({
-      category: 'Interior Finish',
-      description: `${finishName} Finish`,
-      unitPrice: materialRate,
-      quantity: chargeArea,
-      total: baseCost,
-    });
-
-    // Spa finish
-    const surfaceArea = poolSpecs.surfaceArea ?? 0;
-    const spaPrepThreshold = prices.extras.poolPrepThreshold ?? 1200;
-
-    if (isGuniteSpa) {
       laborItems.push({
         category: 'Interior Finish',
-        description: 'Spa Finish',
-        unitPrice: finish?.spaFinishCost ?? 0,
-        quantity: 1,
-        total: finish?.spaFinishCost ?? 0,
+        description: `${finishName} Finish`,
+        unitPrice: materialRate,
+        quantity: chargeArea,
+        total: baseCost,
       });
-    }
 
-    // Pool prep up to 1,200 + overage
-    laborItems.push({
-      category: 'Interior Finish',
-      description: 'Pool Prep',
-      unitPrice: prices.extras.poolPrepBase,
-      quantity: 1,
-      total: prices.extras.poolPrepBase,
-    });
-    const overPrepSqft = Math.max(0, chargeArea - (prices.extras.poolPrepThreshold ?? 1200));
-    if (overPrepSqft > 0) {
-      laborItems.push({
-        category: 'Interior Finish',
-        description: 'Prep Over 1,200 SQFT',
-        unitPrice: prices.extras.poolPrepOverRate,
-        quantity: overPrepSqft,
-        total: prices.extras.poolPrepOverRate * overPrepSqft,
-      });
-    }
+      const surfaceArea = poolSpecs.surfaceArea ?? 0;
+      const spaPrepThreshold = prices.extras.poolPrepThreshold ?? 1200;
 
-    if (isGuniteSpa && surfaceArea > spaPrepThreshold) {
-      laborItems.push({
-        category: 'Interior Finish',
-        description: 'Spa Prep over 1200 SQFT',
-        unitPrice: prices.extras.spaPrep,
-        quantity: 1,
-        total: prices.extras.spaPrep,
-      });
-    }
-
-    // Misc and travel
-    laborItems.push({
-      category: 'Interior Finish',
-      description: 'Miscellaneous',
-      unitPrice: prices.extras.misc,
-      quantity: 1,
-      total: prices.extras.misc,
-    });
-    if (poolSpecs.travelDistance > 0) {
-      laborItems.push({
-        category: 'Interior Finish',
-        description: 'Travel',
-        unitPrice: prices.extras.travelPerMile,
-        quantity: poolSpecs.travelDistance,
-        total: prices.extras.travelPerMile * poolSpecs.travelDistance,
-      });
-    }
-
-    // Step detail beyond 20
-    if (poolSpecs.totalStepsAndBench > 20) {
-      const extraSteps = poolSpecs.totalStepsAndBench - 20;
-      laborItems.push({
-        category: 'Interior Finish',
-        description: 'Step & Bench Detail',
-        unitPrice: prices.extras.stepDetailPerLnftOver20,
-        quantity: extraSteps,
-        total: prices.extras.stepDetailPerLnftOver20 * extraSteps,
-      });
-    }
-
-    const includeMicroglass = interiorFinish.hasWaterproofing !== false;
-
-    // Microglass / Waterproofing (applied for gunite pools unless excluded)
-    if (poolSpecs.poolType === 'gunite' && includeMicroglass) {
-      const waterproofRate = prices.extras.waterproofingPerSqft ?? 0;
-      const spaPerimeter = isGuniteSpa ? (poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs)) : 0;
-      const spaWaterproofSqft = spaPerimeter * 3.45; // matches INT sheet values (28 lnft -> 96.6 sqft)
-      const waterproofQty = interiorArea + spaWaterproofSqft;
-      laborItems.push({
-        category: 'Interior Finish',
-        description: 'Waterproofing (Microglass)',
-        unitPrice: waterproofRate,
-        quantity: waterproofQty,
-        total: waterproofRate * waterproofQty,
-      });
-      if (isGuniteSpa && poolSpecs.isRaisedSpa) {
-        const raisedSpaWaterproof = prices.extras.waterproofingRaisedSpa ?? 0;
+      if (isGuniteSpa) {
         laborItems.push({
           category: 'Interior Finish',
-          description: 'Waterproofing (Microglass) - Raised Spa',
-          unitPrice: raisedSpaWaterproof,
+          description: 'Spa Finish',
+          unitPrice: finish?.spaFinishCost ?? 0,
           quantity: 1,
-          total: raisedSpaWaterproof,
+          total: finish?.spaFinishCost ?? 0,
         });
       }
-    }
 
-    // Fittings (Drains, Vac, Returns, Hydro) as per INT sheet logic
-    const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
-    const pumpQty = getBasePumpQuantity(equipment);
-    const pumpCost = getEquipmentItemCost(equipment?.pump as any, pumpOverhead);
-    const additionalPrimaryPumpCount = getAdditionalPumpSelections(equipment).filter(
-      (pump) => pump && getEquipmentItemCost(pump as any, pumpOverhead) > 0
-    ).length;
-    const mainPumpCount = (pumpCost > 0 ? pumpQty : 0) + additionalPrimaryPumpCount;
-    const auxPumpCount = (
-      equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
-        ? equipment.auxiliaryPumps
-        : equipment?.auxiliaryPump
-          ? [equipment.auxiliaryPump]
-          : []
-    ).filter(p => p && getEquipmentItemCost(p as any, pumpOverhead) > 0).length;
-    const drains = (mainPumpCount + auxPumpCount) * 2 * 15;
-    const vac = 0; // Excel INT sheet shows fittings total $110 (drains/returns/hydro only)
-    const returns = 20;
-    const hydro = 60;
-    const fittingsTotal = drains + vac + returns + hydro;
-    if (fittingsTotal > 0) {
       laborItems.push({
         category: 'Interior Finish',
-        description: 'Fittings (Drains/Vac/Returns/Hydro)',
-        unitPrice: fittingsTotal,
+        description: 'Pool Prep',
+        unitPrice: prices.extras.poolPrepBase,
         quantity: 1,
-        total: fittingsTotal,
+        total: prices.extras.poolPrepBase,
       });
+      const overPrepSqft = Math.max(0, chargeArea - (prices.extras.poolPrepThreshold ?? 1200));
+      if (overPrepSqft > 0) {
+        laborItems.push({
+          category: 'Interior Finish',
+          description: 'Prep Over 1,200 SQFT',
+          unitPrice: prices.extras.poolPrepOverRate,
+          quantity: overPrepSqft,
+          total: prices.extras.poolPrepOverRate * overPrepSqft,
+        });
+      }
+
+      if (isGuniteSpa && surfaceArea > spaPrepThreshold) {
+        laborItems.push({
+          category: 'Interior Finish',
+          description: 'Spa Prep over 1200 SQFT',
+          unitPrice: prices.extras.spaPrep,
+          quantity: 1,
+          total: prices.extras.spaPrep,
+        });
+      }
+
+      laborItems.push({
+        category: 'Interior Finish',
+        description: 'Miscellaneous',
+        unitPrice: prices.extras.misc,
+        quantity: 1,
+        total: prices.extras.misc,
+      });
+      if (poolSpecs.travelDistance > 0) {
+        laborItems.push({
+          category: 'Interior Finish',
+          description: 'Travel',
+          unitPrice: prices.extras.travelPerMile,
+          quantity: poolSpecs.travelDistance,
+          total: prices.extras.travelPerMile * poolSpecs.travelDistance,
+        });
+      }
+
+      if (poolSpecs.totalStepsAndBench > 20) {
+        const extraSteps = poolSpecs.totalStepsAndBench - 20;
+        laborItems.push({
+          category: 'Interior Finish',
+          description: 'Step & Bench Detail',
+          unitPrice: prices.extras.stepDetailPerLnftOver20,
+          quantity: extraSteps,
+          total: prices.extras.stepDetailPerLnftOver20 * extraSteps,
+        });
+      }
+
+      const includeMicroglass = interiorFinish.hasWaterproofing !== false;
+      if (poolSpecs.poolType === 'gunite' && includeMicroglass) {
+        const waterproofRate = prices.extras.waterproofingPerSqft ?? 0;
+        const spaPerimeter = isGuniteSpa
+          ? (poolSpecs.spaPerimeter || PoolCalculations.calculateSpaPerimeter(poolSpecs))
+          : 0;
+        const spaWaterproofSqft = spaPerimeter * 3.45;
+        const waterproofQty = interiorArea + spaWaterproofSqft;
+        laborItems.push({
+          category: 'Interior Finish',
+          description: 'Waterproofing (Microglass)',
+          unitPrice: waterproofRate,
+          quantity: waterproofQty,
+          total: waterproofRate * waterproofQty,
+        });
+        if (isGuniteSpa && poolSpecs.isRaisedSpa) {
+          const raisedSpaWaterproof = prices.extras.waterproofingRaisedSpa ?? 0;
+          laborItems.push({
+            category: 'Interior Finish',
+            description: 'Waterproofing (Microglass) - Raised Spa',
+            unitPrice: raisedSpaWaterproof,
+            quantity: 1,
+            total: raisedSpaWaterproof,
+          });
+        }
+      }
+
+      const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
+      const pumpQty = getBasePumpQuantity(equipment);
+      const pumpCost = getEquipmentItemCost(equipment?.pump as any, pumpOverhead);
+      const additionalPrimaryPumpCount = getAdditionalPumpSelections(equipment).filter(
+        (pump) => pump && getEquipmentItemCost(pump as any, pumpOverhead) > 0
+      ).length;
+      const mainPumpCount = (pumpCost > 0 ? pumpQty : 0) + additionalPrimaryPumpCount;
+      const auxPumpCount = (
+        equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
+          ? equipment.auxiliaryPumps
+          : equipment?.auxiliaryPump
+            ? [equipment.auxiliaryPump]
+            : []
+      ).filter((pump) => pump && getEquipmentItemCost(pump as any, pumpOverhead) > 0).length;
+      const drains = (mainPumpCount + auxPumpCount) * 2 * 15;
+      const vac = 0;
+      const returns = 20;
+      const hydro = 60;
+      const fittingsTotal = drains + vac + returns + hydro;
+      if (fittingsTotal > 0) {
+        laborItems.push({
+          category: 'Interior Finish',
+          description: 'Fittings (Drains/Vac/Returns/Hydro)',
+          unitPrice: fittingsTotal,
+          quantity: 1,
+          total: fittingsTotal,
+        });
+      }
     }
 
     // WATER TRUCK
@@ -1628,100 +1605,116 @@ export class CleanupCalculations {
 // ============================================================================
 
 export class FiberglassCalculations {
-  static calculateFiberglassCost(poolSpecs: PoolSpecs): CostLineItem[] {
+  static calculateFiberglassCost(poolSpecs: PoolSpecs, papDiscountRate: number = 0): CostLineItem[] {
     const items: CostLineItem[] = [];
-    const prices = pricingData.fiberglass;
+    const prices = pricingData.fiberglass as any;
 
     const poolIsFiberglass = poolSpecs.poolType === 'fiberglass';
     const spaIsFiberglass = poolSpecs.spaType === 'fiberglass';
 
     if (!poolIsFiberglass && !spaIsFiberglass) return items;
 
-    if (!hasPoolDefinition(poolSpecs)) {
-      return items;
+    const poolModel = poolIsFiberglass
+      ? findFiberglassPoolModel(poolSpecs.fiberglassModelName, poolSpecs.fiberglassSize)
+      : undefined;
+    const spaOption = spaIsFiberglass
+      ? findFiberglassNamedOption('spaOptions', poolSpecs.spaFiberglassModelName)
+      : undefined;
+    const tanningOption = poolIsFiberglass
+      ? findFiberglassNamedOption('tanningLedgeOptions', poolSpecs.fiberglassTanningLedgeName)
+      : undefined;
+    const finishUpgrade = poolIsFiberglass
+      ? findFiberglassNamedOption('finishUpgrades', poolSpecs.fiberglassFinishUpgradeName)
+      : undefined;
+
+    if (poolModel && poolModel.shellPrice > 0) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: poolModel.name,
+        unitPrice: poolModel.shellPrice,
+        quantity: 1,
+        total: poolModel.shellPrice,
+        details: { fiberglassLineType: 'pool-shell' },
+      });
     }
 
-    // Pool shell
-    if (poolIsFiberglass) {
-      if (poolSpecs.fiberglassModelPrice && poolSpecs.fiberglassModelName) {
-        items.push({
-          category: 'Fiberglass Shell',
-          description: poolSpecs.fiberglassModelName,
-          unitPrice: poolSpecs.fiberglassModelPrice,
-          quantity: 1,
-          total: poolSpecs.fiberglassModelPrice,
-        });
-      } else if (poolSpecs.fiberglassSize) {
-        const priceKey = poolSpecs.fiberglassSize as keyof typeof prices;
-        const price = prices[priceKey] as number;
-        items.push({
-          category: 'Fiberglass Shell',
-          description: `${poolSpecs.fiberglassSize} Fiberglass Pool`,
-          unitPrice: price,
-          quantity: 1,
-          total: price,
-        });
-      }
+    if (spaOption && spaOption.price > 0) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: `Fiberglass Spa - ${spaOption.name}`,
+        unitPrice: spaOption.price,
+        quantity: 1,
+        total: spaOption.price,
+        details: { fiberglassLineType: 'spa-shell' },
+      });
     }
 
-    // Fiberglass spa shell
-    if (spaIsFiberglass) {
-      const spaModel = pricingData.fiberglass.spaModels.find(m => m.name === poolSpecs.spaFiberglassModelName);
-      const spaPrice = poolSpecs.spaFiberglassModelPrice ?? spaModel?.price ?? 0;
-      if (spaPrice > 0 && poolSpecs.spaFiberglassModelName) {
-        items.push({
-          category: 'Fiberglass Shell',
-          description: `Fiberglass Spa - ${poolSpecs.spaFiberglassModelName}`,
-          unitPrice: spaPrice,
-          quantity: 1,
-          total: spaPrice,
-        });
-      }
-    }
-
-    // Spillover (when selected)
-    if (poolSpecs.hasSpillover && (poolIsFiberglass || spaIsFiberglass)) {
+    if (spaIsFiberglass && poolSpecs.hasSpillover && Number(prices.spillover) > 0) {
       items.push({
         category: 'Fiberglass Shell',
         description: 'Spillover',
-        unitPrice: prices.spillover,
+        unitPrice: Number(prices.spillover),
         quantity: 1,
-        total: prices.spillover,
+        total: Number(prices.spillover),
+        details: { fiberglassLineType: 'spillover' },
       });
     }
 
-    // Discount (10% off shell costs only) - Excel Row 1165
-    // Calculate selective sum of shell costs (pool shell + spa shell + spillover)
-    let shellCostsTotal = 0;
-    items.forEach((item) => {
-      // Include only actual shell items, not freight, surcharge, crane
-      if (item.description.toLowerCase().includes('fiberglass pool') ||
-          item.description.toLowerCase().includes('fiberglass spa') ||
-          item.description.toLowerCase().includes('spillover')) {
-        shellCostsTotal += item.total;
-      }
-    });
-
-    if (shellCostsTotal > 0) {
-      const discount = shellCostsTotal * prices.discountRate;
+    if (tanningOption && tanningOption.price > 0) {
       items.push({
         category: 'Fiberglass Shell',
-        description: 'Discount',
-        unitPrice: -discount,
+        description: `Tanning Ledge - ${tanningOption.name}`,
+        unitPrice: tanningOption.price,
         quantity: 1,
-        total: -discount,
+        total: tanningOption.price,
+        details: { fiberglassLineType: 'tanning-ledge' },
       });
     }
 
-    // Tax (7.25% on total) - Excel Row 1168
+    if (finishUpgrade && finishUpgrade.price > 0) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: `Finish Upgrade - ${finishUpgrade.name}`,
+        unitPrice: finishUpgrade.price,
+        quantity: 1,
+        total: finishUpgrade.price,
+        details: { fiberglassLineType: 'finish-upgrade' },
+      });
+    }
+
+    if (poolModel && poolModel.freight > 0) {
+      items.push({
+        category: 'Fiberglass Shell',
+        description: 'Freight',
+        unitPrice: poolModel.freight,
+        quantity: 1,
+        total: poolModel.freight,
+        details: { fiberglassLineType: 'freight' },
+      });
+    }
+
+    const shellPapDiscountRate = Math.max(0, Number(papDiscountRate) || 0);
+    if (poolModel && poolModel.shellPrice > 0 && shellPapDiscountRate > 0) {
+      const discountAmount = roundCurrency(poolModel.shellPrice * shellPapDiscountRate);
+      items.push({
+        category: 'Fiberglass Shell',
+        description: 'PAP Discount',
+        unitPrice: -discountAmount,
+        quantity: 1,
+        total: -discountAmount,
+        details: { fiberglassLineType: 'pap-discount' },
+      });
+    }
+
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-    if (subtotal > 0) {
+    const shellTaxRate = Number(prices.shellTaxRate ?? prices.taxRate ?? 0);
+    if (subtotal > 0 && shellTaxRate > 0) {
       items.push({
         category: 'Fiberglass Shell',
         description: 'Tax',
-        unitPrice: prices.taxRate,
+        unitPrice: shellTaxRate,
         quantity: subtotal,
-        total: subtotal * prices.taxRate,
+        total: subtotal * shellTaxRate,
       });
     }
 
@@ -1730,99 +1723,31 @@ export class FiberglassCalculations {
 
   static calculateFiberglassInstallCost(poolSpecs: PoolSpecs): CostLineItem[] {
     const items: CostLineItem[] = [];
-    const prices = pricingData.fiberglass;
-
-    const poolIsFiberglass = poolSpecs.poolType === 'fiberglass';
-    const spaIsFiberglass = poolSpecs.spaType === 'fiberglass';
-    const hasAnyFiberglass = poolIsFiberglass || spaIsFiberglass;
-    if (!hasAnyFiberglass) {
+    if (poolSpecs.poolType !== 'fiberglass') {
       return items;
     }
 
-    // Determine selected size from model/size selection
-    const selectedSize: string | undefined =
-      poolSpecs.fiberglassSize ||
-      pricingData.fiberglass.models.find(m => m.name === poolSpecs.fiberglassModelName)?.size;
-
-    const isSmall = selectedSize === 'small';
-    const isMedium = selectedSize === 'medium';
-    const isLarge = selectedSize === 'large';
-
-    // Freight (per shell) - size-based
-    if (poolIsFiberglass) {
-      if (isSmall) {
-        items.push({ category: 'Fiberglass Install', description: 'Freight - Small', unitPrice: 950, quantity: 1, total: 950 });
-      } else if (isMedium) {
-        items.push({ category: 'Fiberglass Install', description: 'Freight - Medium', unitPrice: 1100, quantity: 1, total: 1100 });
-      } else if (isLarge) {
-        items.push({ category: 'Fiberglass Install', description: 'Freight - Large', unitPrice: 1200, quantity: 1, total: 1200 });
-      }
+    const poolModel = findFiberglassPoolModel(poolSpecs.fiberglassModelName, poolSpecs.fiberglassSize);
+    if (!poolModel) {
+      return items;
     }
 
-    // Surcharge (per shell) - currently 0 in sheet
-    if (poolIsFiberglass && prices.surcharge2022 > 0) {
+    const addInstallItem = (description: string, cost: number) => {
+      if (cost <= 0) return;
       items.push({
         category: 'Fiberglass Install',
-        description: '2023 Surcharge',
-        unitPrice: prices.surcharge2022,
-        quantity: 1,
-        total: prices.surcharge2022,
-      });
-    }
-
-    // Crane selection
-    const craneOption = poolSpecs.fiberglassCraneOption || 'no-crane';
-    const addCrane = (label: string, cost: number, qty: number = 1) => {
-      if (qty <= 0) return;
-      items.push({
-        category: 'Fiberglass Install',
-        description: label,
+        description,
         unitPrice: cost,
-        quantity: qty,
-        total: cost * qty,
+        quantity: 1,
+        total: cost,
       });
     };
 
-    if (craneOption === 'no-crane') {
-      addCrane('No Crane', prices.noCrane ?? 150);
-    } else if (craneOption === 'crane-small') {
-      addCrane('Crane - Small', 550);
-    } else if (craneOption === 'crane-medium') {
-      addCrane('Crane - Medium', 2000);
-    } else if (craneOption === 'crane-large') {
-      addCrane('Crane - Large', 2600);
+    if (poolSpecs.needsFiberglassCrane) {
+      addInstallItem('Crane', Number(poolModel.crane) || 0);
     }
-
-    // Spa-specific crane (FIBER!70) when a fiberglass spa is selected
-    if (spaIsFiberglass) {
-      addCrane('Crane - Spa', 150);
-    }
-
-    // Install labor (pool) - size based
-    if (poolIsFiberglass) {
-      if (isSmall) addCrane('Install - Small', 9000);
-      if (isMedium) addCrane('Install - Medium', 9000);
-      if (isLarge) addCrane('Install - Large', 9000);
-    }
-
-    // Install labor (spa)
-    if (spaIsFiberglass) {
-      addCrane('Install - Spa', 2600);
-    }
-
-    // Gravel (pool)
-    if (poolIsFiberglass) {
-      if (isSmall) addCrane('Gravel - Small', 1900);
-      if (isMedium) addCrane('Gravel - Medium', 2650);
-      if (isLarge) addCrane('Gravel - Large', 3110);
-    }
-
-    // Water (pool)
-    if (poolIsFiberglass) {
-      if (isSmall) addCrane('Water - Small', 980);
-      if (isMedium) addCrane('Water - Medium', 1470);
-      if (isLarge) addCrane('Water - Large', 1470);
-    }
+    addInstallItem('Install', Number(poolModel.install) || 0);
+    addInstallItem('Gravel', Number(poolModel.gravel) || 0);
 
     return items;
   }

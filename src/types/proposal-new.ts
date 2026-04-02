@@ -21,7 +21,7 @@ export interface CustomerInfo {
 
 export type PoolType = 'gunite' | 'fiberglass';
 export type PoolShape = 'geometric' | 'freeform';
-export type FiberglassSize = 'small' | 'medium' | 'large' | 'crystite';
+export type FiberglassSize = 'small' | 'medium' | 'large';
 export type SpaType = 'none' | 'gunite' | 'fiberglass';
 export type SpaShape = 'round' | 'square';
 export type FiberglassModelSize = 'small' | 'medium' | 'large';
@@ -36,6 +36,9 @@ export interface PoolSpecs {
   // Fiberglass specific
   fiberglassSize?: FiberglassSize;
   fiberglassModelName?: string;
+  fiberglassFinishUpgradeName?: string;
+  fiberglassTanningLedgeName?: string;
+  needsFiberglassCrane?: boolean;
   fiberglassModelPrice?: number;
   fiberglassPerimeter?: number;
   fiberglassCraneOption?: FiberglassCraneOption;
@@ -59,6 +62,7 @@ export interface PoolSpecs {
   spaShape: SpaShape;
   spaPerimeter: number; // Auto-calculated
   spaFiberglassModelName?: string;
+  // Legacy fallback fields retained for compatibility with older saved data.
   spaFiberglassModelPrice?: number;
   isRaisedSpa: boolean; // +18"
   raisedSpaFacing: MasonryFacing;
@@ -683,6 +687,7 @@ export interface PAPDiscounts {
   equipment: number;
   interiorFinish: number;
   startup: number;
+  fiberglassShell: number;
 }
 
 // Manual retail adjustments applied by designers
@@ -712,7 +717,7 @@ export interface PricingCalculations {
   // Retail price calculation
   targetMargin: number; // Default 0.70 (70% - meaning 30% profit)
   baseRetailPrice: number; // CEILING(totalCOGS / targetMargin, 10)
-  g3UpgradeCost: number; // $1,250 if Crystite G3 selected, else $0
+  g3UpgradeCost: number; // Legacy retail add-on slot; fiberglass overhaul keeps this at $0
   discountAmount: number; // Manual discount (negative number)
   retailPrice: number; // baseRetailPrice + g3UpgradeCost + discountAmount
 

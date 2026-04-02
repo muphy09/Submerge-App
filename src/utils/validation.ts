@@ -24,6 +24,21 @@ export function validateProposal(proposal: Partial<Proposal>): ValidationError[]
     }
   }
 
+  if (proposal.poolSpecs?.poolType === 'fiberglass') {
+    if (!proposal.poolSpecs.fiberglassSize) {
+      errors.push({ field: 'fiberglassSize', message: 'Fiberglass size is required for fiberglass pools' });
+    }
+    if (!proposal.poolSpecs.fiberglassModelName) {
+      errors.push({ field: 'fiberglassModelName', message: 'Fiberglass model is required for fiberglass pools' });
+    }
+    if (proposal.poolSpecs.hasTanningShelf && !proposal.poolSpecs.fiberglassTanningLedgeName) {
+      errors.push({
+        field: 'fiberglassTanningLedgeName',
+        message: 'Select a fiberglass tanning ledge option or remove the tanning ledge selection',
+      });
+    }
+  }
+
   // Spa validation
   const hasSpa = proposal.poolSpecs?.spaType !== 'none';
   if (hasSpa) {
@@ -41,6 +56,12 @@ export function validateProposal(proposal: Partial<Proposal>): ValidationError[]
       errors.push({
         field: 'spaRun',
         message: 'Spa plumbing run is required when spa is present',
+      });
+    }
+    if (proposal.poolSpecs?.spaType === 'fiberglass' && !proposal.poolSpecs?.spaFiberglassModelName) {
+      errors.push({
+        field: 'spaFiberglassModelName',
+        message: 'Fiberglass spa option is required when a fiberglass spa is selected',
       });
     }
   }

@@ -44,8 +44,7 @@ const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
     poolSpecs.perimeter > 0 ||
     (poolSpecs.maxLength > 0 && poolSpecs.maxWidth > 0);
   const hasFiberglassSelection =
-    poolSpecs.poolType === 'fiberglass' &&
-    (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName || !!poolSpecs.fiberglassModelPrice);
+    poolSpecs.poolType === 'fiberglass' && (!!poolSpecs.fiberglassSize || !!poolSpecs.fiberglassModelName);
   return hasGuniteDimensions || hasFiberglassSelection;
 };
 
@@ -59,37 +58,10 @@ export class PoolCalculations {
    * Formula: CEILING.MATH(((SurfaceArea * ((ShallowDepth + EndDepth) / 2)) * 7.6), 10) - (TanningShelf * 850)
    */
   static calculateGallons(poolSpecs: PoolSpecs): number {
-    if (poolSpecs.poolType === 'fiberglass') {
-      const fiberglassGallons: Record<string, number> = {
-        small: 8000,
-        medium: 12000,
-        large: 16000,
-        crystite: 10000,
-      };
-      return poolSpecs.fiberglassSize ? fiberglassGallons[poolSpecs.fiberglassSize] : 0;
-    }
-
     const avgDepth = (poolSpecs.shallowDepth + poolSpecs.endDepth) / 2;
     const baseGallons = poolSpecs.surfaceArea * avgDepth * 7.6;
     const tanningShelfDeduction = poolSpecs.hasTanningShelf ? 850 : 0;
-
-    let spaGallons = 0;
-    if (this.hasSpa(poolSpecs)) {
-      if (poolSpecs.spaType === 'gunite') {
-        const spaAvgDepth = 3;
-        spaGallons = poolSpecs.spaLength * poolSpecs.spaWidth * spaAvgDepth * 7.6;
-      } else {
-        const mapping: Record<string, number> = {
-          'fiberglass-small': 1000,
-          'fiberglass-medium': 1200,
-          'fiberglass-large': 1500,
-          crystite: 1200,
-        };
-        spaGallons = mapping[poolSpecs.spaType] || 1000;
-      }
-    }
-
-    const gallons = Math.ceil((baseGallons + spaGallons) / 10) * 10 - tanningShelfDeduction;
+    const gallons = Math.ceil(baseGallons / 10) * 10 - tanningShelfDeduction;
     return Math.max(0, gallons);
   }
 
@@ -173,9 +145,39 @@ export class ExcavationCalculations {
       return items;
     }
 
+    if (isFiberglass) {
+      if (excavation.hasDirtHaul) {
+        const overdigArea = poolSpecs.surfaceArea * 1.15;
+        const adjustedMinDepth = poolSpecs.shallowDepth + 1.25;
+        const adjustedMaxDepth = poolSpecs.endDepth + 1.25;
+        const adjustedDepth = (adjustedMinDepth + adjustedMaxDepth) / 2;
+        const spaAreaAllowance = hasSpa ? 75 : 0;
+        const cubicYards = ((overdigArea * adjustedDepth) / 24) + ((spaAreaAllowance * 2.5) / 24);
+        const yardage = Math.max(0, cubicYards);
+        const yardageDisplay = Math.round(yardage * 100) / 100;
+        const dirtHaulTotal = Math.ceil(prices.dirtHaulPerYard * yardage);
+        items.push({
+          category: 'Excavation',
+          description: 'Dirt Haul',
+          unitPrice: prices.dirtHaulPerYard,
+          quantity: yardageDisplay,
+          total: dirtHaulTotal,
+        });
+        items.push({
+          category: 'Excavation',
+          description: 'Misc',
+          unitPrice: prices.misc,
+          quantity: 1,
+          total: prices.misc,
+        });
+      }
+
+      return items;
+    }
+
     // Base excavation (Excel range table)
     const baseRanges = prices.baseRanges ?? [];
-    if (!isFiberglass && baseRanges.length) {
+    if (baseRanges.length) {
       const baseRange = baseRanges.find((r: any) => poolSpecs.surfaceArea <= r.max) ?? baseRanges[baseRanges.length - 1];
       items.push({
         category: 'Excavation',
@@ -198,7 +200,7 @@ export class ExcavationCalculations {
     }
 
     // Additional 6" depth charge when end depth exceeds 8'
-    if (!isFiberglass && poolSpecs.endDepth >= 8.05) {
+    if (poolSpecs.endDepth >= 8.05) {
       const additionalDepthQty = roundUp((poolSpecs.endDepth - 8) * 2); // increments of 6"
       items.push({
         category: 'Excavation',
@@ -239,7 +241,7 @@ export class ExcavationCalculations {
     });
 
     // Spa excavation
-    if (isGuniteSpa && !isFiberglass) {
+    if (isGuniteSpa) {
       // Base spa excavation is always charged
       items.push({
         category: 'Excavation',
@@ -272,15 +274,13 @@ export class ExcavationCalculations {
     }
 
     // Backfill (always included for gunite)
-    if (!isFiberglass) {
-      items.push({
-        category: 'Excavation',
-        description: 'Backfill',
-        unitPrice: prices.backfill,
-        quantity: 1,
-        total: prices.backfill,
-      });
-    }
+    items.push({
+      category: 'Excavation',
+      description: 'Backfill',
+      unitPrice: prices.backfill,
+      quantity: 1,
+      total: prices.backfill,
+    });
 
     // Gravel install (price per sqft from EXC sheet)
     if (excavation.hasGravelInstall) {
@@ -290,27 +290,6 @@ export class ExcavationCalculations {
         unitPrice: prices.gravelPerSqft,
         quantity: poolSpecs.surfaceArea,
         total: poolSpecs.surfaceArea * prices.gravelPerSqft,
-      });
-    }
-
-    // Fiberglass Install (labor and gravel for fiberglass pools)
-    if (isFiberglass && hasPoolDefinition(poolSpecs)) {
-      const fiberglassInstallPrices = pricingData.fiberglass.fiberglassInstall;
-
-      items.push({
-        category: 'Excavation',
-        description: 'Fiberglass Install - Labor',
-        unitPrice: fiberglassInstallPrices.labor,
-        quantity: 1,
-        total: fiberglassInstallPrices.labor,
-      });
-
-      items.push({
-        category: 'Excavation',
-        description: 'Fiberglass Install - Gravel',
-        unitPrice: fiberglassInstallPrices.gravel,
-        quantity: 1,
-        total: fiberglassInstallPrices.gravel,
       });
     }
 

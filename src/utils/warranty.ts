@@ -345,6 +345,13 @@ const buildSpaDetail = (proposal?: Partial<Proposal>) => {
     return { detail: 'No spa', advantage: 'No spa' };
   }
 
+  if (poolSpecs.spaType === 'fiberglass') {
+    return {
+      detail: poolSpecs.spaFiberglassModelName || 'Fiberglass spa',
+      advantage: 'Factory-built spa shell',
+    };
+  }
+
   const width = formatNumber(poolSpecs.spaWidth);
   const length = formatNumber(poolSpecs.spaLength);
   const shape = poolSpecs.spaShape ? ` ${poolSpecs.spaShape} spa` : ' spa';

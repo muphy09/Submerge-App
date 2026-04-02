@@ -9,10 +9,12 @@ interface Props {
   data: InteriorFinish;
   onChange: (data: InteriorFinish) => void;
   hasSpa: boolean;
+  isFiberglass: boolean;
 }
 
-function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
+function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass }: Props) {
   const [finishes, setFinishes] = useState(pricingData.interiorFinish.finishes || []);
+  const fiberglassDisabledMessage = 'Cannot be adjusted, Fiberglass selected';
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
@@ -90,6 +92,15 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
           <p className="spec-block-subtitle">Select interior finish and color / style.</p>
         </div>
 
+        {isFiberglass && (
+          <div
+            className="info-box"
+            style={{ marginBottom: '12px', background: '#eff6ff', borderColor: '#93c5fd', color: '#1d4ed8' }}
+          >
+            Interior finish pricing does not apply to fiberglass shells. Water truck charges still calculate from pool gallons.
+          </div>
+        )}
+
         <div className="spec-grid spec-grid-3">
           <div className="spec-field">
             <label className="spec-label required">Finish</label>
@@ -97,6 +108,8 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
               className="compact-input"
               value={data.finishType}
               onChange={(e) => handleChange('finishType', e.target.value as InteriorFinishType)}
+              disabled={isFiberglass}
+              title={isFiberglass ? fiberglassDisabledMessage : undefined}
             >
               {finishTypes.map(type => (
                 <option key={type.value} value={type.value}>
@@ -112,6 +125,8 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
               className="compact-input"
               value={selectedColorValue || ''}
               onChange={(e) => handleChange('color', e.target.value)}
+              disabled={isFiberglass}
+              title={isFiberglass ? fiberglassDisabledMessage : undefined}
             >
               <option value="" disabled>
                 Select color/style
@@ -131,6 +146,8 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
               type="button"
               className={`pool-type-btn ${includeMicroglass ? 'active' : ''}`}
               onClick={() => handleChange('hasWaterproofing', !includeMicroglass)}
+              disabled={isFiberglass}
+              title={isFiberglass ? fiberglassDisabledMessage : undefined}
               style={{ width: '100%', padding: '10px 14px' }}
             >
               Include Waterproofing (Microglass)
@@ -139,10 +156,12 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa }: Props) {
         </div>
       </div>
 
-      <CustomOptionsSection
-        data={data.customOptions || []}
-        onChange={(customOptions) => onChange({ ...data, customOptions })}
-      />
+      {!isFiberglass && (
+        <CustomOptionsSection
+          data={data.customOptions || []}
+          onChange={(customOptions) => onChange({ ...data, customOptions })}
+        />
+      )}
     </div>
   );
 }

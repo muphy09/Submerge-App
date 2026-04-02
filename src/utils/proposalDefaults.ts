@@ -36,6 +36,9 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     endDepth: 0,
     fiberglassSize: undefined,
     fiberglassModelName: undefined,
+    fiberglassFinishUpgradeName: undefined,
+    fiberglassTanningLedgeName: undefined,
+    needsFiberglassCrane: false,
     fiberglassModelPrice: undefined,
     fiberglassPerimeter: undefined,
     fiberglassCraneOption: 'no-crane',
@@ -356,6 +359,7 @@ export function getDefaultPAPDiscounts(): PAPDiscounts {
     equipment: 0,
     interiorFinish: 0,
     startup: 0,
+    fiberglassShell: 0,
   };
 }
 

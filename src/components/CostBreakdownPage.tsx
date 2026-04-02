@@ -48,6 +48,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
       equipment: 0,
       interiorFinish: 0,
       startup: 0,
+      fiberglassShell: 0,
     };
   const [manualAdjustments, setManualAdjustments] = useState<ManualAdjustments>(
     proposal.manualAdjustments ||
@@ -319,7 +320,12 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
       subcategories: buildLineItemSubcategories(costBreakdown.interiorFinish),
     },
     { name: 'Water Truck', items: costBreakdown.waterTruck, showPAPInput: false },
-    { name: 'Fiberglass Shell', items: costBreakdown.fiberglassShell, showPAPInput: false },
+    {
+      name: 'Fiberglass Shell',
+      items: costBreakdown.fiberglassShell,
+      papDiscountKey: 'fiberglassShell',
+      showPAPInput: true,
+    },
     { name: 'Fiberglass Install', items: costBreakdown.fiberglassInstall, showPAPInput: false },
     { name: 'Startup/Orientation', items: costBreakdown.startupOrientation, papDiscountKey: 'startup', showPAPInput: true },
     { name: 'Custom Features', items: costBreakdown.customFeatures, showPAPInput: false },

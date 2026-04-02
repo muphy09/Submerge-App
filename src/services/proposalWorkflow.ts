@@ -111,10 +111,6 @@ function toFiniteNumber(value: unknown) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function deepEqualComparable(a: unknown, b: unknown) {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-}
-
 function getCurrentSession(session?: UserSession | null) {
   return session ?? readSession();
 }
@@ -427,7 +423,9 @@ function extractPoolSpecsFields(proposal: Proposal): WorkflowFieldSnapshot[] {
   return compactSnapshots([
     { key: 'poolType', label: 'Pool Type', value: normalizeText(specs.poolType) },
     { key: 'poolShape', label: 'Pool Shape', value: normalizeText(specs.poolShape) },
+    { key: 'fiberglassSize', label: 'Fiberglass Size', value: normalizeText(specs.fiberglassSize) },
     { key: 'fiberglassModel', label: 'Fiberglass Model', value: normalizeText(specs.fiberglassModelName) },
+    { key: 'fiberglassFinishUpgrade', label: 'Finish Upgrade', value: normalizeText(specs.fiberglassFinishUpgradeName) },
     { key: 'perimeter', label: 'Pool Perimeter', value: formatNumber(specs.perimeter, ' LF') },
     { key: 'surfaceArea', label: 'Pool Surface Area', value: formatNumber(specs.surfaceArea, ' SQFT') },
     { key: 'maxWidth', label: 'Max Width', value: formatNumber(specs.maxWidth, ' FT') },
@@ -436,7 +434,9 @@ function extractPoolSpecsFields(proposal: Proposal): WorkflowFieldSnapshot[] {
     { key: 'endDepth', label: 'End Depth', value: formatNumber(specs.endDepth, ' FT') },
     { key: 'stepsBench', label: 'Steps / Bench', value: formatNumber(specs.totalStepsAndBench, ' LF') },
     { key: 'tanningShelf', label: 'Tanning Shelf', value: formatBoolean(specs.hasTanningShelf) },
+    { key: 'fiberglassTanningLedge', label: 'Fiberglass Tanning Ledge', value: normalizeText(specs.fiberglassTanningLedgeName) },
     { key: 'spaType', label: 'Spa Type', value: normalizeText(specs.spaType) || 'None' },
+    { key: 'fiberglassSpa', label: 'Fiberglass Spa', value: normalizeText(specs.spaFiberglassModelName) },
     { key: 'spaSize', label: 'Spa Size', value: [formatNumber(specs.spaLength, ' FT'), formatNumber(specs.spaWidth, ' FT')].filter(Boolean).join(' x ') },
     { key: 'spaPerimeter', label: 'Spa Perimeter', value: formatNumber(specs.spaPerimeter, ' LF') },
     { key: 'raisedSpa', label: 'Raised Spa', value: formatBoolean(specs.isRaisedSpa) },
@@ -611,12 +611,12 @@ function extractInteriorFinishFields(proposal: Proposal): WorkflowFieldSnapshot[
 }
 
 function extractPricingAdjustmentFields(proposal: Proposal): WorkflowFieldSnapshot[] {
-  const manual = proposal.manualAdjustments || ({} as Proposal['manualAdjustments']);
+  const manual = proposal.manualAdjustments;
   return compactSnapshots([
-    { key: 'manualPositive1', label: 'Manual Positive 1', value: formatCurrencyValue(manual.positive1) },
-    { key: 'manualPositive2', label: 'Manual Positive 2', value: formatCurrencyValue(manual.positive2) },
-    { key: 'manualNegative1', label: 'Manual Negative 1', value: formatCurrencyValue(manual.negative1) },
-    { key: 'manualNegative2', label: 'Manual Negative 2', value: formatCurrencyValue(manual.negative2) },
+    { key: 'manualPositive1', label: 'Manual Positive 1', value: formatCurrencyValue(manual?.positive1) },
+    { key: 'manualPositive2', label: 'Manual Positive 2', value: formatCurrencyValue(manual?.positive2) },
+    { key: 'manualNegative1', label: 'Manual Negative 1', value: formatCurrencyValue(manual?.negative1) },
+    { key: 'manualNegative2', label: 'Manual Negative 2', value: formatCurrencyValue(manual?.negative2) },
     { key: 'retailAdjustments', label: 'Retail Adjustments', value: summarizeRetailAdjustments(proposal.retailAdjustments) },
     { key: 'contractOverrides', label: 'Contract Overrides', value: summarizeContractOverrides(proposal.contractOverrides) },
   ]);

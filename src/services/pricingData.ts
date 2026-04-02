@@ -16,6 +16,59 @@ const defaultRaisedSpaFacingOptions: MasonryFacingOption[] = [
   { id: 'stacked-stone', name: 'Stacked Stone', materialCost: 27, laborCost: 16 },
 ];
 
+const defaultFiberglassSmallModels = [
+  { name: 'Caeser', shellPrice: 11325, freight: 950, crane: 550, install: 9000, gravel: 1900 },
+  { name: 'Chateau & Gayla 12', shellPrice: 14825, freight: 950, crane: 550, install: 9000, gravel: 1900 },
+  { name: 'Gayla 12/Freeport', shellPrice: 14375, freight: 950, crane: 550, install: 9000, gravel: 1900 },
+  { name: 'Lotus 12/Bermuda', shellPrice: 15375, freight: 950, crane: 550, install: 9000, gravel: 1900 },
+  { name: 'Santorini & Bliss 12', shellPrice: 12825, freight: 950, crane: 550, install: 9000, gravel: 1900 },
+];
+
+const defaultFiberglassMediumModels = [
+  { name: 'Belvedere', shellPrice: 22801, freight: 1100, crane: 2000, install: 9000, gravel: 2650 },
+  { name: 'Martinique Grand', shellPrice: 23825, freight: 1100, crane: 2000, install: 9000, gravel: 2650 },
+  { name: 'Noveau 14', shellPrice: 23625, freight: 1100, crane: 2000, install: 9000, gravel: 2650 },
+  { name: 'Lotus 14', shellPrice: 20650, freight: 1100, crane: 2000, install: 9000, gravel: 2650 },
+  { name: 'Renaissance 14', shellPrice: 23625, freight: 1100, crane: 2000, install: 9000, gravel: 2650 },
+  { name: 'Sovereign & Gayla 14', shellPrice: 21275, freight: 1100, crane: 2000, install: 9000, gravel: 2650 },
+  { name: 'Belvedere/Olympia 14', shellPrice: 24100, freight: 1100, crane: 2000, install: 9000, gravel: 2650 },
+];
+
+const defaultFiberglassLargeModels = [
+  { name: 'Aristocrat', shellPrice: 25075, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Lotus XL', shellPrice: 26100, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Elysium Grand', shellPrice: 25600, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Grand Palace', shellPrice: 30000, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Imperial', shellPrice: 21700, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Gayla 16', shellPrice: 24000, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Oasis 16', shellPrice: 23300, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Gayla XDL', shellPrice: 27725, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Versailles', shellPrice: 30500, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+  { name: 'Villa Reale', shellPrice: 29600, freight: 1200, crane: 2600, install: 9000, gravel: 3110 },
+];
+
+const defaultFiberglassSpaOptions = [
+  { name: 'Meridian', price: 4794 },
+  { name: 'Mystic', price: 4575 },
+  { name: 'Regal', price: 5000 },
+  { name: 'Royal', price: 5000 },
+  { name: 'Shasta', price: 4150 },
+];
+
+const defaultFiberglassTanningLedgeOptions = [
+  { name: 'Gemini', price: 2838 },
+  { name: 'Genesis', price: 4262 },
+  { name: 'Hermosa', price: 3514 },
+  { name: 'Picasso', price: 3264 },
+  { name: 'Rectangle', price: 5205 },
+  { name: 'Semi-Circle', price: 4805 },
+];
+
+const defaultFiberglassFinishUpgrades = [
+  { name: 'Crystite G2', price: 1000 },
+  { name: 'Crystite G3', price: 1500 },
+];
+
 const pricingData = {
   // PAP (Preferred Approved Provider) Discount Rates
   // These are applied as negative line items in various sections
@@ -30,6 +83,7 @@ const pricingData = {
     equipment: 0.10, // 10%
     interiorFinish: 0.10, // 10%
     startup: 0.10, // 10%
+    fiberglassShell: 0.20, // Workbook fiberglass shell PAP-equivalent discount
   },
   // Manual retail adjustments (designer-facing)
   manualAdjustments: {
@@ -90,6 +144,7 @@ const pricingData = {
   plumbing: {
     shortStub: 550,
     spaBase: 750,
+    fiberglassMultiplier: 0.4,
     poolOverrunPerFt: 25,
     poolOverrunThreshold: 33,
     spaOverrunPerFt: 22,
@@ -582,6 +637,17 @@ const pricingData = {
     roughGrading: 700,
   },
   fiberglass: {
+    poolModels: {
+      small: defaultFiberglassSmallModels,
+      medium: defaultFiberglassMediumModels,
+      large: defaultFiberglassLargeModels,
+    },
+    spaOptions: defaultFiberglassSpaOptions,
+    tanningLedgeOptions: defaultFiberglassTanningLedgeOptions,
+    finishUpgrades: defaultFiberglassFinishUpgrades,
+    spillover: 525,
+    shellTaxRate: 0.0725,
+    equipmentPadCost: 250,
     small: 12192,
     medium: 15120,
     large: 18228,
@@ -589,7 +655,7 @@ const pricingData = {
     spaSmall: 8727,
     spaMedium: 10242,
     spaLarge: 13857,
-    spillover: 1000,
+    spilloverLegacy: 1000,
     crane: 2500,
     noCrane: 150, // FIBER!D66 (applies when fiberglass is not selected)
     freight: 900, // Per shell (Excel: SUM(FIBER!G62:G64))
@@ -600,13 +666,7 @@ const pricingData = {
       labor: 2500, // Installation labor
       gravel: 600, // Gravel for base
     },
-    spaModels: [
-      { name: 'Meridian', price: 4794 },
-      { name: 'Mystic', price: 4575 },
-      { name: 'Regal', price: 5000 },
-      { name: 'Royal', price: 5000 },
-      { name: 'Shasta', price: 4150 },
-    ],
+    spaModels: defaultFiberglassSpaOptions,
     models: [
       { name: 'Caeser', size: 'small', price: 11325, perimeter: 48 },
       { name: 'Chateau & Gayla 12', size: 'small', price: 14825, perimeter: 70 },
@@ -638,7 +698,7 @@ const pricingData = {
       { name: 'Royal', price: 5000 },
     ],
   },
-  misc: {
+    misc: {
     layout: {
       poolOnly: 50,
       spa: 15,
@@ -663,6 +723,20 @@ const pricingData = {
     waterTruck: {
       base: 490,
       loadSizeGallons: 7000,
+    },
+    contractPaymentSchedule: {
+      gunite: {
+        excavation: 0.3,
+        shotcrete: 0.3,
+        decking: 0.3,
+        interiorFinish: 0.1,
+      },
+      fiberglass: {
+        permitting: 0.3,
+        shellDelivery: 0.3,
+        equipmentSet: 0.3,
+        decking: 0.1,
+      },
     },
     startup: {
       base: 700,

@@ -119,6 +119,12 @@ const summarizePumpSelection = (equipment: Proposal['equipment']): string => {
   return hasNamedSelection(equipment.pump?.name, 'no pump') ? normalizeSummaryName(equipment.pump.name) : 'None';
 };
 
+type ProposalViewLocationState = {
+  versionId?: string;
+  reviewerReturnTo?: 'workflow' | 'admin-panel';
+  reviewerReturnPath?: string;
+};
+
 const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefined): string => {
   const names = (lights ?? [])
     .map((light) => light?.name)
@@ -482,6 +488,7 @@ function ProposalView() {
   const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
+  const locationState = (location.state as ProposalViewLocationState | null) ?? null;
   const sessionRole = getSessionRole();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
@@ -495,21 +502,22 @@ function ProposalView() {
       ? versions.find((entry) => (entry.versionId || 'original') === activeVersionId)
       : proposal) || proposal;
   const proposalWorkflowStatus = getWorkflowStatus(proposal);
+  const isProposalCompleted = proposalWorkflowStatus === 'completed';
   const canManageVersionDrafts =
     !isProposalEditingRestricted &&
     !isReadOnlyReviewerView &&
-    proposalWorkflowStatus !== 'completed';
+    !isProposalCompleted;
   const canEditProposal =
     canManageVersionDrafts &&
     Boolean(activeEditableVersion) &&
     !isSubmittedVersionLocked(activeEditableVersion);
-  const canSendWorkflowMessages = Boolean(proposal?.workflow?.submittedAt) && proposalWorkflowStatus !== 'completed';
+  const canSendWorkflowMessages = Boolean(proposal?.workflow?.submittedAt) && !isProposalCompleted;
   const editDisabledReason =
     isProposalEditingRestricted
       ? 'Master accounts acting as owner can view proposals but cannot edit them.'
       : isReadOnlyReviewerView
       ? 'Reviewer accounts can review submitted proposals but cannot edit their versions.'
-      : proposalWorkflowStatus === 'completed'
+      : isProposalCompleted
       ? 'Completed proposals are locked.'
       : isSubmittedVersionLocked(activeEditableVersion)
       ? 'Submitted versions are locked. Create a new version to make changes.'
@@ -520,6 +528,10 @@ function ProposalView() {
       : editDisabledReason;
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
+  const reviewerReturnTo = locationState?.reviewerReturnTo === 'admin-panel' ? 'admin-panel' : 'workflow';
+  const reviewerBackLabel = reviewerReturnTo === 'admin-panel' ? 'Back to Admin Panel' : 'Back to Book Keeper';
+  const handleReviewerBack = () =>
+    navigate(locationState?.reviewerReturnPath || (reviewerReturnTo === 'admin-panel' ? '/admin' : '/workflow'));
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
     const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
@@ -618,7 +630,7 @@ function ProposalView() {
           }))
         )
       ) as Proposal[];
-      const requestedVersionId = (location.state as any)?.versionId as string | undefined;
+      const requestedVersionId = locationState?.versionId;
       const reviewerVisibleVersionIds = isReadOnlyReviewerView
         ? new Set(getReviewerVisibleVersions(sourceProposal).map((entry) => entry.versionId || 'original'))
         : null;
@@ -738,7 +750,7 @@ function ProposalView() {
 
   const handleEdit = (version?: Proposal) => {
     if (!canManageVersionDrafts) return;
-    if (!version || isSubmittedVersionLocked(version) || proposalWorkflowStatus === 'completed') return;
+    if (!version || isSubmittedVersionLocked(version) || isProposalCompleted) return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
   };
@@ -839,7 +851,7 @@ function ProposalView() {
       return;
     }
     if (!proposal) return;
-    if (getWorkflowStatus(proposal) === 'completed') {
+    if (isProposalCompleted) {
       showToast({ type: 'warning', message: 'Completed proposals cannot create new versions.' });
       return;
     }
@@ -855,7 +867,7 @@ function ProposalView() {
       return;
     }
     const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
-    const defaultPrefix = proposalWorkflowStatus === 'approved' ? 'Proposal Addendum' : 'Version';
+    const defaultPrefix = 'Version';
     setNewVersionName(`${defaultPrefix} ${count}`);
     setShowVersionNameModal(true);
   };
@@ -1511,7 +1523,7 @@ function ProposalView() {
       'Proposal approved.'
     );
     if (didApprove) {
-      navigate('/workflow');
+      handleReviewerBack();
     }
   };
 
@@ -1651,7 +1663,7 @@ function ProposalView() {
     const costsBeforePapDiscounts = (pricing?.totalCostsBeforeOverhead ?? subtotal ?? 0) - papDiscountTotal;
     const baseRetailPriceBeforePap =
       Math.ceil(((costsBeforePapDiscounts * overheadMultiplier) / targetMargin) / 10) * 10;
-    const g3UpgradeCost = pricing?.g3UpgradeCost ?? 1250;
+    const g3UpgradeCost = pricing?.g3UpgradeCost ?? 0;
     const retailPriceBeforeDiscounts = baseRetailPriceBeforePap + g3UpgradeCost + offContractTotal;
     const retailSalePrice = retailPrice;
     const totalSavings = retailPriceBeforeDiscounts - retailSalePrice;
@@ -2389,16 +2401,16 @@ function ProposalView() {
     const canEditVersion =
       canManageVersionDrafts &&
       !isSubmittedVersionLocked(vm.proposal) &&
-      proposalWorkflowStatus !== 'completed';
+      !isProposalCompleted;
     const canDeleteVersion =
       canManageVersionDrafts &&
       !isOriginal &&
       !isSubmittedVersionLocked(vm.proposal) &&
-      proposalWorkflowStatus !== 'completed';
+      !isProposalCompleted;
     const versionActionReason =
       !canManageVersionDrafts
         ? editDisabledReason
-        : proposalWorkflowStatus === 'completed'
+        : isProposalCompleted
         ? 'Completed proposals are locked.'
         : isSubmittedVersionLocked(vm.proposal)
         ? 'Submitted versions are locked. Create a new version to make changes.'
@@ -2646,12 +2658,12 @@ function ProposalView() {
                 <>
                   <button
                     className="action-button workflow-summary-reviewer-button"
-                    onClick={() => navigate('/workflow')}
+                    onClick={handleReviewerBack}
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M10 13L5 8L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    Back to Book Keeper
+                    {reviewerBackLabel}
                   </button>
                   {proposalWorkflowStatus === 'needs_approval' && (
                     <button
