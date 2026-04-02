@@ -872,6 +872,67 @@ export function isSubmittedVersionLocked(proposal?: Partial<Proposal> | null) {
   return proposal?.versionLocked === true || Boolean(proposal?.versionSubmittedAt);
 }
 
+export function collapseApprovedProposalVersions(proposal: Proposal): Proposal {
+  const normalized = ensureProposalWorkflow(proposal);
+  const status = getWorkflowStatus(normalized);
+  const approvedVersionId = getApprovedVersionId(normalized);
+  const pendingReviewVersionId = getPendingReviewVersionId(normalized);
+
+  if ((status !== 'approved' && status !== 'completed') || !approvedVersionId || pendingReviewVersionId) {
+    return normalized;
+  }
+
+  const approvedVersion = getVersionById(normalized, approvedVersionId);
+  if (!approvedVersion) {
+    return normalized;
+  }
+
+  const allVersions = listAllVersions(normalized);
+  const hasExtraVersions = allVersions.some(
+    (entry) => (entry.versionId || ORIGINAL_VERSION_ID) !== approvedVersionId
+  );
+  const isApprovedVersionActive =
+    (normalized.activeVersionId || normalized.versionId || ORIGINAL_VERSION_ID) === approvedVersionId;
+  const approvedVersionIds = dedupeVersionIds([approvedVersionId]);
+
+  if (!hasExtraVersions && isApprovedVersionActive && normalized.workflow?.approvedVersionIds?.length === 1) {
+    return normalized;
+  }
+
+  const lockedApprovedVersion = setVersionWorkflowState(approvedVersion, status, {
+    locked: true,
+    submittedAt:
+      approvedVersion.versionSubmittedAt ||
+      normalized.workflow?.approvedAt ||
+      normalized.workflow?.submittedAt ||
+      null,
+    submittedBy:
+      approvedVersion.versionSubmittedBy ||
+      normalized.workflow?.approvedBy ||
+      normalized.workflow?.submittedBy ||
+      null,
+  });
+
+  const nextWorkflow: ProposalWorkflowState = {
+    ...(normalized.workflow as ProposalWorkflowState),
+    status,
+    reviewVersionId: null,
+    submittedVersionId: approvedVersionId,
+    approvedVersionId,
+    approvedVersionIds,
+    needsApproval: false,
+    approved: true,
+  };
+
+  return mergeVersionsIntoContainer(
+    normalized,
+    [lockedApprovedVersion],
+    approvedVersionId,
+    status,
+    nextWorkflow
+  );
+}
+
 export function canCreateReplacementVersion(proposal?: Partial<Proposal> | null) {
   return getWorkflowStatus(proposal) !== 'completed';
 }
@@ -1163,27 +1224,22 @@ export function approveWorkflowProposal(
   const actor = buildWorkflowActor(session);
   const pendingReviewVersionId = getPendingReviewVersionId(normalized);
   const targetApprovedVersionId = pendingReviewVersionId || getReviewVersionId(normalized);
-  const priorApprovedVersionId = getApprovedVersionId(normalized);
-  const approvedVersionIds = dedupeVersionIds(
-    (normalized.workflow as ProposalWorkflowState)?.approvedVersionIds,
-    priorApprovedVersionId
-  );
-  const nextApprovedVersionIds = dedupeVersionIds(approvedVersionIds, targetApprovedVersionId);
-  const updatedVersions = listAllVersions(normalized).map((entry) => {
-    const entryId = entry.versionId || ORIGINAL_VERSION_ID;
-    if (entryId === targetApprovedVersionId || nextApprovedVersionIds.includes(entryId)) {
-      return setVersionWorkflowState(entry, 'approved', {
-        locked: true,
-        submittedAt: entry.versionSubmittedAt || normalized.workflow?.submittedAt || null,
-        submittedBy: entry.versionSubmittedBy || normalized.workflow?.submittedBy || null,
-      });
-    }
-    return setVersionWorkflowState(entry, 'draft', {
+  const nextApprovedVersionIds = dedupeVersionIds([targetApprovedVersionId]);
+  const approvedVersion =
+    getVersionById(normalized, targetApprovedVersionId) ||
+    listAllVersions(normalized).find(
+      (entry) => (entry.versionId || ORIGINAL_VERSION_ID) === targetApprovedVersionId
+    );
+  if (!approvedVersion) {
+    return normalized;
+  }
+  const updatedVersions = [
+    setVersionWorkflowState(approvedVersion, 'approved', {
       locked: true,
-      submittedAt: entry.versionSubmittedAt || null,
-      submittedBy: entry.versionSubmittedBy || null,
-    });
-  });
+      submittedAt: approvedVersion.versionSubmittedAt || normalized.workflow?.submittedAt || null,
+      submittedBy: approvedVersion.versionSubmittedBy || normalized.workflow?.submittedBy || null,
+    }),
+  ];
   const nextWorkflow: ProposalWorkflowState = {
     ...workflow,
     status: 'approved',
@@ -1196,7 +1252,13 @@ export function approveWorkflowProposal(
     approvedAt: nowIso(),
     approvedBy: actor,
   };
-  return mergeVersionsIntoContainer(normalized, updatedVersions, normalized.activeVersionId, 'approved', nextWorkflow);
+  return mergeVersionsIntoContainer(
+    normalized,
+    updatedVersions,
+    targetApprovedVersionId,
+    'approved',
+    nextWorkflow
+  );
 }
 
 export function requestWorkflowChanges(

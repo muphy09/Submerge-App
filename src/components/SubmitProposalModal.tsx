@@ -3,6 +3,7 @@ import './SubmitProposalModal.css';
 type SubmitProposalModalProps = {
   isOpen: boolean;
   versionName?: string;
+  hasApprovedBaseline?: boolean;
   note: string;
   isSubmitting?: boolean;
   onNoteChange: (value: string) => void;
@@ -13,6 +14,7 @@ type SubmitProposalModalProps = {
 function SubmitProposalModal({
   isOpen,
   versionName,
+  hasApprovedBaseline = false,
   note,
   isSubmitting = false,
   onNoteChange,
@@ -38,7 +40,14 @@ function SubmitProposalModal({
           </p>
           <p className="submit-proposal-message">
             This version will lock once submitted. If there is already a pending review version, this submission will
-            replace it. After approval, it becomes the next approved proposal addendum baseline.
+            replace it.{' '}
+            {hasApprovedBaseline
+              ? 'After approval, it becomes the next approved proposal addendum baseline.'
+              : 'After approval, it becomes the active approved proposal.'}
+          </p>
+          <p className="submit-proposal-message">
+            When this submission is approved, any other non-active proposal versions will be removed. Future changes
+            can still be made later by choosing Modify this proposal, which starts the proposal addendum workflow.
           </p>
 
           <label className="submit-proposal-note">

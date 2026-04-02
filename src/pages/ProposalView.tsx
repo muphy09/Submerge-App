@@ -10,6 +10,7 @@ import FranchiseLogo from '../components/FranchiseLogo';
 import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
 import RetiredEquipmentIndicator from '../components/RetiredEquipmentIndicator';
+import ConfirmDialog from '../components/ConfirmDialog';
 import SubmitProposalModal from '../components/SubmitProposalModal';
 import './ProposalView.css';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
@@ -58,6 +59,7 @@ import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   addWorkflowNote,
   approveWorkflowProposal,
+  collapseApprovedProposalVersions,
   completeWorkflowProposal,
   ensureProposalWorkflow,
   getApprovedVersionId,
@@ -275,6 +277,7 @@ function ProposalView() {
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showModifyApprovedConfirm, setShowModifyApprovedConfirm] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
   const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
@@ -370,6 +373,9 @@ function ProposalView() {
         return;
       }
       let sourceProposal = ensureProposalWorkflow(JSON.parse(JSON.stringify(data)) as Proposal);
+      const approvedVersionCleanup = collapseApprovedProposalVersions(sourceProposal);
+      const needsApprovedCleanup = JSON.stringify(approvedVersionCleanup) !== JSON.stringify(sourceProposal);
+      sourceProposal = approvedVersionCleanup;
       const currentUserId = readSession()?.userId;
       const readUpdated = markWorkflowRead(sourceProposal, currentUserId);
       if (JSON.stringify(readUpdated.workflow?.history || []) !== JSON.stringify(sourceProposal.workflow?.history || [])) {
@@ -378,6 +384,12 @@ function ProposalView() {
         } catch (markReadError) {
           console.warn('Failed to persist workflow read state', markReadError);
           sourceProposal = readUpdated;
+        }
+      } else if (needsApprovedCleanup) {
+        try {
+          sourceProposal = await saveProposalRemote(sourceProposal);
+        } catch (cleanupError) {
+          console.warn('Failed to persist approved proposal cleanup', cleanupError);
         }
       }
       const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
@@ -636,13 +648,31 @@ function ProposalView() {
       showToast({ type: 'warning', message: 'Completed proposals cannot create new versions.' });
       return;
     }
+    if (proposalWorkflowStatus === 'approved') {
+      if (existingEditableAddendumVersion) {
+        showToast({
+          type: 'warning',
+          message: 'A proposal addendum draft already exists. Continue editing that version or submit it for review.',
+        });
+        return;
+      }
+      setShowModifyApprovedConfirm(true);
+      return;
+    }
     const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
     const defaultPrefix = getApprovedVersionId(proposal as Proposal) ? 'Proposal Addendum' : 'Version';
     setNewVersionName(`${defaultPrefix} ${count}`);
     setShowVersionNameModal(true);
   };
 
-  const handleConfirmCreateVersion = async () => {
+  const getNextAddendumName = (container: Proposal) => {
+    const priorSubmittedAddendums = (container.workflow?.history || []).filter(
+      (entry) => entry.type === 'submitted' && entry.metadata?.reviewKind === 'proposal_addendum'
+    ).length;
+    return `Proposal Addendum ${priorSubmittedAddendums + 1}`;
+  };
+
+  const createEditableVersion = async (explicitName?: string) => {
     if (!canManageVersionDrafts) return;
     if (!proposal) return;
     try {
@@ -658,10 +688,17 @@ function ProposalView() {
         approvedVersionId ||
         proposal.versionId ||
         activeVersionId;
+      const isAddendumDraft = Boolean(approvedVersionId);
+      const resolvedVersionName =
+        explicitName && explicitName.trim()
+          ? explicitName.trim()
+          : isAddendumDraft
+          ? getNextAddendumName(container)
+          : undefined;
       const { container: nextContainer } = createVersionFromProposal(
         container,
         sourceVersionId,
-        newVersionName && newVersionName.trim() ? newVersionName.trim() : undefined
+        resolvedVersionName
       );
       await initPricingDataStore(
         nextContainer.franchiseId,
@@ -681,12 +718,29 @@ function ProposalView() {
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
       setActiveVersionId(activeApplied.activeVersionId || activeVersionId);
-      setShowVersionNameModal(false);
-      showToast({ type: 'success', message: 'New version created.' });
+      showToast({
+        type: 'success',
+        message: isAddendumDraft ? 'Proposal addendum draft created.' : 'New version created.',
+      });
     } catch (error) {
       console.error('Failed to build version', error);
-      showToast({ type: 'error', message: 'Could not create a new version.' });
+      showToast({
+        type: 'error',
+        message: getApprovedVersionId(proposal as Proposal)
+          ? 'Could not create the proposal addendum draft.'
+          : 'Could not create a new version.',
+      });
     }
+  };
+
+  const handleConfirmCreateVersion = async () => {
+    setShowVersionNameModal(false);
+    await createEditableVersion(newVersionName);
+  };
+
+  const handleConfirmModifyApprovedProposal = async () => {
+    setShowModifyApprovedConfirm(false);
+    await createEditableVersion();
   };
 
   const handleSaveContractOverrides = async (versionId: string, overrides: ContractOverrides) => {
@@ -1668,6 +1722,15 @@ function ProposalView() {
   const versionsForRender = isReadOnlyReviewerView && displayVersionContainer
     ? getReviewerVisibleVersions(displayVersionContainer as Proposal)
     : allVersionsForRender;
+  const approvedVersionId = proposal ? getApprovedVersionId(proposal as Proposal) : null;
+  const existingEditableAddendumVersion =
+    approvedVersionId && !isReadOnlyReviewerView
+      ? allVersionsForRender.find(
+          (entry) =>
+            (entry.versionId || 'original') !== approvedVersionId &&
+            !isSubmittedVersionLocked(entry)
+        ) || null
+      : null;
 
   const sortedVersions = [...versionsForRender].sort((a, b) => {
     const aIsOriginal = a.isOriginalVersion ?? (a.versionId || 'original') === 'original';
@@ -1694,6 +1757,8 @@ function ProposalView() {
       : proposalWorkflowStatus === 'approved'
       ? 'Proposal was approved. Future changes must be submitted as addendums.'
       : undefined;
+  const versionActionLabel =
+    proposalWorkflowStatus === 'approved' ? 'Modify this proposal' : 'Build Another Version';
   const workflowReviewVersionLabel =
     sortedVersions.find(
       (entry) =>
@@ -2389,7 +2454,7 @@ function ProposalView() {
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  Build Another Version
+                  {versionActionLabel}
                 </button>
               )}
             </div>
@@ -2536,6 +2601,7 @@ function ProposalView() {
       <SubmitProposalModal
         isOpen={showSubmitModal}
         versionName={proposal?.versionName || 'Current Version'}
+        hasApprovedBaseline={Boolean(approvedVersionId)}
         note={submitNote}
         isSubmitting={loading}
         onNoteChange={setSubmitNote}
@@ -2543,6 +2609,17 @@ function ProposalView() {
         onConfirm={() => {
           void handleConfirmSubmit();
         }}
+      />
+      <ConfirmDialog
+        open={showModifyApprovedConfirm}
+        title="Start proposal addendum?"
+        message="Making changes to this approved proposal will create a new editable version. The book keeper and admins will continue to see the approved proposal until you submit the addendum for review. Do you want to continue?"
+        confirmLabel="Continue"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          void handleConfirmModifyApprovedProposal();
+        }}
+        onCancel={() => setShowModifyApprovedConfirm(false)}
       />
       {contractVersionId && contractModalView && (
         <div className="modal-overlay contract-printable" onClick={() => setContractVersionId(null)}>
