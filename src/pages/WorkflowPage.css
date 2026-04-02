@@ -229,8 +229,7 @@
   color: #184f78;
 }
 
-.workflow-queue-sections,
-.workflow-changed-sections {
+.workflow-queue-sections {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -374,6 +373,20 @@
   font-size: 1rem;
 }
 
+.workflow-diff-intro {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(22, 50, 77, 0.08);
+}
+
+.workflow-diff-intro-title {
+  color: #35526d;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .workflow-diff-categories {
   display: grid;
   gap: 0.9rem;
@@ -414,12 +427,47 @@
   gap: 0.55rem;
 }
 
+.workflow-diff-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .workflow-diff-block-title {
   color: #5a7188;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.workflow-diff-toggle-btn {
+  border: 1px solid rgba(22, 50, 77, 0.12);
+  border-radius: 999px;
+  background: #f1f7fb;
+  color: #35526d;
+  padding: 0.34rem 0.72rem;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.workflow-diff-toggle-btn:hover {
+  background: #e6f0f7;
+  border-color: rgba(22, 50, 77, 0.18);
+}
+
+.workflow-diff-toggle-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(95, 175, 197, 0.18);
+}
+
+.workflow-diff-block-content {
+  display: grid;
+  gap: 0.55rem;
 }
 
 .workflow-diff-row,

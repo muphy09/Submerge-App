@@ -1969,6 +1969,8 @@ function ProposalView() {
   const workflowHistory = [...(proposal?.workflow?.history || [])].sort(
     (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
   );
+  const hasResubmission =
+    workflowHistory.filter((entry) => entry.type === 'submitted').length > 1;
   const workflowReasons = (proposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
@@ -2708,7 +2710,7 @@ function ProposalView() {
               <div className="workflow-summary-value">{workflowReviewVersionLabel}</div>
             </div>
             <div className="workflow-summary-block">
-              <div className="workflow-summary-label">Submitted</div>
+              <div className="workflow-summary-label">{hasResubmission ? 'Resubmitted' : 'Submitted'}</div>
               <div className="workflow-summary-value">
                 {proposal.workflow.submittedAt
                   ? `${

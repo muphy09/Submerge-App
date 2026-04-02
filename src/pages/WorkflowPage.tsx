@@ -94,6 +94,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const [noteDraft, setNoteDraft] = useState('');
   const [showNoteComposer, setShowNoteComposer] = useState(false);
   const [savingAction, setSavingAction] = useState<string | null>(null);
+  const [expandedCostCategories, setExpandedCostCategories] = useState<string[]>([]);
 
   const effectiveRole = String(session?.role || '').trim().toLowerCase();
   const canAccess =
@@ -179,6 +180,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     setShowNoteComposer(false);
   }, [selectedProposal?.proposalNumber]);
 
+  useEffect(() => {
+    setExpandedCostCategories([]);
+  }, [
+    selectedProposal?.proposalNumber,
+    selectedProposal?.workflow?.submittedVersionId,
+    selectedProposal?.workflow?.approvedVersionId,
+  ]);
+
   const counts = useMemo(() => {
     const needsApproval = proposals.filter((entry) => getWorkflowStatus(entry) === 'needs_approval').length;
     const approved = proposals.filter((entry) => matchesQueueFilter(entry, 'approved')).length;
@@ -208,6 +217,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
+  const selectedHasResubmission =
+    (selectedProposal?.workflow?.history || []).filter((entry) => entry.type === 'submitted').length > 1;
   const selectedRetailTotal = Number(selectedDisplayVersion?.pricing?.retailPrice || selectedDisplayVersion?.totalCost || 0);
   const selectedTotalCogs = Number(selectedDisplayVersion?.pricing?.totalCOGS || 0);
   const selectedGrossProfitPercent = Number(selectedDisplayVersion?.pricing?.grossProfitMargin || 0);
@@ -263,6 +274,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     await persistSelectedProposal(
       completeWorkflowProposal(selectedProposal, noteDraft.trim() || undefined, session),
       'Proposal marked as completed.'
+    );
+  };
+
+  const toggleCostCategory = (categoryKey: string) => {
+    setExpandedCostCategories((current) =>
+      current.includes(categoryKey)
+        ? current.filter((entry) => entry !== categoryKey)
+        : [...current, categoryKey]
     );
   };
 
@@ -404,7 +423,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                   <div className="workflow-detail-value">{selectedProposal.designerName || 'Designer'}</div>
                 </div>
                 <div className="workflow-detail-card">
-                  <div className="workflow-detail-label">Submitted</div>
+                  <div className="workflow-detail-label">{selectedHasResubmission ? 'Resubmitted' : 'Submitted'}</div>
                   <div className="workflow-detail-value">
                     {formatDateTime(selectedProposal.workflow?.submittedAt || selectedProposal.lastModified)}
                   </div>
@@ -475,6 +494,12 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                     </div>
                   </div>
 
+                  <div className="workflow-diff-intro">
+                    <div className="workflow-diff-intro-title">
+                      {`Original -> ${selectedDiff.reviewVersionName} Differences`}
+                    </div>
+                  </div>
+
                   <div className="workflow-metric-grid">
                     <div className="workflow-metric">
                       <span>Retail Delta</span>
@@ -501,16 +526,6 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                       <strong>{selectedDiff.contractOverrideDelta}</strong>
                     </div>
                   </div>
-
-                  {selectedDiff.changedSections.length > 0 && (
-                    <div className="workflow-changed-sections">
-                      {selectedDiff.changedSections.map((section) => (
-                        <span key={section} className="workflow-section-chip">
-                          {section}
-                        </span>
-                      ))}
-                    </div>
-                  )}
 
                   <div className="workflow-diff-categories">
                     {selectedDiff.categories.map((category) => (
@@ -539,22 +554,36 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                         )}
 
                         {category.costChanges.length > 0 && (
-                          <div className="workflow-diff-block">
-                            <div className="workflow-diff-block-title">Cost Breakdown Impact</div>
-                            {category.costChanges.map((change) => (
-                              <div key={`${category.key}-${change.category}-${change.label}`} className="workflow-cost-row">
-                                <div className="workflow-cost-row-copy">
-                                  <div className="workflow-cost-row-title">{change.label}</div>
-                                  <div className="workflow-cost-row-meta">
-                                    {change.beforeQuantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} {'->'} {change.afterQuantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} qty
+                          <div className="workflow-diff-block workflow-diff-block-collapsible">
+                            <div className="workflow-diff-block-header">
+                              <div className="workflow-diff-block-title">Cost Breakdown Impact</div>
+                              <button
+                                type="button"
+                                className="workflow-diff-toggle-btn"
+                                onClick={() => toggleCostCategory(category.key)}
+                                aria-expanded={expandedCostCategories.includes(category.key)}
+                              >
+                                {expandedCostCategories.includes(category.key) ? 'Hide Details' : 'Show Details'}
+                              </button>
+                            </div>
+                            {expandedCostCategories.includes(category.key) && (
+                              <div className="workflow-diff-block-content">
+                                {category.costChanges.map((change) => (
+                                  <div key={`${category.key}-${change.category}-${change.label}`} className="workflow-cost-row">
+                                    <div className="workflow-cost-row-copy">
+                                      <div className="workflow-cost-row-title">{change.label}</div>
+                                      <div className="workflow-cost-row-meta">
+                                        {change.beforeQuantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} {'->'} {change.afterQuantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} qty
+                                      </div>
+                                    </div>
+                                    <div className="workflow-cost-row-values">
+                                      <span>{formatCurrency(change.beforeTotal)} {'->'} {formatCurrency(change.afterTotal)}</span>
+                                      <strong>{formatSignedCurrency(change.delta)}</strong>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="workflow-cost-row-values">
-                                  <span>{formatCurrency(change.beforeTotal)} {'->'} {formatCurrency(change.afterTotal)}</span>
-                                  <strong>{formatSignedCurrency(change.delta)}</strong>
-                                </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
                           </div>
                         )}
                       </div>
