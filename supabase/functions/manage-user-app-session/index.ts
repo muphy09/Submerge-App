@@ -66,6 +66,14 @@ function normalizeText(value: unknown) {
   return String(value || '').trim();
 }
 
+function getErrorStatus(error: any) {
+  const message = normalizeText(error?.message).toLowerCase();
+  if (message === 'unauthorized.' || message === 'unauthorized') return 401;
+  if (message === 'missing authorization token.' || message === 'missing authorization token') return 401;
+  if (message === 'forbidden.' || message === 'forbidden') return 403;
+  return 500;
+}
+
 function isFresh(row: SessionRow | null) {
   const activeSessionId = normalizeText(row?.active_app_session_id);
   const activeLeaseToken = normalizeText(row?.active_lease_token);
@@ -282,6 +290,6 @@ Deno.serve(async (req) => {
       leaseToken,
     });
   } catch (error: any) {
-    return json({ error: error?.message || 'Unexpected error.' }, 500);
+    return json({ error: error?.message || 'Unexpected error.' }, getErrorStatus(error));
   }
 });

@@ -80,6 +80,20 @@ function normalizeText(value?: string | null) {
   return String(value || '').trim();
 }
 
+function isAppSessionAuthorizationError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? normalizeText(error.message).toLowerCase()
+      : normalizeText(String(error || '')).toLowerCase();
+
+  return (
+    message === 'unauthorized' ||
+    message === 'unauthorized.' ||
+    message === 'missing authorization token' ||
+    message === 'missing authorization token.'
+  );
+}
+
 function normalizeDisplayName(name?: string | null) {
   return String(name || '').trim();
 }
@@ -412,6 +426,12 @@ export async function loadSessionFromSupabase(): Promise<LoadSessionFromSupabase
         appSessionLeaseToken: appSession.appSessionLeaseToken,
       });
     } catch (error) {
+      if (isAppSessionAuthorizationError(error)) {
+        await supabase.auth.signOut({ scope: 'local' });
+        clearMasterImpersonation();
+        clearSession();
+        return buildSignedOutRestoreResult('missing-session');
+      }
       return buildUnverifiedRestoreResult(savedSession);
     }
     if (heartbeat.status !== 'active') {
@@ -430,6 +450,12 @@ export async function loadSessionFromSupabase(): Promise<LoadSessionFromSupabase
         takeover: false,
       });
     } catch (error) {
+      if (isAppSessionAuthorizationError(error)) {
+        await supabase.auth.signOut({ scope: 'local' });
+        clearMasterImpersonation();
+        clearSession();
+        return buildSignedOutRestoreResult('missing-session');
+      }
       return buildUnverifiedRestoreResult(savedSession);
     }
     if (claimResult.status !== 'claimed') {
