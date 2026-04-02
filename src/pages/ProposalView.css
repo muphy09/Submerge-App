@@ -84,6 +84,28 @@
   border-color: #3d6aa3;
 }
 
+.action-button.action-button-draft {
+  background: #fef3c7;
+  border-color: #facc15;
+  color: #854d0e;
+}
+
+.action-button.action-button-draft:hover {
+  background: #fde68a;
+  border-color: #eab308;
+}
+
+.action-button.action-button-version {
+  background: #fed7aa;
+  border-color: #fb923c;
+  color: #9a3412;
+}
+
+.action-button.action-button-version:hover {
+  background: #fdba74;
+  border-color: #f97316;
+}
+
 .action-button.danger {
   border-color: #f87171;
   color: #b91c1c;

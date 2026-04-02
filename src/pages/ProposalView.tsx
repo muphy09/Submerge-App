@@ -2021,7 +2021,7 @@ function ProposalView() {
           </div>
           <div className="action-bar-right">
             <button
-              className="action-button"
+              className="action-button action-button-version"
               onClick={handleBuildAnotherVersion}
               disabled={proposalWorkflowStatus === 'completed'}
               title={proposalWorkflowStatus === 'completed' ? 'Completed proposals are locked.' : undefined}
@@ -2032,7 +2032,7 @@ function ProposalView() {
               Build Another Version
             </button>
             <button
-              className="action-button"
+              className="action-button action-button-draft"
               onClick={handleSaveAsDraft}
               disabled={!canEditProposal || loading}
               title={!canEditProposal ? editDisabledReason : undefined}

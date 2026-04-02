@@ -258,6 +258,8 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
 
 type ProposalFormProps = {
   cloudIssue?: CloudConnectionIssue;
+  showFeedbackButton?: boolean;
+  onOpenFeedback?: () => void;
 };
 
 type PricingModelOption = {
@@ -270,7 +272,7 @@ type PricingModelOption = {
   franchiseName?: string;
 };
 
-function ProposalForm({ cloudIssue }: ProposalFormProps) {
+function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }: ProposalFormProps) {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
@@ -1977,6 +1979,11 @@ function ProposalForm({ cloudIssue }: ProposalFormProps) {
               {currentSection > 0 && (
                 <button className="btn btn-secondary" onClick={handlePrevious} disabled={isSaving}>
                   Previous
+                </button>
+              )}
+              {showFeedbackButton && onOpenFeedback && (
+                <button className="btn btn-secondary" onClick={onOpenFeedback} disabled={isSaving}>
+                  Feedback
                 </button>
               )}
               {currentSection < sections.length - 1 && (

@@ -390,6 +390,8 @@ function AppContent() {
     !globalFeedbackEnabledLoading &&
     Boolean(effectiveSession?.franchiseId) &&
     (!isMaster || Boolean(masterImpersonation?.franchiseId));
+  const isProposalBuilderRoute =
+    location.pathname === '/proposal/new' || location.pathname.startsWith('/proposal/edit/');
   const adminPanelRequiresPin =
     isAdmin &&
     Boolean(effectiveSession?.franchiseId) &&
@@ -1026,10 +1028,27 @@ function AppContent() {
             />
           }
         />
-        <Route path="/proposal/new" element={<ProposalForm key="new" cloudIssue={cloudIssue} />} />
+        <Route
+          path="/proposal/new"
+          element={
+            <ProposalForm
+              key="new"
+              cloudIssue={cloudIssue}
+              showFeedbackButton={canSubmitFeedback}
+              onOpenFeedback={handleOpenFeedbackModal}
+            />
+          }
+        />
         <Route
           path="/proposal/edit/:proposalNumber"
-          element={<ProposalForm key={location.pathname} cloudIssue={cloudIssue} />}
+          element={
+            <ProposalForm
+              key={location.pathname}
+              cloudIssue={cloudIssue}
+              showFeedbackButton={canSubmitFeedback}
+              onOpenFeedback={handleOpenFeedbackModal}
+            />
+          }
         />
         <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
       </Routes>
@@ -1048,7 +1067,7 @@ function AppContent() {
           )}
         </div>
       )}
-      {canSubmitFeedback && (
+      {canSubmitFeedback && !isProposalBuilderRoute && (
         <div
           className={`app-feedback-anchor${updateStatus ? ' has-update' : ''}${effectiveSession && location.pathname === '/' ? ' has-session-meta' : ''}`}
         >
