@@ -23,7 +23,6 @@ import {
   validateContractInputs,
 } from '../services/contractGenerator';
 import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
-import { buildContractTextOverlays } from '../services/contractOverlays';
 import { ContractTemplateId, getContractTemplateIdForProposal } from '../services/contractTemplates';
 import { useToast } from './Toast';
 import './ContractView.css';
@@ -264,7 +263,6 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   const latestSavePromiseRef = useRef<Promise<boolean> | null>(null);
   const previousIncomingOverridesRef = useRef<ContractOverrides>(incomingOverrides || {});
   const previousProposalVersionIdRef = useRef(proposal.versionId || 'original');
-  const contractTextOverlays = useMemo(() => buildContractTextOverlays(fields, proposal), [fields, proposal]);
 
   useEffect(() => {
     const nextIncomingOverrides = incomingOverrides || {};
@@ -307,7 +305,6 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
           includeFormFields: false,
           flatten: false,
           templateId: resolvedTemplateId,
-          textOverlays: contractTextOverlays,
         });
         if (!canceled) {
           setPdfBytes(result.pdfBytes);
@@ -324,7 +321,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     return () => {
       canceled = true;
     };
-  }, [contractTextOverlays, fields, resolvedTemplateId, showToast]);
+  }, [fields, resolvedTemplateId, showToast]);
 
   useEffect(() => {
     if (!pdfBytes || !pageSizes.length) return;
@@ -563,7 +560,6 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
         flatten: true,
         includeFormFields: true,
         templateId: resolvedTemplateId,
-        textOverlays: contractTextOverlays,
       });
 
       const customerName = proposal.customerInfo.customerName || 'Proposal';
@@ -588,7 +584,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     } finally {
       setExporting(false);
     }
-  }, [contractTextOverlays, exporting, fields, handleSave, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
+  }, [exporting, fields, handleSave, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
 
   const printContract = useCallback(async (): Promise<boolean> => {
     const saveSucceeded = await handleSave();

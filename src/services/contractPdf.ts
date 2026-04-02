@@ -20,25 +20,10 @@ export type ContractPdfResult = {
   pageSizes: { width: number; height: number }[];
 };
 
-export type ContractPdfTextOverlay = {
-  page: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  text: string;
-  fill?: 'white' | 'headerGray';
-  fontSize?: number;
-  align?: 'left' | 'center';
-  fontStyle?: 'regular' | 'bold';
-  paddingLeft?: number;
-};
-
 type ContractPdfBuildOptions = {
   flatten?: boolean;
   includeFormFields?: boolean;
   templateId?: ContractTemplateId;
-  textOverlays?: ContractPdfTextOverlay[];
 };
 
 const DEFAULT_FONT_SIZE = 10;
@@ -91,7 +76,7 @@ export async function buildContractPdf(
   fields: ContractFieldRender[],
   options: ContractPdfBuildOptions = {}
 ): Promise<ContractPdfResult> {
-  const { flatten = false, includeFormFields = true, templateId, textOverlays = [] } = options;
+  const { flatten = false, includeFormFields = true, templateId } = options;
   const template = getContractTemplate(templateId);
   const templateBytes = await loadTemplateBytes(templateId);
   const pdf = await PDFDocument.load(templateBytes);
@@ -152,43 +137,6 @@ export async function buildContractPdf(
         font: textFont,
         color: rgb(0, 0, 0),
       });
-    });
-  });
-
-  textOverlays.forEach((overlay) => {
-    if (!(overlay.text || '').trim()) return;
-
-    const pageIndex = Math.max(0, Math.min(pdf.getPageCount() - 1, overlay.page - 1));
-    const page = pdf.getPage(pageIndex);
-    const pageHeight = page.getHeight();
-    const drawY = pageHeight - (overlay.y + overlay.height);
-    const textFont = overlay.fontStyle === 'bold' ? boldFont : font;
-    const fontSize = overlay.fontSize || DEFAULT_FONT_SIZE;
-    const textWidth = textFont.widthOfTextAtSize(overlay.text, fontSize);
-    const textHeight = textFont.heightAtSize(fontSize);
-    const availableWidth = Math.max(4, overlay.width - (overlay.paddingLeft ?? 0));
-    const textX =
-      overlay.align === 'center'
-        ? overlay.x + Math.max(0, (overlay.width - textWidth) / 2)
-        : overlay.x + (overlay.paddingLeft ?? 0);
-    const textY = drawY + Math.max(0.5, (overlay.height - textHeight) / 2);
-
-    page.drawRectangle({
-      x: overlay.x,
-      y: drawY,
-      width: overlay.width,
-      height: overlay.height,
-      color: resolvePatchFillColor(overlay.fill),
-      borderWidth: 0,
-    });
-
-    page.drawText(overlay.text, {
-      x: textX,
-      y: textY,
-      size: fontSize,
-      font: textFont,
-      color: rgb(0, 0, 0),
-      maxWidth: availableWidth,
     });
   });
 
