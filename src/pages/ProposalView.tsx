@@ -1035,7 +1035,7 @@ function ProposalView() {
     setShowSubmitModal(false);
     await persistStatusChange('submitted', {
       manualReviewRequested: submitManualReviewRequested,
-      note: submitNote,
+      note: submitManualReviewRequested ? submitNote : '',
     });
   };
 

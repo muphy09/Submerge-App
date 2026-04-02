@@ -676,22 +676,6 @@ function CustomFeaturesSectionNew({
         )}
       </div>
 
-      {normalizedData.features.length > 0 && (
-        <div
-          className="cost-summary"
-          style={{
-            marginTop: '2rem',
-            padding: '1rem',
-            backgroundColor: '#f9fafb',
-            borderRadius: '4px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-            <span>Total Custom Features:</span>
-            <span>{formatCurrency(normalizedData.totalCost)}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -6,7 +6,6 @@ import {
   LightSelection,
   PlumbingRuns,
   SaltSystemSelection,
-  EquipmentAccessorySelection,
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
@@ -121,8 +120,7 @@ function EquipmentSectionNew({
     const heater = byCost(pricingData.equipment.heaters);
     const automation = byCost(pricingData.equipment.automation);
     const autoFillSystem = byCost(pricingData.equipment.autoFillSystem);
-    const sanitationAccessory = byCost(((pricingData as any).equipment?.sanitationAccessories || []) as any[]);
-    return { pump, filter, cleaner, heater, automation, autoFillSystem, sanitationAccessory };
+    return { pump, filter, cleaner, heater, automation, autoFillSystem };
   }, []);
 
   const selectableDefaults = useMemo(() => ({
@@ -132,10 +130,6 @@ function EquipmentSectionNew({
     automation: pricingData.equipment.automation.find(a => !a.name.toLowerCase().includes('no automation')) || pricingData.equipment.automation[0],
     saltSystem: pricingData.equipment.saltSystem.find(s => !isNoSaltSystemName(s.name)) || pricingData.equipment.saltSystem[0],
     autoFillSystem: pricingData.equipment.autoFillSystem.find(s => !s.name.toLowerCase().includes('no auto')) || pricingData.equipment.autoFillSystem[0],
-    sanitationAccessory:
-      (((pricingData as any).equipment?.sanitationAccessories || []) as any[]).find(
-        (s: any) => !s.name.toLowerCase().includes('no sanitation')
-      ) || (((pricingData as any).equipment?.sanitationAccessories || []) as any[])[0],
   }), []);
 
   const hasRealSelection = (name: string | undefined, placeholder: string) =>
@@ -195,12 +189,15 @@ function EquipmentSectionNew({
     excludedFromSaltCell: (system as any)?.excludedFromSaltCell,
     includedSaltCellPlaceholder: false,
   });
-  const buildSanitationAccessorySelection = (accessory: any): EquipmentAccessorySelection => ({
-    name: accessory?.name || '',
-    basePrice: (accessory as any)?.basePrice,
-    addCost1: (accessory as any)?.addCost1,
-    addCost2: (accessory as any)?.addCost2,
-    price: costOf(accessory),
+  const buildAdditionalSanitationSelection = (option: any): SaltSystemSelection => ({
+    name: option?.name || '',
+    model: (option as any)?.model,
+    basePrice: (option as any)?.basePrice,
+    addCost1: (option as any)?.addCost1,
+    addCost2: (option as any)?.addCost2,
+    price: costOf(option),
+    excludedFromSaltCell: true,
+    includedSaltCellPlaceholder: false,
   });
 
   const hasPumpSelection = hasRealSelection(data?.pump?.name, 'no pump');
@@ -323,7 +320,8 @@ function EquipmentSectionNew({
     safeData.sanitationAccessoryQuantity ?? (safeData.sanitationAccessory?.name ? 1 : 0),
     0
   );
-  const includeSanitationAccessory =
+  const editableSanitationAccessorySelected =
+    !isFixedPackage &&
     sanitationAccessoryQuantity > 0 &&
     !!safeData.sanitationAccessory?.name &&
     !safeData.sanitationAccessory.name.toLowerCase().includes('no sanitation');
@@ -341,7 +339,7 @@ function EquipmentSectionNew({
   const heaterDisabledByPackage = isFixedPackage && !packageIncludesHeater && !packageAllowsHeaterChanges;
   const automationDisabledByPackage = isFixedPackage && !packageIncludesAutomation;
   const autoFillDisabledByPackage = isFixedPackage && !packageIncludesAutoFill && !packageAllowsAutoFillChanges;
-  const sanitationAccessoryDisabledByPackage =
+  const additionalSanitationDisabledByPackage =
     isFixedPackage && !packageIncludesSanitationAccessory && !packageAllowsSanitationAccessoryChanges;
 
   const renderRetiredOption = (name?: string) =>
@@ -439,11 +437,28 @@ function EquipmentSectionNew({
     automationIncludesSaltCell(safeData.automation);
   const primarySaltOptions = saltCatalog.filter(system => !isExcludedFromSaltCell(system));
   const additionalSaltOptions = saltCatalog.filter(system => isExcludedFromSaltCell(system));
+  const additionalSanitationOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return [...additionalSaltOptions, ...sanitationAccessoryOptions].filter((option: any) => {
+      const key = option?.name?.trim()?.toLowerCase?.();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [additionalSaltOptions, sanitationAccessoryOptions]);
   const visibleSaltOptions = automationHasIncludedSaltCell
     ? [buildIncludedSaltCellOption(), ...primarySaltOptions]
     : primarySaltOptions;
   const showSaltQuantity = includeSalt && isRealSaltSystemSelection(safeData.saltSystem);
-  const showAdditionalSaltOptions = includeSalt;
+  const additionalSanitationOptionSelectedName =
+    safeData.additionalSaltSystem?.name ||
+    (editableSanitationAccessorySelected ? safeData.sanitationAccessory?.name || '' : '');
+  const showAdditionalSanitationOptions =
+    includeSalt &&
+    (!isFixedPackage || packageAllowsSanitationAccessoryChanges || Boolean(additionalSanitationOptionSelectedName));
+  const additionalSanitationOptionMissingFromCatalog =
+    !!additionalSanitationOptionSelectedName &&
+    !additionalSanitationOptions.some((option: any) => option.name === additionalSanitationOptionSelectedName);
   const poolLights = safeData.poolLights || [];
   const spaLights = safeData.spaLights || [];
   const summarizeQuantity = (name: string, quantity: number) =>
@@ -528,19 +543,13 @@ function EquipmentSectionNew({
       pushRow('Sanitation', summarizeQuantity(effectiveSaltName || 'Sanitation System', effectiveSaltQuantity));
     }
 
-    if (safeData.additionalSaltSystem?.name) {
-      pushRow('Additional Sanitation', safeData.additionalSaltSystem.name);
-    }
-
-    if (
-      (packageIncludesSanitationAccessory || includeSanitationAccessory) &&
-      !!safeData.sanitationAccessory?.name &&
-      sanitationAccessoryQuantity > 0
-    ) {
-      pushRow(
-        'Sanitation Accessory',
-        summarizeQuantity(safeData.sanitationAccessory.name, sanitationAccessoryQuantity)
-      );
+    const additionalSanitationSummaryName =
+      safeData.additionalSaltSystem?.name ||
+      (editableSanitationAccessorySelected ? safeData.sanitationAccessory?.name : undefined);
+    if (additionalSanitationSummaryName) {
+      pushRow('Additional Options', additionalSanitationSummaryName);
+    } else if (packageIncludesSanitationAccessory && !!safeData.sanitationAccessory?.name && sanitationAccessoryQuantity > 0) {
+      pushRow('Additional Options', summarizeQuantity(safeData.sanitationAccessory.name, sanitationAccessoryQuantity));
     }
 
     const poolLightSummary = summarizeSelectionNames(poolLights.map((light) => light?.name));
@@ -573,7 +582,7 @@ function EquipmentSectionNew({
     includeHeater,
     includePump,
     includeSalt,
-    includeSanitationAccessory,
+    editableSanitationAccessorySelected,
     packageIncludesAutoFill,
     packageIncludesAutomation,
     packageIncludesCleaner,
@@ -593,6 +602,8 @@ function EquipmentSectionNew({
     safeData.pump?.name,
     safeData.saltSystem,
     safeData.sanitationAccessory?.name,
+    selectedPackage?.includedSanitationAccessoryName,
+    selectedPackage?.includedSanitationAccessoryQuantity,
     sanitationAccessoryQuantity,
     saltSystemQuantity,
     spaLights,
@@ -799,8 +810,19 @@ function EquipmentSectionNew({
       if (includeSalt) {
         setIncludeSalt(false);
       }
-      if (safeData.saltSystem || safeData.additionalSaltSystem || (safeData.saltSystemQuantity ?? 0) > 0) {
-        updateData({ saltSystem: undefined, saltSystemQuantity: 0, additionalSaltSystem: undefined });
+      if (
+        safeData.saltSystem ||
+        safeData.additionalSaltSystem ||
+        safeData.sanitationAccessory ||
+        (safeData.saltSystemQuantity ?? 0) > 0
+      ) {
+        updateData({
+          saltSystem: undefined,
+          saltSystemQuantity: 0,
+          additionalSaltSystem: undefined,
+          sanitationAccessory: undefined,
+          sanitationAccessoryQuantity: 0,
+        });
       }
       return;
     }
@@ -814,7 +836,13 @@ function EquipmentSectionNew({
     if (!automationSelected) {
       if (currentSaltIsIncluded) {
         setIncludeSalt(false);
-        updateData({ saltSystem: undefined, saltSystemQuantity: 0, additionalSaltSystem: undefined });
+        updateData({
+          saltSystem: undefined,
+          saltSystemQuantity: 0,
+          additionalSaltSystem: undefined,
+          sanitationAccessory: undefined,
+          sanitationAccessoryQuantity: 0,
+        });
         return;
       }
       if (safeData.saltSystem?.name && !currentSaltIsPrimary) {
@@ -882,6 +910,39 @@ function EquipmentSectionNew({
     safeData.saltSystem?.excludedFromSaltCell,
     safeData.saltSystem?.includedSaltCellPlaceholder,
     safeData.saltSystemQuantity,
+  ]);
+
+  useEffect(() => {
+    if (isFixedPackage || packageIncludesSanitationAccessory || !editableSanitationAccessorySelected) {
+      return;
+    }
+
+    const legacyName = safeData.sanitationAccessory?.name;
+    if (!legacyName) return;
+
+    const legacyOption =
+      additionalSanitationOptions.find((option: any) => option.name === legacyName) ||
+      sanitationAccessoryCatalog.find((option: any) => option.name === legacyName);
+    if (!legacyOption) return;
+
+    onChange({
+      ...safeData,
+      additionalSaltSystem:
+        safeData.additionalSaltSystem?.name === legacyName
+          ? safeData.additionalSaltSystem
+          : buildAdditionalSanitationSelection(legacyOption),
+      sanitationAccessory: undefined,
+      sanitationAccessoryQuantity: 0,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isFixedPackage,
+    packageIncludesSanitationAccessory,
+    editableSanitationAccessorySelected,
+    safeData.sanitationAccessory?.name,
+    safeData.additionalSaltSystem?.name,
+    additionalSanitationOptions,
+    sanitationAccessoryCatalog,
   ]);
 
   const handlePoolLightSelect = (name: string) => {
@@ -1013,7 +1074,13 @@ function EquipmentSectionNew({
   const toggleSalt = (val: boolean) => {
     setIncludeSalt(val);
     if (!val) {
-      updateData({ saltSystem: undefined, saltSystemQuantity: 0, additionalSaltSystem: undefined });
+      updateData({
+        saltSystem: undefined,
+        saltSystemQuantity: 0,
+        additionalSaltSystem: undefined,
+        sanitationAccessory: undefined,
+        sanitationAccessoryQuantity: 0,
+      });
     }
   };
 
@@ -1259,7 +1326,13 @@ function EquipmentSectionNew({
 
   const handleSaltSystemChange = (name?: string) => {
     if (!name) {
-      updateData({ saltSystem: undefined, saltSystemQuantity: 0, additionalSaltSystem: undefined });
+      updateData({
+        saltSystem: undefined,
+        saltSystemQuantity: 0,
+        additionalSaltSystem: undefined,
+        sanitationAccessory: undefined,
+        sanitationAccessoryQuantity: 0,
+      });
       return;
     }
     if (isIncludedSaltCellOptionName(name)) {
@@ -1278,17 +1351,29 @@ function EquipmentSectionNew({
     });
   };
 
-  const handleAdditionalSaltSystemChange = (name?: string) => {
+  const handleAdditionalSanitationOptionChange = (name?: string) => {
     if (!name || name === noneOptionValue) {
-      updateData({ additionalSaltSystem: undefined });
+      updateData({
+        additionalSaltSystem: undefined,
+        sanitationAccessory: undefined,
+        sanitationAccessoryQuantity: 0,
+      });
       return;
     }
-    const system = pricingData.equipment.saltSystem.find(s => s.name === name);
-    if (!system || !isExcludedFromSaltCell(system)) {
-      updateData({ additionalSaltSystem: undefined });
+    const option = additionalSanitationOptions.find((entry: any) => entry.name === name);
+    if (!option) {
+      updateData({
+        additionalSaltSystem: undefined,
+        sanitationAccessory: undefined,
+        sanitationAccessoryQuantity: 0,
+      });
       return;
     }
-    updateData({ additionalSaltSystem: buildSaltSystemSelection(system) });
+    updateData({
+      additionalSaltSystem: buildAdditionalSanitationSelection(option),
+      sanitationAccessory: undefined,
+      sanitationAccessoryQuantity: 0,
+    });
   };
 
   const handleAutoFillSystemChange = (name?: string) => {
@@ -1306,22 +1391,6 @@ function EquipmentSectionNew({
       autoFillSystem: buildAutoFillSelection(system),
       autoFillSystemQuantity: nextQuantity,
       hasAutoFill: false,
-    });
-  };
-
-  const handleSanitationAccessoryChange = (name?: string) => {
-    if (!name || name === noneOptionValue) {
-      updateData({ sanitationAccessory: undefined, sanitationAccessoryQuantity: 0 });
-      return;
-    }
-    const accessory = sanitationAccessoryCatalog.find((entry: any) => entry.name === name);
-    if (!accessory) {
-      updateData({ sanitationAccessory: undefined, sanitationAccessoryQuantity: 0 });
-      return;
-    }
-    updateData({
-      sanitationAccessory: buildSanitationAccessorySelection(accessory),
-      sanitationAccessoryQuantity: Math.max(safeData.sanitationAccessoryQuantity ?? 1, 1),
     });
   };
 
@@ -1939,24 +2008,32 @@ function EquipmentSectionNew({
                 </select>
               </div>
             )}
-          {!isFixedPackage && showAdditionalSaltOptions && (
+          {showAdditionalSanitationOptions && (
             <div className="spec-field">
               <label className="spec-label">Additional Options</label>
               <select
                 className="compact-input equipment-select"
-                value={safeData.additionalSaltSystem?.name || noneOptionValue}
-                onChange={(e) => handleAdditionalSaltSystemChange(e.target.value)}
+                value={additionalSanitationOptionSelectedName || noneOptionValue}
+                onChange={(e) => handleAdditionalSanitationOptionChange(e.target.value)}
+                disabled={additionalSanitationDisabledByPackage}
+                title={
+                  additionalSanitationDisabledByPackage
+                    ? 'This equipment package does not allow additional sanitation upgrades.'
+                    : undefined
+                }
               >
                 <option value={noneOptionValue}>None</option>
-                {safeData.additionalSaltSystem?.name &&
-                  !additionalSaltOptions.some((system) => system.name === safeData.additionalSaltSystem?.name) &&
-                  renderRetiredOption(safeData.additionalSaltSystem?.name)}
-                {additionalSaltOptions.map(system => (
-                  <option key={system.name} value={system.name}>
-                    {formatOptionLabel(system.name, costOf(system))}
+                {additionalSanitationOptionMissingFromCatalog &&
+                  renderRetiredOption(additionalSanitationOptionSelectedName)}
+                {additionalSanitationOptions.map(option => (
+                  <option key={option.name} value={option.name}>
+                    {formatOptionLabel(option.name, costOf(option))}
                   </option>
                 ))}
               </select>
+              {additionalSanitationDisabledByPackage && (
+                <small className="form-help">This equipment package does not allow additional sanitation upgrades.</small>
+              )}
             </div>
           )}
           {packageIncludesSalt
@@ -1981,56 +2058,23 @@ function EquipmentSectionNew({
             )}
         </div>
         <div className="spec-grid spec-grid-2">
-          {packageIncludesSanitationAccessory
-            ? renderReadOnlySelection(
-                'Sanitation Accessory',
-                safeData.sanitationAccessory?.name || selectedPackage?.includedSanitationAccessoryName || 'Included',
-                packageLockedCategoryMessage
-              )
-            : (
-              <div className="spec-field">
-                <LabelWithRetired text="Sanitation Accessory" showRetired={retiredFlags.sanitationAccessory} />
-                <select
-                  className="compact-input equipment-select"
-                  value={includeSanitationAccessory ? safeData.sanitationAccessory?.name || noneOptionValue : noneOptionValue}
-                  onChange={(e) => handleSanitationAccessoryChange(e.target.value)}
-                  disabled={sanitationAccessoryDisabledByPackage}
-                  title={
-                    sanitationAccessoryDisabledByPackage
-                      ? 'This equipment package does not allow sanitation accessory upgrades.'
-                      : undefined
-                  }
-                >
-                  <option value={noneOptionValue}>None</option>
-                  {retiredFlags.sanitationAccessory && renderRetiredOption(safeData.sanitationAccessory?.name)}
-                  {sanitationAccessoryOptions.map((accessory: any) => (
-                    <option key={accessory.name} value={accessory.name}>
-                      {formatOptionLabel(accessory.name, costOf(accessory))}
-                    </option>
-                  ))}
-                </select>
-                {sanitationAccessoryDisabledByPackage && (
-                  <small className="form-help">This equipment package does not allow sanitation accessory upgrades.</small>
-                )}
-              </div>
+          {packageIncludesSanitationAccessory &&
+            renderReadOnlySelection(
+              'Additional Options',
+              safeData.sanitationAccessory?.name || selectedPackage?.includedSanitationAccessoryName || 'Included',
+              packageLockedCategoryMessage,
+              retiredFlags.sanitationAccessory
             )}
-          {(includeSanitationAccessory || packageIncludesSanitationAccessory) && (
+          {packageIncludesSanitationAccessory && (
             <div className="spec-field" style={{ maxWidth: '220px' }}>
-              <label className="spec-label">Accessory Quantity</label>
+              <label className="spec-label">Additional Option Quantity</label>
               <CompactInput
-                value={
-                  packageIncludesSanitationAccessory
-                    ? Math.max(selectedPackage?.includedSanitationAccessoryQuantity ?? sanitationAccessoryQuantity, 0)
-                    : sanitationAccessoryQuantity
-                }
-                onChange={(e) =>
-                  updateData({ sanitationAccessoryQuantity: Math.max(1, parseInt(e.target.value) || 1) })
-                }
+                value={Math.max(selectedPackage?.includedSanitationAccessoryQuantity ?? sanitationAccessoryQuantity, 0)}
                 unit="ea"
                 min="1"
                 step="1"
                 placeholder="1"
-                readOnly={packageIncludesSanitationAccessory}
+                readOnly
               />
             </div>
           )}

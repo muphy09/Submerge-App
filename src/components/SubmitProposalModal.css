@@ -100,9 +100,12 @@
 .submit-proposal-button {
   min-width: 130px;
   min-height: 42px;
+  padding: 0 1rem;
   border-radius: 999px;
   border: 1px solid transparent;
   font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.2;
   font-weight: 700;
   cursor: pointer;
 }

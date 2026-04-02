@@ -55,16 +55,18 @@ function SubmitProposalModal({
             <span>Request manual review and attach a note</span>
           </label>
 
-          <label className="submit-proposal-note">
-            <span>Submission note</span>
-            <textarea
-              value={note}
-              onChange={(event) => onNoteChange(event.target.value)}
-              placeholder="Add context for the reviewer"
-              disabled={isSubmitting}
-              rows={5}
-            />
-          </label>
+          {manualReviewRequested && (
+            <label className="submit-proposal-note">
+              <span>Submission note</span>
+              <textarea
+                value={note}
+                onChange={(event) => onNoteChange(event.target.value)}
+                placeholder="Add context for the reviewer"
+                disabled={isSubmitting}
+                rows={5}
+              />
+            </label>
+          )}
         </div>
 
         <div className="submit-proposal-actions">
