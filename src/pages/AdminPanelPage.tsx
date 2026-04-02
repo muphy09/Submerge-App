@@ -101,7 +101,12 @@ const parseThresholdPercentInput = (value: string, label: string) => {
 
 const isSubmittedStatus = (status?: string) => {
   const normalized = normalizeStatus(status);
-  return normalized === 'submitted' || normalized === 'needs_approval' || normalized === 'changes_requested';
+  return (
+    normalized === 'submitted' ||
+    normalized === 'approved' ||
+    normalized === 'needs_approval' ||
+    normalized === 'changes_requested'
+  );
 };
 
 function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = false }: AdminPanelPageProps) {

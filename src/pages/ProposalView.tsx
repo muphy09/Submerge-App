@@ -57,6 +57,8 @@ import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   addWorkflowNote,
+  approveWorkflowProposal,
+  completeWorkflowProposal,
   ensureProposalWorkflow,
   getApprovedVersionId,
   getPendingReviewVersionId,
@@ -65,6 +67,7 @@ import {
   getWorkflowStatus,
   isSubmittedVersionLocked,
   markWorkflowRead,
+  requestWorkflowChanges,
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
 
@@ -276,6 +279,7 @@ function ProposalView() {
   const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
+  const [reviewerActionSaving, setReviewerActionSaving] = useState(false);
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
   const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
@@ -1191,6 +1195,92 @@ function ProposalView() {
     }
   };
 
+  const persistReviewerWorkflowAction = async (
+    buildPayload: (container: Proposal, note: string) => Proposal,
+    successMessage: string,
+    options?: { requiresNote?: boolean }
+  ) => {
+    const trimmedMessage = workflowMessageDraft.trim();
+    if (!proposal || reviewerActionSaving) return;
+    if (options?.requiresNote && !trimmedMessage) {
+      setShowWorkflowMessageComposer(true);
+      showToast({ type: 'error', message: 'Add a note before requesting changes.' });
+      return false;
+    }
+
+    setReviewerActionSaving(true);
+    try {
+      const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+      const normalizedVersions = all.map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versions: [],
+      }));
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const container = buildContainerFromVersions(normalizedVersions, desiredActiveId);
+      if (!container) return;
+
+      const payload = buildPayload(container, trimmedMessage);
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
+      const saved = await saveProposalRemote(payload);
+      const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versionId: version.versionId || 'original',
+        versionName: version.versionName || (version.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: version.isOriginalVersion,
+        activeVersionId: version.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+
+      setVersions(updatedVersions);
+      setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
+      setProposal(activeApplied as Proposal);
+      setWorkflowMessageDraft('');
+      setShowWorkflowMessageComposer(false);
+      showToast({ type: 'success', message: successMessage });
+      return true;
+    } catch (error) {
+      console.error('Failed to save reviewer workflow action', error);
+      showToast({ type: 'error', message: 'Could not save the workflow action.' });
+      return false;
+    } finally {
+      setReviewerActionSaving(false);
+    }
+  };
+
+  const handleReviewerApprove = async () => {
+    const didApprove = await persistReviewerWorkflowAction(
+      (container) => approveWorkflowProposal(container, undefined),
+      'Proposal approved.'
+    );
+    if (didApprove) {
+      navigate('/workflow');
+    }
+  };
+
+  const handleReviewerRequestChanges = async () => {
+    await persistReviewerWorkflowAction(
+      (container, note) => requestWorkflowChanges(container, note),
+      'Proposal returned with requested changes.',
+      { requiresNote: true }
+    );
+  };
+
+  const handleReviewerComplete = async () => {
+    await persistReviewerWorkflowAction(
+      (container, note) => completeWorkflowProposal(container, note || undefined),
+      'Proposal marked as completed.'
+    );
+  };
+
   const formatCurrency = (value: number): string =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -1601,7 +1691,7 @@ function ProposalView() {
   const workflowStatusTooltip =
     proposalWorkflowStatus === 'needs_approval'
       ? 'Proposal submitted and awaiting approval'
-      : proposal?.workflow?.approved && proposalWorkflowStatus === 'submitted'
+      : proposalWorkflowStatus === 'approved'
       ? 'Proposal was approved. Future changes must be submitted as addendums.'
       : undefined;
   const workflowReviewVersionLabel =
@@ -2187,56 +2277,58 @@ function ProposalView() {
 
   return (
     <div className="proposal-view">
-      <div className="view-actions no-print">
-        <div className="action-bar">
-          <div className="action-bar-left">
-            <button className="action-button" onClick={() => navigate('/')}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10 13L5 8L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Back to Home
-            </button>
-            {hasMultipleVersions && (
-              <div className="version-switcher">
-                <label htmlFor="active-version">Active Version:</label>
-                <select
-                  id="active-version"
-                  value={isReadOnlyReviewerView ? displayPrimaryVersionId : activeVersionId}
-                  onChange={(e) => handleSetActiveVersion(e.target.value)}
-                  disabled={!canManageVersionDrafts}
-                  title={editDisabledReason}
-                >
-                  {viewModels.map((vm) => (
-                    <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
-                      {getDisplayVersionLabel(vm.proposal)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-          <div className="action-bar-right">
-            <button
-              className="action-button primary workflow-summary-submit-button"
-              onClick={handleSubmitProposal}
-              disabled={!canEditProposal || loading || !canSubmitProposal}
-              title={
-                !canEditProposal
-                  ? editDisabledReason
-                  : !canSubmitProposal
-                  ? 'Must include Customer Name'
-                  : undefined
-              }
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Submit Proposal
-            </button>
+      {!isReadOnlyReviewerView && (
+        <div className="view-actions no-print">
+          <div className="action-bar">
+            <div className="action-bar-left">
+              <button className="action-button" onClick={() => navigate('/')}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10 13L5 8L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Back to Home
+              </button>
+              {hasMultipleVersions && (
+                <div className="version-switcher">
+                  <label htmlFor="active-version">Active Version:</label>
+                  <select
+                    id="active-version"
+                    value={isReadOnlyReviewerView ? displayPrimaryVersionId : activeVersionId}
+                    onChange={(e) => handleSetActiveVersion(e.target.value)}
+                    disabled={!canManageVersionDrafts}
+                    title={editDisabledReason}
+                  >
+                    {viewModels.map((vm) => (
+                      <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
+                        {getDisplayVersionLabel(vm.proposal)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="action-bar-right">
+              <button
+                className="action-button primary workflow-summary-submit-button"
+                onClick={handleSubmitProposal}
+                disabled={!canEditProposal || loading || !canSubmitProposal}
+                title={
+                  !canEditProposal
+                    ? editDisabledReason
+                    : !canSubmitProposal
+                    ? 'Must include Customer Name'
+                    : undefined
+                }
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                Submit Proposal
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {proposal?.workflow && (
         <div className="workflow-summary-card no-print">
@@ -2248,21 +2340,58 @@ function ProposalView() {
                 title={workflowStatusTooltip}
               >
                 {formatWorkflowStatusLabel(proposalWorkflowStatus)}
-                {proposal.workflow.approved ? ' *' : ''}
               </div>
             </div>
             <div className="workflow-summary-header-actions">
-              <button
-                className="action-button action-button-version workflow-summary-version-button"
-                onClick={handleBuildAnotherVersion}
-                disabled={!canManageVersionDrafts}
-                title={!canManageVersionDrafts ? editDisabledReason : undefined}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-                Build Another Version
-              </button>
+              {isReadOnlyReviewerView ? (
+                <>
+                  {proposalWorkflowStatus === 'needs_approval' && (
+                    <button
+                      className="action-button primary workflow-summary-reviewer-button"
+                      onClick={() => {
+                        void handleReviewerApprove();
+                      }}
+                      disabled={reviewerActionSaving}
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {proposalWorkflowStatus !== 'completed' && (
+                    <button
+                      className="action-button danger workflow-summary-reviewer-button"
+                      onClick={() => {
+                        void handleReviewerRequestChanges();
+                      }}
+                      disabled={reviewerActionSaving}
+                    >
+                      Request Changes
+                    </button>
+                  )}
+                  {proposalWorkflowStatus === 'approved' && (
+                    <button
+                      className="action-button primary workflow-summary-reviewer-button"
+                      onClick={() => {
+                        void handleReviewerComplete();
+                      }}
+                      disabled={reviewerActionSaving}
+                    >
+                      Mark Completed
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  className="action-button action-button-version workflow-summary-version-button"
+                  onClick={handleBuildAnotherVersion}
+                  disabled={!canManageVersionDrafts}
+                  title={!canManageVersionDrafts ? editDisabledReason : undefined}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  Build Another Version
+                </button>
+              )}
             </div>
           </div>
 
@@ -2323,7 +2452,7 @@ function ProposalView() {
                     onClick={() => setShowWorkflowMessageComposer(true)}
                     disabled={workflowMessageSaving || loading}
                   >
-                    Send Another Note
+                    {isReadOnlyReviewerView ? 'Add Note' : 'Send Another Note'}
                   </button>
                 </div>
               )}

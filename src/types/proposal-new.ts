@@ -736,6 +736,7 @@ export interface PricingCalculations {
 export type ProposalWorkflowStatus =
   | 'draft'
   | 'submitted'
+  | 'approved'
   | 'needs_approval'
   | 'changes_requested'
   | 'completed';

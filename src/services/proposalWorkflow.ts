@@ -715,6 +715,8 @@ export function buildWorkflowActor(session?: UserSession | null): ProposalWorkfl
 
 export function getWorkflowStatus(proposal?: Partial<Proposal> | null): ProposalWorkflowStatus {
   const status = normalizeText(proposal?.workflow?.status || proposal?.status).toLowerCase();
+  if (status === 'approved') return 'approved';
+  if (status === 'submitted' && proposal?.workflow?.approved === true) return 'approved';
   if (status === 'submitted') return 'submitted';
   if (status === 'needs_approval') return 'needs_approval';
   if (status === 'changes_requested') return 'changes_requested';
@@ -753,10 +755,16 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
     : dedupeVersionIds(workflow.approvedVersionIds, approvedVersionId);
   let pendingReviewVersionId = shouldResetLegacySubmittedProposal
     ? null
-    : normalizeText(workflow.reviewVersionId || workflow.submittedVersionId) || null;
+    : isPendingReviewStatus(normalizedStatus)
+    ? normalizeText(workflow.reviewVersionId || workflow.submittedVersionId) || null
+    : null;
 
-  if (normalizedStatus === 'submitted' && !approvedVersionId && pendingReviewVersionId) {
+  if ((normalizedStatus === 'submitted' || normalizedStatus === 'approved') && pendingReviewVersionId) {
     normalizedStatus = 'needs_approval';
+  }
+
+  if (normalizedStatus === 'submitted' && approvedVersionId && !pendingReviewVersionId) {
+    normalizedStatus = 'approved';
   }
 
   if (!isPendingReviewStatus(normalizedStatus)) {
@@ -1037,7 +1045,7 @@ export function submitProposalForWorkflow(
     }
 
     if (approvedVersionIds.includes(entryId)) {
-      const baselineStatus = getWorkflowStatus(normalized) === 'completed' ? 'completed' : 'submitted';
+      const baselineStatus = getWorkflowStatus(normalized) === 'completed' ? 'completed' : 'approved';
       return setVersionWorkflowState(entry, baselineStatus, {
         locked: true,
         submittedAt: entry.versionSubmittedAt || workflow.approvedAt || workflow.submittedAt || null,
@@ -1149,7 +1157,7 @@ export function approveWorkflowProposal(
   const { normalized, workflow } = appendWorkflowEvent(
     proposal,
     'approved',
-    { message, toStatus: 'submitted' },
+    { message, toStatus: 'approved' },
     session
   );
   const actor = buildWorkflowActor(session);
@@ -1164,7 +1172,7 @@ export function approveWorkflowProposal(
   const updatedVersions = listAllVersions(normalized).map((entry) => {
     const entryId = entry.versionId || ORIGINAL_VERSION_ID;
     if (entryId === targetApprovedVersionId || nextApprovedVersionIds.includes(entryId)) {
-      return setVersionWorkflowState(entry, 'submitted', {
+      return setVersionWorkflowState(entry, 'approved', {
         locked: true,
         submittedAt: entry.versionSubmittedAt || normalized.workflow?.submittedAt || null,
         submittedBy: entry.versionSubmittedBy || normalized.workflow?.submittedBy || null,
@@ -1178,7 +1186,7 @@ export function approveWorkflowProposal(
   });
   const nextWorkflow: ProposalWorkflowState = {
     ...workflow,
-    status: 'submitted',
+    status: 'approved',
     reviewVersionId: null,
     submittedVersionId: targetApprovedVersionId,
     approvedVersionId: targetApprovedVersionId,
@@ -1188,7 +1196,7 @@ export function approveWorkflowProposal(
     approvedAt: nowIso(),
     approvedBy: actor,
   };
-  return mergeVersionsIntoContainer(normalized, updatedVersions, normalized.activeVersionId, 'submitted', nextWorkflow);
+  return mergeVersionsIntoContainer(normalized, updatedVersions, normalized.activeVersionId, 'approved', nextWorkflow);
 }
 
 export function requestWorkflowChanges(

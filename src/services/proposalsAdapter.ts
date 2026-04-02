@@ -72,7 +72,12 @@ function isOwnProposal(proposal: Proposal, session?: UserSession | null) {
 
 function isSubmittedStatus(status?: string | null) {
   const normalized = normalizeIdentity(status);
-  return normalized === 'submitted' || normalized === 'needs_approval' || normalized === 'changes_requested';
+  return (
+    normalized === 'submitted' ||
+    normalized === 'approved' ||
+    normalized === 'needs_approval' ||
+    normalized === 'changes_requested'
+  );
 }
 
 function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | null, franchiseId?: string) {
@@ -105,7 +110,13 @@ function canReadProposal(proposal: Proposal, session?: UserSession | null) {
   }
   if (role === 'bookkeeper') {
     const status = getWorkflowStatus(proposal);
-    return status === 'submitted' || status === 'needs_approval' || status === 'changes_requested' || status === 'completed';
+    return (
+      status === 'submitted' ||
+      status === 'approved' ||
+      status === 'needs_approval' ||
+      status === 'changes_requested' ||
+      status === 'completed'
+    );
   }
   return false;
 }

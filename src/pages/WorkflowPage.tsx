@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import type { Proposal } from '../types/proposal-new';
 import {
-  addWorkflowNote,
   approveWorkflowProposal,
   buildVersionDiffSummary,
   completeWorkflowProposal,
@@ -27,7 +26,7 @@ type WorkflowPageProps = {
   session?: UserSession | null;
 };
 
-type QueueFilter = 'needs_approval' | 'active' | 'archive';
+type QueueFilter = 'needs_approval' | 'approved' | 'archive';
 
 const normalizeStatusLabel = (value?: string | null) =>
   String(value || 'draft')
@@ -35,6 +34,13 @@ const normalizeStatusLabel = (value?: string | null) =>
     .toLowerCase()
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (character) => character.toUpperCase());
+
+const matchesQueueFilter = (proposal: Proposal, filter: QueueFilter) => {
+  const status = getWorkflowStatus(proposal);
+  if (filter === 'needs_approval') return status === 'needs_approval';
+  if (filter === 'archive') return status === 'completed';
+  return status === 'approved' || status === 'submitted';
+};
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return 'N/A';
@@ -60,6 +66,23 @@ const formatSignedPercent = (value: number) => {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
 };
 
+const formatPercent = (value: number) => `${(Number.isFinite(value) ? value : 0).toFixed(2)}%`;
+
+const getNonPapDiscountTotal = (proposal?: Partial<Proposal> | null) => {
+  const retailAdjustments = Array.isArray(proposal?.retailAdjustments) ? proposal.retailAdjustments : [];
+  const retailDiscountTotal = retailAdjustments.reduce((sum, adjustment) => {
+    const amount = Number(adjustment?.amount);
+    return Number.isFinite(amount) && amount < 0 ? sum + Math.abs(amount) : sum;
+  }, 0);
+  const manualAdjustments = proposal?.manualAdjustments || ({} as Proposal['manualAdjustments']);
+  const negative1 = Number((manualAdjustments as any).negative1);
+  const negative2 = Number((manualAdjustments as any).negative2);
+  const manualDiscountTotal =
+    Math.abs(Math.min(0, Number.isFinite(negative1) ? negative1 : 0)) +
+    Math.abs(Math.min(0, Number.isFinite(negative2) ? negative2 : 0));
+  return retailDiscountTotal + manualDiscountTotal;
+};
+
 function WorkflowPage({ session }: WorkflowPageProps) {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
@@ -69,6 +92,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<QueueFilter>('needs_approval');
   const [noteDraft, setNoteDraft] = useState('');
+  const [showNoteComposer, setShowNoteComposer] = useState(false);
   const [savingAction, setSavingAction] = useState<string | null>(null);
 
   const effectiveRole = String(session?.role || '').trim().toLowerCase();
@@ -97,9 +121,9 @@ function WorkflowPage({ session }: WorkflowPageProps) {
         }
       }
 
-      const activeRows = rows.filter((entry) => getWorkflowStatus(entry) !== 'draft');
-      if (activeRows[0]) {
-        await loadSelectedProposal(activeRows[0].proposalNumber, rows);
+      const preferredRow = rows.find((entry) => matchesQueueFilter(entry, selectedFilter));
+      if (preferredRow) {
+        await loadSelectedProposal(preferredRow.proposalNumber, rows);
       } else {
         setSelectedProposal(null);
       }
@@ -150,24 +174,21 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     return () => window.removeEventListener('online', handleOnline);
   }, [proposalNumber, selectedProposal?.proposalNumber]);
 
+  useEffect(() => {
+    setNoteDraft('');
+    setShowNoteComposer(false);
+  }, [selectedProposal?.proposalNumber]);
+
   const counts = useMemo(() => {
     const needsApproval = proposals.filter((entry) => getWorkflowStatus(entry) === 'needs_approval').length;
-    const active = proposals.filter((entry) => {
-      const status = getWorkflowStatus(entry);
-      return status === 'submitted' || status === 'needs_approval' || status === 'changes_requested';
-    }).length;
+    const approved = proposals.filter((entry) => matchesQueueFilter(entry, 'approved')).length;
     const archive = proposals.filter((entry) => getWorkflowStatus(entry) === 'completed').length;
-    return { needsApproval, active, archive };
+    return { needsApproval, approved, archive };
   }, [proposals]);
 
   const filteredProposals = useMemo(() => {
     return proposals
-      .filter((entry) => {
-        const status = getWorkflowStatus(entry);
-        if (selectedFilter === 'needs_approval') return status === 'needs_approval';
-        if (selectedFilter === 'archive') return status === 'completed';
-        return status === 'submitted' || status === 'needs_approval' || status === 'changes_requested';
-      })
+      .filter((entry) => matchesQueueFilter(entry, selectedFilter))
       .sort((a, b) => {
         const aTs = new Date(a.workflow?.submittedAt || a.lastModified || a.createdDate || 0).getTime();
         const bTs = new Date(b.workflow?.submittedAt || b.lastModified || b.createdDate || 0).getTime();
@@ -183,20 +204,35 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const selectedApprovedVersionId = selectedProposal ? getApprovedVersionId(selectedProposal) : null;
   const selectedReviewVersion = selectedProposal ? getPendingReviewVersion(selectedProposal) : null;
   const selectedApprovedVersion = selectedProposal ? getApprovedVersion(selectedProposal) : null;
-  const selectedUnreadCount = selectedProposal ? countUnreadWorkflowEvents(selectedProposal, session?.userId) : 0;
+  const selectedDisplayVersion = selectedReviewVersion || selectedApprovedVersion || selectedProposal;
   const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
+  const selectedRetailTotal = Number(selectedDisplayVersion?.pricing?.retailPrice || selectedDisplayVersion?.totalCost || 0);
+  const selectedTotalCogs = Number(selectedDisplayVersion?.pricing?.totalCOGS || 0);
+  const selectedGrossProfitPercent = Number(selectedDisplayVersion?.pricing?.grossProfitMargin || 0);
+  const selectedDiscountAmount = getNonPapDiscountTotal(selectedDisplayVersion);
 
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
     setSavingAction(successMessage);
     try {
       const saved = ensureProposalWorkflow((await saveProposal(nextProposal)) as Proposal);
-      setSelectedProposal(saved);
-      setProposals((current) =>
-        current.map((entry) => (entry.proposalNumber === saved.proposalNumber ? saved : entry))
+      const nextRows = proposals.map((entry) =>
+        entry.proposalNumber === saved.proposalNumber ? saved : entry
       );
+      const nextSelected =
+        matchesQueueFilter(saved, selectedFilter)
+          ? saved
+          : nextRows.find((entry) => entry.proposalNumber !== saved.proposalNumber && matchesQueueFilter(entry, selectedFilter)) ||
+            null;
+
+      setSelectedProposal(nextSelected);
+      setProposals(nextRows);
       setNoteDraft('');
+      setShowNoteComposer(false);
+      if (nextSelected) {
+        navigate(`/workflow/${nextSelected.proposalNumber}`, { replace: true });
+      }
       showToast({ type: 'success', message: successMessage });
     } catch (error) {
       console.error('Failed to save workflow action', error);
@@ -206,22 +242,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     }
   };
 
-  const handleAddNote = async () => {
-    if (!selectedProposal || !noteDraft.trim()) return;
-    await persistSelectedProposal(addWorkflowNote(selectedProposal, noteDraft, session), 'Workflow note saved.');
-  };
-
   const handleApprove = async () => {
     if (!selectedProposal) return;
-    await persistSelectedProposal(
-      approveWorkflowProposal(selectedProposal, noteDraft.trim() || undefined, session),
-      'Proposal approved.'
-    );
+    await persistSelectedProposal(approveWorkflowProposal(selectedProposal, undefined, session), 'Proposal approved.');
   };
 
   const handleRequestChanges = async () => {
     if (!selectedProposal || !noteDraft.trim()) {
-      showToast({ type: 'error', message: 'Changes requested requires a note.' });
+      setShowNoteComposer(true);
       return;
     }
     await persistSelectedProposal(
@@ -269,17 +297,17 @@ function WorkflowPage({ session }: WorkflowPageProps) {
           </button>
           <button
             type="button"
-            className={`workflow-filter-pill${selectedFilter === 'active' ? ' is-active' : ''}`}
-            onClick={() => setSelectedFilter('active')}
+            className={`workflow-filter-pill${selectedFilter === 'approved' ? ' is-active' : ''}`}
+            onClick={() => setSelectedFilter('approved')}
           >
-            Active ({counts.active})
+            Approved ({counts.approved})
           </button>
           <button
             type="button"
             className={`workflow-filter-pill${selectedFilter === 'archive' ? ' is-active' : ''}`}
             onClick={() => setSelectedFilter('archive')}
           >
-            Archive ({counts.archive})
+            Archived ({counts.archive})
           </button>
         </div>
       </div>
@@ -291,8 +319,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
               {selectedFilter === 'needs_approval'
                 ? 'Approval Queue'
                 : selectedFilter === 'archive'
-                ? 'Completed Proposals'
-                : 'Submitted Proposals'}
+                ? 'Archived Proposals'
+                : 'Approved Proposals'}
             </div>
             <div className="workflow-queue-meta">{filteredProposals.length} shown</div>
           </div>
@@ -306,13 +334,6 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 const diff = buildVersionDiffSummary(entry);
                 const unread = hasUnreadWorkflowEvents(entry, session?.userId);
                 const status = getWorkflowStatus(entry);
-                const reviewVersion = getPendingReviewVersion(entry);
-                const approvedVersion = getApprovedVersion(entry);
-                const queueVersionLabel =
-                  reviewVersion?.versionName ||
-                  approvedVersion?.versionName ||
-                  entry.versionName ||
-                  'Current Version';
                 return (
                   <button
                     key={entry.proposalNumber}
@@ -332,11 +353,9 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                       </div>
                       <div className={`workflow-status-pill is-${status}`}>
                         {normalizeStatusLabel(status)}
-                        {entry.workflow?.approved ? ' *' : ''}
                       </div>
                     </div>
                     <div className="workflow-queue-item-meta">
-                      <span>{queueVersionLabel}</span>
                       <span>{formatDateTime(entry.workflow?.submittedAt || entry.lastModified)}</span>
                       {unread && <span className="workflow-unread-pill">{countUnreadWorkflowEvents(entry, session?.userId)} New</span>}
                     </div>
@@ -376,7 +395,6 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 </div>
                 <div className={`workflow-status-pill is-${getWorkflowStatus(selectedProposal)}`}>
                   {normalizeStatusLabel(getWorkflowStatus(selectedProposal))}
-                  {selectedProposal.workflow?.approved ? ' *' : ''}
                 </div>
               </div>
 
@@ -392,20 +410,20 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                   </div>
                 </div>
                 <div className="workflow-detail-card">
-                  <div className="workflow-detail-label">Unread Activity</div>
-                  <div className="workflow-detail-value">{selectedUnreadCount}</div>
+                  <div className="workflow-detail-label">Discount Amount</div>
+                  <div className="workflow-detail-value">{formatCurrency(selectedDiscountAmount)}</div>
                 </div>
                 <div className="workflow-detail-card">
-                  <div className="workflow-detail-label">
-                    {selectedDiff ? 'Pending Addendum' : selectedReviewVersion ? 'Review Version' : 'Approved Proposal'}
-                  </div>
-                  <div className="workflow-detail-value">
-                    {selectedDiff?.reviewVersionName ||
-                      selectedReviewVersion?.versionName ||
-                      selectedApprovedVersion?.versionName ||
-                      selectedProposal.versionName ||
-                      'Current Version'}
-                  </div>
+                  <div className="workflow-detail-label">Gross Profit %</div>
+                  <div className="workflow-detail-value">{formatPercent(selectedGrossProfitPercent)}</div>
+                </div>
+                <div className="workflow-detail-card">
+                  <div className="workflow-detail-label">Total COGS</div>
+                  <div className="workflow-detail-value">{formatCurrency(selectedTotalCogs)}</div>
+                </div>
+                <div className="workflow-detail-card">
+                  <div className="workflow-detail-label">Total Retail</div>
+                  <div className="workflow-detail-value">{formatCurrency(selectedRetailTotal)}</div>
                 </div>
               </div>
 
@@ -549,90 +567,85 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 <div className="workflow-action-header">
                   <div>
                     <div className="workflow-detail-label">Reviewer Actions</div>
-                    <div className="workflow-detail-value">Add a note, approve, return, or complete</div>
+                    <div className="workflow-detail-value">Approve or request changes</div>
                   </div>
                 </div>
-                <textarea
-                  className="workflow-note-input"
-                  value={noteDraft}
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                  placeholder="Add a workflow note"
-                />
-                <div className="workflow-action-buttons">
+                <div className="workflow-action-stack">
                   <button
                     type="button"
-                    className="workflow-secondary-btn"
-                    disabled={!noteDraft.trim() || Boolean(savingAction)}
-                    onClick={() => {
-                      void handleAddNote();
-                    }}
+                    className="workflow-open-summary-btn"
+                    onClick={() => navigate(`/proposal/view/${selectedProposal.proposalNumber}`)}
                   >
-                    Add Note
+                    Open Proposal Summary
                   </button>
-                  {getWorkflowStatus(selectedProposal) === 'needs_approval' && (
-                    <button
-                      type="button"
-                      className="workflow-primary-btn"
-                      disabled={Boolean(savingAction)}
-                      onClick={() => {
-                        void handleApprove();
-                      }}
-                    >
-                      Approve
-                    </button>
-                  )}
-                  {getWorkflowStatus(selectedProposal) !== 'completed' && (
-                    <button
-                      type="button"
-                      className="workflow-danger-btn"
-                      disabled={Boolean(savingAction)}
-                      onClick={() => {
-                        void handleRequestChanges();
-                      }}
-                    >
-                      Request Changes
-                    </button>
-                  )}
-                  {getWorkflowStatus(selectedProposal) === 'submitted' && (
-                    <button
-                      type="button"
-                      className="workflow-primary-btn"
-                      disabled={Boolean(savingAction)}
-                      onClick={() => {
-                        void handleComplete();
-                      }}
-                    >
-                      Mark Completed
-                    </button>
-                  )}
+                  <div className="workflow-action-buttons">
+                    {getWorkflowStatus(selectedProposal) === 'needs_approval' && (
+                      <button
+                        type="button"
+                        className="workflow-success-btn"
+                        disabled={Boolean(savingAction)}
+                        onClick={() => {
+                          void handleApprove();
+                        }}
+                      >
+                        Approve
+                      </button>
+                    )}
+                    {getWorkflowStatus(selectedProposal) !== 'completed' && (
+                      <button
+                        type="button"
+                        className="workflow-danger-btn"
+                        disabled={Boolean(savingAction)}
+                        onClick={() => setShowNoteComposer(true)}
+                      >
+                        Request Changes
+                      </button>
+                    )}
+                    {getWorkflowStatus(selectedProposal) === 'approved' && (
+                      <button
+                        type="button"
+                        className="workflow-primary-btn"
+                        disabled={Boolean(savingAction)}
+                        onClick={() => {
+                          void handleComplete();
+                        }}
+                      >
+                        Mark Completed
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-
-              <div className="workflow-history-card">
-                <div className="workflow-detail-label">Workflow History</div>
-                {(selectedProposal.workflow?.history || [])
-                  .slice()
-                  .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-                  .map((entry) => (
-                    <div key={entry.id} className="workflow-history-row">
-                      <div className="workflow-history-meta">
-                        <span>{normalizeStatusLabel(entry.type)}</span>
-                        <span>{formatDateTime(entry.createdAt)}</span>
-                        <span>{entry.actor?.name || entry.actor?.email || 'User'}</span>
-                      </div>
-                      {entry.message && <div className="workflow-history-message">{entry.message}</div>}
+                {showNoteComposer && (
+                  <>
+                    <textarea
+                      className="workflow-note-input"
+                      value={noteDraft}
+                      onChange={(event) => setNoteDraft(event.target.value)}
+                      placeholder="Add a note"
+                    />
+                    <div className="workflow-note-actions">
+                      <button
+                        type="button"
+                        className="workflow-secondary-btn"
+                        disabled={!noteDraft.trim() || Boolean(savingAction)}
+                        onClick={() => void handleRequestChanges()}
+                      >
+                        Request Changes
+                      </button>
+                      <button
+                        type="button"
+                        className="workflow-secondary-btn"
+                        disabled={Boolean(savingAction)}
+                        onClick={() => {
+                          setNoteDraft('');
+                          setShowNoteComposer(false);
+                        }}
+                      >
+                        Cancel
+                      </button>
                     </div>
-                  ))}
-              </div>
-
-              <div className="workflow-drilldown-actions">
-                <button
-                  type="button"
-                  className="workflow-secondary-btn"
-                  onClick={() => navigate(`/proposal/view/${selectedProposal.proposalNumber}`)}
-                >
-                  Open Proposal Summary
-                </button>
+                  </>
+                )}
               </div>
             </>
           )}
