@@ -1758,7 +1758,7 @@ function ProposalView() {
       ? 'Proposal was approved. Future changes must be submitted as addendums.'
       : undefined;
   const versionActionLabel =
-    proposalWorkflowStatus === 'approved' ? 'Modify this proposal' : 'Build Another Version';
+    proposalWorkflowStatus === 'approved' ? 'Modify Approved Proposal' : 'Build Another Version';
   const workflowReviewVersionLabel =
     sortedVersions.find(
       (entry) =>
