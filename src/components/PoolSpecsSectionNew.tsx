@@ -168,6 +168,11 @@ function PoolSpecsSectionNew({
   const spilloverSelectValue = data.hasSpillover ? 'yes' : 'none';
   const raisedSpaSelectValue = data.isRaisedSpa ? 'yes' : 'none';
 
+  useEffect(() => {
+    if (!isFiberglass || data.poolShape === 'geometric') return;
+    onChange({ ...data, poolShape: 'geometric' });
+  }, [data, isFiberglass, onChange]);
+
   const handleDoubleBullnoseSelect = (value: string) => {
     if (doubleBullnoseDisabled || !tileCopingDecking || !onChangeTileCopingDecking) {
       return;
@@ -431,31 +436,33 @@ function PoolSpecsSectionNew({
           </>
         )}
 
+        {!isFiberglass && (
+          <div className="spec-grid-2" style={{ marginTop: '0' }}>
+            <div className="spec-field">
+              <label className="spec-label">Pool Shape</label>
+              <div className="pool-type-buttons" style={{ marginBottom: 0 }}>
+                <button
+                  type="button"
+                  className={`pool-type-btn ${data.poolShape === 'geometric' ? 'active' : ''}`}
+                  onClick={() => handleChange('poolShape', 'geometric')}
+                >
+                  Geometric
+                </button>
+                <button
+                  type="button"
+                  className={`pool-type-btn ${data.poolShape === 'freeform' ? 'active' : ''}`}
+                  onClick={() => handleChange('poolShape', 'freeform')}
+                >
+                  Freeform
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Calculated Gallons - shown for both pool types */}
         {(isFiberglass || data.poolType === 'gunite') && (
           <>
-            <div className="spec-grid-2" style={{ marginTop: '0' }}>
-              <div className="spec-field">
-                <label className="spec-label">Pool Shape</label>
-                <div className="pool-type-buttons" style={{ marginBottom: 0 }}>
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${data.poolShape === 'geometric' ? 'active' : ''}`}
-                    onClick={() => handleChange('poolShape', 'geometric')}
-                  >
-                    Geometric
-                  </button>
-                  <button
-                    type="button"
-                    className={`pool-type-btn ${data.poolShape === 'freeform' ? 'active' : ''}`}
-                    onClick={() => handleChange('poolShape', 'freeform')}
-                  >
-                    Freeform
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
                 <label className="spec-label">Approximate Gallons (Auto-calculated)</label>
@@ -539,18 +546,6 @@ function PoolSpecsSectionNew({
             </div>
 
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
-              <div className="spec-field">
-                <label className="spec-label">Double Bullnose</label>
-                <select
-                  className="compact-input"
-                  value={doubleBullnoseSelectValue}
-                  onChange={(e) => handleDoubleBullnoseSelect(e.target.value)}
-                  disabled={doubleBullnoseDisabled}
-                >
-                  <option value="none">None</option>
-                  <option value="yes">Yes</option>
-                </select>
-              </div>
               <div className="spec-field">
                 <label className="spec-label">Spillover</label>
                 <select
