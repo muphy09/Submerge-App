@@ -120,10 +120,6 @@ function markFeedbackBackendUnavailable(error: any) {
   console.warn('Feedback backend is unavailable; disabling feedback features for this session.', error);
 }
 
-export function isFeedbackFeatureAvailable() {
-  return !feedbackBackendUnavailable;
-}
-
 function emitGlobalFeedbackEnabledUpdate(enabled: boolean) {
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
   window.dispatchEvent(

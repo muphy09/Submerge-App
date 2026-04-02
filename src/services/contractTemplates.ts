@@ -401,7 +401,3 @@ export function getContractTemplateIdForProposal(proposal: Proposal): ContractTe
 
   return poolType === 'fiberglass' ? 'nc-fiberglass' : 'nc-gunite';
 }
-
-export function listContractTemplates(): ContractTemplate[] {
-  return Object.values(CONTRACT_TEMPLATES);
-}

@@ -1,10 +1,14 @@
 import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import HomePage from './pages/HomePage';
-import ProposalForm from './pages/ProposalForm';
-import ProposalView from './pages/ProposalView';
-import WorkflowPage from './pages/WorkflowPage';
-import SettingsPage from './pages/SettingsPage';
 import NavigationBar from './components/NavigationBar';
 import UpdateNotification from './components/UpdateNotification';
 import ChangelogModal from './components/ChangelogModal';
@@ -12,8 +16,6 @@ import UserProfileModal from './components/UserProfileModal';
 import { setActiveFranchiseId } from './services/pricingDataStore';
 import { ToastProvider, useToast } from './components/Toast';
 import LoginModal from './components/LoginModal';
-import AdminPanelPage from './pages/AdminPanelPage';
-import AdminPricingPage from './pages/AdminPricingPage';
 import { getSupabaseClient, getSupabaseReachability, isSupabaseEnabled } from './services/supabaseClient';
 import CloudConnectionNotice, { CloudConnectionIssue } from './components/CloudConnectionNotice';
 import useKeyboardNavigation from './hooks/useKeyboardNavigation';
@@ -49,7 +51,6 @@ import {
   hasPendingChangelog,
   recordAppLaunch,
 } from './services/changelogPrompt';
-import MasterPage from './pages/MasterPage';
 import type { MasterFranchise } from './services/masterAdminAdapter';
 import AdminPinModal from './components/AdminPinModal';
 import { useFranchiseAppName } from './hooks/useFranchiseAppName';
@@ -80,6 +81,14 @@ import { listProposals } from './services/proposalsAdapter';
 import { countUnreadWorkflowEvents } from './services/proposalWorkflow';
 import './App.css';
 
+const ProposalForm = lazy(() => import('./pages/ProposalForm'));
+const ProposalView = lazy(() => import('./pages/ProposalView'));
+const WorkflowPage = lazy(() => import('./pages/WorkflowPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AdminPanelPage = lazy(() => import('./pages/AdminPanelPage'));
+const AdminPricingPage = lazy(() => import('./pages/AdminPricingPage'));
+const MasterPage = lazy(() => import('./pages/MasterPage'));
+
 type PendingSessionTakeover = {
   session: UserSession;
 };
@@ -97,6 +106,14 @@ function readFeedbackLauncherRect(element: HTMLButtonElement | null): FeedbackTu
     width: rect.width,
     height: rect.height,
   };
+}
+
+function RouteLoading() {
+  return (
+    <div className="app">
+      <div style={{ padding: '2rem' }}>Loading...</div>
+    </div>
+  );
 }
 
 function AppContent() {
@@ -981,71 +998,73 @@ function AppContent() {
           onAdminPanelClick={handleAdminPanelTabClick}
         />
       )}
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <HomePage
-              session={effectiveSession}
-              onFeedbackInboxLoadingChange={setFeedbackInboxLoading}
-              onFeedbackInboxVisibilityChange={setFeedbackInboxOpen}
-            />
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            canRenderAdminPanel ? (
-              <AdminPanelPage
-                onOpenPricingData={() => navigate('/admin/pricing')}
+      <Suspense fallback={<RouteLoading />}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <HomePage
                 session={effectiveSession}
-                offsetSettingsLauncher={Boolean(actingLabel)}
+                onFeedbackInboxLoadingChange={setFeedbackInboxLoading}
+                onFeedbackInboxVisibilityChange={setFeedbackInboxOpen}
               />
-            ) : null
-          }
-        />
-        <Route
-          path="/admin/pricing"
-          element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
-        />
-        <Route path="/workflow" element={<WorkflowPage session={effectiveSession} />} />
-        <Route path="/workflow/:proposalNumber" element={<WorkflowPage session={effectiveSession} />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route
-          path="/master"
-          element={
-            <MasterPage
-              session={session}
-              onActAsFranchise={handleActAsFranchise}
-              actingFranchiseId={masterImpersonation?.franchiseId}
-              onFranchiseUpdated={handleMasterFranchiseUpdated}
-            />
-          }
-        />
-        <Route
-          path="/proposal/new"
-          element={
-            <ProposalForm
-              key="new"
-              cloudIssue={cloudIssue}
-              showFeedbackButton={canSubmitFeedback}
-              onOpenFeedback={handleOpenFeedbackModal}
-            />
-          }
-        />
-        <Route
-          path="/proposal/edit/:proposalNumber"
-          element={
-            <ProposalForm
-              key={location.pathname}
-              cloudIssue={cloudIssue}
-              showFeedbackButton={canSubmitFeedback}
-              onOpenFeedback={handleOpenFeedbackModal}
-            />
-          }
-        />
-        <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
-      </Routes>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              canRenderAdminPanel ? (
+                <AdminPanelPage
+                  onOpenPricingData={() => navigate('/admin/pricing')}
+                  session={effectiveSession}
+                  offsetSettingsLauncher={Boolean(actingLabel)}
+                />
+              ) : null
+            }
+          />
+          <Route
+            path="/admin/pricing"
+            element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
+          />
+          <Route path="/workflow" element={<WorkflowPage session={effectiveSession} />} />
+          <Route path="/workflow/:proposalNumber" element={<WorkflowPage session={effectiveSession} />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route
+            path="/master"
+            element={
+              <MasterPage
+                session={session}
+                onActAsFranchise={handleActAsFranchise}
+                actingFranchiseId={masterImpersonation?.franchiseId}
+                onFranchiseUpdated={handleMasterFranchiseUpdated}
+              />
+            }
+          />
+          <Route
+            path="/proposal/new"
+            element={
+              <ProposalForm
+                key="new"
+                cloudIssue={cloudIssue}
+                showFeedbackButton={canSubmitFeedback}
+                onOpenFeedback={handleOpenFeedbackModal}
+              />
+            }
+          />
+          <Route
+            path="/proposal/edit/:proposalNumber"
+            element={
+              <ProposalForm
+                key={location.pathname}
+                cloudIssue={cloudIssue}
+                showFeedbackButton={canSubmitFeedback}
+                onOpenFeedback={handleOpenFeedbackModal}
+              />
+            }
+          />
+          <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
+        </Routes>
+      </Suspense>
       {(actingLabel || location.pathname === '/') && (
         <div className="app-bottom-left-meta">
           {actingLabel && (

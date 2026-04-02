@@ -40,6 +40,3 @@ export const getAdditionalPumpSelections = (equipment?: Partial<Equipment> | nul
 
   return Array.from({ length: legacyCount }, () => ({ ...basePump }));
 };
-
-export const getTotalPrimaryPumpCount = (equipment?: Partial<Equipment> | null) =>
-  getBasePumpQuantity(equipment) + getAdditionalPumpSelections(equipment).length;

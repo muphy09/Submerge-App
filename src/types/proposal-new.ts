@@ -24,7 +24,6 @@ export type PoolShape = 'geometric' | 'freeform';
 export type FiberglassSize = 'small' | 'medium' | 'large';
 export type SpaType = 'none' | 'gunite' | 'fiberglass';
 export type SpaShape = 'round' | 'square';
-export type FiberglassModelSize = 'small' | 'medium' | 'large';
 export type FiberglassCraneOption = 'no-crane' | 'crane-small' | 'crane-medium' | 'crane-large';
 export type MasonryFacing = string;
 

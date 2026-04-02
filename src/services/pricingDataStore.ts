@@ -501,12 +501,6 @@ export function removePricingListItem(path: (string | number)[], index: number) 
   notify();
 }
 
-export function resetPricingData() {
-  pricingState = normalizePricingState(deepClone(defaultSnapshot), defaultSnapshot);
-  syncBaseFromState();
-  notify();
-}
-
 export function subscribeToPricingData(listener: (data: PricingData) => void) {
   listeners.add(listener);
   return () => {

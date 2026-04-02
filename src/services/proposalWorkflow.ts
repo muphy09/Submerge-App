@@ -868,11 +868,6 @@ export function getReviewVersionId(proposal?: Partial<Proposal> | null) {
   );
 }
 
-export function getReviewVersion(proposal: Proposal): Proposal | null {
-  const normalized = ensureProposalWorkflow(proposal);
-  return getVersionById(normalized, getReviewVersionId(normalized));
-}
-
 export function getPendingReviewVersion(proposal: Proposal): Proposal | null {
   const normalized = ensureProposalWorkflow(proposal);
   return getVersionById(normalized, getPendingReviewVersionId(normalized));
@@ -881,10 +876,6 @@ export function getPendingReviewVersion(proposal: Proposal): Proposal | null {
 export function getApprovedVersion(proposal: Proposal): Proposal | null {
   const normalized = ensureProposalWorkflow(proposal);
   return getVersionById(normalized, getApprovedVersionId(normalized));
-}
-
-export function hasPendingWorkflowReview(proposal?: Partial<Proposal> | null) {
-  return Boolean(getPendingReviewVersionId(proposal));
 }
 
 export function getReviewerVisibleVersions(proposal: Proposal) {
@@ -1020,10 +1011,6 @@ export function collapseApprovedProposalVersions(proposal: Proposal): Proposal {
     status,
     nextWorkflow
   );
-}
-
-export function canCreateReplacementVersion(proposal?: Partial<Proposal> | null) {
-  return getWorkflowStatus(proposal) !== 'completed';
 }
 
 function createWorkflowEvent(
@@ -1489,12 +1476,6 @@ function getSubmittedReviewKind(proposal: Proposal) {
     return reviewKind as VersionDiffSummary['comparisonKind'];
   }
   return null;
-}
-
-export function getChangedSections(current?: Partial<Proposal> | null, previous?: Partial<Proposal> | null) {
-  if (!current || !previous) return [];
-  const categories = buildDetailedDiffCategories(current as Proposal, previous as Proposal);
-  return categories.map((category) => category.label);
 }
 
 function getWorkflowComparisonVersions(proposal: Proposal) {

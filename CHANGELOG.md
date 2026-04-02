@@ -1,3 +1,9 @@
+## [2.2.1] - 4/1/26
+### Improvements
+    - Numerous backend code changes should allow for faster loading and rendering
+    - Removed lots of old unreferenced data
+    
+-----
 ## [2.2.0] - 4/1/26
 ### Proposal Submission Workflow
     - Submitting a Proposal now locks the Submited Proposal from edits, and can then be viewed by an Admin or Book Keeper for Approval

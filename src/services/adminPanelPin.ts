@@ -134,11 +134,6 @@ export function getCachedAdminPanelPin(franchiseId: string) {
   return cached ?? DEFAULT_ADMIN_PANEL_PIN;
 }
 
-export function hasLoadedAdminPanelPin(franchiseId: string) {
-  if (!franchiseId) return true;
-  return loadedFranchiseIds.has(franchiseId) || getCachedFranchiseAdminPanelPin(franchiseId) !== undefined;
-}
-
 export async function loadAdminPanelPin(
   franchiseId: string,
   options: { force?: boolean } = {}

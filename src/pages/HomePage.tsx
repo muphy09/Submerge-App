@@ -9,24 +9,6 @@ import heroImage from '../../docs/img/newback.jpg';
 import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, isMasterActingAsOwnerSession, type UserSession } from '../services/session';
 import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
-import MasterPricingEngine from '../services/masterPricingEngine';
-import {
-  getDefaultProposal,
-  getDefaultPoolSpecs,
-  getDefaultExcavation,
-  getDefaultPlumbing,
-  getDefaultElectrical,
-  getDefaultTileCopingDecking,
-  getDefaultDrainage,
-  getDefaultEquipment,
-  getDefaultWaterFeatures,
-  getDefaultInteriorFinish,
-  getDefaultManualAdjustments,
-  mergeRetailAdjustments,
-} from '../utils/proposalDefaults';
-import { normalizeEquipmentLighting } from '../utils/lighting';
-import { normalizeCustomFeatures } from '../utils/customFeatures';
-import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   acknowledgeFeedbackReply,
   isFeedbackFeatureUnavailableError,
@@ -60,7 +42,35 @@ function HomePage({
   const loadProposals = useCallback(async () => {
     setLoading(true);
     try {
-      const filtered = await listDashboardProposals(sessionFranchiseId);
+      const [
+        filtered,
+        { default: MasterPricingEngine },
+        proposalDefaultsModule,
+        { normalizeEquipmentLighting },
+        { normalizeCustomFeatures },
+        { normalizeWarrantySectionsSetting },
+      ] = await Promise.all([
+        listDashboardProposals(sessionFranchiseId),
+        import('../services/masterPricingEngine'),
+        import('../utils/proposalDefaults'),
+        import('../utils/lighting'),
+        import('../utils/customFeatures'),
+        import('../utils/warranty'),
+      ]);
+      const {
+        getDefaultProposal,
+        getDefaultPoolSpecs,
+        getDefaultExcavation,
+        getDefaultPlumbing,
+        getDefaultElectrical,
+        getDefaultTileCopingDecking,
+        getDefaultDrainage,
+        getDefaultEquipment,
+        getDefaultWaterFeatures,
+        getDefaultInteriorFinish,
+        getDefaultManualAdjustments,
+        mergeRetailAdjustments,
+      } = proposalDefaultsModule;
 
       const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
         const base = getDefaultProposal();

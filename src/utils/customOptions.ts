@@ -72,9 +72,6 @@ export const normalizeCustomOption = (option?: Partial<CustomOption> | null): Cu
   isOffContract: Boolean(option?.isOffContract),
 });
 
-export const normalizeCustomOptions = (options?: Array<Partial<CustomOption> | null>): CustomOption[] =>
-  (options || []).map(normalizeCustomOption);
-
 const OFF_CONTRACT_SECTION_DEFINITIONS = [
   {
     category: 'Excavation',

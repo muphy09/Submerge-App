@@ -37,8 +37,5 @@ export const isOffContractEligibleLineItem = (
   return String(item?.details?.offContractGroup || '').trim() === group;
 };
 
-export const getOffContractLineItemGroup = (item?: CostLineItem | null): string =>
-  String(item?.details?.offContractGroup || '').trim();
-
 export const getOffContractSelectionLabel = (item?: CostLineItem | null): string =>
   String(item?.details?.offContractSelectionLabel || '').trim();

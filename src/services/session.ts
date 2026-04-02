@@ -112,17 +112,6 @@ export function subscribeToMasterImpersonationUpdates(
   return () => window.removeEventListener(MASTER_IMPERSONATION_UPDATED_EVENT, handler as EventListener);
 }
 
-export function getActiveMasterImpersonation(): MasterImpersonation | null {
-  const session = readSession();
-  const role = (session?.role || '').toLowerCase();
-  if (role !== 'master') return null;
-  return readMasterImpersonation();
-}
-
-export function isMasterImpersonating(): boolean {
-  return Boolean(getActiveMasterImpersonation());
-}
-
 export function isMasterSession(): boolean {
   return (readSession()?.role || '').toLowerCase() === 'master';
 }
@@ -180,10 +169,6 @@ export function getSessionFranchiseCode() {
     if (impersonation?.franchiseCode) return impersonation.franchiseCode;
   }
   return session?.franchiseCode;
-}
-
-export function getSessionUserEmail(defaultEmail = '') {
-  return readSession()?.userEmail || defaultEmail;
 }
 
 export function getSessionCommissionRates(): UserCommissionRates {

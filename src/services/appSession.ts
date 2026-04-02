@@ -1,7 +1,6 @@
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
 
 export const APP_SESSION_HEARTBEAT_INTERVAL_MS = 10000;
-export const APP_SESSION_STALE_WINDOW_MS = 3 * 60 * 1000;
 
 const DEVICE_ID_STORAGE_KEY = 'submerge-device-id';
 

@@ -3,19 +3,6 @@ import { isEnvFlagTrue } from './env';
 import { logLedgerEventSafe } from './ledger';
 import { readSession } from './session';
 
-export type PricingModelRow = {
-  id: string;
-  franchise_id: string;
-  name: string;
-  version: string;
-  pricing_json: any;
-  is_default: boolean;
-  is_hidden_from_view: boolean;
-  created_at?: string;
-  updated_at?: string;
-  updated_by?: string | null;
-};
-
 type PricingModelSummary = {
   id: string;
   name: string;

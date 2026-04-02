@@ -27,7 +27,6 @@ export type WaterFeatureRunEntry = {
   run: number;
 };
 
-export const DEFAULT_WATER_FEATURE_MARGIN = 0.7;
 export const WATER_FEATURE_RUN_FIELDS: Array<keyof PlumbingRuns> = [
   'waterFeature1Run',
   'waterFeature2Run',
@@ -81,12 +80,6 @@ export function getWaterFeatureCogs(item?: WaterFeatureItem | null): number {
     (item.addCost2 ?? 0) +
     (item.needsPoolLight ? getDefaultPoolLightCost() : 0)
   );
-}
-
-export function getWaterFeatureRetail(item?: WaterFeatureItem | null, retailMargin: number = DEFAULT_WATER_FEATURE_MARGIN): number {
-  const cogs = getWaterFeatureCogs(item);
-  if (!retailMargin) return cogs;
-  return cogs / retailMargin;
 }
 
 export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {

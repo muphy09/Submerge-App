@@ -1,5 +1,4 @@
 import { getSupabaseClient } from './supabaseClient';
-import { Proposal } from '../types/proposal-new';
 import { isEnvFlagTrue } from './env';
 import { getLedgerContextPayload, logLedgerEventSafe } from './ledger';
 import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
@@ -307,34 +306,6 @@ export async function updateFranchiseUserCommissionRates(
   return normalizedRates;
 }
 
-export async function deactivateFranchiseUser(userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    requireSupabase();
-    return null;
-  }
-  const { error } = await supabase
-    .from('franchise_users')
-    .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-  if (error) throw error;
-  return true;
-}
-
-export async function setFranchiseUserActive(userId: string, isActive: boolean) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    requireSupabase();
-    return null;
-  }
-  const { error } = await supabase
-    .from('franchise_users')
-    .update({ is_active: isActive, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-  if (error) throw error;
-  return true;
-}
-
 export async function deleteFranchiseUser(userId: string, transferToUserId?: string | null) {
   const supabase = getSupabaseClient();
   if (!supabase) {
@@ -355,42 +326,6 @@ export async function deleteFranchiseUser(userId: string, transferToUserId?: str
     throw new Error('User removal did not persist.');
   }
   return data as { success?: boolean; user?: Pick<FranchiseUser, 'id' | 'franchiseId' | 'role' | 'isActive'>; proposalsUpdated?: number };
-}
-
-export async function markDesignerProposalsDeleted(franchiseId: string, name: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    requireSupabase();
-    return null;
-  }
-  const cleanName = normalizeName(name);
-  if (!cleanName) return null;
-  // Fetch proposals for this designer
-  const { data, error } = await supabase
-    .from('franchise_proposals')
-    .select('proposal_number, proposal_json, designer_name')
-    .eq('franchise_id', franchiseId)
-    .ilike('designer_name', cleanName);
-  if (error) throw error;
-  const updates =
-    data
-      ?.map((row: any) => {
-        const currentName: string = row.designer_name || cleanName;
-        const alreadyDeleted = /\(deleted\)$/i.test(currentName.trim());
-        const newName = alreadyDeleted ? currentName : `${currentName} (Deleted)`;
-        const proposalJson = row.proposal_json as Proposal;
-        return {
-          proposal_number: row.proposal_number,
-          franchise_id: franchiseId,
-          designer_name: newName,
-          proposal_json: { ...proposalJson, designerName: newName },
-        };
-      })
-      .filter(Boolean) || [];
-  if (!updates.length) return null;
-  const { error: upsertError } = await supabase.from('franchise_proposals').upsert(updates);
-  if (upsertError) throw upsertError;
-  return true;
 }
 
 export async function resetFranchiseUserPassword(userId: string) {

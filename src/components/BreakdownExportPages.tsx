@@ -512,5 +512,3 @@ export function BreakdownWarrantyExportPages({ proposal }: WarrantyExportProps) 
     </>
   );
 }
-
-export const BreakdownWarrantyExportPage = BreakdownWarrantyExportPages;

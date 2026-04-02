@@ -2,19 +2,17 @@ import {
   useState,
   useEffect,
   useLayoutEffect,
+  useCallback,
   useRef,
   type FocusEventHandler,
   type MouseEventHandler,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CostLineItem, Proposal, RetailAdjustment } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
-import { BreakdownCostExportPage, BreakdownWarrantyExportPages } from '../components/BreakdownExportPages';
-import ContractView, { ContractViewHandle } from '../components/ContractView';
+import type { ContractViewHandle } from '../components/ContractView';
 import FranchiseLogo from '../components/FranchiseLogo';
 import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
@@ -124,6 +122,25 @@ type ProposalViewLocationState = {
   versionId?: string;
   reviewerReturnTo?: 'workflow' | 'admin-panel';
   reviewerReturnPath?: string;
+};
+
+type ContractViewComponent = typeof import('../components/ContractView').default;
+type BreakdownExportPagesModule = typeof import('../components/BreakdownExportPages');
+
+let contractViewModulePromise: Promise<typeof import('../components/ContractView')> | null = null;
+const loadContractView = () => {
+  if (!contractViewModulePromise) {
+    contractViewModulePromise = import('../components/ContractView');
+  }
+  return contractViewModulePromise;
+};
+
+let breakdownExportPagesModulePromise: Promise<typeof import('../components/BreakdownExportPages')> | null = null;
+const loadBreakdownExportPages = () => {
+  if (!breakdownExportPagesModulePromise) {
+    breakdownExportPagesModulePromise = import('../components/BreakdownExportPages');
+  }
+  return breakdownExportPagesModulePromise;
 };
 
 const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefined): string => {
@@ -472,6 +489,9 @@ function ProposalView() {
   const [contractDirty, setContractDirty] = useState(false);
   const [contractExporting, setContractExporting] = useState(false);
   const [contractSaving, setContractSaving] = useState(false);
+  const [contractViewReady, setContractViewReady] = useState(false);
+  const [loadedContractView, setLoadedContractView] = useState<ContractViewComponent | null>(null);
+  const [loadedBreakdownExportPages, setLoadedBreakdownExportPages] = useState<BreakdownExportPagesModule | null>(null);
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -489,6 +509,10 @@ function ProposalView() {
   const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
+  const handleContractViewRef = useCallback((instance: ContractViewHandle | null) => {
+    contractViewRef.current = instance;
+    setContractViewReady(Boolean(instance));
+  }, []);
   const locationState = (location.state as ProposalViewLocationState | null) ?? null;
   const sessionRole = getSessionRole();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
@@ -714,8 +738,34 @@ function ProposalView() {
       setContractDirty(false);
       setContractExporting(false);
       setContractSaving(false);
+      setContractViewReady(false);
     }
   }, [contractVersionId]);
+
+  useEffect(() => {
+    if (!contractVersionId || loadedContractView) return;
+
+    let isMounted = true;
+    setContractViewReady(false);
+
+    void loadContractView()
+      .then((module) => {
+        if (isMounted) {
+          setLoadedContractView(() => module.default);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load contract view', error);
+        if (isMounted) {
+          setContractVersionId(null);
+          showToast({ type: 'error', message: 'Could not load contract view.' });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [contractVersionId, loadedContractView, showToast]);
 
   useEffect(() => {
     return () => {
@@ -1196,7 +1246,12 @@ function ProposalView() {
   };
 
   const prepareBreakdownExport = async () => {
+    if (!loadedBreakdownExportPages) {
+      const module = await loadBreakdownExportPages();
+      setLoadedBreakdownExportPages(module);
+    }
     setBreakdownExportActive(true);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
   };
 
@@ -1231,6 +1286,7 @@ function ProposalView() {
   };
 
   const exportBreakdownPdfFallback = async (filename: string) => {
+    const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
     const exportArea = breakdownExportAreaRef.current;
     const pages = exportArea
       ? Array.from(exportArea.querySelectorAll('.export-breakdown-page'))
@@ -1295,12 +1351,12 @@ function ProposalView() {
   };
 
   const handleContractSaveClick = () => {
-    if (contractSaving) return;
+    if (contractSaving || !contractViewReady) return;
     void contractViewRef.current?.saveOverrides();
   };
 
   const handleContractExportToggle = () => {
-    if (contractExporting || contractSaving) return;
+    if (contractExporting || contractSaving || !contractViewReady) return;
     setContractExportOpen((prev) => !prev);
   };
 
@@ -2047,6 +2103,9 @@ function ProposalView() {
   const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
   const hasMultipleVersions = viewModels.length > 1;
   const shouldRenderBreakdownExport = breakdownExportActive || breakdownExporting;
+  const ContractViewComponent = loadedContractView;
+  const BreakdownCostExportPageComponent = loadedBreakdownExportPages?.BreakdownCostExportPage;
+  const BreakdownWarrantyExportPagesComponent = loadedBreakdownExportPages?.BreakdownWarrantyExportPages;
 
   const categoryTotal = (items: CostLineItem[] = []): number =>
     items.reduce((sum, item) => sum + (isOffContractLineItem(item) ? 0 : (item.total ?? 0)), 0);
@@ -2932,7 +2991,7 @@ function ProposalView() {
                     className={`action-button export-button ${contractExportOpen ? 'open' : ''}`}
                     type="button"
                     onClick={handleContractExportToggle}
-                    disabled={contractExporting || contractSaving}
+                    disabled={contractExporting || contractSaving || !contractViewReady}
                     aria-expanded={contractExportOpen}
                     aria-haspopup="listbox"
                   >
@@ -2949,7 +3008,7 @@ function ProposalView() {
                         className="export-option"
                         role="option"
                         onClick={handleContractPrint}
-                        disabled={contractExporting || contractSaving}
+                        disabled={contractExporting || contractSaving || !contractViewReady}
                       >
                         Print
                       </button>
@@ -2958,7 +3017,7 @@ function ProposalView() {
                         className="export-option"
                         role="option"
                         onClick={handleContractPdf}
-                        disabled={contractExporting || contractSaving}
+                        disabled={contractExporting || contractSaving || !contractViewReady}
                       >
                         PDF
                       </button>
@@ -2970,7 +3029,7 @@ function ProposalView() {
                     className="action-button primary"
                     type="button"
                     onClick={handleContractSaveClick}
-                    disabled={!canEditProposal || !contractDirty || contractSaving}
+                    disabled={!canEditProposal || !contractDirty || contractSaving || !contractViewReady}
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M3 2h8l2 2v10H3V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
@@ -2986,16 +3045,22 @@ function ProposalView() {
               </div>
             </div>
             <div className="modal-body-scroll">
-              <ContractView
-                ref={contractViewRef}
-                proposal={contractModalView.proposal}
-                overrides={contractModalView.proposal.contractOverrides || {}}
-                onSave={(next) => handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)}
-                readOnly={!canEditProposal}
-                onDirtyChange={setContractDirty}
-                onExportingChange={setContractExporting}
-                onSavingChange={setContractSaving}
-              />
+              {ContractViewComponent ? (
+                <ContractViewComponent
+                  ref={handleContractViewRef}
+                  proposal={contractModalView.proposal}
+                  overrides={contractModalView.proposal.contractOverrides || {}}
+                  onSave={(next: ContractOverrides) =>
+                    handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)
+                  }
+                  readOnly={!canEditProposal}
+                  onDirtyChange={setContractDirty}
+                  onExportingChange={setContractExporting}
+                  onSavingChange={setContractSaving}
+                />
+              ) : (
+                <div className="modal-loading-state">Loading contract preview...</div>
+              )}
             </div>
           </div>
         </div>
@@ -3107,21 +3172,21 @@ function ProposalView() {
               </div>
             </div>
           </div>
-          {shouldRenderBreakdownExport && (
+          {shouldRenderBreakdownExport && BreakdownCostExportPageComponent && BreakdownWarrantyExportPagesComponent && (
             <div
               className={`export-print-area ${breakdownExportActive ? 'print-mode' : ''}`}
               ref={breakdownExportAreaRef}
               aria-hidden="true"
             >
               <div className="export-breakdown-page export-breakdown-page--cost">
-                <BreakdownCostExportPage
+                <BreakdownCostExportPageComponent
                   costBreakdown={customerModalView.costBreakdownForDisplay}
                   customerName={customerModalView.proposal.customerInfo.customerName}
                   proposal={customerModalView.proposal}
                   pricing={customerModalView.pricing}
                 />
               </div>
-              <BreakdownWarrantyExportPages proposal={customerModalView.proposal} />
+              <BreakdownWarrantyExportPagesComponent proposal={customerModalView.proposal} />
             </div>
           )}
         </>

@@ -369,64 +369,6 @@ export const getPackageTotal = (option?: EquipmentPackageOption | null): number 
   return base + checkValve;
 };
 
-export const buildPackageSummaryRows = (option?: EquipmentPackageOption | null) => {
-  if (!option) return [];
-  const rows: Array<{ label: string; value: string }> = [];
-  const maybePush = (label: string, name?: string | null, qty?: number | null) => {
-    if (!hasName(name)) return;
-    const quantity = resolvePackageQty(qty) || 1;
-    rows.push({
-      label,
-      value: quantity > 1 ? `${quantity} x ${name}` : String(name),
-    });
-  };
-
-  maybePush('Pump', option.includedPumpName, option.includedPumpQuantity);
-  maybePush('Filter', option.includedFilterName, option.includedFilterQuantity);
-  maybePush('Automation', option.includedAutomationName, option.includedAutomationQuantity);
-  maybePush('Sanitation', option.includedSaltSystemName, option.includedSaltSystemQuantity);
-  maybePush('Pool Lights', option.includedPoolLightName, option.includedPoolLightQuantity);
-  maybePush('Spa Lights', option.includedSpaLightName, option.includedSpaLightQuantity);
-  maybePush('Heater', option.includedHeaterName, option.includedHeaterQuantity);
-  maybePush('Cleaner', option.includedCleanerName, option.includedCleanerQuantity);
-  maybePush('Auto-Fill', option.includedAutoFillSystemName, option.includedAutoFillSystemQuantity);
-  maybePush(
-    'Sanitation Accessory',
-    option.includedSanitationAccessoryName,
-    option.includedSanitationAccessoryQuantity
-  );
-
-  return rows;
-};
-
-export const buildPackageRuleNotes = (option?: EquipmentPackageOption | null): string[] => {
-  if (!option) return [];
-  const notes: string[] = [];
-  if (!packageSupportsSpa(option)) {
-    notes.push('This equipment package cannot include a spa.');
-  }
-  if (!packageAllowsWaterFeatures(option)) {
-    notes.push('Water features are not available with this package.');
-  } else {
-    const allowance = getPackageWaterFeaturesWithoutExtraPump(option);
-    if (allowance > 0) {
-      notes.push(
-        `This package supports ${allowance} water feature${allowance === 1 ? '' : 's'} before another pump is required.`
-      );
-    }
-  }
-  if (!packageAllowsAdditionalPumps(option)) {
-    notes.push('Additional pumps are not available with this package.');
-  }
-  if (option.includeCheckValve !== false) {
-    notes.push('Package pricing includes the check valve cost.');
-  }
-  if (option.notes?.trim()) {
-    notes.push(option.notes.trim());
-  }
-  return notes;
-};
-
 export const createFreshEquipmentForPackage = (
   option: EquipmentPackageOption,
   opts?: { hasPool?: boolean; hasSpa?: boolean }

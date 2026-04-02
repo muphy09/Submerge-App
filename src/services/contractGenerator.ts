@@ -48,21 +48,6 @@ const ADDITIONAL_SPEC_FIELD_IDS = [
   'p2_additional_spec_82',
 ] as const;
 const ADDITIONAL_SPEC_FIELD_ID_SET = new Set<string>(ADDITIONAL_SPEC_FIELD_IDS);
-const OPTIONAL_UNMAPPED_FIELD_IDS = new Set([
-  'p1_16',
-  'p1_37_size',
-  'p1_38_qty',
-  'p1_40_qty',
-  'p1_rbb_6',
-  'p1_rbb_12',
-  'p1_rbb_18',
-  'p1_rbb_24',
-  'p1_rbb_30',
-  'p1_rbb_36',
-  'p1_rbb_42',
-  'p1_rbb_48',
-  ...ADDITIONAL_SPEC_FIELD_IDS,
-]);
 const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set([
   'p1_39',
   'p1_40',
@@ -875,13 +860,6 @@ export async function getEditableContractFields(
     });
 
   return fields;
-}
-
-export function listUnmappedFields(fields: ContractFieldRender[]): string[] {
-  return fields
-    .filter((f) => !OPTIONAL_UNMAPPED_FIELD_IDS.has(f.id))
-    .filter((f) => !f.value && f.color === 'blue' && (f.label || '').trim())
-    .map((f) => f.label || f.id);
 }
 
 export function validateContractInputs(proposal: Proposal): string[] {
