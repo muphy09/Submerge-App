@@ -112,6 +112,7 @@ function getStatusBadgeClass(status: string) {
 function formatStatusLabel(status?: string | null) {
   const normalized = String(status || '').trim().toLowerCase();
   if (!normalized) return 'Draft';
+  if (normalized === 'changes_requested') return 'Returned';
   return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 }
 

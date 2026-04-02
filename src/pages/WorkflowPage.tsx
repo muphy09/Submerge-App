@@ -29,11 +29,11 @@ type WorkflowPageProps = {
 type QueueFilter = 'needs_approval' | 'approved' | 'archive';
 
 const normalizeStatusLabel = (value?: string | null) =>
-  String(value || 'draft')
-    .trim()
-    .toLowerCase()
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+  (() => {
+    const normalized = String(value || 'draft').trim().toLowerCase();
+    if (normalized === 'changes_requested') return 'Returned';
+    return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
+  })();
 
 const matchesQueueFilter = (proposal: Proposal, filter: QueueFilter) => {
   const status = getWorkflowStatus(proposal);

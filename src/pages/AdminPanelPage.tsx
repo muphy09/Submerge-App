@@ -68,6 +68,7 @@ const normalizeStatus = (status?: string | null) => String(status || '').trim().
 const formatStatusLabel = (status?: string | null) => {
   const normalized = normalizeStatus(status);
   if (!normalized) return 'Draft';
+  if (normalized === 'changes_requested') return 'Returned';
   return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 };
 

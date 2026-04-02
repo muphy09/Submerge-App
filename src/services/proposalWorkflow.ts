@@ -718,12 +718,12 @@ export function getWorkflowStatus(proposal?: Partial<Proposal> | null): Proposal
   const hasApprovedBaseline = Boolean(proposal?.workflow?.approved === true || proposal?.workflow?.approvedVersionId);
   const hasPendingReview = Boolean(normalizeText(proposal?.workflow?.reviewVersionId));
   if (status === 'completed') return 'completed';
+  if (status === 'needs_approval') return 'needs_approval';
+  if (status === 'changes_requested') return 'changes_requested';
   if (status === 'approved') return 'approved';
   if (hasApprovedBaseline && !hasPendingReview) return 'approved';
   if (status === 'submitted' && proposal?.workflow?.approved === true) return 'approved';
   if (status === 'submitted') return 'submitted';
-  if (status === 'needs_approval') return 'needs_approval';
-  if (status === 'changes_requested') return 'changes_requested';
   return 'draft';
 }
 

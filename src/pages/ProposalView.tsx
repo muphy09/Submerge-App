@@ -1554,6 +1554,7 @@ function ProposalView() {
   const formatWorkflowStatusLabel = (value?: string | null) => {
     const normalized = String(value || '').trim().toLowerCase();
     if (!normalized) return 'Draft';
+    if (normalized === 'changes_requested') return 'Returned';
     return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
   };
 
@@ -1969,6 +1970,8 @@ function ProposalView() {
   const workflowStatusTooltip =
     proposalWorkflowStatus === 'needs_approval'
       ? 'Proposal submitted and awaiting approval'
+      : proposalWorkflowStatus === 'changes_requested'
+      ? 'Changes were requested. Create a new version and resubmit for approval.'
       : proposalWorkflowStatus === 'approved'
       ? 'Proposal was approved. Future changes must be submitted as addendums.'
       : undefined;
