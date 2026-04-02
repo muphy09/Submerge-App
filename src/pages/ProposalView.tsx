@@ -1,4 +1,13 @@
-import { useState, useEffect, useRef, type MouseEventHandler, type ReactNode } from 'react';
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type FocusEventHandler,
+  type MouseEventHandler,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -206,22 +215,137 @@ const resolveOverflowTooltipText = (children: ReactNode, tooltipText?: string): 
   return '';
 };
 
-const setOverflowTooltip: MouseEventHandler<HTMLElement> = (event) => {
-  const target = event.currentTarget;
-  const isOverflowing = target.scrollWidth > target.clientWidth || target.scrollHeight > target.clientHeight;
+const clampTooltipValue = (value: number, min: number, max: number): number => {
+  if (max <= min) return min;
+  return Math.min(max, Math.max(min, value));
+};
 
-  if (!isOverflowing) {
-    target.removeAttribute('title');
-    return;
-  }
+type TooltipPlacement = 'top' | 'bottom';
 
-  const fullText = target.dataset.fullText?.trim() || target.textContent?.trim() || '';
-  if (fullText) {
-    target.title = fullText;
-    return;
-  }
+type TooltipPosition = {
+  left: number;
+  top: number;
+  maxWidth: number;
+  arrowLeft: number;
+  placement: TooltipPlacement;
+  ready: boolean;
+};
 
-  target.removeAttribute('title');
+const DEFAULT_TOOLTIP_POSITION: TooltipPosition = {
+  left: 0,
+  top: 0,
+  maxWidth: 320,
+  arrowLeft: 24,
+  placement: 'top',
+  ready: false,
+};
+
+const useFloatingTooltip = <T extends HTMLElement>(tooltip?: string | null) => {
+  const normalizedTooltip = String(tooltip || '').trim();
+  const anchorRef = useRef<T | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState<TooltipPosition>(DEFAULT_TOOLTIP_POSITION);
+
+  const updatePosition = () => {
+    if (!anchorRef.current || !tooltipRef.current || typeof window === 'undefined') return;
+
+    const rect = anchorRef.current.getBoundingClientRect();
+    const viewportPadding = 18;
+    const verticalGap = 12;
+    const availableWidth = Math.max(160, window.innerWidth - viewportPadding * 2);
+    const maxWidth = Math.min(340, availableWidth);
+    const tooltipWidth = Math.min(tooltipRef.current.offsetWidth || maxWidth, maxWidth);
+    const tooltipHeight = tooltipRef.current.offsetHeight || 0;
+    const anchorCenter = rect.left + rect.width / 2;
+    const minCenter = viewportPadding + tooltipWidth / 2;
+    const maxCenter = window.innerWidth - viewportPadding - tooltipWidth / 2;
+    const left = clampTooltipValue(anchorCenter, minCenter, maxCenter);
+    const canFitAbove = rect.top - tooltipHeight - verticalGap >= viewportPadding;
+    const placement: TooltipPlacement = canFitAbove ? 'top' : 'bottom';
+    const unclampedTop = placement === 'top' ? rect.top - tooltipHeight - verticalGap : rect.bottom + verticalGap;
+    const top = clampTooltipValue(
+      unclampedTop,
+      viewportPadding,
+      Math.max(viewportPadding, window.innerHeight - tooltipHeight - viewportPadding)
+    );
+    const tooltipLeftEdge = left - tooltipWidth / 2;
+    const arrowLeft = clampTooltipValue(anchorCenter - tooltipLeftEdge, 18, Math.max(18, tooltipWidth - 18));
+
+    setPosition({
+      left,
+      top,
+      maxWidth,
+      arrowLeft,
+      placement,
+      ready: true,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!isVisible || !normalizedTooltip || typeof window === 'undefined') return;
+
+    const frame = window.requestAnimationFrame(updatePosition);
+    const handleWindowChange = () => updatePosition();
+    window.addEventListener('resize', handleWindowChange);
+    window.addEventListener('scroll', handleWindowChange, true);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', handleWindowChange);
+      window.removeEventListener('scroll', handleWindowChange, true);
+    };
+  }, [isVisible, normalizedTooltip]);
+
+  useEffect(() => {
+    if (!normalizedTooltip && isVisible) {
+      setIsVisible(false);
+      setPosition(DEFAULT_TOOLTIP_POSITION);
+    }
+  }, [normalizedTooltip, isVisible]);
+
+  const showTooltip = () => {
+    if (!normalizedTooltip) return;
+    setPosition((current) => ({ ...current, ready: false }));
+    setIsVisible(true);
+  };
+
+  const hideTooltip = () => {
+    setIsVisible(false);
+  };
+
+  const tooltipPortal =
+    isVisible && normalizedTooltip && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={tooltipRef}
+            className="proposal-tooltip-floating"
+            data-placement={position.placement}
+            role="tooltip"
+            style={{
+              left: `${position.left}px`,
+              top: `${position.top}px`,
+              maxWidth: `${position.maxWidth}px`,
+              opacity: position.ready ? 1 : 0,
+            }}
+          >
+            {normalizedTooltip}
+            <span
+              className="proposal-tooltip-floating-arrow"
+              aria-hidden="true"
+              style={{ left: `${position.arrowLeft}px` }}
+            />
+          </div>,
+          document.body
+        )
+      : null;
+
+  return {
+    anchorRef,
+    hideTooltip,
+    showTooltip,
+    tooltipPortal,
+  };
 };
 
 type OverflowTooltipTextProps = {
@@ -238,19 +362,86 @@ const OverflowTooltipText = ({
   tooltipText,
 }: OverflowTooltipTextProps) => {
   const fullText = resolveOverflowTooltipText(children, tooltipText);
+  const { anchorRef, showTooltip, hideTooltip, tooltipPortal } = useFloatingTooltip<HTMLElement>(fullText);
+  const tooltipClassName = ['proposal-tooltip-target', className].filter(Boolean).join(' ');
+  const maybeShowTooltip = (target: HTMLElement) => {
+    const isOverflowing = target.scrollWidth > target.clientWidth || target.scrollHeight > target.clientHeight;
+    if (!isOverflowing || !fullText) {
+      hideTooltip();
+      return;
+    }
+
+    showTooltip();
+  };
+  const handleMouseEnter: MouseEventHandler<HTMLElement> = (event) => {
+    maybeShowTooltip(event.currentTarget);
+  };
+  const handleFocusCapture: FocusEventHandler<HTMLElement> = (event) => {
+    maybeShowTooltip(event.currentTarget);
+  };
 
   if (as === 'p') {
     return (
-      <p className={className} data-full-text={fullText || undefined} onMouseEnter={setOverflowTooltip}>
-        {children}
-      </p>
+      <>
+        <p
+          ref={anchorRef as any}
+          className={tooltipClassName}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={hideTooltip}
+          onFocusCapture={handleFocusCapture}
+          onBlurCapture={hideTooltip}
+        >
+          {children}
+        </p>
+        {tooltipPortal}
+      </>
     );
   }
 
   return (
-    <span className={className} data-full-text={fullText || undefined} onMouseEnter={setOverflowTooltip}>
-      {children}
-    </span>
+    <>
+      <span
+        ref={anchorRef as any}
+        className={tooltipClassName}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={hideTooltip}
+        onFocusCapture={handleFocusCapture}
+        onBlurCapture={hideTooltip}
+      >
+        {children}
+      </span>
+      {tooltipPortal}
+    </>
+  );
+};
+
+type TooltipAnchorProps = {
+  tooltip?: string | null;
+  className?: string;
+  as?: 'span' | 'div';
+  children: ReactNode;
+};
+
+const TooltipAnchor = ({ tooltip, className, as = 'span', children }: TooltipAnchorProps) => {
+  const { anchorRef, showTooltip, hideTooltip, tooltipPortal } = useFloatingTooltip<
+    HTMLSpanElement | HTMLDivElement
+  >(tooltip);
+  const Component = as;
+
+  return (
+    <>
+      <Component
+        ref={anchorRef as any}
+        className={['proposal-tooltip-anchor', className].filter(Boolean).join(' ')}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        onFocusCapture={showTooltip}
+        onBlurCapture={hideTooltip}
+      >
+        {children}
+      </Component>
+      {tooltipPortal}
+    </>
   );
 };
 
@@ -1258,7 +1449,6 @@ function ProposalView() {
     if (!proposal || reviewerActionSaving) return;
     if (options?.requiresNote && !trimmedMessage) {
       setShowWorkflowMessageComposer(true);
-      showToast({ type: 'error', message: 'Add a note before requesting changes.' });
       return false;
     }
 
@@ -1731,8 +1921,33 @@ function ProposalView() {
             !isSubmittedVersionLocked(entry)
         ) || null
       : null;
+  const renderPrimaryVersionId =
+    (isReadOnlyReviewerView ? getReviewerPrimaryVersionId(displayVersionContainer as Proposal) : activeVersionId) ||
+    activeVersionId ||
+    (proposal as Proposal).activeVersionId ||
+    (proposal as Proposal).versionId ||
+    'original';
+  const shouldPromoteActiveAddendum =
+    Boolean(approvedVersionId) &&
+    renderPrimaryVersionId !== approvedVersionId &&
+    versionsForRender.some((entry) => (entry.versionId || 'original') === renderPrimaryVersionId);
 
   const sortedVersions = [...versionsForRender].sort((a, b) => {
+    const aId = a.versionId || 'original';
+    const bId = b.versionId || 'original';
+
+    if (shouldPromoteActiveAddendum) {
+      const aIsPrimary = aId === renderPrimaryVersionId;
+      const bIsPrimary = bId === renderPrimaryVersionId;
+      if (aIsPrimary !== bIsPrimary) return aIsPrimary ? -1 : 1;
+
+      const aIsApprovedBaseline = aId === approvedVersionId;
+      const bIsApprovedBaseline = bId === approvedVersionId;
+      if (aIsApprovedBaseline !== bIsApprovedBaseline) {
+        return aIsApprovedBaseline ? 1 : -1;
+      }
+    }
+
     const aIsOriginal = a.isOriginalVersion ?? (a.versionId || 'original') === 'original';
     const bIsOriginal = b.isOriginalVersion ?? (b.versionId || 'original') === 'original';
     if (aIsOriginal && !bIsOriginal) return -1;
@@ -1767,9 +1982,7 @@ function ProposalView() {
     )?.versionName ||
     proposal?.versionName ||
     'Current Version';
-  const displayPrimaryVersionId =
-    (isReadOnlyReviewerView ? getReviewerPrimaryVersionId(displayVersionContainer as Proposal) : activeVersionId) ||
-    activeVersionId;
+  const displayPrimaryVersionId = renderPrimaryVersionId;
   const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
   const customerModalView = customerBreakdownVersionId
     ? versionMap.get(customerBreakdownVersionId) || primaryView
@@ -2204,16 +2417,9 @@ function ProposalView() {
                 {vm.hasRetiredEquipment && <RetiredEquipmentIndicator />}
               </h2>
             </div>
-            <div
-              className={`hero-price-model ${vm.priceModelStatus}`}
-              data-tooltip={
-                vm.priceModelStatus === 'active'
-                  ? 'Pricing Model is Current'
-                  : vm.priceModelStatus === 'removed'
-                  ? 'Pricing Model was removed; please select another'
-                  : 'Pricing Model is not active, consider changing'
-              }
-              aria-label={
+            <TooltipAnchor
+              as="div"
+              tooltip={
                 vm.priceModelStatus === 'active'
                   ? 'Pricing Model is Current'
                   : vm.priceModelStatus === 'removed'
@@ -2221,26 +2427,39 @@ function ProposalView() {
                   : 'Pricing Model is not active, consider changing'
               }
             >
-              {vm.priceModel}{vm.priceModelStatus === 'active' ? ' (Active)' : ''}
-            </div>
-            <div className="hero-actions">
-              <button
-                className="action-button"
-                onClick={() => handleEdit(vm.proposal)}
-                disabled={!canEditVersion}
-                title={versionActionReason}
+              <div
+                className={`hero-price-model ${vm.priceModelStatus}`}
+                aria-label={
+                  vm.priceModelStatus === 'active'
+                    ? 'Pricing Model is Current'
+                    : vm.priceModelStatus === 'removed'
+                    ? 'Pricing Model was removed; please select another'
+                    : 'Pricing Model is not active, consider changing'
+                }
               >
-                Edit Proposal
-              </button>
-              {!isOriginal && (
+                {vm.priceModel}{vm.priceModelStatus === 'active' ? ' (Active)' : ''}
+              </div>
+            </TooltipAnchor>
+            <div className="hero-actions">
+              <TooltipAnchor tooltip={versionActionReason}>
                 <button
-                  className="action-button danger"
-                  onClick={() => handleDeleteVersion(versionId)}
-                  disabled={!canDeleteVersion}
-                  title={versionActionReason}
+                  className="action-button"
+                  onClick={() => handleEdit(vm.proposal)}
+                  disabled={!canEditVersion}
                 >
-                  Delete Version
+                  Edit Proposal
                 </button>
+              </TooltipAnchor>
+              {!isOriginal && (
+                <TooltipAnchor tooltip={versionActionReason}>
+                  <button
+                    className="action-button danger"
+                    onClick={() => handleDeleteVersion(versionId)}
+                    disabled={!canDeleteVersion}
+                  >
+                    Delete Version
+                  </button>
+                </TooltipAnchor>
               )}
             </div>
           </div>
@@ -2352,31 +2571,31 @@ function ProposalView() {
                 </svg>
                 Back to Home
               </button>
+            </div>
+            <div className="action-bar-center">
               {hasMultipleVersions && (
                 <div className="version-switcher">
                   <label htmlFor="active-version">Active Version:</label>
-                  <select
-                    id="active-version"
-                    value={isReadOnlyReviewerView ? displayPrimaryVersionId : activeVersionId}
-                    onChange={(e) => handleSetActiveVersion(e.target.value)}
-                    disabled={!canManageVersionDrafts}
-                    title={editDisabledReason}
-                  >
-                    {viewModels.map((vm) => (
-                      <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
-                        {getDisplayVersionLabel(vm.proposal)}
-                      </option>
-                    ))}
-                  </select>
+                  <TooltipAnchor tooltip={editDisabledReason}>
+                    <select
+                      id="active-version"
+                      value={isReadOnlyReviewerView ? displayPrimaryVersionId : activeVersionId}
+                      onChange={(e) => handleSetActiveVersion(e.target.value)}
+                      disabled={!canManageVersionDrafts}
+                    >
+                      {viewModels.map((vm) => (
+                        <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
+                          {getDisplayVersionLabel(vm.proposal)}
+                        </option>
+                      ))}
+                    </select>
+                  </TooltipAnchor>
                 </div>
               )}
             </div>
             <div className="action-bar-right">
-              <button
-                className="action-button primary workflow-summary-submit-button"
-                onClick={handleSubmitProposal}
-                disabled={!canEditProposal || loading || !canSubmitProposal}
-                title={
+              <TooltipAnchor
+                tooltip={
                   !canEditProposal
                     ? editDisabledReason
                     : !canSubmitProposal
@@ -2384,12 +2603,18 @@ function ProposalView() {
                     : undefined
                 }
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-                Submit Proposal
-              </button>
+                <button
+                  className="action-button primary workflow-summary-submit-button"
+                  onClick={handleSubmitProposal}
+                  disabled={!canEditProposal || loading || !canSubmitProposal}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  Submit Proposal
+                </button>
+              </TooltipAnchor>
             </div>
           </div>
         </div>
@@ -2400,16 +2625,24 @@ function ProposalView() {
           <div className="workflow-summary-header">
             <div className="workflow-summary-heading">
               <p className="workflow-summary-kicker">Submission Workflow</p>
-              <div
-                className={`workflow-summary-pill is-${proposalWorkflowStatus}`}
-                title={workflowStatusTooltip}
-              >
-                {formatWorkflowStatusLabel(proposalWorkflowStatus)}
-              </div>
+              <TooltipAnchor as="div" tooltip={workflowStatusTooltip}>
+                <div className={`workflow-summary-pill is-${proposalWorkflowStatus}`}>
+                  {formatWorkflowStatusLabel(proposalWorkflowStatus)}
+                </div>
+              </TooltipAnchor>
             </div>
             <div className="workflow-summary-header-actions">
               {isReadOnlyReviewerView ? (
                 <>
+                  <button
+                    className="action-button workflow-summary-reviewer-button"
+                    onClick={() => navigate('/workflow')}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M10 13L5 8L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Back to Book Keeper
+                  </button>
                   {proposalWorkflowStatus === 'needs_approval' && (
                     <button
                       className="action-button primary workflow-summary-reviewer-button"
@@ -2445,17 +2678,18 @@ function ProposalView() {
                   )}
                 </>
               ) : (
-                <button
-                  className="action-button action-button-version workflow-summary-version-button"
-                  onClick={handleBuildAnotherVersion}
-                  disabled={!canManageVersionDrafts}
-                  title={!canManageVersionDrafts ? editDisabledReason : undefined}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  {versionActionLabel}
-                </button>
+                <TooltipAnchor tooltip={!canManageVersionDrafts ? editDisabledReason : undefined}>
+                  <button
+                    className="action-button action-button-version workflow-summary-version-button"
+                    onClick={handleBuildAnotherVersion}
+                    disabled={!canManageVersionDrafts}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    {versionActionLabel}
+                  </button>
+                </TooltipAnchor>
               )}
             </div>
           </div>
@@ -2468,13 +2702,24 @@ function ProposalView() {
             <div className="workflow-summary-block">
               <div className="workflow-summary-label">Submitted</div>
               <div className="workflow-summary-value">
-                {proposal.workflow.submittedAt ? new Date(proposal.workflow.submittedAt).toLocaleString() : 'Not submitted'}
+                {proposal.workflow.submittedAt
+                  ? `${
+                      proposal.workflow.submittedBy?.name ||
+                      proposal.workflow.submittedBy?.email ||
+                      proposal.designerName ||
+                      'Design Team'
+                    } - ${new Date(proposal.workflow.submittedAt).toLocaleString()}`
+                  : 'Not submitted'}
               </div>
             </div>
             <div className="workflow-summary-block">
               <div className="workflow-summary-label">Approved By</div>
               <div className="workflow-summary-value">
-                {proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email || 'Not approved'}
+                {proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email
+                  ? `${proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email}${
+                      proposal.workflow.approvedAt ? ` - ${new Date(proposal.workflow.approvedAt).toLocaleString()}` : ''
+                    }`
+                  : 'Not approved'}
               </div>
             </div>
             <div className="workflow-summary-block">
@@ -2670,20 +2915,21 @@ function ProposalView() {
                     </div>
                   )}
                 </div>
-                <button
-                  className="action-button primary"
-                  type="button"
-                  onClick={handleContractSaveClick}
-                  disabled={!canEditProposal || !contractDirty || contractSaving}
-                  title={!canEditProposal ? editDisabledReason : undefined}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3 2h8l2 2v10H3V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                    <path d="M5 2v4h6V2" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
-                    <path d="M6 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  {contractSaving ? 'Saving...' : 'Save Changes'}
-                </button>
+                <TooltipAnchor tooltip={!canEditProposal ? editDisabledReason : undefined}>
+                  <button
+                    className="action-button primary"
+                    type="button"
+                    onClick={handleContractSaveClick}
+                    disabled={!canEditProposal || !contractDirty || contractSaving}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M3 2h8l2 2v10H3V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                      <path d="M5 2v4h6V2" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                      <path d="M6 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    {contractSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </TooltipAnchor>
                 <button className="modal-close" onClick={() => setContractVersionId(null)} aria-label="Close contract">
                   x
                 </button>
