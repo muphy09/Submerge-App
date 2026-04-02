@@ -1971,6 +1971,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               <button className="btn btn-secondary" onClick={handleHome} disabled={isSaving}>
                 Home
               </button>
+              {showFeedbackButton && onOpenFeedback && (
+                <button className="btn btn-secondary" onClick={onOpenFeedback} disabled={isSaving}>
+                  Feedback
+                </button>
+              )}
             </div>
             <div className="middle-actions">
               <span className="proposal-gp-indicator">{proposalIndicator}</span>
@@ -1979,11 +1984,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               {currentSection > 0 && (
                 <button className="btn btn-secondary" onClick={handlePrevious} disabled={isSaving}>
                   Previous
-                </button>
-              )}
-              {showFeedbackButton && onOpenFeedback && (
-                <button className="btn btn-secondary" onClick={onOpenFeedback} disabled={isSaving}>
-                  Feedback
                 </button>
               )}
               {currentSection < sections.length - 1 && (
