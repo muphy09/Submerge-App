@@ -1,0 +1,45 @@
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+}
+
+.btn-primary {
+  background: #0c2243;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #1a3a6b;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.btn-secondary:hover {
+  background: #d1d5db;
+}
+
+.btn-success {
+  background: #0b8f29;
+  color: white;
+}
+
+.btn-success:hover {
+  background: #086f20;
+}
+
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
