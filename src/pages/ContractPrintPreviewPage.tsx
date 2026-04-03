@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { getDocument } from 'pdfjs-dist';
 import './ContractPrintPreviewPage.css';
-
-GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const DEFAULT_DISPLAY_SCALE = 1.2;
 const MIN_DISPLAY_SCALE = 0.8;
 const MAX_DISPLAY_SCALE = 1.8;
 const DISPLAY_SCALE_STEP = 0.1;
 const MAX_RENDER_DPR = 3;
-const MIN_RENDER_SCALE = 2.4;
 
 function clampDisplayScale(value: number): number {
   const rounded = Math.round(value * 100) / 100;
@@ -60,6 +56,7 @@ export default function ContractPrintPreviewPage() {
   const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[]>([]);
   const [displayScale, setDisplayScale] = useState(DEFAULT_DISPLAY_SCALE);
   const [loading, setLoading] = useState(true);
+  const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
 
@@ -91,8 +88,7 @@ export default function ContractPrintPreviewPage() {
           return;
         }
 
-        const nextBytes =
-          result.pdfBytes instanceof Uint8Array ? result.pdfBytes : Uint8Array.from(result.pdfBytes || []);
+        const nextBytes = Uint8Array.from(result.pdfBytes || []);
 
         setFileName(result.fileName || 'Contract');
         setPdfBytes(nextBytes);
@@ -159,13 +155,12 @@ export default function ContractPrintPreviewPage() {
     loadingTask.promise
       .then(async (pdfDoc) => {
         const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR) : 1;
-        const renderScale = Math.max(displayScale, MIN_RENDER_SCALE);
 
         for (let i = 1; i <= pdfDoc.numPages; i += 1) {
           if (canceled) break;
           const page = await pdfDoc.getPage(i);
           const cssViewport = page.getViewport({ scale: displayScale });
-          const renderViewport = page.getViewport({ scale: dpr * renderScale });
+          const renderViewport = page.getViewport({ scale: dpr * displayScale });
           const canvas = canvasRefs.current[i - 1];
           if (!canvas) continue;
           const context = canvas.getContext('2d');
@@ -202,8 +197,17 @@ export default function ContractPrintPreviewPage() {
   }, []);
 
   const handlePrint = useCallback(() => {
-    window.print();
-  }, []);
+    if (!previewToken || printing) return;
+    setPrinting(true);
+    setError('');
+    void window.electron
+      .printContractPreviewPdf({ previewToken })
+      .catch((printError) => {
+        console.error('Failed to print contract preview PDF', printError);
+        setPrinting(false);
+        setError('Could not open the Windows print dialog for this contract.');
+      });
+  }, [previewToken, printing]);
 
   const handleClose = useCallback(() => {
     window.close();
@@ -226,9 +230,14 @@ export default function ContractPrintPreviewPage() {
               <ZoomIcon direction="in" />
             </button>
           </div>
-          <button type="button" className="contract-print-preview-primary" onClick={handlePrint}>
+          <button
+            type="button"
+            className="contract-print-preview-primary"
+            onClick={handlePrint}
+            disabled={printing || !pdfBytes || loading || Boolean(error)}
+          >
             <PrintIcon />
-            Print
+            {printing ? 'Opening Print...' : 'Print'}
           </button>
           <button type="button" className="contract-print-preview-secondary" onClick={handleClose}>
             Close

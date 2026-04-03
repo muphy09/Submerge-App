@@ -35,8 +35,11 @@ declare global {
         previewToken: string;
       }) => Promise<{
         fileName?: string;
-        pdfBytes: Uint8Array | number[];
+        pdfBytes: number[];
       } | null>;
+      printContractPreviewPdf: (payload: {
+        previewToken: string;
+      }) => Promise<{ success?: boolean; canceled?: boolean; errorType?: string }>;
 
       // Franchise + pricing
       listFranchises: () => Promise<

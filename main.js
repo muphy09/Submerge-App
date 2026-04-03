@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 
 // Lightweight env loader so dev runs pick up Supabase config from .env/.env.local
 function loadLocalEnv() {
@@ -845,6 +846,15 @@ function toPdfBuffer(input) {
   throw new Error('Unsupported PDF payload for printing.');
 }
 
+function cleanupTempPath(targetPath) {
+  if (!targetPath) return;
+  try {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  } catch (error) {
+    console.warn('Failed to clean up temporary print file:', error);
+  }
+}
+
 ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   if (!mainWindow || !mainWindow.webContents) {
     throw new Error('Main window is not available.');
@@ -972,8 +982,111 @@ ipcMain.handle('get-contract-print-preview-data', async (_, payload) => {
 
   return {
     fileName: previewPayload.fileName,
-    pdfBytes: Uint8Array.from(previewPayload.pdfBytes),
+    pdfBytes: Array.from(previewPayload.pdfBytes),
   };
+});
+
+ipcMain.handle('print-contract-preview-pdf', async (event, payload) => {
+  const previewToken = payload?.previewToken;
+  if (!previewToken || typeof previewToken !== 'string') {
+    throw new Error('Missing contract print preview token.');
+  }
+
+  const previewPayload = contractPreviewPayloads.get(previewToken);
+  if (!previewPayload) {
+    throw new Error('This contract preview is no longer available.');
+  }
+
+  const pdfBuffer = Buffer.from(previewPayload.pdfBytes);
+  const pdfFileName = sanitizePdfFileName(previewPayload.fileName, 'contract-print.pdf');
+  const previewWindow = BrowserWindow.fromWebContents(event.sender);
+
+  const startPrintJob = async () => {
+    const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'submerge-contract-print-'));
+    const pdfPath = path.join(tempDir, pdfFileName);
+    fs.writeFileSync(pdfPath, pdfBuffer);
+
+    return new Promise((resolve, reject) => {
+      const printWindow = new BrowserWindow({
+        parent: mainWindow || undefined,
+        modal: false,
+        show: false,
+        autoHideMenuBar: true,
+        backgroundColor: '#ffffff',
+        webPreferences: {
+          plugins: true,
+        },
+      });
+      printWindow.removeMenu();
+
+      let settled = false;
+
+      const cleanup = () => {
+        cleanupTempPath(tempDir);
+      };
+
+      const fail = (error) => {
+        if (!printWindow.isDestroyed()) {
+          printWindow.destroy();
+        }
+        cleanup();
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      };
+
+      printWindow.on('closed', () => {
+        cleanup();
+      });
+
+      printWindow.webContents.once('did-fail-load', (_, errorCode, errorDescription) => {
+        fail(new Error(`Failed to load contract PDF for printing (${errorCode}): ${errorDescription}`));
+      });
+
+      printWindow.webContents.once('did-finish-load', () => {
+        setTimeout(() => {
+          if (printWindow.isDestroyed()) return;
+          printWindow.webContents.print(
+            {
+              silent: false,
+              printBackground: true,
+            },
+            (success, errorType) => {
+              if (!success && errorType && errorType !== 'Print job canceled') {
+                fail(new Error(`Failed to print contract PDF: ${errorType}`));
+                return;
+              }
+
+              if (!printWindow.isDestroyed()) {
+                printWindow.close();
+              }
+              cleanup();
+              if (!settled) {
+                settled = true;
+                resolve({
+                  success,
+                  canceled: !success && errorType === 'Print job canceled',
+                  errorType: success ? undefined : errorType,
+                });
+              }
+            }
+          );
+        }, 250);
+      });
+
+      printWindow.loadURL(pathToFileURL(pdfPath).toString()).catch(fail);
+    });
+  };
+
+  if (previewWindow && !previewWindow.isDestroyed()) {
+    await new Promise((resolve) => {
+      previewWindow.once('closed', resolve);
+      previewWindow.close();
+    });
+  }
+
+  return startPrintJob();
 });
 
 // Reference data handlers
