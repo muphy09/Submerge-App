@@ -1,3 +1,8 @@
+## [2.2.3] - 4/2/26
+### HOTFIX
+- Fixed unknown draft state issue with Admins
+
+-----
 ## [2.2.2] - 4/2/26
 ### Changed
 - 'Retired Equipment' workflow has been modified to be more clear

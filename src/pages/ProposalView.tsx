@@ -655,7 +655,8 @@ function ProposalView() {
   const sessionRole = getSessionRole();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
-  const isReadOnlyReviewerView = isReviewerRole;
+  const isReviewerWorkspaceView = Boolean(locationState?.reviewerReturnTo || locationState?.reviewerReturnPath);
+  const isReadOnlyReviewerView = isReviewerRole && isReviewerWorkspaceView;
   const canViewCogsBreakdown = showCogsBreakdown;
   const activeEditableVersion =
     (versions.length
@@ -676,7 +677,7 @@ function ProposalView() {
     isProposalEditingRestricted
       ? 'Master accounts acting as owner can view proposals but cannot edit them.'
       : isReadOnlyReviewerView
-      ? 'Reviewer accounts can review submitted proposals but cannot edit their versions.'
+      ? 'Proposals opened from the reviewer workspace are read-only. Return to Dashboard to edit drafts.'
       : isProposalCompleted
       ? 'Completed proposals are locked.'
       : proposalWorkflowStatus === 'signed' && isSubmittedVersionLocked(activeEditableVersion)
