@@ -1,14 +1,13 @@
 ## [2.2.4] - 4/2/26
 ### Changed
 - Proposals Contracts can now be edited until the Proposal is marked as 'Signed'
-        - If another edit to the Contract needs to be made after 'Signed', a Proposal Addendum must be made
-- Exporting a Contract now gives a propoer Print Preview and prints correctly
+    - If another edit to the Contract needs to be made after 'Signed', a Proposal Addendum must be made
+- Exporting a Contract now gives a propoer Print Preview and *should* print correctly
 
 -----
 ## [2.2.3] - 4/2/26
 ### HOTFIX
 - Fixed unknown draft state issue with Admins
-
 -----
 ## [2.2.2] - 4/2/26
 ### Changed

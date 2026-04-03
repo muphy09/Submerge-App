@@ -128,6 +128,24 @@
   gap: 28px;
 }
 
+.contract-print-preview-native-shell {
+  width: min(960px, calc(100vw - 40px));
+  height: calc(100vh - 150px);
+  margin: 0 auto;
+  border: 1px solid rgba(121, 144, 182, 0.35);
+  box-shadow: 0 28px 60px rgba(34, 55, 97, 0.18);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.contract-print-preview-native-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #ffffff;
+}
+
 .contract-print-preview-sheet {
   display: block;
   overflow: hidden;

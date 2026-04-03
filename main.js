@@ -69,6 +69,7 @@ let proposalsDir = null;
 let updateClient = null;
 const contractPreviewWindows = new Set();
 const contractPreviewPayloads = new Map();
+const contractPreviewTempDirs = new Set();
 
 const UPDATE_FEED = {
   provider: 'github',
@@ -624,6 +625,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  contractPreviewTempDirs.forEach((targetPath) => {
+    cleanupTempPath(targetPath);
+  });
+  contractPreviewTempDirs.clear();
   if (db) db.close();
 });
 
@@ -855,6 +860,23 @@ function cleanupTempPath(targetPath) {
   }
 }
 
+function openNativeContractPreviewWindow(pdfBuffer, pdfFileName) {
+  const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'submerge-contract-preview-'));
+  const pdfPath = path.join(tempDir, pdfFileName);
+  fs.writeFileSync(pdfPath, pdfBuffer);
+  contractPreviewTempDirs.add(tempDir);
+
+  return shell.openPath(pdfPath).then((errorMessage) => {
+    if (errorMessage) {
+      contractPreviewTempDirs.delete(tempDir);
+      cleanupTempPath(tempDir);
+      throw new Error(`Failed to open contract PDF preview: ${errorMessage}`);
+    }
+
+    return { success: true };
+  });
+}
+
 ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   if (!mainWindow || !mainWindow.webContents) {
     throw new Error('Main window is not available.');
@@ -902,6 +924,11 @@ ipcMain.handle('open-contract-print-preview', async (_, payload) => {
 
   const pdfBuffer = toPdfBuffer(payload?.pdfBytes);
   const pdfFileName = sanitizePdfFileName(payload?.fileName, 'contract-print.pdf');
+
+  if (process.platform === 'win32') {
+    return openNativeContractPreviewWindow(pdfBuffer, pdfFileName);
+  }
+
   const previewToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   contractPreviewPayloads.set(previewToken, {
     fileName: pdfFileName,
@@ -949,7 +976,11 @@ ipcMain.handle('open-contract-print-preview', async (_, payload) => {
       cleanup();
     });
 
-    previewWindow.webContents.once('did-fail-load', (_, errorCode, errorDescription) => {
+    previewWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) {
+        console.warn('Ignored contract preview subframe load failure:', errorCode, errorDescription, validatedURL);
+        return;
+      }
       fail(new Error(`Failed to load contract print preview (${errorCode}): ${errorDescription}`));
     });
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getDocument } from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import './ContractPrintPreviewPage.css';
 
 const DEFAULT_DISPLAY_SCALE = 1.2;
@@ -7,10 +8,44 @@ const MIN_DISPLAY_SCALE = 0.8;
 const MAX_DISPLAY_SCALE = 1.8;
 const DISPLAY_SCALE_STEP = 0.1;
 const MAX_RENDER_DPR = 3;
+const MIN_PRINT_PREVIEW_RENDER_SCALE = 3;
+
+GlobalWorkerOptions.workerSrc = pdfWorker;
+
+function getPreviewTokenFromLocation(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const searchToken = new URLSearchParams(window.location.search).get('previewToken');
+  if (searchToken) return searchToken;
+
+  const hash = window.location.hash || '';
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex === -1) return null;
+
+  return new URLSearchParams(hash.slice(queryIndex + 1)).get('previewToken');
+}
 
 function clampDisplayScale(value: number): number {
   const rounded = Math.round(value * 100) / 100;
   return Math.max(MIN_DISPLAY_SCALE, Math.min(MAX_DISPLAY_SCALE, rounded));
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string') return error;
+  return '';
+}
+
+function isIgnorablePdfRenderError(error: unknown): boolean {
+  const name = typeof error === 'object' && error && 'name' in error ? String((error as { name?: unknown }).name) : '';
+  const message = getErrorMessage(error);
+
+  return (
+    name === 'RenderingCancelledException' ||
+    name === 'AbortException' ||
+    /cancelled|canceled/i.test(message) ||
+    /multiple render\(\) operations/i.test(message)
+  );
 }
 
 function ZoomIcon({ direction }: { direction: 'in' | 'out' }) {
@@ -56,18 +91,64 @@ export default function ContractPrintPreviewPage() {
   const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[]>([]);
   const [displayScale, setDisplayScale] = useState(DEFAULT_DISPLAY_SCALE);
   const [loading, setLoading] = useState(true);
+  const [rendering, setRendering] = useState(false);
+  const [initialRenderComplete, setInitialRenderComplete] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState('');
+  const [nativePreviewUrl, setNativePreviewUrl] = useState<string | null>(null);
+  const [useNativePreview, setUseNativePreview] = useState(false);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const printResetTimeoutRef = useRef<number | null>(null);
+  const renderTasksRef = useRef<Array<{ cancel: () => void; promise: Promise<unknown> }>>([]);
 
   const previewToken = useMemo(() => {
-    const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
-    return params.get('previewToken');
+    return getPreviewTokenFromLocation();
   }, []);
 
   useEffect(() => {
     document.title = 'Contract Print Preview';
   }, []);
+
+  const clearPrintResetTimeout = useCallback(() => {
+    if (printResetTimeoutRef.current !== null) {
+      window.clearTimeout(printResetTimeoutRef.current);
+      printResetTimeoutRef.current = null;
+    }
+  }, []);
+
+  const finishPrint = useCallback(() => {
+    clearPrintResetTimeout();
+    setPrinting(false);
+  }, [clearPrintResetTimeout]);
+
+  const cancelActiveRenderTasks = useCallback(() => {
+    const tasks = renderTasksRef.current;
+    renderTasksRef.current = [];
+    const settle = Promise.allSettled(
+      tasks.map((task) => {
+        try {
+          task.cancel();
+        } catch {
+          // Ignore task cancellation errors during rerenders/unmounts.
+        }
+        return task.promise;
+      })
+    ).then(() => undefined);
+    return settle;
+  }, []);
+
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      finishPrint();
+    };
+
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint);
+      clearPrintResetTimeout();
+      void cancelActiveRenderTasks();
+    };
+  }, [cancelActiveRenderTasks, clearPrintResetTimeout, finishPrint]);
 
   useEffect(() => {
     if (!previewToken) {
@@ -111,6 +192,30 @@ export default function ContractPrintPreviewPage() {
   }, [previewToken]);
 
   useEffect(() => {
+    setPageCount(0);
+    setPageSizes([]);
+    setInitialRenderComplete(false);
+    setRendering(false);
+    setUseNativePreview(false);
+    canvasRefs.current = [];
+  }, [pdfBytes]);
+
+  useEffect(() => {
+    if (!pdfBytes) {
+      setNativePreviewUrl(null);
+      return;
+    }
+
+    const normalizedPdfBytes = new Uint8Array(Array.from(pdfBytes));
+    const nextUrl = URL.createObjectURL(new Blob([normalizedPdfBytes], { type: 'application/pdf' }));
+    setNativePreviewUrl(nextUrl);
+
+    return () => {
+      URL.revokeObjectURL(nextUrl);
+    };
+  }, [pdfBytes]);
+
+  useEffect(() => {
     if (!pdfBytes) return;
 
     let canceled = false;
@@ -136,6 +241,7 @@ export default function ContractPrintPreviewPage() {
       .catch((metadataError) => {
         console.error('Failed to read contract preview PDF metadata', metadataError);
         if (!canceled) {
+          setRendering(false);
           setError('Could not read the contract preview.');
         }
       });
@@ -151,42 +257,73 @@ export default function ContractPrintPreviewPage() {
 
     let canceled = false;
     const loadingTask = getDocument({ data: pdfBytes });
+    setRendering(true);
+    setError('');
 
-    loadingTask.promise
-      .then(async (pdfDoc) => {
-        const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR) : 1;
+    void (async () => {
+      try {
+        await cancelActiveRenderTasks();
+        const pdfDoc = await loadingTask.promise;
 
-        for (let i = 1; i <= pdfDoc.numPages; i += 1) {
-          if (canceled) break;
-          const page = await pdfDoc.getPage(i);
-          const cssViewport = page.getViewport({ scale: displayScale });
-          const renderViewport = page.getViewport({ scale: dpr * displayScale });
-          const canvas = canvasRefs.current[i - 1];
-          if (!canvas) continue;
-          const context = canvas.getContext('2d');
-          if (!context) continue;
-          context.imageSmoothingEnabled = true;
-          (context as CanvasRenderingContext2D & { imageSmoothingQuality?: string }).imageSmoothingQuality = 'high';
-          canvas.width = renderViewport.width;
-          canvas.height = renderViewport.height;
-          canvas.style.width = `${cssViewport.width}px`;
-          canvas.style.height = `${cssViewport.height}px`;
-          await page.render({ canvasContext: context, viewport: renderViewport, canvas }).promise;
+        try {
+          const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR) : 1;
+
+          for (let i = 1; i <= pdfDoc.numPages; i += 1) {
+            if (canceled) break;
+            const page = await pdfDoc.getPage(i);
+            const cssViewport = page.getViewport({ scale: displayScale });
+            const renderScale = Math.max(dpr * displayScale, MIN_PRINT_PREVIEW_RENDER_SCALE);
+            const renderViewport = page.getViewport({ scale: renderScale });
+            const canvas = canvasRefs.current[i - 1];
+            if (!canvas) continue;
+            const context = canvas.getContext('2d');
+            if (!context) continue;
+            context.imageSmoothingEnabled = true;
+            (context as CanvasRenderingContext2D & { imageSmoothingQuality?: string }).imageSmoothingQuality = 'high';
+            canvas.width = renderViewport.width;
+            canvas.height = renderViewport.height;
+            canvas.style.width = `${cssViewport.width}px`;
+            canvas.style.height = `${cssViewport.height}px`;
+            const renderTask = page.render({ canvasContext: context, viewport: renderViewport, canvas });
+            renderTasksRef.current.push(renderTask);
+            try {
+              await renderTask.promise;
+            } finally {
+              renderTasksRef.current = renderTasksRef.current.filter((task) => task !== renderTask);
+            }
+          }
+          if (!canceled) {
+            setRendering(false);
+            setInitialRenderComplete(true);
+          }
+        } finally {
+          pdfDoc.destroy();
         }
-        pdfDoc.destroy();
-      })
-      .catch((renderError) => {
+      } catch (renderError) {
+        if (canceled || isIgnorablePdfRenderError(renderError)) {
+          return;
+        }
+
         console.error('Failed to render contract print preview PDF', renderError);
         if (!canceled) {
-          setError('Could not render the contract print preview.');
+          setRendering(false);
+          if (nativePreviewUrl) {
+            setUseNativePreview(true);
+            setInitialRenderComplete(true);
+            setError('');
+          } else {
+            setError('Could not render the contract preview.');
+          }
         }
-      });
+      }
+    })();
 
     return () => {
       canceled = true;
       loadingTask.destroy();
+      void cancelActiveRenderTasks();
     };
-  }, [displayScale, pageCount, pageSizes, pdfBytes]);
+  }, [cancelActiveRenderTasks, displayScale, nativePreviewUrl, pageCount, pageSizes, pdfBytes]);
 
   const handleZoomOut = useCallback(() => {
     setDisplayScale((prev) => clampDisplayScale(prev - DISPLAY_SCALE_STEP));
@@ -197,17 +334,43 @@ export default function ContractPrintPreviewPage() {
   }, []);
 
   const handlePrint = useCallback(() => {
-    if (!previewToken || printing) return;
+    if (!previewToken || printing || !pdfBytes || loading || Boolean(error) || rendering || !initialRenderComplete) {
+      return;
+    }
+
     setPrinting(true);
     setError('');
+
+    if (!useNativePreview && typeof window.print === 'function') {
+      window.requestAnimationFrame(() => {
+        window.print();
+        clearPrintResetTimeout();
+        printResetTimeoutRef.current = window.setTimeout(() => {
+          finishPrint();
+        }, 1200);
+      });
+      return;
+    }
+
     void window.electron
       .printContractPreviewPdf({ previewToken })
       .catch((printError) => {
         console.error('Failed to print contract preview PDF', printError);
-        setPrinting(false);
+        finishPrint();
         setError('Could not open the Windows print dialog for this contract.');
       });
-  }, [previewToken, printing]);
+  }, [
+    clearPrintResetTimeout,
+    error,
+    finishPrint,
+    initialRenderComplete,
+    loading,
+    pdfBytes,
+    previewToken,
+    printing,
+    rendering,
+    useNativePreview,
+  ]);
 
   const handleClose = useCallback(() => {
     window.close();
@@ -234,10 +397,10 @@ export default function ContractPrintPreviewPage() {
             type="button"
             className="contract-print-preview-primary"
             onClick={handlePrint}
-            disabled={printing || !pdfBytes || loading || Boolean(error)}
+            disabled={printing || !pdfBytes || loading || Boolean(error) || rendering || !initialRenderComplete}
           >
             <PrintIcon />
-            {printing ? 'Opening Print...' : 'Print'}
+            {printing ? 'Opening Print...' : rendering || !initialRenderComplete ? 'Rendering...' : 'Print'}
           </button>
           <button type="button" className="contract-print-preview-secondary" onClick={handleClose}>
             Close
@@ -250,29 +413,54 @@ export default function ContractPrintPreviewPage() {
           <div className="contract-print-preview-status">Loading contract preview...</div>
         ) : error ? (
           <div className="contract-print-preview-status error">{error}</div>
-        ) : (
-          <div className="contract-print-preview-pages">
-            {Array.from({ length: pageCount }).map((_, index) => {
-              const pageSize = pageSizes[index] || { width: 612, height: 792 };
-              return (
-                <div
-                  className="contract-print-preview-sheet"
-                  key={`contract-preview-page-${index + 1}`}
-                  style={{
-                    width: `${pageSize.width * displayScale}px`,
-                    height: `${pageSize.height * displayScale}px`,
-                  }}
-                >
-                  <canvas
-                    ref={(element) => {
-                      canvasRefs.current[index] = element;
-                    }}
-                    className="contract-print-preview-canvas"
-                  />
-                </div>
-              );
-            })}
+        ) : useNativePreview && nativePreviewUrl ? (
+          <div className="contract-print-preview-native-shell">
+            <iframe
+              className="contract-print-preview-native-frame"
+              src={nativePreviewUrl}
+              title="Contract Preview"
+            />
           </div>
+        ) : (
+          <>
+            {!initialRenderComplete ? (
+              <div className="contract-print-preview-status">Rendering contract preview...</div>
+            ) : null}
+            <div
+              className="contract-print-preview-pages"
+              aria-hidden={!initialRenderComplete}
+              style={
+                initialRenderComplete
+                  ? undefined
+                  : {
+                      position: 'absolute',
+                      left: '-100000px',
+                      top: 0,
+                    }
+              }
+            >
+              {Array.from({ length: pageCount }).map((_, index) => {
+                const pageSize = pageSizes[index] || { width: 612, height: 792 };
+                return (
+                  <div
+                    className="contract-print-preview-sheet"
+                    key={`contract-preview-page-${index + 1}`}
+                    style={{
+                      width: `${pageSize.width * displayScale}px`,
+                      height: `${pageSize.height * displayScale}px`,
+                    }}
+                  >
+                    <canvas
+                      ref={(element) => {
+                        canvasRefs.current[index] = element;
+                      }}
+                      className="contract-print-preview-canvas"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -34,6 +34,8 @@ const MIN_DISPLAY_SCALE = 1;
 const MAX_DISPLAY_SCALE = 2.5;
 const DISPLAY_SCALE_STEP = 0.05;
 const MAX_RENDER_DPR = 3;
+const PRINT_PREVIEW_RENDER_SCALE = 2.2;
+const CONTRACT_TOAST_WARNING_EXCLUSIONS = new Set(['Customer name', 'Job site address', 'City']);
 const CONTRACT_DATE_FIELD_IDS = new Set(['p1_8', 'p1_9']);
 const ADDITIONAL_SPEC_FIELD_IDS = [
   'p2_additional_spec_73',
@@ -199,6 +201,368 @@ function formatDateForDisplay(raw?: string | null): string {
   const parts = parseDateParts(raw);
   if (!parts) return '';
   return `${parts.month}/${parts.day}/${parts.year}`;
+}
+
+type ContractPrintPreviewWindow = Window;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function writePrintPreviewWindowShell(
+  previewWindow: ContractPrintPreviewWindow,
+  options: {
+    title: string;
+    fileName: string;
+    showPrintButton?: boolean;
+    content: string;
+  }
+) {
+  previewWindow.document.open();
+  previewWindow.document.write(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(options.title)}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        --preview-bg: #d8dee8;
+        --preview-panel: #eef2f8;
+        --preview-border: rgba(57, 78, 115, 0.18);
+        --preview-text: #163055;
+        --preview-muted: #55709a;
+        --preview-accent: #1d4f91;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--preview-bg);
+        color: var(--preview-text);
+      }
+
+      body {
+        font-family: inherit;
+      }
+
+      .preview-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+        background: rgba(238, 242, 248, 0.96);
+        border-bottom: 1px solid var(--preview-border);
+        backdrop-filter: blur(12px);
+      }
+
+      .preview-title {
+        min-width: 0;
+      }
+
+      .preview-title p {
+        margin: 0 0 2px;
+        color: var(--preview-muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .preview-title h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .preview-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .preview-actions button {
+        border: 1px solid rgba(55, 83, 128, 0.22);
+        border-radius: 999px;
+        padding: 0 16px;
+        height: 40px;
+        background: #ffffff;
+        color: var(--preview-text);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+      }
+
+      .preview-actions button.primary {
+        background: var(--preview-accent);
+        border-color: var(--preview-accent);
+        color: #ffffff;
+      }
+
+      .preview-status {
+        width: min(560px, calc(100vw - 48px));
+        margin: 72px auto 0;
+        padding: 24px 28px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid var(--preview-border);
+        box-shadow: 0 20px 44px rgba(34, 55, 97, 0.12);
+        text-align: center;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .preview-status.error {
+        color: #8d1d1d;
+      }
+
+      .preview-pages {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+        padding: 24px 18px 40px;
+      }
+
+      .preview-sheet {
+        width: min(8.5in, calc(100vw - 36px));
+        background: #ffffff;
+        border: 1px solid var(--preview-border);
+        box-shadow: 0 28px 60px rgba(34, 55, 97, 0.18);
+      }
+
+      .preview-sheet img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      @media (max-width: 800px) {
+        .preview-toolbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .preview-actions {
+          justify-content: space-between;
+        }
+      }
+
+      @media print {
+        @page {
+          size: letter;
+          margin: 0;
+        }
+
+        html, body {
+          background: #ffffff !important;
+        }
+
+        .preview-toolbar {
+          display: none !important;
+        }
+
+        .preview-pages {
+          padding: 0 !important;
+          gap: 0 !important;
+        }
+
+        .preview-sheet {
+          width: 8.5in !important;
+          border: none !important;
+          box-shadow: none !important;
+          break-after: page;
+          page-break-after: always;
+        }
+
+        .preview-sheet img {
+          width: 8.5in !important;
+          height: 11in !important;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-toolbar">
+      <div class="preview-title">
+        <p>Contract</p>
+        <h1>${escapeHtml(options.fileName)}</h1>
+      </div>
+      <div class="preview-actions">
+        ${
+          options.showPrintButton
+            ? '<button type="button" class="primary" id="preview-print">Print</button>'
+            : ''
+        }
+        <button type="button" id="preview-close">Close</button>
+      </div>
+    </div>
+    ${options.content}
+  </body>
+</html>`);
+  previewWindow.document.close();
+}
+
+function bindPrintPreviewWindowControls(previewWindow: ContractPrintPreviewWindow) {
+  const closeButton = previewWindow.document.getElementById('preview-close');
+  closeButton?.addEventListener('click', () => {
+    previewWindow.close();
+  });
+
+  const printButton = previewWindow.document.getElementById('preview-print') as HTMLButtonElement | null;
+  if (printButton) {
+    printButton.addEventListener('click', () => {
+      printButton.disabled = true;
+      previewWindow.focus();
+      previewWindow.print();
+    });
+  }
+
+  previewWindow.onafterprint = () => {
+    const currentPrintButton = previewWindow.document.getElementById('preview-print') as HTMLButtonElement | null;
+    if (currentPrintButton) {
+      currentPrintButton.disabled = false;
+    }
+  };
+}
+
+function openPrintPreviewWindow(fileName: string): ContractPrintPreviewWindow | null {
+  const previewWindow = window.open('', '_blank', 'width=1120,height=1400');
+  if (!previewWindow) {
+    return null;
+  }
+
+  writePrintPreviewWindowShell(previewWindow, {
+    title: `${fileName} Print Preview`,
+    fileName,
+    content: '<div class="preview-status">Preparing contract print preview...</div>',
+  });
+  bindPrintPreviewWindowControls(previewWindow);
+  previewWindow.focus();
+  return previewWindow;
+}
+
+function showPrintPreviewError(previewWindow: ContractPrintPreviewWindow, fileName: string, message: string) {
+  writePrintPreviewWindowShell(previewWindow, {
+    title: `${fileName} Print Preview`,
+    fileName,
+    content: `<div class="preview-status error">${escapeHtml(message)}</div>`,
+  });
+  bindPrintPreviewWindowControls(previewWindow);
+}
+
+function showPrintPreviewPages(previewWindow: ContractPrintPreviewWindow, fileName: string, pageImages: string[]) {
+  writePrintPreviewWindowShell(previewWindow, {
+    title: `${fileName} Print Preview`,
+    fileName,
+    showPrintButton: true,
+    content: '<div class="preview-pages" id="preview-pages"></div>',
+  });
+  bindPrintPreviewWindowControls(previewWindow);
+
+  const pagesRoot = previewWindow.document.getElementById('preview-pages');
+  if (!pagesRoot) {
+    showPrintPreviewError(previewWindow, fileName, 'Could not open the contract print preview.');
+    return;
+  }
+
+  pageImages.forEach((src, index) => {
+    const sheet = previewWindow.document.createElement('div');
+    sheet.className = 'preview-sheet';
+    const image = previewWindow.document.createElement('img');
+    image.src = src;
+    image.alt = `Contract page ${index + 1}`;
+    image.loading = 'eager';
+    sheet.appendChild(image);
+    pagesRoot.appendChild(sheet);
+  });
+  previewWindow.focus();
+}
+
+async function renderContractPrintPreviewPages(pdfBytes: Uint8Array): Promise<string[]> {
+  const loadingTask = getDocument({ data: pdfBytes });
+
+  try {
+    const pdfDoc = await loadingTask.promise;
+
+    try {
+      const pageImages: string[] = [];
+
+      for (let i = 1; i <= pdfDoc.numPages; i += 1) {
+        const page = await pdfDoc.getPage(i);
+        const viewport = page.getViewport({ scale: PRINT_PREVIEW_RENDER_SCALE });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) {
+          throw new Error('Could not prepare the contract preview canvas.');
+        }
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        await page.render({ canvasContext: context, viewport, canvas }).promise;
+        pageImages.push(canvas.toDataURL('image/png'));
+      }
+
+      return pageImages;
+    } finally {
+      pdfDoc.destroy();
+    }
+  } finally {
+    loadingTask.destroy();
+  }
+}
+
+function hasContractFieldValue(
+  fields: ContractFieldRender[],
+  predicate: (field: ContractFieldRender, label: string) => boolean
+): boolean {
+  return fields.some((field) => {
+    const label = (field.label || '').toLowerCase();
+    return predicate(field, label) && Boolean((field.value || '').trim());
+  });
+}
+
+function validateContractWarnings(proposal: Proposal, fields: ContractFieldRender[]): string[] {
+  const baseWarnings = validateContractInputs(proposal).filter(
+    (warning) => warning !== 'Customer name' && warning !== 'Job site address' && warning !== 'City'
+  );
+  const info = proposal.customerInfo || {};
+  const warnings: string[] = [];
+
+  const hasCustomerName =
+    Boolean(info.customerName?.trim()) ||
+    hasContractFieldValue(fields, (_, label) => (/customer/.test(label) || /buyer/.test(label)) && /name/.test(label));
+  const hasAddress =
+    Boolean(info.address?.trim()) ||
+    hasContractFieldValue(fields, (_, label) => /job site/.test(label) || /address/.test(label));
+  const hasCity =
+    Boolean(info.city?.trim()) ||
+    hasContractFieldValue(fields, (_, label) => /city/.test(label) && !/surface/.test(label));
+
+  if (!hasCustomerName) warnings.push('Customer name');
+  if (!hasAddress) warnings.push('Job site address');
+  if (!hasCity) warnings.push('City');
+
+  return [...warnings, ...baseWarnings];
 }
 
 type ContractViewProps = {
@@ -373,7 +737,11 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     () => new Set(fields.filter((f) => !f.value && f.color === 'blue' && !OPTIONAL_FIELD_IDS.has(f.id)).map((f) => f.id)),
     [fields]
   );
-  const warnings = useMemo(() => validateContractInputs(proposal), [proposal]);
+  const warnings = useMemo(() => validateContractWarnings(proposal, fields), [fields, proposal]);
+  const exportWarnings = useMemo(
+    () => warnings.filter((warning) => !CONTRACT_TOAST_WARNING_EXCLUSIONS.has(warning)),
+    [warnings]
+  );
 
   const hasUnsavedChanges = useMemo(
     () => !areOverridesEqual(overrides, baselineOverrides),
@@ -579,10 +947,10 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     if (!saveSucceeded) return false;
     setExporting(true);
     try {
-      if (warnings.length) {
+      if (exportWarnings.length) {
         showToast({
           type: 'warning',
-          message: `Missing data: ${warnings.join(', ')}`,
+          message: `Missing data: ${exportWarnings.join(', ')}`,
         });
       }
       const { pdfBytes, fileName } = await buildFlattenedContractPdf();
@@ -602,34 +970,53 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     } finally {
       setExporting(false);
     }
-  }, [buildFlattenedContractPdf, exporting, fields, handleSave, showToast, warnings]);
+  }, [buildFlattenedContractPdf, exportWarnings, exporting, fields, handleSave, showToast]);
 
   const printContract = useCallback(async (): Promise<boolean> => {
     if (!fields.length || exporting) return false;
+    const previewWindow = openPrintPreviewWindow(getContractPdfFileName());
     const saveSucceeded = await handleSave();
-    if (!saveSucceeded) return false;
+    if (!saveSucceeded) {
+      previewWindow?.close();
+      return false;
+    }
     setExporting(true);
-    if (warnings.length) {
+    if (exportWarnings.length) {
       showToast({
         type: 'warning',
-        message: `Missing data: ${warnings.join(', ')}`,
+        message: `Missing data: ${exportWarnings.join(', ')}`,
       });
     }
     try {
       const { pdfBytes, fileName } = await buildFlattenedContractPdf();
-      const result = await window.electron.openContractPrintPreview({
-        pdfBytes,
-        fileName,
-      });
+      if (previewWindow) {
+        if (previewWindow.closed) {
+          return false;
+        }
+        try {
+          const pageImages = await renderContractPrintPreviewPages(pdfBytes);
+          showPrintPreviewPages(previewWindow, fileName, pageImages);
+          return true;
+        } catch (previewError) {
+          console.error('Failed to render contract print preview in renderer', previewError);
+          showPrintPreviewError(previewWindow, fileName, 'Could not render the contract print preview.');
+          return false;
+        }
+      }
+
+      const result = await window.electron.openContractPrintPreview({ pdfBytes, fileName });
       return Boolean(result?.success);
     } catch (error) {
       console.error('Failed to print contract PDF', error);
+      if (previewWindow && !previewWindow.closed) {
+        showPrintPreviewError(previewWindow, getContractPdfFileName(), 'Could not open contract print preview.');
+      }
       showToast({ type: 'error', message: 'Could not open contract print preview.' });
       return false;
     } finally {
       setExporting(false);
     }
-  }, [buildFlattenedContractPdf, exporting, fields, handleSave, showToast, warnings]);
+  }, [buildFlattenedContractPdf, exportWarnings, exporting, fields, getContractPdfFileName, handleSave, showToast]);
 
   const handleZoomOut = useCallback(() => {
     setDisplayScale((prev) => clampDisplayScale(prev - DISPLAY_SCALE_STEP));
