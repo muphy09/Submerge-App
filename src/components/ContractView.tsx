@@ -617,11 +617,11 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     }
     try {
       const { pdfBytes, fileName } = await buildFlattenedContractPdf();
-      const result = await window.electron.printContractPdf({
+      const result = await window.electron.openContractPrintPreview({
         pdfBytes,
         fileName,
       });
-      return Boolean(result?.success) && !result?.canceled;
+      return Boolean(result?.success);
     } catch (error) {
       console.error('Failed to print contract PDF', error);
       showToast({ type: 'error', message: 'Could not open contract print preview.' });

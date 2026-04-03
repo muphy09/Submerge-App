@@ -67,6 +67,7 @@ let mainWindow = null;
 let db = null;
 let proposalsDir = null;
 let updateClient = null;
+const contractPreviewWindows = new Set();
 
 const UPDATE_FEED = {
   provider: 'github',
@@ -831,15 +832,13 @@ function toPdfBuffer(input) {
   throw new Error('Unsupported PDF payload for printing.');
 }
 
-function scheduleTempPathCleanup(targetPath) {
+function cleanupTempPath(targetPath) {
   if (!targetPath) return;
-  setTimeout(() => {
-    try {
-      fs.rmSync(targetPath, { recursive: true, force: true });
-    } catch (error) {
-      console.warn('Failed to clean up temporary print file:', error);
-    }
-  }, 60000);
+  try {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  } catch (error) {
+    console.warn('Failed to clean up temporary print file:', error);
+  }
 }
 
 ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
@@ -882,7 +881,7 @@ ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   return { filePath };
 });
 
-ipcMain.handle('print-contract-pdf', async (_, payload) => {
+ipcMain.handle('open-contract-print-preview', async (_, payload) => {
   if (!mainWindow) {
     throw new Error('Main window is not available.');
   }
@@ -894,81 +893,61 @@ ipcMain.handle('print-contract-pdf', async (_, payload) => {
   fs.writeFileSync(pdfPath, pdfBuffer);
 
   return new Promise((resolve, reject) => {
-    const showPreviewWindow = process.platform === 'win32';
-    const printWindow = new BrowserWindow({
-      width: 980,
-      height: 1240,
+    const previewWindow = new BrowserWindow({
+      width: 1100,
+      height: 1400,
       parent: mainWindow,
       modal: false,
       show: false,
       autoHideMenuBar: true,
       backgroundColor: '#ffffff',
       title: 'Contract Print Preview',
-      paintWhenInitiallyHidden: true,
       webPreferences: {
         plugins: true,
       },
     });
+    contractPreviewWindows.add(previewWindow);
 
     let settled = false;
+    let cleanedUp = false;
 
-    const finalize = (result) => {
-      if (settled) return;
-      settled = true;
-      if (!printWindow.isDestroyed()) {
-        printWindow.close();
-      }
-      scheduleTempPathCleanup(tempDir);
-      resolve(result);
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      contractPreviewWindows.delete(previewWindow);
+      cleanupTempPath(tempDir);
     };
 
     const fail = (error) => {
-      if (settled) return;
-      settled = true;
-      if (!printWindow.isDestroyed()) {
-        printWindow.destroy();
+      if (!previewWindow.isDestroyed()) {
+        previewWindow.destroy();
       }
-      scheduleTempPathCleanup(tempDir);
-      reject(error);
+      cleanup();
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
     };
 
-    printWindow.webContents.once('did-fail-load', (_, errorCode, errorDescription) => {
+    previewWindow.on('closed', () => {
+      cleanup();
+    });
+
+    previewWindow.webContents.once('did-fail-load', (_, errorCode, errorDescription) => {
       fail(new Error(`Failed to load contract print preview (${errorCode}): ${errorDescription}`));
     });
 
-    if (showPreviewWindow) {
-      printWindow.once('ready-to-show', () => {
-        if (!printWindow.isDestroyed()) {
-          printWindow.show();
-        }
-      });
-    }
-
-    printWindow.webContents.once('did-stop-loading', () => {
-      setTimeout(() => {
-        if (settled || printWindow.isDestroyed()) return;
-        printWindow.webContents.print(
-          {
-            silent: false,
-            printBackground: true,
-          },
-          (success, errorType) => {
-            if (!success && errorType && errorType !== 'Print job canceled') {
-              fail(new Error(`Failed to print contract: ${errorType}`));
-              return;
-            }
-
-            finalize({
-              success,
-              canceled: !success && errorType === 'Print job canceled',
-              errorType: success ? undefined : errorType,
-            });
-          }
-        );
-      }, 350);
+    previewWindow.webContents.once('did-finish-load', () => {
+      if (previewWindow.isDestroyed()) return;
+      previewWindow.show();
+      previewWindow.focus();
+      if (!settled) {
+        settled = true;
+        resolve({ success: true });
+      }
     });
 
-    printWindow.loadURL(pathToFileURL(pdfPath).toString()).catch(fail);
+    previewWindow.loadURL(pathToFileURL(pdfPath).toString()).catch(fail);
   });
 });
 

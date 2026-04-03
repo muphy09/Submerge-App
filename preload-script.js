@@ -41,7 +41,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   // Export
   exportBreakdownPdf: (payload) => ipcRenderer.invoke('export-breakdown-pdf', payload),
-  printContractPdf: (payload) => ipcRenderer.invoke('print-contract-pdf', payload),
+  openContractPrintPreview: (payload) => ipcRenderer.invoke('open-contract-print-preview', payload),
 
   // Franchise + pricing
   listFranchises: () => ipcRenderer.invoke('list-franchises'),
