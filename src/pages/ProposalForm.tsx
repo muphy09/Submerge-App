@@ -87,7 +87,6 @@ import {
 } from '../services/session';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
-import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   ensureProposalWorkflow,
@@ -281,8 +280,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const canViewCostBreakdown =
     sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
-  const { hideCogsFromProposalBuilder } = useAdminCogsView();
-  const canOpenCogsBreakdown = canViewCostBreakdown && !hideCogsFromProposalBuilder;
+  const canOpenCogsBreakdown = canViewCostBreakdown;
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
   const versionNameFromState = (location.state as any)?.versionName as string | undefined;
   const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
@@ -1442,12 +1440,17 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       setEditingVersionId(savedActive.versionId || currentVersionId);
       setHasEdits(false);
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
+      const isSignedAddendumSubmission = getWorkflowStatus(containerToSave as Proposal) === 'signed';
       showToast({
         type: 'success',
         message:
           effectiveMode === 'submit'
             ? savedWorkflowStatus === 'needs_approval'
-              ? 'Proposal submitted for approval.'
+              ? isSignedAddendumSubmission
+                ? 'Proposal addendum submitted for approval.'
+                : 'Proposal submitted for approval.'
+              : savedWorkflowStatus === 'signed' && isSignedAddendumSubmission
+              ? 'Proposal addendum added successfully.'
               : 'Proposal submitted successfully.'
             : options?.forceDraftStatus
             ? 'Proposal saved as draft.'

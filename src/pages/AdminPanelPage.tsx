@@ -105,6 +105,7 @@ const isSubmittedStatus = (status?: string) => {
   return (
     normalized === 'submitted' ||
     normalized === 'approved' ||
+    normalized === 'signed' ||
     normalized === 'needs_approval' ||
     normalized === 'changes_requested'
   );
@@ -804,7 +805,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
               <div className="admin-user-commission-section">
                 <div className="admin-user-commission-header">
                   <div className="admin-user-commission-title">Workflow Approval Settings</div>
-                  <div className="admin-user-commission-subtitle">Per-user submission review thresholds</div>
+                  <div className="admin-user-commission-subtitle">Per-user approval rules and submission thresholds</div>
                 </div>
                 <div className="admin-user-commission-grid">
                   <label className="admin-user-commission-field" htmlFor="approval-threshold-input">
@@ -867,7 +868,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                     onChange={(event) => setSelectedAlwaysRequireApproval(event.target.checked)}
                     disabled={savingApprovalSettingsUserId === selectedUser.id}
                   />
-                  <span>Always require approval for this user</span>
+                  <span>Approval Required</span>
                 </label>
                 <button
                   className="admin-primary-btn"

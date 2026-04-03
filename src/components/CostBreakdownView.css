@@ -414,6 +414,19 @@
   border-top: 2px solid #cbd5e1;
 }
 
+.breakdown-profit-indicator-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.75rem;
+}
+
+.proposal-gp-indicator {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.2px;
+}
+
 .pricing-section {
   margin-top: 0.5rem;
 }

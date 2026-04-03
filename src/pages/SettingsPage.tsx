@@ -1,28 +1,19 @@
 import React, { useState } from 'react';
 import ChangelogModal from '../components/ChangelogModal';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
-import { useAdminCogsView } from '../hooks/useAdminCogsView';
-import { getSessionFranchiseId, getSessionRole, readMasterImpersonation, readSession } from '../services/session';
+import { getSessionFranchiseId, getSessionRole } from '../services/session';
 import './SettingsPage.css';
 
 const SettingsPage: React.FC = () => {
   const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
   const [showChangelog, setShowChangelog] = useState(false);
-  const [adminCogsViewStatus, setAdminCogsViewStatus] = useState<{
-    type: 'success' | 'error' | 'info';
-    message: string;
-  } | null>(null);
 
   const franchiseId = getSessionFranchiseId();
   const sessionRole = getSessionRole();
-  const actualSessionRole = (readSession()?.role || '').toLowerCase();
-  const isMasterImpersonating = Boolean(readMasterImpersonation()?.franchiseId);
-  const showMasterCogsSetting = actualSessionRole === 'master' && !isMasterImpersonating;
   const canViewChangelog = sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'master';
   const isChangelogDisabled = !canViewChangelog;
   const { displayName } = useFranchiseAppName(franchiseId);
-  const { hideCogsFromProposalBuilder, setHideCogsFromProposalBuilder } = useAdminCogsView({ franchiseId });
 
   const handleCheckForUpdates = async () => {
     setChecking(true);
@@ -50,20 +41,6 @@ const SettingsPage: React.FC = () => {
   const openChangelog = () => {
     if (!canViewChangelog) return;
     setShowChangelog(true);
-  };
-
-  const handleToggleAdminCogsView = () => {
-    try {
-      const nextValue = !hideCogsFromProposalBuilder;
-      setHideCogsFromProposalBuilder(nextValue);
-      setAdminCogsViewStatus(null);
-    } catch (error) {
-      console.error('Failed to update admin COGS view setting:', error);
-      setAdminCogsViewStatus({
-        type: 'error',
-        message: 'Unable to update the Admin COGS View setting.',
-      });
-    }
   };
 
   return (
@@ -103,32 +80,6 @@ const SettingsPage: React.FC = () => {
             </button>
           </div>
         </div>
-
-        {showMasterCogsSetting && (
-          <div className="settings-card">
-            <h2>Admin COGS View</h2>
-            <div className="admin-cogs-settings-panel">
-              <div className="section-row admin-cogs-settings-row">
-                <div>
-                  <h3>Hide COGS from Prop. Builder</h3>
-                  <p className="settings-description">
-                    Control whether COGS breakdowns are visible while you build and review proposals.
-                  </p>
-                </div>
-                <button
-                  className={`settings-button admin-cogs-toggle-button ${hideCogsFromProposalBuilder ? 'is-active' : ''}`}
-                  onClick={handleToggleAdminCogsView}
-                  type="button"
-                >
-                  {hideCogsFromProposalBuilder ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
-              {adminCogsViewStatus?.type === 'error' && (
-                <div className={`logo-status ${adminCogsViewStatus.type}`}>{adminCogsViewStatus.message}</div>
-              )}
-            </div>
-          </div>
-        )}
 
         <div className="settings-card">
           <h2>About</h2>

@@ -97,6 +97,8 @@ function getStatusBadgeClass(status: string) {
       return 'dashboard-status-pill is-completed';
     case 'approved':
       return 'dashboard-status-pill is-approved';
+    case 'signed':
+      return 'dashboard-status-pill is-signed';
     case 'rejected':
       return 'dashboard-status-pill is-rejected';
     case 'modified':
@@ -503,6 +505,8 @@ function DashboardProposalsPanel({
                   </thead>
                   <tbody>
                     {filteredProposals.map((proposal) => {
+                      const normalizedStatus = String(proposal.status || '').trim().toLowerCase();
+                      const showApprovalMarker = proposal.workflow?.approved && normalizedStatus !== 'signed';
                       const contractTypeLabel = getContractTypeLabel(proposal);
                       const versionCount = getVersionCount(proposal, viewerRole);
                       const pricingModelClass = getPricingModelClass(
@@ -535,7 +539,7 @@ function DashboardProposalsPanel({
                           <td>
                             <span className={getStatusBadgeClass(proposal.status)}>
                               {formatStatusLabel(proposal.status)}
-                              {proposal.workflow?.approved ? '*' : ''}
+                              {showApprovalMarker ? '*' : ''}
                             </span>
                           </td>
                           <td>

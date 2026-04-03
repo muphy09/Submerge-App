@@ -60,7 +60,6 @@ import {
 import { getOffContractItemGroups, getOffContractTotal } from '../utils/customOptions';
 import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } from '../utils/equipmentPackages';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
-import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
@@ -70,11 +69,15 @@ import {
   completeWorkflowProposal,
   ensureProposalWorkflow,
   getApprovedVersionId,
+  getLatestSignedBaselineVersionId,
   getPendingReviewVersionId,
   getReviewerPrimaryVersionId,
   getReviewerVisibleVersions,
+  getSignedVersionId,
+  getWorkflowSubmissionPreview,
   getWorkflowStatus,
   isSubmittedVersionLocked,
+  markProposalAsSigned,
   markWorkflowRead,
   reconcileWorkflowVersionStates,
   requestWorkflowChanges,
@@ -480,6 +483,7 @@ function ProposalView() {
   const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
   const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
+  const [showCogsBreakdown, setShowCogsBreakdown] = useState(false);
   const [offContractVersionId, setOffContractVersionId] = useState<string | null>(null);
   const [contractVersionId, setContractVersionId] = useState<string | null>(null);
   const [breakdownExportOpen, setBreakdownExportOpen] = useState(false);
@@ -495,8 +499,12 @@ function ProposalView() {
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
   const [newVersionName, setNewVersionName] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [showModifyApprovedConfirm, setShowModifyApprovedConfirm] = useState(false);
+  const [submitTargetVersionId, setSubmitTargetVersionId] = useState<string | null>(null);
+  const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
+  const [showModifySignedConfirm, setShowModifySignedConfirm] = useState(false);
+  const [showMarkSignedConfirm, setShowMarkSignedConfirm] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
+  const [isWorkflowHistoryExpanded, setIsWorkflowHistoryExpanded] = useState(false);
   const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
@@ -518,10 +526,7 @@ function ProposalView() {
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
   const isReadOnlyReviewerView = isReviewerRole;
-  const canViewFullSummary =
-    sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'bookkeeper';
-  const { hideCogsFromProposalBuilder } = useAdminCogsView();
-  const canViewCogsBreakdown = canViewFullSummary && !hideCogsFromProposalBuilder;
+  const canViewCogsBreakdown = showCogsBreakdown;
   const activeEditableVersion =
     (versions.length
       ? versions.find((entry) => (entry.versionId || 'original') === activeVersionId)
@@ -544,6 +549,8 @@ function ProposalView() {
       ? 'Reviewer accounts can review submitted proposals but cannot edit their versions.'
       : isProposalCompleted
       ? 'Completed proposals are locked.'
+      : proposalWorkflowStatus === 'signed' && isSubmittedVersionLocked(activeEditableVersion)
+      ? 'Signed proposal versions are locked. Use Modify Signed Proposal to create an addendum draft.'
       : isSubmittedVersionLocked(activeEditableVersion)
       ? 'Submitted versions are locked. Create a new version to make changes.'
       : undefined;
@@ -586,6 +593,12 @@ function ProposalView() {
       warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
     };
   };
+
+  useEffect(() => {
+    setShowCogsBreakdown(false);
+    setCogsBreakdownVersionId(null);
+    setPreCogsBreakdownVersionId(null);
+  }, [proposalNumber]);
 
   useEffect(() => {
     if (canViewCogsBreakdown) return;
@@ -701,6 +714,10 @@ function ProposalView() {
       loadProposal(proposalNumber);
     }
   }, [location.state, navigate, proposalNumber, showToast]);
+
+  useEffect(() => {
+    setIsWorkflowHistoryExpanded(false);
+  }, [proposal?.proposalNumber]);
 
   useEffect(() => {
     if (!breakdownExportOpen) return;
@@ -909,15 +926,15 @@ function ProposalView() {
       showToast({ type: 'warning', message: 'Completed proposals cannot create new versions.' });
       return;
     }
-    if (proposalWorkflowStatus === 'approved') {
+    if (proposalWorkflowStatus === 'signed') {
       if (existingEditableAddendumVersion) {
         showToast({
           type: 'warning',
-          message: 'A proposal addendum draft already exists. Continue editing that version or submit it for review.',
+          message: 'A proposal addendum draft already exists. Continue editing that version or add it as a proposal addendum.',
         });
         return;
       }
-      setShowModifyApprovedConfirm(true);
+      setShowModifySignedConfirm(true);
       return;
     }
     const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
@@ -927,10 +944,10 @@ function ProposalView() {
   };
 
   const getNextAddendumName = (container: Proposal) => {
-    const priorSubmittedAddendums = (container.workflow?.history || []).filter(
-      (entry) => entry.type === 'submitted' && entry.metadata?.reviewKind === 'proposal_addendum'
-    ).length;
-    return `Proposal Addendum ${priorSubmittedAddendums + 1}`;
+    const existingSignedAddendums = Array.isArray(container.workflow?.signedAddendumVersionIds)
+      ? container.workflow?.signedAddendumVersionIds.length
+      : 0;
+    return `Proposal Addendum ${existingSignedAddendums + 1}`;
   };
 
   const createEditableVersion = async (explicitName?: string) => {
@@ -950,7 +967,7 @@ function ProposalView() {
         approvedVersionId ||
         proposal.versionId ||
         activeVersionId;
-      const isAddendumDraft = containerWorkflowStatus === 'approved';
+      const isAddendumDraft = containerWorkflowStatus === 'signed';
       const resolvedVersionName =
         explicitName && explicitName.trim()
           ? explicitName.trim()
@@ -1002,7 +1019,7 @@ function ProposalView() {
       console.error('Failed to build version', error);
       showToast({
         type: 'error',
-        message: getApprovedVersionId(proposal as Proposal)
+        message: proposalWorkflowStatus === 'signed'
           ? 'Could not create the proposal addendum draft.'
           : 'Could not create a new version.',
       });
@@ -1014,8 +1031,8 @@ function ProposalView() {
     await createEditableVersion(newVersionName);
   };
 
-  const handleConfirmModifyApprovedProposal = async () => {
-    setShowModifyApprovedConfirm(false);
+  const handleConfirmModifySignedProposal = async () => {
+    setShowModifySignedConfirm(false);
     await createEditableVersion();
   };
 
@@ -1374,12 +1391,14 @@ function ProposalView() {
 
   const persistStatusChange = async (
     nextStatus: 'draft' | 'submitted',
-    submissionRequest?: { manualReviewRequested: boolean; note: string }
+    submissionRequest?: { manualReviewRequested: boolean; note: string },
+    targetVersionId?: string
   ) => {
     if (!proposal) return;
     try {
       const all = versions.length ? versions : listAllVersions(proposal as Proposal);
       const desiredActiveId =
+        targetVersionId ||
         activeVersionId ||
         (proposal as Proposal).activeVersionId ||
         (proposal as Proposal).versionId ||
@@ -1427,6 +1446,7 @@ function ProposalView() {
       setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
       setProposal(activeApplied as Proposal);
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
+      const isSignedAddendumSubmission = getWorkflowStatus(container) === 'signed';
       showToast({
         type: isPending ? 'warning' : 'success',
         message:
@@ -1434,7 +1454,11 @@ function ProposalView() {
             ? isPending
               ? 'Saved locally. Will submit when back online.'
               : savedWorkflowStatus === 'needs_approval'
-              ? 'Proposal submitted for approval.'
+              ? isSignedAddendumSubmission
+                ? 'Proposal addendum submitted for approval.'
+                : 'Proposal submitted for approval.'
+              : savedWorkflowStatus === 'signed' && isSignedAddendumSubmission
+              ? 'Proposal addendum added successfully.'
               : 'Proposal submitted successfully.'
             : isPending
             ? 'Saved locally. Will sync when back online.'
@@ -1446,19 +1470,36 @@ function ProposalView() {
     }
   };
 
-  const handleOpenSubmitModal = () => {
+  const handleOpenSubmitModal = (versionId?: string) => {
     if (!proposal) return;
+    setSubmitTargetVersionId(
+      versionId ||
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original'
+    );
+    setSubmitManualReviewRequested(false);
     setSubmitNote('');
     setShowSubmitModal(true);
   };
 
-  const handleSubmitProposal = async () => {
+  const handleSubmitProposal = async (versionId?: string) => {
     if (!proposal) return;
-    if (!canSubmitProposal) {
+    const targetId =
+      versionId ||
+      activeVersionId ||
+      (proposal as Proposal).activeVersionId ||
+      (proposal as Proposal).versionId ||
+      'original';
+    const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+    const targetVersion =
+      all.find((entry) => (entry.versionId || 'original') === targetId) || proposal;
+    if (!targetVersion?.customerInfo?.customerName?.trim()) {
       showToast({ type: 'error', message: 'Customer name is required to submit.' });
       return;
     }
-    const errors = validateProposal(proposal);
+    const errors = validateProposal(targetVersion);
     if (errors.length > 0) {
       showToast({
         type: 'error',
@@ -1466,15 +1507,18 @@ function ProposalView() {
       });
       return;
     }
-    handleOpenSubmitModal();
+    handleOpenSubmitModal(targetId);
   };
 
   const handleConfirmSubmit = async () => {
     setShowSubmitModal(false);
     await persistStatusChange('submitted', {
-      manualReviewRequested: false,
-      note: submitNote,
-    });
+      manualReviewRequested: submitManualReviewRequested,
+      note: submitManualReviewRequested ? submitNote : '',
+    }, submitTargetVersionId || undefined);
+    setSubmitTargetVersionId(null);
+    setSubmitManualReviewRequested(false);
+    setSubmitNote('');
   };
 
   const handleSendWorkflowMessage = async () => {
@@ -1594,7 +1638,7 @@ function ProposalView() {
   const handleReviewerApprove = async () => {
     const didApprove = await persistReviewerWorkflowAction(
       (container) => approveWorkflowProposal(container, undefined),
-      'Proposal approved.'
+      getSignedVersionId(proposal as Proposal) ? 'Proposal addendum approved.' : 'Proposal approved.'
     );
     if (didApprove) {
       handleReviewerBack();
@@ -1614,6 +1658,52 @@ function ProposalView() {
       (container, note) => completeWorkflowProposal(container, note || undefined),
       'Proposal marked as completed.'
     );
+  };
+
+  const handleConfirmMarkProposalAsSigned = async () => {
+    if (!proposal) return;
+    setReviewerActionSaving(true);
+    try {
+      const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+      const normalizedVersions = all.map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versions: [],
+      }));
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const container = buildContainerFromVersions(normalizedVersions, desiredActiveId);
+      if (!container) return;
+
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
+      const saved = await saveProposalRemote(markProposalAsSigned(container));
+      const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
+        ...(mergeProposalWithDefaults(version) as Proposal),
+        versionId: version.versionId || 'original',
+        versionName: version.versionName || (version.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: version.isOriginalVersion,
+        activeVersionId: version.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+
+      setVersions(updatedVersions);
+      setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
+      setProposal(activeApplied as Proposal);
+      setShowMarkSignedConfirm(false);
+      showToast({ type: 'success', message: 'Proposal marked as signed.' });
+    } catch (error) {
+      console.error('Failed to mark proposal as signed', error);
+      showToast({ type: 'error', message: 'Could not mark the proposal as signed.' });
+    } finally {
+      setReviewerActionSaving(false);
+    }
   };
 
   const formatCurrency = (value: number): string =>
@@ -2008,11 +2098,16 @@ function ProposalView() {
     ? getReviewerVisibleVersions(displayVersionContainer as Proposal)
     : allVersionsForRender;
   const approvedVersionId = proposal ? getApprovedVersionId(proposal as Proposal) : null;
+  const latestSignedBaselineVersionId = proposal ? getLatestSignedBaselineVersionId(proposal as Proposal) : null;
+  const livePublishedVersionId =
+    proposalWorkflowStatus === 'signed'
+      ? latestSignedBaselineVersionId || approvedVersionId
+      : getPendingReviewVersionId(proposal as Proposal) || approvedVersionId;
   const existingEditableAddendumVersion =
-    approvedVersionId && !isReadOnlyReviewerView
+    proposalWorkflowStatus === 'signed' && livePublishedVersionId && !isReadOnlyReviewerView
       ? allVersionsForRender.find(
           (entry) =>
-            (entry.versionId || 'original') !== approvedVersionId &&
+            (entry.versionId || 'original') !== livePublishedVersionId &&
             !isSubmittedVersionLocked(entry)
         ) || null
       : null;
@@ -2022,25 +2117,25 @@ function ProposalView() {
     (proposal as Proposal).activeVersionId ||
     (proposal as Proposal).versionId ||
     'original';
-  const shouldPromoteActiveAddendum =
-    Boolean(approvedVersionId) &&
-    renderPrimaryVersionId !== approvedVersionId &&
+  const shouldPromoteEditableVersion =
+    Boolean(renderPrimaryVersionId) &&
+    renderPrimaryVersionId !== livePublishedVersionId &&
     versionsForRender.some((entry) => (entry.versionId || 'original') === renderPrimaryVersionId);
 
   const sortedVersions = [...versionsForRender].sort((a, b) => {
     const aId = a.versionId || 'original';
     const bId = b.versionId || 'original';
 
-    if (shouldPromoteActiveAddendum) {
+    if (livePublishedVersionId) {
+      const aIsPublished = aId === livePublishedVersionId;
+      const bIsPublished = bId === livePublishedVersionId;
+      if (aIsPublished !== bIsPublished) return aIsPublished ? -1 : 1;
+    }
+
+    if (shouldPromoteEditableVersion) {
       const aIsPrimary = aId === renderPrimaryVersionId;
       const bIsPrimary = bId === renderPrimaryVersionId;
       if (aIsPrimary !== bIsPrimary) return aIsPrimary ? -1 : 1;
-
-      const aIsApprovedBaseline = aId === approvedVersionId;
-      const bIsApprovedBaseline = bId === approvedVersionId;
-      if (aIsApprovedBaseline !== bIsApprovedBaseline) {
-        return aIsApprovedBaseline ? 1 : -1;
-      }
     }
 
     const aIsOriginal = a.isOriginalVersion ?? (a.versionId || 'original') === 'original';
@@ -2060,11 +2155,12 @@ function ProposalView() {
   );
   const submissionCount = workflowHistory.filter((entry) => entry.type === 'submitted').length;
   const submittedVersionId =
+    livePublishedVersionId ||
     proposal?.workflow?.submittedVersionId ||
     getPendingReviewVersionId(proposal as Proposal) ||
-    getApprovedVersionId(proposal as Proposal) ||
     null;
-  const submittedVersionLabel = formatSubmittedVersionLabel(submissionCount);
+  const submittedVersionLabel =
+    proposalWorkflowStatus === 'signed' ? 'Signed' : formatSubmittedVersionLabel(submissionCount);
   const workflowReasons = (proposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
@@ -2073,19 +2169,29 @@ function ProposalView() {
       ? 'Proposal submitted and awaiting approval'
       : proposalWorkflowStatus === 'changes_requested'
       ? 'Changes were requested. Create a new version and resubmit for approval.'
+      : proposalWorkflowStatus === 'signed'
+      ? 'Proposal is signed. Future changes must be added as proposal addendums.'
       : proposalWorkflowStatus === 'approved'
-      ? 'Proposal was approved. Future changes must be submitted as addendums.'
+      ? 'Proposal was approved and can now be marked as signed.'
       : undefined;
   const versionActionLabel =
-    proposalWorkflowStatus === 'approved' ? 'Modify Approved Proposal' : 'Build Another Version';
+    proposalWorkflowStatus === 'signed' ? 'Modify Signed Proposal' : 'Build Another Version';
   const workflowReviewVersionLabel =
     sortedVersions.find(
       (entry) =>
         (entry.versionId || 'original') ===
-        (getPendingReviewVersionId(proposal as Proposal) || getApprovedVersionId(proposal as Proposal) || '')
+        (getPendingReviewVersionId(proposal as Proposal) || livePublishedVersionId || '')
     )?.versionName ||
     proposal?.versionName ||
     'Current Version';
+  const activeVersionIsSignedAddendumDraft =
+    proposalWorkflowStatus === 'signed' &&
+    Boolean(activeEditableVersion) &&
+    !isSubmittedVersionLocked(activeEditableVersion) &&
+    (activeEditableVersion?.versionId || 'original') !== (livePublishedVersionId || '');
+  const submitActionLabel = activeVersionIsSignedAddendumDraft
+    ? 'Add as Proposal Addendum'
+    : 'Submit Proposal';
   const displayPrimaryVersionId = renderPrimaryVersionId;
   const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
   const customerModalView = customerBreakdownVersionId
@@ -2101,6 +2207,21 @@ function ProposalView() {
     ? versionMap.get(offContractVersionId) || primaryView
     : null;
   const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
+  const submitTargetVersion =
+    (submitTargetVersionId
+      ? allVersionsForRender.find((entry) => (entry.versionId || 'original') === submitTargetVersionId)
+      : activeEditableVersion) || proposal;
+  const submitPreview = submitTargetVersion
+    ? getWorkflowSubmissionPreview(submitTargetVersion as Proposal, {
+        manualReviewRequested: submitManualReviewRequested,
+        message: submitManualReviewRequested ? submitNote : '',
+      })
+    : null;
+  const isSubmittingSignedAddendum =
+    proposalWorkflowStatus === 'signed' &&
+    Boolean(submitTargetVersion) &&
+    !isSubmittedVersionLocked(submitTargetVersion || undefined) &&
+    (submitTargetVersion?.versionId || 'original') !== (livePublishedVersionId || '');
   const hasMultipleVersions = viewModels.length > 1;
   const shouldRenderBreakdownExport = breakdownExportActive || breakdownExporting;
   const ContractViewComponent = loadedContractView;
@@ -2477,12 +2598,35 @@ function ProposalView() {
     );
   };
 
+  const renderCogsToggle = () => (
+    <div className="proposal-summary-tools">
+      <div className="proposal-summary-toggle-card">
+        <div className="proposal-summary-toggle-copy">
+          <span className="proposal-summary-toggle-label">Show COGS</span>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showCogsBreakdown}
+          className={`proposal-summary-toggle-switch ${showCogsBreakdown ? 'is-on' : ''}`}
+          onClick={() => setShowCogsBreakdown((current) => !current)}
+        >
+          <span className="proposal-summary-toggle-switch-track" aria-hidden="true">
+            <span className="proposal-summary-toggle-switch-thumb" />
+          </span>
+          <span className="proposal-summary-toggle-switch-state">{showCogsBreakdown ? 'On' : 'Off'}</span>
+        </button>
+      </div>
+    </div>
+  );
+
   const renderVersionSection = (vm: ReturnType<typeof buildViewModel>, index: number) => {
     const versionId = vm.proposal.versionId || `version-${index}`;
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
     const versionLabel = getDisplayVersionLabel(vm.proposal);
     const isActive = versionId === activeVersionId;
     const isSubmittedVersion = Boolean(submittedVersionId) && versionId === submittedVersionId;
+    const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
     const canEditVersion =
       canManageVersionDrafts &&
@@ -2493,11 +2637,24 @@ function ProposalView() {
       !isOriginal &&
       !isSubmittedVersionLocked(vm.proposal) &&
       !isProposalCompleted;
+    const canMarkAsSignedVersion =
+      !isProposalEditingRestricted &&
+      proposalWorkflowStatus === 'approved' &&
+      isLivePublishedVersion;
+    const canSubmitAddendumVersion =
+      !isReadOnlyReviewerView &&
+      proposalWorkflowStatus === 'signed' &&
+      !isProposalCompleted &&
+      !isSubmittedVersionLocked(vm.proposal) &&
+      versionId !== (livePublishedVersionId || '');
+    const showDeleteButton = !isReadOnlyReviewerView && !isOriginal && !isActive && !canMarkAsSignedVersion;
     const versionActionReason =
       !canManageVersionDrafts
         ? editDisabledReason
         : isProposalCompleted
         ? 'Completed proposals are locked.'
+        : proposalWorkflowStatus === 'signed' && isLivePublishedVersion
+        ? 'Signed proposal versions are locked. Create a new version to prepare an addendum.'
         : isSubmittedVersionLocked(vm.proposal)
         ? 'Submitted versions are locked. Create a new version to make changes.'
         : undefined;
@@ -2506,11 +2663,17 @@ function ProposalView() {
       <div key={versionId} className={`version-section ${index > 0 ? 'has-divider' : ''}`}>
         {index > 0 && (
           <>
-            <div className="version-divider-title">Additional Version - {versionLabel}</div>
+            <div className="version-divider-title">
+              {index === 1 && livePublishedVersionId ? 'Other Versions' : `Additional Version - ${versionLabel}`}
+            </div>
             <div className="version-divider" />
           </>
         )}
-        <div className="hero-card">
+        <div
+          className={`hero-card${isLivePublishedVersion ? ' is-live-published-version' : ''}${
+            proposalWorkflowStatus === 'signed' && isLivePublishedVersion ? ' is-signed-version' : ''
+          }`}
+        >
           <div className="hero-header">
             <div className="hero-icon">
               <img src={summaryIconImg} alt="Proposal summary icon" className="summary-icon" />
@@ -2559,7 +2722,26 @@ function ProposalView() {
                   Edit Proposal
                 </button>
               </TooltipAnchor>
-              {!isOriginal && (
+              {canSubmitAddendumVersion && (
+                <button
+                  className="action-button primary"
+                  onClick={() => {
+                    void handleSubmitProposal(versionId);
+                  }}
+                >
+                  Add as Proposal Addendum
+                </button>
+              )}
+              {canMarkAsSignedVersion && (
+                <button
+                  className="action-button primary"
+                  onClick={() => setShowMarkSignedConfirm(true)}
+                  disabled={reviewerActionSaving}
+                >
+                  Mark as Signed
+                </button>
+              )}
+              {showDeleteButton && (
                 <TooltipAnchor tooltip={versionActionReason}>
                   <button
                     className="action-button danger"
@@ -2714,14 +2896,16 @@ function ProposalView() {
               >
                 <button
                   className="action-button primary workflow-summary-submit-button"
-                  onClick={handleSubmitProposal}
+                  onClick={() => {
+                    void handleSubmitProposal();
+                  }}
                   disabled={!canEditProposal || loading || !canSubmitProposal}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                     <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
-                  Submit Proposal
+                  {submitActionLabel}
                 </button>
               </TooltipAnchor>
             </div>
@@ -2763,7 +2947,7 @@ function ProposalView() {
                       Approve
                     </button>
                   )}
-                  {proposalWorkflowStatus !== 'completed' && (
+                  {proposalWorkflowStatus !== 'completed' && proposalWorkflowStatus !== 'signed' && (
                     <button
                       className="action-button danger workflow-summary-reviewer-button"
                       onClick={() => {
@@ -2774,7 +2958,7 @@ function ProposalView() {
                       Request Changes
                     </button>
                   )}
-                  {proposalWorkflowStatus === 'approved' && (
+                  {(proposalWorkflowStatus === 'approved' || proposalWorkflowStatus === 'signed') && (
                     <button
                       className="action-button primary workflow-summary-reviewer-button"
                       onClick={() => {
@@ -2824,7 +3008,9 @@ function ProposalView() {
             <div className="workflow-summary-block">
               <div className="workflow-summary-label">Approved By</div>
               <div className="workflow-summary-value">
-                {proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email
+                {proposal.workflow.approvalNotRequired
+                  ? 'Not required'
+                  : proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email
                   ? `${proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email}${
                       proposal.workflow.approvedAt ? ` - ${new Date(proposal.workflow.approvedAt).toLocaleString()}` : ''
                     }`
@@ -2832,9 +3018,17 @@ function ProposalView() {
               </div>
             </div>
             <div className="workflow-summary-block">
-              <div className="workflow-summary-label">Completed By</div>
+              <div className="workflow-summary-label">
+                {proposal.workflow.signedVersionId ? 'Signed By' : 'Completed By'}
+              </div>
               <div className="workflow-summary-value">
-                {proposal.workflow.completedBy?.name || proposal.workflow.completedBy?.email || 'Not completed'}
+                {proposal.workflow.signedVersionId
+                  ? proposal.workflow.signedBy?.name || proposal.workflow.signedBy?.email
+                    ? `${proposal.workflow.signedBy?.name || proposal.workflow.signedBy?.email}${
+                        proposal.workflow.signedAt ? ` - ${new Date(proposal.workflow.signedAt).toLocaleString()}` : ''
+                      }`
+                    : 'Not signed'
+                  : proposal.workflow.completedBy?.name || proposal.workflow.completedBy?.email || 'Not completed'}
               </div>
             </div>
           </div>
@@ -2852,63 +3046,76 @@ function ProposalView() {
 
           {(workflowHistory.length > 0 || canSendWorkflowMessages) && (
             <div className="workflow-summary-history">
-              <div className="workflow-summary-history-title">Workflow Activity</div>
-              {workflowHistory.map((entry) => (
-                <div key={entry.id} className="workflow-summary-history-item">
-                  <div className="workflow-summary-history-meta">
-                    <span>{formatWorkflowStatusLabel(entry.type)}</span>
-                    <span>{new Date(entry.createdAt).toLocaleString()}</span>
-                    <span>{entry.actor?.name || entry.actor?.email || 'User'}</span>
-                  </div>
-                  {entry.message && <div className="workflow-summary-history-message">{entry.message}</div>}
-                </div>
-              ))}
-              {canSendWorkflowMessages && !showWorkflowMessageComposer && (
-                <div className="workflow-summary-message-actions">
-                  <button
-                    type="button"
-                    className="action-button workflow-summary-message-trigger"
-                    onClick={() => setShowWorkflowMessageComposer(true)}
-                    disabled={workflowMessageSaving || loading}
-                  >
-                    {isReadOnlyReviewerView ? 'Add Note' : 'Send Another Note'}
-                  </button>
-                </div>
-              )}
-              {canSendWorkflowMessages && showWorkflowMessageComposer && (
-                <div className="workflow-summary-message-composer">
-                  <textarea
-                    className="workflow-summary-message-input"
-                    value={workflowMessageDraft}
-                    onChange={(event) => setWorkflowMessageDraft(event.target.value)}
-                    placeholder="Add a message here"
-                    disabled={workflowMessageSaving || loading}
-                    rows={4}
-                  />
-                  <div className="workflow-summary-message-actions">
-                    <button
-                      type="button"
-                      className="action-button"
-                      onClick={() => {
-                        setWorkflowMessageDraft('');
-                        setShowWorkflowMessageComposer(false);
-                      }}
-                      disabled={workflowMessageSaving}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="action-button primary workflow-summary-message-button"
-                      onClick={() => {
-                        void handleSendWorkflowMessage();
-                      }}
-                      disabled={!workflowMessageDraft.trim() || workflowMessageSaving || loading}
-                    >
-                      {workflowMessageSaving ? 'Sending...' : 'Send Message'}
-                    </button>
-                  </div>
-                </div>
+              <div className="workflow-summary-history-header">
+                <div className="workflow-summary-history-title">Workflow Activity</div>
+                <button
+                  type="button"
+                  className="workflow-summary-history-toggle"
+                  onClick={() => setIsWorkflowHistoryExpanded((current) => !current)}
+                >
+                  {isWorkflowHistoryExpanded ? 'Compress' : 'Expand'}
+                </button>
+              </div>
+              {isWorkflowHistoryExpanded && (
+                <>
+                  {workflowHistory.map((entry) => (
+                    <div key={entry.id} className="workflow-summary-history-item">
+                      <div className="workflow-summary-history-meta">
+                        <span>{formatWorkflowStatusLabel(entry.type)}</span>
+                        <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                        <span>{entry.actor?.name || entry.actor?.email || 'User'}</span>
+                      </div>
+                      {entry.message && <div className="workflow-summary-history-message">{entry.message}</div>}
+                    </div>
+                  ))}
+                  {canSendWorkflowMessages && !showWorkflowMessageComposer && (
+                    <div className="workflow-summary-message-actions">
+                      <button
+                        type="button"
+                        className="action-button workflow-summary-message-trigger"
+                        onClick={() => setShowWorkflowMessageComposer(true)}
+                        disabled={workflowMessageSaving || loading}
+                      >
+                        {isReadOnlyReviewerView ? 'Add Note' : 'Send Another Note'}
+                      </button>
+                    </div>
+                  )}
+                  {canSendWorkflowMessages && showWorkflowMessageComposer && (
+                    <div className="workflow-summary-message-composer">
+                      <textarea
+                        className="workflow-summary-message-input"
+                        value={workflowMessageDraft}
+                        onChange={(event) => setWorkflowMessageDraft(event.target.value)}
+                        placeholder="Add a message here"
+                        disabled={workflowMessageSaving || loading}
+                        rows={4}
+                      />
+                      <div className="workflow-summary-message-actions">
+                        <button
+                          type="button"
+                          className="action-button"
+                          onClick={() => {
+                            setWorkflowMessageDraft('');
+                            setShowWorkflowMessageComposer(false);
+                          }}
+                          disabled={workflowMessageSaving}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="action-button primary workflow-summary-message-button"
+                          onClick={() => {
+                            void handleSendWorkflowMessage();
+                          }}
+                          disabled={!workflowMessageDraft.trim() || workflowMessageSaving || loading}
+                        >
+                          {workflowMessageSaving ? 'Sending...' : 'Send Message'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -2916,7 +3123,10 @@ function ProposalView() {
       )}
 
       <div ref={proposalRef} className="proposal-summary-page">
-        <h1 className="page-title">Proposal Summary</h1>
+        <div className="proposal-summary-header">
+          <h1 className="page-title">Proposal Summary</h1>
+          {renderCogsToggle()}
+        </div>
         {viewModels.map((vm, index) => renderVersionSection(vm, index))}
       </div>
       {showVersionNameModal && (
@@ -2954,26 +3164,46 @@ function ProposalView() {
       )}
       <SubmitProposalModal
         isOpen={showSubmitModal}
-        versionName={proposal?.versionName || 'Current Version'}
-        hasApprovedBaseline={Boolean(approvedVersionId)}
+        versionName={submitTargetVersion ? getDisplayVersionLabel(submitTargetVersion as Proposal) : 'Current Version'}
+        isAddendum={isSubmittingSignedAddendum}
+        willAutoApprove={submitPreview?.willAutoApprove === true}
+        manualReviewRequested={submitManualReviewRequested}
         note={submitNote}
         isSubmitting={loading}
         onNoteChange={setSubmitNote}
-        onCancel={() => setShowSubmitModal(false)}
+        onManualReviewToggle={() => setSubmitManualReviewRequested((current) => !current)}
+        onCancel={() => {
+          setShowSubmitModal(false);
+          setSubmitTargetVersionId(null);
+          setSubmitManualReviewRequested(false);
+          setSubmitNote('');
+        }}
         onConfirm={() => {
           void handleConfirmSubmit();
         }}
       />
       <ConfirmDialog
-        open={showModifyApprovedConfirm}
+        open={showModifySignedConfirm}
         title="Start proposal addendum?"
-        message="Making changes to this approved proposal will create a new editable version. The book keeper and admins will continue to see the approved proposal until you submit the addendum for review. Do you want to continue?"
+        message="Making changes to this signed proposal will create a new editable version. The book keeper and admins will continue to see the signed proposal until you add the new version as a proposal addendum. Do you want to continue?"
         confirmLabel="Continue"
         cancelLabel="Cancel"
         onConfirm={() => {
-          void handleConfirmModifyApprovedProposal();
+          void handleConfirmModifySignedProposal();
         }}
-        onCancel={() => setShowModifyApprovedConfirm(false)}
+        onCancel={() => setShowModifySignedConfirm(false)}
+      />
+      <ConfirmDialog
+        open={showMarkSignedConfirm}
+        title="Are you sure?"
+        message="Marking as Signed will lock the current active version. All other non-active versions will be deleted. Additional changes made afterwards will be added as a Proposal Addendum"
+        confirmLabel="Yes I'm sure. Mark as Signed"
+        cancelLabel="No, take me back"
+        isLoading={reviewerActionSaving}
+        onConfirm={() => {
+          void handleConfirmMarkProposalAsSigned();
+        }}
+        onCancel={() => setShowMarkSignedConfirm(false)}
       />
       {contractVersionId && contractModalView && (
         <div className="modal-overlay contract-printable" onClick={() => setContractVersionId(null)}>

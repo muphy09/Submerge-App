@@ -3,10 +3,13 @@ import './SubmitProposalModal.css';
 type SubmitProposalModalProps = {
   isOpen: boolean;
   versionName?: string;
-  hasApprovedBaseline?: boolean;
+  isAddendum?: boolean;
+  willAutoApprove?: boolean;
+  manualReviewRequested?: boolean;
   note: string;
   isSubmitting?: boolean;
   onNoteChange: (value: string) => void;
+  onManualReviewToggle: () => void;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -14,10 +17,13 @@ type SubmitProposalModalProps = {
 function SubmitProposalModal({
   isOpen,
   versionName,
-  hasApprovedBaseline = false,
+  isAddendum = false,
+  willAutoApprove = false,
+  manualReviewRequested = false,
   note,
   isSubmitting = false,
   onNoteChange,
+  onManualReviewToggle,
   onCancel,
   onConfirm,
 }: SubmitProposalModalProps) {
@@ -30,44 +36,61 @@ function SubmitProposalModal({
       <div className="submit-proposal-modal">
         <div className="submit-proposal-header">
           <p className="submit-proposal-kicker">Submission Lock</p>
-          <h2 id="submit-proposal-title">Submit {trimmedVersionName}?</h2>
+          <h2 id="submit-proposal-title">
+            {isAddendum ? `Add ${trimmedVersionName} as a Proposal Addendum?` : `Submit ${trimmedVersionName}?`}
+          </h2>
         </div>
 
         <div className="submit-proposal-body">
           <p className="submit-proposal-message">
-            Every proposal submission requires admin or book keeper approval before it becomes the active approved
-            proposal.
+            {willAutoApprove
+              ? 'This Proposal will be automatically Approved, set up by your Admin.'
+              : 'This Proposal version will be sent for Approval.'}
           </p>
           <p className="submit-proposal-message">
-            This version will lock once submitted. If there is already a pending review version, this submission will
-            replace it.{' '}
-            {hasApprovedBaseline
-              ? 'After approval, it becomes the next approved proposal addendum baseline.'
-              : 'After approval, it becomes the active approved proposal.'}
+            This Proposal version will be locked from editing after it is Submitted.
           </p>
-          <p className="submit-proposal-message">
-            When this submission is approved, any other non-active proposal versions will be removed. Future changes
-            can still be made later by choosing Modify this proposal, which starts the proposal addendum workflow.
-          </p>
+          {isAddendum ? (
+            <p className="submit-proposal-message">
+              The signed proposal remains in effect until this addendum is approved.
+            </p>
+          ) : (
+            <p className="submit-proposal-message">
+              Other proposal versions will stay available until the approved proposal is marked as signed.
+            </p>
+          )}
 
-          <label className="submit-proposal-note">
-            <span>Reviewer note</span>
-            <textarea
-              value={note}
-              onChange={(event) => onNoteChange(event.target.value)}
-              placeholder="Add context here"
-              disabled={isSubmitting}
-              rows={5}
-            />
-          </label>
+          {manualReviewRequested && (
+            <label className="submit-proposal-note">
+              <span>Message for reviewer</span>
+              <textarea
+                value={note}
+                onChange={(event) => onNoteChange(event.target.value)}
+                placeholder="Add context for the Book Keeper / Admin"
+                disabled={isSubmitting}
+                rows={5}
+              />
+            </label>
+          )}
         </div>
 
         <div className="submit-proposal-actions">
           <button type="button" className="submit-proposal-button submit-proposal-button--ghost" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </button>
+          <button
+            type="button"
+            className={`submit-proposal-button submit-proposal-button--manual-review${
+              manualReviewRequested ? ' is-active' : ''
+            }`}
+            onClick={onManualReviewToggle}
+            disabled={isSubmitting}
+            aria-pressed={manualReviewRequested}
+          >
+            Mark for Manual Review
+          </button>
           <button type="button" className="submit-proposal-button submit-proposal-button--primary" onClick={onConfirm} disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : 'Submit Proposal'}
+            {isSubmitting ? 'Submitting...' : 'Submit'}
           </button>
         </div>
       </div>

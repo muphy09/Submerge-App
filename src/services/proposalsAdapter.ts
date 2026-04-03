@@ -75,6 +75,7 @@ function isSubmittedStatus(status?: string | null) {
   return (
     normalized === 'submitted' ||
     normalized === 'approved' ||
+    normalized === 'signed' ||
     normalized === 'needs_approval' ||
     normalized === 'changes_requested'
   );
@@ -113,6 +114,7 @@ function canReadProposal(proposal: Proposal, session?: UserSession | null) {
     return (
       status === 'submitted' ||
       status === 'approved' ||
+      status === 'signed' ||
       status === 'needs_approval' ||
       status === 'changes_requested' ||
       status === 'completed'

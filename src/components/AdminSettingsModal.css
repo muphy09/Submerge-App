@@ -120,10 +120,6 @@
   align-items: start;
 }
 
-.admin-settings-field-row--summary {
-  align-items: end;
-}
-
 .admin-settings-field {
   display: grid;
   gap: 0.45rem;
@@ -200,12 +196,6 @@
   gap: 0.7rem;
 }
 
-.admin-settings-actions--align-end {
-  justify-content: flex-start;
-  align-items: center;
-  height: 100%;
-}
-
 .admin-settings-button {
   border: none;
   padding: 0.72rem 1rem;
@@ -252,33 +242,6 @@
 
 .admin-settings-button--danger:hover:not(:disabled) {
   background: #ffe4e6;
-}
-
-.admin-settings-button--toggle {
-  min-width: 176px;
-  background: #ffffff;
-  color: #1e3a5f;
-  border: 1px solid #dbe3ee;
-}
-
-.admin-settings-button--toggle:hover:not(:disabled) {
-  background: #eef6ff;
-  color: #1e3a5f;
-}
-
-.admin-settings-button--toggle.is-active {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border-color: #d97706;
-  color: #ffffff;
-  box-shadow: 0 10px 24px rgba(217, 119, 6, 0.22);
-}
-
-.admin-settings-button--toggle.is-active:hover:not(:disabled),
-.admin-settings-button--toggle.is-active:focus-visible {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border-color: #d97706;
-  color: #ffffff;
-  box-shadow: 0 10px 24px rgba(217, 119, 6, 0.22);
 }
 
 .admin-settings-feedback {
@@ -377,7 +340,6 @@
     max-width: 340px;
   }
 
-  .admin-settings-button--toggle,
   .admin-settings-pin-toggle {
     width: 100%;
   }

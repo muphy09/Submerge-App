@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import submergeLogo from '../../Submerge Logo.png';
-import { useAdminCogsView } from '../hooks/useAdminCogsView';
 import { useAdminPanelPin } from '../hooks/useAdminPanelPin';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { useFranchiseLogo } from '../hooks/useFranchiseLogo';
@@ -46,7 +45,6 @@ function AdminSettingsModal({ isOpen, onClose }: AdminSettingsModalProps) {
   const { appName: savedAppName, displayName, isLoading: appNameLoading } = useFranchiseAppName(franchiseId);
   const { logoUrl: savedLogoUrl, isLoading: logoLoading } = useFranchiseLogo(franchiseId);
   const { adminPanelPin: currentAdminPin, isLoading: adminPinLoading } = useAdminPanelPin(franchiseId);
-  const { hideCogsFromProposalBuilder, setHideCogsFromProposalBuilder } = useAdminCogsView({ franchiseId });
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -68,8 +66,6 @@ function AdminSettingsModal({ isOpen, onClose }: AdminSettingsModalProps) {
   const [adminPinStatus, setAdminPinStatus] = useState<StatusMessage>(null);
   const [adminPinSaving, setAdminPinSaving] = useState(false);
   const [showAdminPin, setShowAdminPin] = useState(false);
-
-  const [adminCogsViewStatus, setAdminCogsViewStatus] = useState<StatusMessage>(null);
 
   const previewLogoUrl = pendingLogoUrl || savedLogoUrl || submergeLogo;
   const hasCustomLogo = Boolean(savedLogoUrl);
@@ -103,7 +99,6 @@ function AdminSettingsModal({ isOpen, onClose }: AdminSettingsModalProps) {
       setAppNameStatus(null);
       setFranchiseCodeStatus(null);
       setAdminPinStatus(null);
-      setAdminCogsViewStatus(null);
       setPendingAppName(displayName);
       setPendingFranchiseCode(sessionFranchiseCode);
       setPendingAdminPin(effectiveCurrentAdminPin);
@@ -394,20 +389,6 @@ function AdminSettingsModal({ isOpen, onClose }: AdminSettingsModalProps) {
     }
   };
 
-  const handleToggleAdminCogsView = () => {
-    try {
-      const nextValue = !hideCogsFromProposalBuilder;
-      setHideCogsFromProposalBuilder(nextValue);
-      setAdminCogsViewStatus(null);
-    } catch (error) {
-      console.error('Failed to update admin COGS view setting:', error);
-      setAdminCogsViewStatus({
-        type: 'error',
-        message: 'Unable to update the Admin COGS View setting.',
-      });
-    }
-  };
-
   if (!isOpen || !modalRoot) return null;
 
   return createPortal(
@@ -436,41 +417,6 @@ function AdminSettingsModal({ isOpen, onClose }: AdminSettingsModalProps) {
         </div>
 
         <div className="admin-settings-body">
-          <section className="admin-settings-item">
-            <div className="admin-settings-item-header">
-              <div>
-                <h3>Admin COGS View</h3>
-                <p>Control whether COGS breakdowns are visible while you build and review proposals.</p>
-              </div>
-            </div>
-            <div className="admin-settings-item-panel">
-              <div className="admin-settings-field-row admin-settings-field-row--summary">
-                <div className="admin-settings-field">
-                  <span className="admin-settings-field-label">Current setting</span>
-                  <div className="admin-settings-readonly-value">
-                    {hideCogsFromProposalBuilder ? 'Hidden in Builder' : 'Visible in Builder'}
-                  </div>
-                </div>
-                <div className="admin-settings-actions admin-settings-actions--align-end">
-                  <button
-                    type="button"
-                    className={`admin-settings-button admin-settings-button--toggle${
-                      hideCogsFromProposalBuilder ? ' is-active' : ''
-                    }`}
-                    onClick={handleToggleAdminCogsView}
-                  >
-                    {hideCogsFromProposalBuilder ? 'Show COGS' : 'Hide COGS'}
-                  </button>
-                </div>
-              </div>
-            </div>
-            {adminCogsViewStatus?.type === 'error' && (
-              <div className={`admin-settings-feedback ${adminCogsViewStatus.type}`}>
-                {adminCogsViewStatus.message}
-              </div>
-            )}
-          </section>
-
           <section className="admin-settings-item">
             <div className="admin-settings-item-header">
               <div>

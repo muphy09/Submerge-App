@@ -42,6 +42,17 @@ const isAdjustmentInputPending = (value: string): boolean => {
   return trimmed === '' || trimmed === '-' || trimmed === '.' || trimmed === '-.';
 };
 
+const formatGrossMarginIndicator = (value?: number): string => {
+  const safeValue = Number.isFinite(value) ? (value as number) : 0;
+  const sign = safeValue < 0 ? '-' : '';
+  const fixed = Math.abs(safeValue).toFixed(2);
+  const [whole, decimal] = fixed.split('.');
+  const paddedWhole = (whole || '0').padStart(2, '0');
+  return `${sign}${paddedWhole}.${decimal}`;
+};
+
+const buildProposalIndicator = (value?: number): string => `Proposal #26${formatGrossMarginIndicator(value)}`;
+
 function CostBreakdownView({
   costBreakdown,
   customerName,
@@ -238,6 +249,7 @@ function CostBreakdownView({
 
   const canEditAdjustments = allowRetailAdjustments && typeof onRetailAdjustmentsChange === 'function';
   const grossProfitMargin = pricing?.grossProfitMargin ?? proposal?.pricing?.grossProfitMargin ?? 0;
+  const proposalIndicator = buildProposalIndicator(grossProfitMargin);
   const exceedsFranchiseLimit =
     retailAdjustments.some((adj) => adj.amount < 0) &&
     Number.isFinite(grossProfitMargin) &&
@@ -519,6 +531,11 @@ function CostBreakdownView({
               <span>RETAIL PRICE:</span>
               <span>{formatCurrency(displayRetailPrice)}</span>
             </div>
+            {!exportLayout && (
+              <div className="breakdown-profit-indicator-row">
+                <span className="proposal-gp-indicator">{proposalIndicator}</span>
+              </div>
+            )}
           </div>
         </div>
         </div>

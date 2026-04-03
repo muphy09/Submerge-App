@@ -1,8 +1,20 @@
-## [2.2.1] - 4/1/26
+## [2.2.1] - 4/2/26
+### Proposal Submission Workflow Changes
+- Toggle for 'Require Approval' added per user in the Admin Panel
+    - If this option is off, Proposals are automatically approved
+- Toggle for 'Mark as Signed'
+    - Marking a Proposal version as 'Signed' removes previous non-active versions
+    - Additional modifications can be made to the signed proposal and reflect as a Proposal Addendum
+    - All users can see the comparison breakdown of Proposal Addendums
+### Changed
+- 'Hide COGS' option now lives in the Proposal Summary screen to toggle On/Off from view
+    - Designers can now see this option
+- Hidden Proposal Gross Profit % now appears in the Customer Job Cost Breakdown
+    - Visual only, will not export along with the breakdown
 ### Improvements
+    - Fiberglass Contracts should format correctly now
     - Numerous backend code changes should allow for faster loading and rendering
-    - Removed lots of old unreferenced data
-    
+    - Removed lots of old, unreferenced data
 -----
 ## [2.2.0] - 4/1/26
 ### Proposal Submission Workflow

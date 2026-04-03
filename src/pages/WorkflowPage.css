@@ -211,6 +211,12 @@
   color: #17643b;
 }
 
+.workflow-status-pill.is-signed {
+  background: #dff0fb;
+  border-color: #9dc8e5;
+  color: #1b5d87;
+}
+
 .workflow-status-pill.is-needs_approval {
   background: #ead9c5;
   border-color: #c7a884;
@@ -385,6 +391,26 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.workflow-signed-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.workflow-signed-column {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid rgba(22, 50, 77, 0.08);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.9rem;
+}
+
+.workflow-signed-column--baseline {
+  background: linear-gradient(180deg, #eef7fd 0, #ffffff 100%);
 }
 
 .workflow-diff-categories {

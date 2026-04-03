@@ -741,6 +741,7 @@ export type ProposalWorkflowStatus =
   | 'draft'
   | 'submitted'
   | 'approved'
+  | 'signed'
   | 'needs_approval'
   | 'changes_requested'
   | 'completed';
@@ -769,6 +770,7 @@ export interface ProposalWorkflowActor {
 export type ProposalWorkflowEventType =
   | 'submitted'
   | 'approved'
+  | 'signed'
   | 'changes_requested'
   | 'completed'
   | 'note';
@@ -792,6 +794,7 @@ export interface ProposalWorkflowState {
   submittedVersionId?: string | null;
   approvedVersionId?: string | null;
   approvedVersionIds?: string[];
+  approvalNotRequired?: boolean;
   submittedAt?: string | null;
   submittedBy?: ProposalWorkflowActor | null;
   manualReviewRequested?: boolean;
@@ -801,6 +804,10 @@ export interface ProposalWorkflowState {
   approved?: boolean;
   approvedAt?: string | null;
   approvedBy?: ProposalWorkflowActor | null;
+  signedVersionId?: string | null;
+  signedAddendumVersionIds?: string[];
+  signedAt?: string | null;
+  signedBy?: ProposalWorkflowActor | null;
   completedAt?: string | null;
   completedBy?: ProposalWorkflowActor | null;
   history?: ProposalWorkflowEvent[];

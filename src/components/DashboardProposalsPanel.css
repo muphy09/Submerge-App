@@ -360,6 +360,12 @@
   color: #0f5d56;
 }
 
+.dashboard-status-pill.is-signed {
+  background: #dff0fb;
+  border-color: #9dc8e5;
+  color: #1b5d87;
+}
+
 .dashboard-status-pill.is-rejected,
 .dashboard-status-pill.is-modified {
   background: #fde0df;

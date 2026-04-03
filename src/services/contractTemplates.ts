@@ -52,6 +52,13 @@ type FieldOverride = {
   rect: [number, number, number, number];
 };
 
+type PageFieldTransform = {
+  xScale: number;
+  xOffset: number;
+  yScale: number;
+  yOffset: number;
+};
+
 type AdditionalFeaturesPatchConfig = {
   fontSize: number;
   headingLeftRect: [number, number, number, number];
@@ -315,6 +322,144 @@ const PAYMENT_SCHEDULE_OVERRIDES: Record<ContractTemplateId, FieldOverride[]> = 
   ],
 };
 
+const FIBERGLASS_PAGE_ONE_FIELD_OVERRIDES: Partial<Record<ContractTemplateId, FieldOverride[]>> = {
+  'nc-fiberglass': [
+    {
+      id: 'p1_body_buyer_name',
+      page: 1,
+      rect: [379.45, 172.583, 484.18, 181.875],
+    },
+    {
+      id: 'p1_body_job_site_address',
+      page: 1,
+      rect: [230.77, 181.748, 339.07, 191.04],
+    },
+    {
+      id: 'p1_7',
+      page: 1,
+      rect: [403.96, 182.002, 508.3, 191.294],
+    },
+    {
+      id: 'p1_deposit_amount',
+      page: 1,
+      rect: [392.38, 191.167, 508.3, 200.332],
+    },
+    {
+      id: 'p1_installment_count',
+      page: 1,
+      rect: [173, 199.568, 197, 209.624],
+    },
+  ],
+  'sc-fiberglass': [
+    {
+      id: 'p1_body_buyer_name',
+      page: 1,
+      rect: [386.05, 156.226, 485.98, 165.64],
+    },
+    {
+      id: 'p1_body_job_site_address',
+      page: 1,
+      rect: [233.51, 165.511, 339.31, 174.926],
+    },
+    {
+      id: 'p1_7',
+      page: 1,
+      rect: [406.15, 165.769, 510.34, 175.184],
+    },
+    {
+      id: 'p1_deposit_amount',
+      page: 1,
+      rect: [399.86, 175.055, 510.34, 184.34],
+    },
+    {
+      id: 'p1_installment_count',
+      page: 1,
+      rect: [172.46, 183.566, 196.46, 193.755],
+    },
+  ],
+};
+
+// The fiberglass PDFs use a different print layout than the baseline PPAS/gunite map,
+// so we remap the shared coordinates before applying any template-specific overrides.
+const FIBERGLASS_FIELD_TRANSFORMS: Partial<Record<ContractTemplateId, Partial<Record<number, PageFieldTransform>>>> = {
+  'nc-fiberglass': {
+    1: {
+      xScale: 1.058383652707,
+      xOffset: -18.07463438408,
+      yScale: 1.060738536274,
+      yOffset: -3.86026766202,
+    },
+    2: {
+      xScale: 1.058384846338,
+      xOffset: -18.148640158683,
+      yScale: 1.062219358873,
+      yOffset: -3.104355581704,
+    },
+    3: {
+      xScale: 1.028988887709,
+      xOffset: -10.537505539578,
+      yScale: 1.056703104208,
+      yOffset: -3.240093455295,
+    },
+    4: {
+      xScale: 1.042038199271,
+      xOffset: -12.90447072702,
+      yScale: 1.056129384168,
+      yOffset: -3.150432692494,
+    },
+    5: {
+      xScale: 1.057335353696,
+      xOffset: -17.656706556381,
+      yScale: 1.055168168063,
+      yOffset: -3.010884889705,
+    },
+    6: {
+      xScale: 1.06104691195,
+      xOffset: -18.919513509595,
+      yScale: 1.055608165902,
+      yOffset: -3.02864374615,
+    },
+  },
+  'sc-fiberglass': {
+    1: {
+      xScale: 1.068499811253,
+      xOffset: -21.325920676893,
+      yScale: 1.074709550436,
+      yOffset: -22.541414583436,
+    },
+    2: {
+      xScale: 1.06901873376,
+      xOffset: -21.748393046473,
+      yScale: 1.076284680343,
+      yOffset: -22.164951172319,
+    },
+    3: {
+      xScale: 1.043329853294,
+      xOffset: -15.318518161094,
+      yScale: 1.071601025819,
+      yOffset: -21.96231543513,
+    },
+    4: {
+      xScale: 1.052018233068,
+      xOffset: -16.329336583595,
+      yScale: 1.071411539591,
+      yOffset: -21.972303044896,
+    },
+    5: {
+      xScale: 1.064535387372,
+      xOffset: -20.80150010585,
+      yScale: 1.071300566276,
+      yOffset: -21.963604287487,
+    },
+    6: {
+      xScale: 1.06597825429,
+      xOffset: -21.242045828587,
+      yScale: 1.06941273053,
+      yOffset: -21.7469808228,
+    },
+  },
+};
+
 const applyFieldOverrides = (fields: TemplateField[], overrides: FieldOverride[]): TemplateField[] => {
   if (!overrides.length) return fields;
   const overrideMap = new Map(overrides.map((override) => [`${override.id}-${override.page}`, override.rect]));
@@ -340,20 +485,45 @@ const applyInlineFieldAdjustments = (fields: TemplateField[]): TemplateField[] =
   return [...fields, ...INLINE_CONTRACT_FIELDS];
 };
 
+const applyPageFieldTransforms = (templateId: ContractTemplateId, fields: TemplateField[]): TemplateField[] => {
+  const transforms = FIBERGLASS_FIELD_TRANSFORMS[templateId];
+  if (!transforms) return fields;
+
+  return fields.map((field) => {
+    const transform = transforms[field.page];
+    if (!transform) return field;
+    const [x0, y0, x1, y1] = field.rect;
+    return {
+      ...field,
+      rect: [
+        x0 * transform.xScale + transform.xOffset,
+        y0 * transform.yScale + transform.yOffset,
+        x1 * transform.xScale + transform.xOffset,
+        y1 * transform.yScale + transform.yOffset,
+      ],
+    };
+  });
+};
+
 const buildTemplate = (
   id: ContractTemplateId,
   label: string,
   url: URL,
   overrides: FieldOverride[] = [],
   staticPatches: ContractStaticPatch[] = []
-): ContractTemplate => ({
-  id,
-  label,
-  pdfUrl: url.href,
-  pdfPath: url.pathname,
-  fields: applyInlineFieldAdjustments(widenPaymentScheduleFields(applyFieldOverrides(DEFAULT_FIELDS, overrides))),
-  staticPatches,
-});
+): ContractTemplate => {
+  const fieldOverrides = [...(FIBERGLASS_PAGE_ONE_FIELD_OVERRIDES[id] || []), ...overrides];
+  return {
+    id,
+    label,
+    pdfUrl: url.href,
+    pdfPath: url.pathname,
+    fields: widenPaymentScheduleFields(
+      applyFieldOverrides(applyPageFieldTransforms(id, applyInlineFieldAdjustments(DEFAULT_FIELDS)), fieldOverrides)
+    ),
+    staticPatches,
+  };
+};
 
 const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {
   'nc-gunite': buildTemplate(

@@ -92,6 +92,7 @@
 
 .submit-proposal-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 0 1.35rem 1.35rem;
@@ -119,6 +120,18 @@
   background: #eff3f7;
   border-color: rgba(22, 50, 77, 0.1);
   color: #16324d;
+}
+
+.submit-proposal-button--manual-review {
+  background: #ffffff;
+  border-color: rgba(148, 108, 29, 0.3);
+  color: #946c1d;
+}
+
+.submit-proposal-button--manual-review.is-active {
+  background: #fff7e6;
+  border-color: rgba(148, 108, 29, 0.7);
+  color: #724f10;
 }
 
 .submit-proposal-button--primary {

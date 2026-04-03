@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import type { Proposal } from '../types/proposal-new';
 import {
   approveWorkflowProposal,
+  buildSignedAddendumDiffSummaries,
   buildVersionDiffSummary,
   completeWorkflowProposal,
   countUnreadWorkflowEvents,
@@ -14,6 +15,7 @@ import {
   getPendingReviewVersion,
   getPendingReviewVersionId,
   getReviewVersionId,
+  getSignedVersion,
   getWorkflowStatus,
   hasUnreadWorkflowEvents,
   markWorkflowRead,
@@ -27,7 +29,7 @@ type WorkflowPageProps = {
   session?: UserSession | null;
 };
 
-type QueueFilter = 'needs_approval' | 'approved' | 'archive';
+type QueueFilter = 'needs_approval' | 'approved' | 'signed' | 'archive';
 
 const normalizeStatusLabel = (value?: string | null) =>
   (() => {
@@ -39,6 +41,7 @@ const normalizeStatusLabel = (value?: string | null) =>
 const matchesQueueFilter = (proposal: Proposal, filter: QueueFilter) => {
   const status = getWorkflowStatus(proposal);
   if (filter === 'needs_approval') return status === 'needs_approval';
+  if (filter === 'signed') return status === 'signed';
   if (filter === 'archive') return status === 'completed';
   return status === 'approved' || status === 'submitted';
 };
@@ -189,8 +192,9 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const counts = useMemo(() => {
     const needsApproval = proposals.filter((entry) => getWorkflowStatus(entry) === 'needs_approval').length;
     const approved = proposals.filter((entry) => matchesQueueFilter(entry, 'approved')).length;
+    const signed = proposals.filter((entry) => matchesQueueFilter(entry, 'signed')).length;
     const archive = proposals.filter((entry) => getWorkflowStatus(entry) === 'completed').length;
-    return { needsApproval, approved, archive };
+    return { needsApproval, approved, signed, archive };
   }, [proposals]);
 
   const filteredProposals = useMemo(() => {
@@ -207,11 +211,16 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     () => (selectedProposal ? buildVersionDiffSummary(selectedProposal) : null),
     [selectedProposal]
   );
+  const selectedSignedDiffs = useMemo(
+    () => (selectedProposal ? buildSignedAddendumDiffSummaries(selectedProposal) : []),
+    [selectedProposal]
+  );
   const selectedReviewVersionId = selectedProposal ? getPendingReviewVersionId(selectedProposal) || getReviewVersionId(selectedProposal) : null;
   const selectedApprovedVersionId = selectedProposal ? getApprovedVersionId(selectedProposal) : null;
   const selectedReviewVersion = selectedProposal ? getPendingReviewVersion(selectedProposal) : null;
   const selectedApprovedVersion = selectedProposal ? getApprovedVersion(selectedProposal) : null;
-  const selectedDisplayVersion = selectedReviewVersion || selectedApprovedVersion || selectedProposal;
+  const selectedSignedVersion = selectedProposal ? getSignedVersion(selectedProposal) : null;
+  const selectedDisplayVersion = selectedReviewVersion || selectedApprovedVersion || selectedSignedVersion || selectedProposal;
   const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
@@ -225,6 +234,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const emptyDetailMessage =
     selectedFilter === 'needs_approval' && filteredProposals.length > 0
       ? 'Select a Proposal that is Awaiting Approval on the left'
+      : selectedFilter === 'signed' && filteredProposals.length > 0
+      ? 'Select a signed proposal to review its addendum history.'
       : 'Select a proposal to review its workflow.';
 
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
@@ -260,7 +271,10 @@ function WorkflowPage({ session }: WorkflowPageProps) {
 
   const handleApprove = async () => {
     if (!selectedProposal) return;
-    await persistSelectedProposal(approveWorkflowProposal(selectedProposal, undefined, session), 'Proposal approved.');
+    await persistSelectedProposal(
+      approveWorkflowProposal(selectedProposal, undefined, session),
+      getSignedVersion(selectedProposal) ? 'Proposal addendum approved.' : 'Proposal approved.'
+    );
   };
 
   const handleRequestChanges = async () => {
@@ -328,6 +342,13 @@ function WorkflowPage({ session }: WorkflowPageProps) {
           </button>
           <button
             type="button"
+            className={`workflow-filter-pill${selectedFilter === 'signed' ? ' is-active' : ''}`}
+            onClick={() => setSelectedFilter('signed')}
+          >
+            Signed ({counts.signed})
+          </button>
+          <button
+            type="button"
             className={`workflow-filter-pill${selectedFilter === 'archive' ? ' is-active' : ''}`}
             onClick={() => setSelectedFilter('archive')}
           >
@@ -342,6 +363,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
             <div className="workflow-queue-title">
               {selectedFilter === 'needs_approval'
                 ? 'Approval Queue'
+                : selectedFilter === 'signed'
+                ? 'Signed Proposals'
                 : selectedFilter === 'archive'
                 ? 'Archived Proposals'
                 : 'Approved Proposals'}
@@ -356,6 +379,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
             <div className="workflow-queue-list">
               {filteredProposals.map((entry) => {
                 const diff = buildVersionDiffSummary(entry);
+                const signedDiffs = buildSignedAddendumDiffSummaries(entry);
                 const unread = hasUnreadWorkflowEvents(entry, session?.userId);
                 const status = getWorkflowStatus(entry);
                 return (
@@ -389,6 +413,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                         {diff.compareVersionName ? <span>{diff.compareVersionName} vs {diff.reviewVersionName}</span> : null}
                         <span>{formatSignedCurrency(diff.retailDelta)} retail</span>
                         <span>{formatSignedPercent(diff.grossMarginDelta)} GP</span>
+                      </div>
+                    )}
+                    {!diff && status === 'signed' && (
+                      <div className="workflow-queue-diff">
+                        <span>Signed History</span>
+                        <span>
+                          {signedDiffs.length} addendum{signedDiffs.length === 1 ? '' : 's'}
+                        </span>
                       </div>
                     )}
                     {diff?.changedSections?.length ? (
@@ -459,6 +491,95 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                       {reason.detail ? ` - ${reason.detail}` : ''}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {getWorkflowStatus(selectedProposal) === 'signed' && selectedSignedVersion && (
+                <div className="workflow-compare-card">
+                  <div className="workflow-compare-header">
+                    <div>
+                      <div className="workflow-detail-label">Signed Proposal History</div>
+                      <div className="workflow-detail-value">
+                        Original signed proposal vs approved addendums
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="workflow-signed-columns">
+                    <div className="workflow-signed-column workflow-signed-column--baseline">
+                      <div className="workflow-diff-category-title">Original Signed Proposal</div>
+                      <div className="workflow-detail-value">
+                        {selectedSignedVersion.versionName || 'Signed Proposal'}
+                      </div>
+                      <div className="workflow-queue-item-meta">
+                        <span>{formatDateTime(selectedProposal.workflow?.signedAt || selectedProposal.workflow?.submittedAt)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="workflow-secondary-btn"
+                        onClick={() =>
+                          navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
+                            state: {
+                              versionId: selectedSignedVersion.versionId || 'original',
+                              reviewerReturnTo: 'workflow',
+                              reviewerReturnPath: selectedWorkflowPath,
+                            },
+                          })
+                        }
+                      >
+                        Open Signed Proposal
+                      </button>
+                    </div>
+
+                    {selectedSignedDiffs.length > 0 ? (
+                      selectedSignedDiffs.map((diff) => (
+                        <div key={diff.reviewVersionId} className="workflow-signed-column">
+                          <div className="workflow-diff-category-title">{diff.reviewVersionName}</div>
+                          <div className="workflow-detail-value">
+                            Compared to {diff.compareVersionName}
+                          </div>
+                          <div className="workflow-metric-grid">
+                            <div className="workflow-metric">
+                              <span>Retail Delta</span>
+                              <strong>{formatSignedCurrency(diff.retailDelta)}</strong>
+                            </div>
+                            <div className="workflow-metric">
+                              <span>GP % Delta</span>
+                              <strong>{formatSignedPercent(diff.grossMarginDelta)}</strong>
+                            </div>
+                          </div>
+                          {diff.changedSections.length > 0 && (
+                            <div className="workflow-queue-sections">
+                              {diff.changedSections.slice(0, 4).map((section) => (
+                                <span key={`${diff.reviewVersionId}-${section}`} className="workflow-section-chip">
+                                  {section}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="workflow-secondary-btn"
+                            onClick={() =>
+                              navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
+                                state: {
+                                  versionId: diff.reviewVersionId,
+                                  reviewerReturnTo: 'workflow',
+                                  reviewerReturnPath: selectedWorkflowPath,
+                                },
+                              })
+                            }
+                          >
+                            Open Addendum
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="workflow-signed-column">
+                        <div className="workflow-detail-value">No approved proposal addendums yet.</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -608,9 +729,13 @@ function WorkflowPage({ session }: WorkflowPageProps) {
               <div className="workflow-action-card">
                 <div className="workflow-action-header">
                   <div>
-                    <div className="workflow-detail-label">Reviewer Actions</div>
+                    <div className="workflow-detail-label">
+                      {getWorkflowStatus(selectedProposal) === 'signed' ? 'Signed Proposal' : 'Reviewer Actions'}
+                    </div>
                     <div className="workflow-detail-value">
-                      {getWorkflowStatus(selectedProposal) === 'approved'
+                      {getWorkflowStatus(selectedProposal) === 'signed'
+                        ? 'Open the signed proposal history or mark it complete.'
+                        : getWorkflowStatus(selectedProposal) === 'approved'
                         ? 'Mark Complete or Request Changes'
                         : 'Approve or Request Changes'}
                     </div>
@@ -644,7 +769,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                         Approve
                       </button>
                     )}
-                    {getWorkflowStatus(selectedProposal) !== 'completed' && (
+                    {getWorkflowStatus(selectedProposal) !== 'completed' &&
+                      getWorkflowStatus(selectedProposal) !== 'signed' && (
                       <button
                         type="button"
                         className="workflow-danger-btn"
@@ -654,7 +780,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                         Request Changes
                       </button>
                     )}
-                    {getWorkflowStatus(selectedProposal) === 'approved' && (
+                    {(getWorkflowStatus(selectedProposal) === 'approved' ||
+                      getWorkflowStatus(selectedProposal) === 'signed') && (
                       <button
                         type="button"
                         className="workflow-primary-btn"
@@ -666,7 +793,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                     )}
                   </div>
                 </div>
-                {showNoteComposer && (
+                {showNoteComposer && getWorkflowStatus(selectedProposal) !== 'signed' && (
                   <>
                     <textarea
                       className="workflow-note-input"

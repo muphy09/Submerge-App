@@ -990,6 +990,12 @@
   color: #ffffff;
 }
 
+.admin-table .status-badge-table.is-signed {
+  background: #2b6f95;
+  border-color: #2b6f95;
+  color: #ffffff;
+}
+
 .admin-table .status-badge-table.is-rejected,
 .admin-table .status-badge-table.is-alert {
   background: #ef4444;
