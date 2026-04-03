@@ -1,21 +1,9 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-- Admin configurable % threshold amount for approval required; per user
-
-Fiberglass Pools:
-    - 3 Levels- Small, Medium, Large (Datasheet)
-    - Spas and Tanning ledges as options
-    - When Fiberglass Pool is selected;
-        - 
-        - 
-        - 
-
 
 Proposal Notes:
 
-- Compare all versions section (top button after building another version)
-- Admins should not get the notifications for book keeper, but can still view it
-- No way to sumbit new version of proposal after orginal has been submitted
+
 
 Fiberglass pricing notes:
 - Plumbing is reduced to 40% of the normal subtotal cost (hard math)
@@ -30,46 +18,18 @@ SHould only display matierial tier not the color attached
     But in the tool it should show up what materials are in what tiers. only transfer tier to contract not color.
     after picking tier '1' it shows 'these colors are included in tier 1'
 
-Toggle ability for approval workflow
-
-Hitting submit is the final draft becomes baseline 
-
-marking as signed
-
-hidden prop number needs to appear at the bottom of the contact summary
-
-Anything they do after that is a draft until they hit submit again
-
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Cleanup visuals on Contract export
------
-- Submission workflow
-    - Submitting a proposal should put the proposal into an approval state. Admins or bookkeeper (new role) will need to 'Complete' which then marks as 'Complete'
-        - Completed proposals will be stored in the Archive (avoid clutter on active proposals)
-            - Archive functionality will need to include 'deleted users' proposals, completed proposals, maybe more
-        - Franchise Proposals on admin menu needs to change to 'Active Proposals' displaying only submitted proposals
-        - Proposals that do not meet requirements need to have another workflow 'Needs Approval'
-            - Needs approval can also be a setting marked by an admin per user - all proposals would 'need approval' on submit if that setting is enabled for that user (regardless if the profit % is good)
-            - Admin / Bookkeeper should be notified somehow that there is a proposal needed for approval (maybe an indicator similar to the Feedback messages for the Master)
-                - Approval proposal section (seperate page that opens, not a modal)
-                    - Breakdown of why the proposal needs approval, and how much money is being lost by not being at the threshold
-                    - Admin/BK has ability to add notes and send back, or just approve it
-                        - Approved proposals still need to be marked as 'Completed' by an admin or BK. It essentially puts it back into the 'Submitted' phase
-                        - Designer would be notified and can 'resubmit', or be notified it was approved
-                    - Asterik would appear with proposals that were approved in the archive and active proposals list (admin menu) next to the proposal status pill
-                    - Ability to see what admin approved it and when (also ability to see what Admin / BK marked as completed after submitting)
------
-- ** Ability to select the indiviudual material instead of tiers
-    - Backburner
 - Workflow for Addendum (contract changes after original) must show cost comparison of before and after 
-- Booster pump is an add on pump
 - Ability to 'Search' for an input in the Admin Pricing Model
 - Supporting Documents (measurments) included when submitting proposal
 - Lighted Sheer (needs electric run and price) Is this lighted? checkbox (maybe)
         - Will add pool light and housing cost, Has conduit run and match WF run.
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
+- Ability to select the indiviudual material instead of tiers
+    - Backburner
 - Levels
     - Bronze Pool
         - Will change some formulas in the core pricing
@@ -83,13 +43,11 @@ Long Term -
 
 - Admin proposal large screen
 - Performance Data for Admin overhaul
-- Equipment logic for lights when selecting multiple can be cleaned up
-- Add aux pump - double main drain run. every pump gets same drain run
 - Keyboard Nav dropdown selection trouble
 - Homescreen background change
 - Segregate franchises so they can be updated and changed independantly
     - Includes patch notes, admin pricing options, tabs, settings they see, everything.
-- Logic for contracts and different franchises
+    - Logic for contracts and different franchises
 ----------------------------------------------------------------------------------------------------------
 Ideas - 
 - Potential column for "Included Items"
@@ -114,8 +72,5 @@ Help Needed -
 ** - Booster Pump for Spa Jets logic
 ----------------------------------------------------------------------------------------------------------
 Confusion -
-- There is a $1250 kicker always present in retail cost (E309)
-- Spa Prep ($250) never included in COST-NEW (INTD25)?
-- Remodel workflow
 
 ----------------------------------------------------------------------------------------------------------

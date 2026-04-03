@@ -16,7 +16,6 @@ import type { ContractViewHandle } from '../components/ContractView';
 import FranchiseLogo from '../components/FranchiseLogo';
 import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
-import RetiredEquipmentIndicator from '../components/RetiredEquipmentIndicator';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SubmitProposalModal from '../components/SubmitProposalModal';
 import './ProposalView.css';
@@ -25,6 +24,7 @@ import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import {
   initPricingDataStore,
   loadPricingSnapshotForFranchise,
@@ -48,7 +48,7 @@ import {
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
-import { hasRetiredEquipment } from '../utils/retiredEquipment';
+import { getEmptyRetiredEquipmentFlags, getRetiredEquipmentFlags, type RetiredEquipmentFlags } from '../utils/retiredEquipment';
 import { validateProposal } from '../utils/validation';
 import { ContractOverrides } from '../services/contractGenerator';
 import {
@@ -84,12 +84,100 @@ import {
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
 
+type PricingModelStatus = 'active' | 'inactive' | 'removed';
+
+type ProposalVersionSyncMeta = {
+  priceModelStatus: PricingModelStatus;
+  equipmentFlags: RetiredEquipmentFlags;
+};
+
+type PricingModelDirectory = {
+  loaded: boolean;
+  rows: Awaited<ReturnType<typeof listPricingModelsRemote>>;
+};
+
 const splitCustomOptions = (items: CostLineItem[]) => ({
   baseItems: items.filter(item => !isCustomOptionItem(item)),
   customOptions: items.filter(isCustomOptionItem),
 });
 
 const normalizeSummaryName = (value?: string | null): string => (value ?? '').trim();
+const normalizeComparisonText = (value?: string | null): string => normalizeSummaryName(value).toLowerCase();
+const REMOVED_EQUIPMENT_SUMMARY_LABEL = 'Removed - Please Select Another';
+
+const getStoredPricingModelStatus = (proposal?: Partial<Proposal> | null): PricingModelStatus => {
+  const name = normalizeComparisonText(proposal?.pricingModelName);
+  if (name.includes('(removed)')) return 'removed';
+  return proposal?.pricingModelIsDefault ? 'active' : 'inactive';
+};
+
+const getPricingModelStatusTooltip = (status: PricingModelStatus) => {
+  switch (status) {
+    case 'active':
+      return 'Pricing Model is Current';
+    case 'removed':
+      return 'Pricing Model was removed; please select another';
+    case 'inactive':
+    default:
+      return 'Pricing Model is no longer active for this franchise';
+  }
+};
+
+const getPricingModelDisplayName = (name: string, status: PricingModelStatus) => {
+  const baseName = normalizeSummaryName(name) || 'No Pricing Model';
+  const normalizedName = normalizeComparisonText(baseName);
+
+  if (baseName === 'No Pricing Model') {
+    return baseName;
+  }
+
+  if (status === 'active') {
+    return normalizedName.endsWith('(active)') ? baseName : `${baseName} (Active)`;
+  }
+
+  if (status === 'inactive') {
+    return normalizedName.endsWith('(inactive)') ? baseName : `${baseName} (Inactive)`;
+  }
+
+  return normalizedName.endsWith('(removed)') ? baseName : `${baseName} (Removed)`;
+};
+
+const resolveCurrentPricingModelStatus = (
+  proposal: Partial<Proposal>,
+  pricingSnapshot: Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>,
+  directory: PricingModelDirectory
+): PricingModelStatus => {
+  if (normalizeComparisonText(proposal.pricingModelName).includes('(removed)')) {
+    return 'removed';
+  }
+
+  const pricingModelId = normalizeSummaryName(proposal.pricingModelId);
+  if (directory.loaded) {
+    const rows = directory.rows || [];
+    if (pricingModelId) {
+      const matchingRow = rows.find((row) => row.id === pricingModelId);
+      if (!matchingRow) return 'removed';
+      return matchingRow.isDefault ? 'active' : 'inactive';
+    }
+
+    const pricingModelName = normalizeComparisonText(proposal.pricingModelName);
+    if (pricingModelName) {
+      const matchingRows = rows.filter((row) => normalizeComparisonText(row.name) === pricingModelName);
+      if (!matchingRows.length) return 'removed';
+      return matchingRows.some((row) => row.isDefault) ? 'active' : 'inactive';
+    }
+  }
+
+  if (pricingModelId) {
+    const resolvedPricingModelId = normalizeSummaryName(pricingSnapshot.pricingModelId);
+    if (resolvedPricingModelId && resolvedPricingModelId !== pricingModelId) {
+      return 'removed';
+    }
+    return pricingSnapshot.isDefault ? 'active' : 'inactive';
+  }
+
+  return proposal.pricingModelIsDefault ? 'active' : 'inactive';
+};
 
 const hasNamedSelection = (value: string | undefined, placeholderToken: string): boolean => {
   const normalized = normalizeSummaryName(value).toLowerCase();
@@ -125,6 +213,7 @@ type ProposalViewLocationState = {
   versionId?: string;
   reviewerReturnTo?: 'workflow' | 'admin-panel';
   reviewerReturnPath?: string;
+  reviewerReturnFilter?: 'needs_approval' | 'approved' | 'signed' | 'archive';
 };
 
 type ContractViewComponent = typeof import('../components/ContractView').default;
@@ -177,7 +266,10 @@ const getEquipmentPackageLabel = (equipment: Proposal['equipment']): string | nu
   return normalizedPackageName.includes('package') ? packageName : `${packageName} Equipment Package`;
 };
 
-const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
+const buildEquipmentSummary = (
+  equipment: Proposal['equipment'],
+  equipmentFlags: RetiredEquipmentFlags = getEmptyRetiredEquipmentFlags()
+) => {
   const selectedPackage = getSelectedEquipmentPackage(equipment as any);
   const packageSaltName = selectedPackage?.includedSaltSystemName;
   const effectiveSaltName = getEffectivePrimarySanitationSystemName(equipment as any);
@@ -203,19 +295,31 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
     equipment.autoFillSystemQuantity ?? (hasNamedSelection(equipment.autoFillSystem?.name, 'no auto') ? 1 : 0),
     0
   );
+  const pumpChangeRequired =
+    equipmentFlags.pump ||
+    equipmentFlags.additionalPumps.some(Boolean) ||
+    equipmentFlags.auxiliaryPumps.some(Boolean);
+  const poolLightChangeRequired = equipmentFlags.poolLights.some(Boolean);
+  const sanitationChangeRequired = equipmentFlags.saltSystem || equipmentFlags.sanitationAccessory;
 
   return {
     equipmentPackageLabel: getEquipmentPackageLabel(equipment),
-    pumpSummary: summarizePumpSelection(equipment),
-    filterSummary: summarizeSelectionWithQuantity(equipment.filter?.name, filterQuantity, 'no filter'),
-    heaterSummary: summarizeSelectionWithQuantity(equipment.heater?.name, heaterQuantity, 'no heater'),
-    cleanerSummary: summarizeSelectionWithQuantity(equipment.cleaner?.name, cleanerQuantity, 'no cleaner'),
-    automationSummary: summarizeSelectionWithQuantity(
-      equipment.automation?.name,
-      automationQuantity,
-      'no automation'
-    ),
-    sanitationSummary: (() => {
+    pumpSummary: pumpChangeRequired ? REMOVED_EQUIPMENT_SUMMARY_LABEL : summarizePumpSelection(equipment),
+    filterSummary: equipmentFlags.filter
+      ? REMOVED_EQUIPMENT_SUMMARY_LABEL
+      : summarizeSelectionWithQuantity(equipment.filter?.name, filterQuantity, 'no filter'),
+    heaterSummary: equipmentFlags.heater
+      ? REMOVED_EQUIPMENT_SUMMARY_LABEL
+      : summarizeSelectionWithQuantity(equipment.heater?.name, heaterQuantity, 'no heater'),
+    cleanerSummary: equipmentFlags.cleaner
+      ? REMOVED_EQUIPMENT_SUMMARY_LABEL
+      : summarizeSelectionWithQuantity(equipment.cleaner?.name, cleanerQuantity, 'no cleaner'),
+    automationSummary: equipmentFlags.automation
+      ? REMOVED_EQUIPMENT_SUMMARY_LABEL
+      : summarizeSelectionWithQuantity(equipment.automation?.name, automationQuantity, 'no automation'),
+    sanitationSummary: sanitationChangeRequired
+      ? REMOVED_EQUIPMENT_SUMMARY_LABEL
+      : (() => {
       const primarySummary = equipment.saltSystem?.includedSaltCellPlaceholder
         ? equipment.saltSystem.name
         : summarizeSelectionWithQuantity(effectiveSaltName, saltQuantity, 'no salt');
@@ -225,8 +329,12 @@ const buildEquipmentSummary = (equipment: Proposal['equipment']) => {
       if (!additionalSummary) return primarySummary;
       return primarySummary === 'None' ? additionalSummary : `${primarySummary} + ${additionalSummary}`;
     })(),
-    autoFillSummary: summarizeSelectionWithQuantity(equipment.autoFillSystem?.name, autoFillQuantity, 'no auto'),
-    poolLightSummary: summarizePoolLightSelection(equipment.poolLights),
+    autoFillSummary: equipmentFlags.autoFillSystem
+      ? REMOVED_EQUIPMENT_SUMMARY_LABEL
+      : summarizeSelectionWithQuantity(equipment.autoFillSystem?.name, autoFillQuantity, 'no auto'),
+    poolLightSummary: poolLightChangeRequired
+      ? REMOVED_EQUIPMENT_SUMMARY_LABEL
+      : summarizePoolLightSelection(equipment.poolLights),
   };
 };
 
@@ -509,6 +617,7 @@ function ProposalView() {
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
   const [reviewerActionSaving, setReviewerActionSaving] = useState(false);
+  const [versionSyncMeta, setVersionSyncMeta] = useState<Record<string, ProposalVersionSyncMeta>>({});
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
   const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
@@ -533,6 +642,7 @@ function ProposalView() {
       : proposal) || proposal;
   const proposalWorkflowStatus = getWorkflowStatus(proposal);
   const isProposalCompleted = proposalWorkflowStatus === 'completed';
+  const freezeHistoricalPricingUpdates = Boolean(getSignedVersionId(proposal)) || isProposalCompleted;
   const canManageVersionDrafts =
     !isProposalEditingRestricted &&
     !isReadOnlyReviewerView &&
@@ -563,7 +673,12 @@ function ProposalView() {
   const reviewerReturnTo = locationState?.reviewerReturnTo === 'admin-panel' ? 'admin-panel' : 'workflow';
   const reviewerBackLabel = reviewerReturnTo === 'admin-panel' ? 'Back to Admin Panel' : 'Back to Book Keeper';
   const handleReviewerBack = () =>
-    navigate(locationState?.reviewerReturnPath || (reviewerReturnTo === 'admin-panel' ? '/admin' : '/workflow'));
+    navigate(locationState?.reviewerReturnPath || (reviewerReturnTo === 'admin-panel' ? '/admin' : '/workflow'), {
+      state:
+        reviewerReturnTo === 'workflow'
+          ? { selectedFilter: locationState?.reviewerReturnFilter || 'needs_approval' }
+          : undefined,
+    });
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
     const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
@@ -599,6 +714,99 @@ function ProposalView() {
     setCogsBreakdownVersionId(null);
     setPreCogsBreakdownVersionId(null);
   }, [proposalNumber]);
+
+  useEffect(() => {
+    if (!proposal) {
+      setVersionSyncMeta({});
+      return;
+    }
+
+    const versionsToResolve = versions.length ? versions : listAllVersions(proposal);
+    if (!versionsToResolve.length) {
+      setVersionSyncMeta({});
+      return;
+    }
+
+    let cancelled = false;
+    const pricingSnapshotCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+    const pricingDirectoryCache = new Map<string, PricingModelDirectory>();
+
+    const loadVersionSyncMeta = async () => {
+      const entries = await Promise.all(
+        versionsToResolve.map(async (entry) => {
+          const versionId = entry.versionId || 'original';
+
+          if (freezeHistoricalPricingUpdates) {
+            return [
+              versionId,
+              {
+                priceModelStatus: getStoredPricingModelStatus(entry),
+                equipmentFlags: getEmptyRetiredEquipmentFlags(),
+              },
+            ] as const;
+          }
+
+          const sourceFranchiseId = entry.pricingModelFranchiseId || entry.franchiseId || proposal.franchiseId || 'default';
+          let pricingDirectory = pricingDirectoryCache.get(sourceFranchiseId);
+          if (!pricingDirectory) {
+            try {
+              pricingDirectory = {
+                loaded: true,
+                rows: await listPricingModelsRemote(sourceFranchiseId),
+              };
+            } catch (error) {
+              console.warn('Unable to load pricing models for proposal view', sourceFranchiseId, error);
+              pricingDirectory = {
+                loaded: false,
+                rows: [],
+              };
+            }
+            pricingDirectoryCache.set(sourceFranchiseId, pricingDirectory);
+          }
+
+          const resolvedFranchiseId = entry.franchiseId || proposal.franchiseId || 'default';
+          const pricingModelId = entry.pricingModelId || undefined;
+          const pricingModelFranchiseId = entry.pricingModelFranchiseId || undefined;
+          const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
+          let pricingSnapshot = pricingSnapshotCache.get(pricingCacheKey);
+          if (!pricingSnapshot) {
+            pricingSnapshot = await loadPricingSnapshotForFranchise(
+              resolvedFranchiseId,
+              pricingModelId,
+              pricingModelFranchiseId
+            );
+            pricingSnapshotCache.set(pricingCacheKey, pricingSnapshot);
+          }
+
+          const mergedVersion = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(entry)) as Proposal;
+          const priceModelStatus = resolveCurrentPricingModelStatus(entry, pricingSnapshot, pricingDirectory);
+          const equipmentFlags =
+            priceModelStatus === 'removed'
+              ? getEmptyRetiredEquipmentFlags()
+              : withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
+                  getRetiredEquipmentFlags(mergedVersion.equipment)
+                );
+
+          return [
+            versionId,
+            {
+              priceModelStatus,
+              equipmentFlags,
+            },
+          ] as const;
+        })
+      );
+
+      if (cancelled) return;
+      setVersionSyncMeta(Object.fromEntries(entries));
+    };
+
+    void loadVersionSyncMeta();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [freezeHistoricalPricingUpdates, proposal, versions]);
 
   useEffect(() => {
     if (canViewCogsBreakdown) return;
@@ -1852,11 +2060,14 @@ function ProposalView() {
     const designerName = 'Design Team';
 
     // Get the pricing model used for this proposal
-      const priceModel = mergedProposal.pricingModelName || 'No Pricing Model';
-      const isPriceModelActive = mergedProposal.pricingModelIsDefault ?? false;
-      const isPriceModelRemoved = (mergedProposal.pricingModelName || '').toLowerCase().includes('removed');
-      const priceModelStatus = isPriceModelRemoved ? 'removed' : isPriceModelActive ? 'active' : 'inactive';
-      const hasRetiredEquipmentSelections = hasRetiredEquipment(mergedProposal.equipment);
+    const priceModel = mergedProposal.pricingModelName || 'No Pricing Model';
+    const syncMeta = versionSyncMeta[input.versionId || 'original'];
+    const priceModelStatus = syncMeta?.priceModelStatus ?? getStoredPricingModelStatus(mergedProposal);
+    const isPriceModelActive = priceModelStatus === 'active';
+    const isPriceModelRemoved = priceModelStatus === 'removed';
+    const equipmentFlags = freezeHistoricalPricingUpdates
+      ? getEmptyRetiredEquipmentFlags()
+      : syncMeta?.equipmentFlags ?? getEmptyRetiredEquipmentFlags();
 
     const poolTypeLabel =
       mergedProposal.poolSpecs.poolType === 'gunite'
@@ -1876,7 +2087,7 @@ function ProposalView() {
     const endDepth = formatNumber(mergedProposal.poolSpecs.endDepth, 'ft');
     const spaLength = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft') : 'No Spa';
     const spaWidth = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft') : 'No Spa';
-    const equipmentSummary = buildEquipmentSummary(mergedProposal.equipment);
+    const equipmentSummary = buildEquipmentSummary(mergedProposal.equipment, equipmentFlags);
 
     const tileLaborItems = costBreakdownForDisplay?.tileLabor || [];
     const tileMaterialItems = costBreakdownForDisplay?.tileMaterial || [];
@@ -2037,12 +2248,11 @@ function ProposalView() {
       proposalStatus,
       dateModified,
       designerName,
-        priceModel,
-        isPriceModelActive,
-        isPriceModelRemoved,
-        priceModelStatus,
-        hasRetiredEquipment: hasRetiredEquipmentSelections,
-        poolTypeLabel,
+      priceModel,
+      isPriceModelActive,
+      isPriceModelRemoved,
+      priceModelStatus,
+      poolTypeLabel,
       approximateGallons,
       maxWidth,
       maxLength,
@@ -2686,30 +2896,17 @@ function ProposalView() {
                   {versionLabel}
                 </span>
                 {isSubmittedVersion && <span className="version-status-pill">{submittedVersionLabel}</span>}
-                {vm.hasRetiredEquipment && <RetiredEquipmentIndicator />}
               </h2>
             </div>
             <TooltipAnchor
               as="div"
-              tooltip={
-                vm.priceModelStatus === 'active'
-                  ? 'Pricing Model is Current'
-                  : vm.priceModelStatus === 'removed'
-                  ? 'Pricing Model was removed; please select another'
-                  : 'Pricing Model is not active, consider changing'
-              }
+              tooltip={getPricingModelStatusTooltip(vm.priceModelStatus)}
             >
               <div
                 className={`hero-price-model ${vm.priceModelStatus}`}
-                aria-label={
-                  vm.priceModelStatus === 'active'
-                    ? 'Pricing Model is Current'
-                    : vm.priceModelStatus === 'removed'
-                    ? 'Pricing Model was removed; please select another'
-                    : 'Pricing Model is not active, consider changing'
-                }
+                aria-label={getPricingModelStatusTooltip(vm.priceModelStatus)}
               >
-                {vm.priceModel}{vm.priceModelStatus === 'active' ? ' (Active)' : ''}
+                {getPricingModelDisplayName(vm.priceModel, vm.priceModelStatus)}
               </div>
             </TooltipAnchor>
             <div className="hero-actions">

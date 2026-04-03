@@ -4,7 +4,8 @@ import { isIncludedSaltCellSelection } from './saltCellCompatibility';
 
 type NamedItem = { name?: string | null };
 
-export const RETIRED_EQUIPMENT_TOOLTIP = 'Retired Equipment. Please select another.';
+export const RETIRED_EQUIPMENT_TOOLTIP =
+  'Equipment you have selected has been modified in the Pricing Model and requires you to make a change';
 
 const normalizeName = (value?: string | null) => (value ?? '').trim().toLowerCase();
 
@@ -41,23 +42,25 @@ export type RetiredEquipmentFlags = {
   any: boolean;
 };
 
+export const getEmptyRetiredEquipmentFlags = (): RetiredEquipmentFlags => ({
+  pump: false,
+  additionalPumps: [],
+  auxiliaryPumps: [],
+  filter: false,
+  cleaner: false,
+  heater: false,
+  automation: false,
+  saltSystem: false,
+  sanitationAccessory: false,
+  autoFillSystem: false,
+  poolLights: [],
+  spaLights: [],
+  any: false,
+});
+
 export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmentFlags => {
   if (!equipment) {
-    return {
-      pump: false,
-      additionalPumps: [],
-      auxiliaryPumps: [],
-      filter: false,
-      cleaner: false,
-      heater: false,
-      automation: false,
-      saltSystem: false,
-      sanitationAccessory: false,
-      autoFillSystem: false,
-      poolLights: [],
-      spaLights: [],
-      any: false,
-    };
+    return getEmptyRetiredEquipmentFlags();
   }
 
   const pumpSelected = hasRealSelection(equipment.pump?.name, 'no pump');
@@ -70,7 +73,13 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     (equipment.automation?.zones ?? 0) > 0;
   const saltSelected =
     hasRealSelection(equipment.saltSystem?.name, 'no salt') && !isIncludedSaltCellSelection(equipment.saltSystem);
-  const sanitationAccessorySelected = hasRealSelection(equipment.sanitationAccessory?.name, 'no sanitation');
+  const additionalSanitationSelectionName =
+    equipment.additionalSaltSystem?.name || equipment.sanitationAccessory?.name;
+  const sanitationAccessorySelected = Boolean(
+    additionalSanitationSelectionName &&
+      !normalizeName(additionalSanitationSelectionName).includes('no sanitation') &&
+      !normalizeName(additionalSanitationSelectionName).includes('no salt')
+  );
   const autoFillSelected = hasRealSelection(equipment.autoFillSystem?.name, 'no auto');
 
   const pump = pumpSelected && isRetiredName(equipment.pump?.name, pricingData.equipment.pumps);
@@ -99,8 +108,13 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
   const sanitationAccessory =
     sanitationAccessorySelected &&
     isRetiredName(
-      equipment.sanitationAccessory?.name,
-      ((pricingData as any).equipment?.sanitationAccessories || []) as NamedItem[]
+      additionalSanitationSelectionName,
+      [
+        ...(((pricingData as any).equipment?.saltSystem || []) as NamedItem[]).filter((item: any) =>
+          Boolean(item?.excludedFromSaltCell)
+        ),
+        ...((((pricingData as any).equipment?.sanitationAccessories || []) as NamedItem[])),
+      ]
     );
   const autoFillSystem =
     autoFillSelected && isRetiredName(equipment.autoFillSystem?.name, pricingData.equipment.autoFillSystem);

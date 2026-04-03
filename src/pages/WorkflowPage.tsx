@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import type { Proposal } from '../types/proposal-new';
@@ -30,6 +30,9 @@ type WorkflowPageProps = {
 };
 
 type QueueFilter = 'needs_approval' | 'approved' | 'signed' | 'archive';
+type WorkflowLocationState = {
+  selectedFilter?: QueueFilter;
+};
 
 const normalizeStatusLabel = (value?: string | null) =>
   (() => {
@@ -44,6 +47,13 @@ const matchesQueueFilter = (proposal: Proposal, filter: QueueFilter) => {
   if (filter === 'signed') return status === 'signed';
   if (filter === 'archive') return status === 'completed';
   return status === 'approved' || status === 'submitted';
+};
+
+const getQueueFilterForProposal = (proposal: Proposal): QueueFilter => {
+  if (matchesQueueFilter(proposal, 'needs_approval')) return 'needs_approval';
+  if (matchesQueueFilter(proposal, 'signed')) return 'signed';
+  if (matchesQueueFilter(proposal, 'archive')) return 'archive';
+  return 'approved';
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -88,13 +98,17 @@ const getNonPapDiscountTotal = (proposal?: Partial<Proposal> | null) => {
 };
 
 function WorkflowPage({ session }: WorkflowPageProps) {
+  const location = useLocation();
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedFilter, setSelectedFilter] = useState<QueueFilter>('needs_approval');
+  const workflowLocationState = (location.state as WorkflowLocationState | null) ?? null;
+  const [selectedFilter, setSelectedFilter] = useState<QueueFilter>(
+    workflowLocationState?.selectedFilter || 'needs_approval'
+  );
   const [noteDraft, setNoteDraft] = useState('');
   const [showNoteComposer, setShowNoteComposer] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
@@ -168,6 +182,13 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   }, [canAccess, proposalNumber, session?.franchiseId]);
 
   useEffect(() => {
+    const requestedFilter = workflowLocationState?.selectedFilter;
+    if (requestedFilter && requestedFilter !== selectedFilter) {
+      setSelectedFilter(requestedFilter);
+    }
+  }, [selectedFilter, workflowLocationState?.selectedFilter]);
+
+  useEffect(() => {
     const handleOnline = () => {
       void loadWorkspace(selectedProposal?.proposalNumber || proposalNumber);
     };
@@ -188,6 +209,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     selectedProposal?.workflow?.submittedVersionId,
     selectedProposal?.workflow?.approvedVersionId,
   ]);
+
+  useEffect(() => {
+    if (!selectedProposal || !proposalNumber || workflowLocationState?.selectedFilter) return;
+    const inferredFilter = getQueueFilterForProposal(selectedProposal);
+    if (inferredFilter !== selectedFilter) {
+      setSelectedFilter(inferredFilter);
+    }
+  }, [proposalNumber, selectedFilter, selectedProposal, workflowLocationState?.selectedFilter]);
 
   const counts = useMemo(() => {
     const needsApproval = proposals.filter((entry) => getWorkflowStatus(entry) === 'needs_approval').length;
@@ -230,13 +259,25 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const selectedTotalCogs = Number(selectedDisplayVersion?.pricing?.totalCOGS || 0);
   const selectedGrossProfitPercent = Number(selectedDisplayVersion?.pricing?.grossProfitMargin || 0);
   const selectedDiscountAmount = getNonPapDiscountTotal(selectedDisplayVersion);
-  const selectedWorkflowPath = selectedProposal ? `/workflow/${selectedProposal.proposalNumber}` : '/workflow';
   const emptyDetailMessage =
     selectedFilter === 'needs_approval' && filteredProposals.length > 0
       ? 'Select a Proposal that is Awaiting Approval on the left'
       : selectedFilter === 'signed' && filteredProposals.length > 0
       ? 'Select a signed proposal to review its addendum history.'
       : 'Select a proposal to review its workflow.';
+
+  const handleFilterChange = (nextFilter: QueueFilter) => {
+    setSelectedFilter(nextFilter);
+    if (selectedProposal && !matchesQueueFilter(selectedProposal, nextFilter)) {
+      setSelectedProposal(null);
+      if (proposalNumber) {
+        navigate('/workflow', {
+          replace: true,
+          state: { selectedFilter: nextFilter },
+        });
+      }
+    }
+  };
 
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
     setSavingAction(successMessage);
@@ -329,28 +370,28 @@ function WorkflowPage({ session }: WorkflowPageProps) {
           <button
             type="button"
             className={`workflow-filter-pill${selectedFilter === 'needs_approval' ? ' is-active' : ''}`}
-            onClick={() => setSelectedFilter('needs_approval')}
+            onClick={() => handleFilterChange('needs_approval')}
           >
             Needs Approval ({counts.needsApproval})
           </button>
           <button
             type="button"
             className={`workflow-filter-pill${selectedFilter === 'approved' ? ' is-active' : ''}`}
-            onClick={() => setSelectedFilter('approved')}
+            onClick={() => handleFilterChange('approved')}
           >
             Approved ({counts.approved})
           </button>
           <button
             type="button"
             className={`workflow-filter-pill${selectedFilter === 'signed' ? ' is-active' : ''}`}
-            onClick={() => setSelectedFilter('signed')}
+            onClick={() => handleFilterChange('signed')}
           >
             Signed ({counts.signed})
           </button>
           <button
             type="button"
             className={`workflow-filter-pill${selectedFilter === 'archive' ? ' is-active' : ''}`}
-            onClick={() => setSelectedFilter('archive')}
+            onClick={() => handleFilterChange('archive')}
           >
             Archived ({counts.archive})
           </button>
@@ -522,7 +563,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                             state: {
                               versionId: selectedSignedVersion.versionId || 'original',
                               reviewerReturnTo: 'workflow',
-                              reviewerReturnPath: selectedWorkflowPath,
+                              reviewerReturnPath: '/workflow',
+                              reviewerReturnFilter: selectedFilter,
                             },
                           })
                         }
@@ -565,7 +607,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                                 state: {
                                   versionId: diff.reviewVersionId,
                                   reviewerReturnTo: 'workflow',
-                                  reviewerReturnPath: selectedWorkflowPath,
+                                  reviewerReturnPath: '/workflow',
+                                  reviewerReturnFilter: selectedFilter,
                                 },
                               })
                             }
@@ -601,7 +644,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                             state: {
                               versionId: selectedReviewVersionId,
                               reviewerReturnTo: 'workflow',
-                              reviewerReturnPath: selectedWorkflowPath,
+                              reviewerReturnPath: '/workflow',
+                              reviewerReturnFilter: selectedFilter,
                             },
                           })
                         }
@@ -617,7 +661,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                               state: {
                                 versionId: selectedApprovedVersionId,
                                 reviewerReturnTo: 'workflow',
-                                reviewerReturnPath: selectedWorkflowPath,
+                                reviewerReturnPath: '/workflow',
+                                reviewerReturnFilter: selectedFilter,
                               },
                             })
                           }
@@ -749,7 +794,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                       navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
                         state: {
                           reviewerReturnTo: 'workflow',
-                          reviewerReturnPath: selectedWorkflowPath,
+                          reviewerReturnPath: '/workflow',
+                          reviewerReturnFilter: selectedFilter,
                         },
                       })
                     }

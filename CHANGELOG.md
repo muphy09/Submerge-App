@@ -1,3 +1,15 @@
+## [2.2.2] - 4/2/26
+### Changed
+- 'Retired Equipment' workflow has been modified to be more clear
+    - All Proposals that have selected a certain piece equipment; if that equipment was modified or removed in the Admin Pricing Model, the equipment will be marked as 'Removed' now in the Proposals that are impacted by the modification
+        - Clear indication that the user must select another option; cannot Mark as Signed until the change is made
+        - Does NOT impact 'Signed' Proposals or 'Completed' Proposals; only 'Draft' and 'Submitted'
+### Fixed
+- Inactive Price Models used in Proposals now display their intended 'Inactive' notifier
+    
+
+
+-----
 ## [2.2.1] - 4/2/26
 ### Proposal Submission Workflow Changes
 - Toggle for 'Require Approval' added per user in the Admin Panel
