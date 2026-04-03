@@ -1,6 +1,8 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-
+- Proposal summary when submitting an addendum, 'Submit Proposal' should say 'Submit Addendum', there should also be a button to do this from the version summary screen
+    - submitting addendum warning needs to change
+- Book Keeper notifications stacks total, not new
 - Int finihs  need to tell what tier they are, should not transfer material color only tier to contract
     - Should only display matierial tier not the color attached
     But in the tool it should show up what materials are in what tiers. only transfer tier to contract not color.
