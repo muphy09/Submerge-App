@@ -1600,8 +1600,13 @@ export function completeWorkflowProposal(
   message?: string,
   session?: UserSession | null
 ): Proposal {
+  const currentProposal = ensureProposalWorkflow(proposal);
+  if (getWorkflowStatus(currentProposal) !== 'signed') {
+    return currentProposal;
+  }
+
   const { normalized, workflow } = appendWorkflowEvent(
-    proposal,
+    currentProposal,
     'completed',
     { message, toStatus: 'completed' },
     session

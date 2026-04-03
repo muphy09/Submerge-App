@@ -71,6 +71,7 @@ import {
   getApprovedVersionId,
   getLatestSignedBaselineVersionId,
   getPendingReviewVersionId,
+  getReviewVersionId,
   getReviewerPrimaryVersionId,
   getReviewerVisibleVersions,
   getSignedVersionId,
@@ -104,6 +105,10 @@ const splitCustomOptions = (items: CostLineItem[]) => ({
 const normalizeSummaryName = (value?: string | null): string => (value ?? '').trim();
 const normalizeComparisonText = (value?: string | null): string => normalizeSummaryName(value).toLowerCase();
 const REMOVED_EQUIPMENT_SUMMARY_LABEL = 'Removed - Please Select Another';
+const MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE =
+  'Equipment change required. Update the equipment selections before marking this proposal as signed.';
+const ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE =
+  'Equipment change required. Update the equipment selections before submitting this proposal addendum.';
 
 const getStoredPricingModelStatus = (proposal?: Partial<Proposal> | null): PricingModelStatus => {
   const name = normalizeComparisonText(proposal?.pricingModelName);
@@ -179,6 +184,20 @@ const resolveCurrentPricingModelStatus = (
   return proposal.pricingModelIsDefault ? 'active' : 'inactive';
 };
 
+const getVersionIdKey = (proposal?: Partial<Proposal> | null) => proposal?.versionId || 'original';
+
+const getFrozenVersionSyncMeta = (proposal?: Partial<Proposal> | null): ProposalVersionSyncMeta => ({
+  priceModelStatus: getStoredPricingModelStatus(proposal),
+  equipmentFlags: getEmptyRetiredEquipmentFlags(),
+});
+
+const isHistoricalVersionState = (proposal?: Partial<Proposal> | null) => {
+  const status = getWorkflowStatus(proposal);
+  return status === 'signed' || status === 'completed';
+};
+
+const hasEquipmentChangeRequired = (equipmentFlags?: RetiredEquipmentFlags | null) => Boolean(equipmentFlags?.any);
+
 const hasNamedSelection = (value: string | undefined, placeholderToken: string): boolean => {
   const normalized = normalizeSummaryName(value).toLowerCase();
   return Boolean(normalized) && normalized !== 'none' && !normalized.includes(placeholderToken);
@@ -214,6 +233,7 @@ type ProposalViewLocationState = {
   reviewerReturnTo?: 'workflow' | 'admin-panel';
   reviewerReturnPath?: string;
   reviewerReturnFilter?: 'needs_approval' | 'approved' | 'signed' | 'archive';
+  reviewerReturnUserId?: string | null;
 };
 
 type ContractViewComponent = typeof import('../components/ContractView').default;
@@ -611,6 +631,7 @@ function ProposalView() {
   const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
   const [showModifySignedConfirm, setShowModifySignedConfirm] = useState(false);
   const [showMarkSignedConfirm, setShowMarkSignedConfirm] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
   const [isWorkflowHistoryExpanded, setIsWorkflowHistoryExpanded] = useState(false);
   const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
@@ -642,7 +663,6 @@ function ProposalView() {
       : proposal) || proposal;
   const proposalWorkflowStatus = getWorkflowStatus(proposal);
   const isProposalCompleted = proposalWorkflowStatus === 'completed';
-  const freezeHistoricalPricingUpdates = Boolean(getSignedVersionId(proposal)) || isProposalCompleted;
   const canManageVersionDrafts =
     !isProposalEditingRestricted &&
     !isReadOnlyReviewerView &&
@@ -676,9 +696,19 @@ function ProposalView() {
     navigate(locationState?.reviewerReturnPath || (reviewerReturnTo === 'admin-panel' ? '/admin' : '/workflow'), {
       state:
         reviewerReturnTo === 'workflow'
-          ? { selectedFilter: locationState?.reviewerReturnFilter || 'needs_approval' }
+          ? {
+              selectedFilter: locationState?.reviewerReturnFilter || 'needs_approval',
+              selectedUserId: locationState?.reviewerReturnUserId || '',
+            }
           : undefined,
     });
+  const getCachedVersionSyncMeta = (version?: Partial<Proposal> | null) =>
+    version ? versionSyncMeta[getVersionIdKey(version)] : undefined;
+  const shouldUseLiveVersionSync = (container: Proposal, version?: Partial<Proposal> | null) => {
+    if (!version) return false;
+    if (getWorkflowStatus(container) === 'completed') return false;
+    return !isHistoricalVersionState(version);
+  };
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
     const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
@@ -709,6 +739,81 @@ function ProposalView() {
     };
   };
 
+  const resolveVersionSyncMetaEntries = async (
+    entries: Proposal[],
+    container: Proposal
+  ): Promise<Record<string, ProposalVersionSyncMeta>> => {
+    const pricingSnapshotCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+    const pricingDirectoryCache = new Map<string, PricingModelDirectory>();
+
+    const results = await Promise.all(
+      entries.map(async (entry) => {
+        const versionKey = getVersionIdKey(entry);
+
+        if (!shouldUseLiveVersionSync(container, entry)) {
+          return [versionKey, getFrozenVersionSyncMeta(entry)] as const;
+        }
+
+        const sourceFranchiseId = entry.pricingModelFranchiseId || entry.franchiseId || container.franchiseId || 'default';
+        let pricingDirectory = pricingDirectoryCache.get(sourceFranchiseId);
+        if (!pricingDirectory) {
+          try {
+            pricingDirectory = {
+              loaded: true,
+              rows: await listPricingModelsRemote(sourceFranchiseId),
+            };
+          } catch (error) {
+            console.warn('Unable to load pricing models for proposal view', sourceFranchiseId, error);
+            pricingDirectory = {
+              loaded: false,
+              rows: [],
+            };
+          }
+          pricingDirectoryCache.set(sourceFranchiseId, pricingDirectory);
+        }
+
+        const resolvedFranchiseId = entry.franchiseId || container.franchiseId || 'default';
+        const pricingModelId = entry.pricingModelId || undefined;
+        const pricingModelFranchiseId = entry.pricingModelFranchiseId || undefined;
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
+        let pricingSnapshot = pricingSnapshotCache.get(pricingCacheKey);
+        if (!pricingSnapshot) {
+          pricingSnapshot = await loadPricingSnapshotForFranchise(
+            resolvedFranchiseId,
+            pricingModelId,
+            pricingModelFranchiseId
+          );
+          pricingSnapshotCache.set(pricingCacheKey, pricingSnapshot);
+        }
+
+        const mergedVersion = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(entry)) as Proposal;
+        const priceModelStatus = resolveCurrentPricingModelStatus(entry, pricingSnapshot, pricingDirectory);
+        const equipmentFlags =
+          priceModelStatus === 'removed'
+            ? getEmptyRetiredEquipmentFlags()
+            : withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
+                getRetiredEquipmentFlags(mergedVersion.equipment)
+              );
+
+        return [
+          versionKey,
+          {
+            priceModelStatus,
+            equipmentFlags,
+          },
+        ] as const;
+      })
+    );
+
+    return Object.fromEntries(results);
+  };
+
+  const resolveVersionSyncMetaForVersion = async (version?: Proposal | null, container?: Proposal | null) => {
+    if (!version || !container) return null;
+    const results = await resolveVersionSyncMetaEntries([version], container);
+    return results[getVersionIdKey(version)] || null;
+  };
+
   useEffect(() => {
     setShowCogsBreakdown(false);
     setCogsBreakdownVersionId(null);
@@ -721,84 +826,18 @@ function ProposalView() {
       return;
     }
 
-    const versionsToResolve = versions.length ? versions : listAllVersions(proposal);
+    const container = ensureProposalWorkflow(proposal);
+    const versionsToResolve = versions.length ? versions : listAllVersions(container);
     if (!versionsToResolve.length) {
       setVersionSyncMeta({});
       return;
     }
 
     let cancelled = false;
-    const pricingSnapshotCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
-    const pricingDirectoryCache = new Map<string, PricingModelDirectory>();
-
     const loadVersionSyncMeta = async () => {
-      const entries = await Promise.all(
-        versionsToResolve.map(async (entry) => {
-          const versionId = entry.versionId || 'original';
-
-          if (freezeHistoricalPricingUpdates) {
-            return [
-              versionId,
-              {
-                priceModelStatus: getStoredPricingModelStatus(entry),
-                equipmentFlags: getEmptyRetiredEquipmentFlags(),
-              },
-            ] as const;
-          }
-
-          const sourceFranchiseId = entry.pricingModelFranchiseId || entry.franchiseId || proposal.franchiseId || 'default';
-          let pricingDirectory = pricingDirectoryCache.get(sourceFranchiseId);
-          if (!pricingDirectory) {
-            try {
-              pricingDirectory = {
-                loaded: true,
-                rows: await listPricingModelsRemote(sourceFranchiseId),
-              };
-            } catch (error) {
-              console.warn('Unable to load pricing models for proposal view', sourceFranchiseId, error);
-              pricingDirectory = {
-                loaded: false,
-                rows: [],
-              };
-            }
-            pricingDirectoryCache.set(sourceFranchiseId, pricingDirectory);
-          }
-
-          const resolvedFranchiseId = entry.franchiseId || proposal.franchiseId || 'default';
-          const pricingModelId = entry.pricingModelId || undefined;
-          const pricingModelFranchiseId = entry.pricingModelFranchiseId || undefined;
-          const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
-          let pricingSnapshot = pricingSnapshotCache.get(pricingCacheKey);
-          if (!pricingSnapshot) {
-            pricingSnapshot = await loadPricingSnapshotForFranchise(
-              resolvedFranchiseId,
-              pricingModelId,
-              pricingModelFranchiseId
-            );
-            pricingSnapshotCache.set(pricingCacheKey, pricingSnapshot);
-          }
-
-          const mergedVersion = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(entry)) as Proposal;
-          const priceModelStatus = resolveCurrentPricingModelStatus(entry, pricingSnapshot, pricingDirectory);
-          const equipmentFlags =
-            priceModelStatus === 'removed'
-              ? getEmptyRetiredEquipmentFlags()
-              : withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
-                  getRetiredEquipmentFlags(mergedVersion.equipment)
-                );
-
-          return [
-            versionId,
-            {
-              priceModelStatus,
-              equipmentFlags,
-            },
-          ] as const;
-        })
-      );
-
+      const entries = await resolveVersionSyncMetaEntries(versionsToResolve, container);
       if (cancelled) return;
-      setVersionSyncMeta(Object.fromEntries(entries));
+      setVersionSyncMeta(entries);
     };
 
     void loadVersionSyncMeta();
@@ -806,7 +845,7 @@ function ProposalView() {
     return () => {
       cancelled = true;
     };
-  }, [freezeHistoricalPricingUpdates, proposal, versions]);
+  }, [proposal, versions]);
 
   useEffect(() => {
     if (canViewCogsBreakdown) return;
@@ -1597,6 +1636,38 @@ function ProposalView() {
     void contractViewRef.current.exportPdf();
   };
 
+  const ensureVersionCanSubmitAddendum = async (version?: Proposal | null, container?: Proposal | null) => {
+    if (!version || !container || !isEditableAddendumVersion(version)) {
+      return true;
+    }
+
+    const syncMeta = await resolveVersionSyncMetaForVersion(version, container);
+    if (hasEquipmentChangeRequired(syncMeta?.equipmentFlags)) {
+      showToast({ type: 'error', message: ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE });
+      return false;
+    }
+
+    return true;
+  };
+
+  const ensureVersionCanBeMarkedAsSigned = async (container?: Proposal | null) => {
+    if (!container) return false;
+
+    const targetVersionId = getApprovedVersionId(container) || getReviewVersionId(container);
+    const targetVersion =
+      listAllVersions(container).find((entry) => getVersionIdKey(entry) === (targetVersionId || 'original')) || null;
+
+    if (!targetVersion) return false;
+
+    const syncMeta = await resolveVersionSyncMetaForVersion(targetVersion, container);
+    if (hasEquipmentChangeRequired(syncMeta?.equipmentFlags)) {
+      showToast({ type: 'error', message: MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE });
+      return false;
+    }
+
+    return true;
+  };
+
   const persistStatusChange = async (
     nextStatus: 'draft' | 'submitted',
     submissionRequest?: { manualReviewRequested: boolean; note: string },
@@ -1620,12 +1691,21 @@ function ProposalView() {
         normalizedVersions[0];
       if (!active) return;
 
-      const container = buildContainerFromVersions(
+      const draftContainer = buildContainerFromVersions(
         normalizedVersions,
         active.versionId || 'original',
         nextStatus === 'draft' ? 'draft' : getWorkflowStatus(proposal)
       );
-      if (!container) return;
+      if (!draftContainer) return;
+
+      if (nextStatus === 'submitted') {
+        const canSubmitAddendum = await ensureVersionCanSubmitAddendum(active, draftContainer);
+        if (!canSubmitAddendum) {
+          return;
+        }
+      }
+
+      const container = draftContainer;
       const payload =
         nextStatus === 'submitted'
           ? submitProposalForWorkflow(container, active.versionId || 'original', {
@@ -1715,6 +1795,19 @@ function ProposalView() {
       });
       return;
     }
+
+    const draftContainer = ensureProposalWorkflow(
+      buildContainerFromVersions(
+        all.map((entry) => ({ ...(entry as Proposal), versions: [] })),
+        targetId,
+        getWorkflowStatus(proposal)
+      ) || (proposal as Proposal)
+    );
+    const canSubmitAddendum = await ensureVersionCanSubmitAddendum(targetVersion as Proposal, draftContainer);
+    if (!canSubmitAddendum) {
+      return;
+    }
+
     handleOpenSubmitModal(targetId);
   };
 
@@ -1862,6 +1955,7 @@ function ProposalView() {
   };
 
   const handleReviewerComplete = async () => {
+    if (proposalWorkflowStatus !== 'signed') return;
     await persistReviewerWorkflowAction(
       (container, note) => completeWorkflowProposal(container, note || undefined),
       'Proposal marked as completed.'
@@ -1884,6 +1978,12 @@ function ProposalView() {
         'original';
       const container = buildContainerFromVersions(normalizedVersions, desiredActiveId);
       if (!container) return;
+
+      const canMarkAsSigned = await ensureVersionCanBeMarkedAsSigned(container);
+      if (!canMarkAsSigned) {
+        setShowMarkSignedConfirm(false);
+        return;
+      }
 
       await initPricingDataStore(
         container.franchiseId,
@@ -2061,13 +2161,12 @@ function ProposalView() {
 
     // Get the pricing model used for this proposal
     const priceModel = mergedProposal.pricingModelName || 'No Pricing Model';
-    const syncMeta = versionSyncMeta[input.versionId || 'original'];
-    const priceModelStatus = syncMeta?.priceModelStatus ?? getStoredPricingModelStatus(mergedProposal);
+    const syncMeta = getCachedVersionSyncMeta(input) ?? getFrozenVersionSyncMeta(mergedProposal);
+    const priceModelStatus = syncMeta.priceModelStatus;
     const isPriceModelActive = priceModelStatus === 'active';
     const isPriceModelRemoved = priceModelStatus === 'removed';
-    const equipmentFlags = freezeHistoricalPricingUpdates
-      ? getEmptyRetiredEquipmentFlags()
-      : syncMeta?.equipmentFlags ?? getEmptyRetiredEquipmentFlags();
+    const equipmentFlags = syncMeta.equipmentFlags;
+    const hasEquipmentChangeRequiredForVersion = hasEquipmentChangeRequired(equipmentFlags);
 
     const poolTypeLabel =
       mergedProposal.poolSpecs.poolType === 'gunite'
@@ -2252,6 +2351,7 @@ function ProposalView() {
       isPriceModelActive,
       isPriceModelRemoved,
       priceModelStatus,
+      hasEquipmentChangeRequired: hasEquipmentChangeRequiredForVersion,
       poolTypeLabel,
       approximateGallons,
       maxWidth,
@@ -2308,6 +2408,7 @@ function ProposalView() {
     ? getReviewerVisibleVersions(displayVersionContainer as Proposal)
     : allVersionsForRender;
   const approvedVersionId = proposal ? getApprovedVersionId(proposal as Proposal) : null;
+  const hasSignedBaseline = Boolean(getSignedVersionId(proposal as Proposal));
   const latestSignedBaselineVersionId = proposal ? getLatestSignedBaselineVersionId(proposal as Proposal) : null;
   const livePublishedVersionId =
     proposalWorkflowStatus === 'signed'
@@ -2394,14 +2495,24 @@ function ProposalView() {
     )?.versionName ||
     proposal?.versionName ||
     'Current Version';
-  const activeVersionIsSignedAddendumDraft =
-    proposalWorkflowStatus === 'signed' &&
-    Boolean(activeEditableVersion) &&
-    !isSubmittedVersionLocked(activeEditableVersion) &&
-    (activeEditableVersion?.versionId || 'original') !== (livePublishedVersionId || '');
+  const isEditableAddendumVersion = (version?: Partial<Proposal> | null) => {
+    if (!hasSignedBaseline || !version) return false;
+    const versionStatus = getWorkflowStatus(version);
+    return (
+      !isSubmittedVersionLocked(version) &&
+      versionStatus !== 'signed' &&
+      versionStatus !== 'completed' &&
+      getVersionIdKey(version) !== (livePublishedVersionId || '')
+    );
+  };
+  const activeVersionIsSignedAddendumDraft = isEditableAddendumVersion(activeEditableVersion);
   const submitActionLabel = activeVersionIsSignedAddendumDraft
     ? 'Add as Proposal Addendum'
     : 'Submit Proposal';
+  const activeVersionHasEquipmentChangeRequired = hasEquipmentChangeRequired(
+    getCachedVersionSyncMeta(activeEditableVersion)?.equipmentFlags
+  );
+  const activeAddendumSubmitBlocked = activeVersionIsSignedAddendumDraft && activeVersionHasEquipmentChangeRequired;
   const displayPrimaryVersionId = renderPrimaryVersionId;
   const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
   const customerModalView = customerBreakdownVersionId
@@ -2428,11 +2539,18 @@ function ProposalView() {
       })
     : null;
   const isSubmittingSignedAddendum =
-    proposalWorkflowStatus === 'signed' &&
-    Boolean(submitTargetVersion) &&
-    !isSubmittedVersionLocked(submitTargetVersion || undefined) &&
-    (submitTargetVersion?.versionId || 'original') !== (livePublishedVersionId || '');
+    isEditableAddendumVersion(submitTargetVersion);
   const hasMultipleVersions = viewModels.length > 1;
+  const submitActionDisabledReason =
+    activeAddendumSubmitBlocked
+      ? ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
+      : !canEditProposal
+      ? submitDisabledReason
+      : !canSubmitProposal
+      ? 'Must include Customer Name'
+      : undefined;
+  const isSubmitActionDisabled =
+    !canEditProposal || loading || !canSubmitProposal || activeAddendumSubmitBlocked;
   const shouldRenderBreakdownExport = breakdownExportActive || breakdownExporting;
   const ContractViewComponent = loadedContractView;
   const BreakdownCostExportPageComponent = loadedBreakdownExportPages?.BreakdownCostExportPage;
@@ -2847,17 +2965,24 @@ function ProposalView() {
       !isOriginal &&
       !isSubmittedVersionLocked(vm.proposal) &&
       !isProposalCompleted;
-    const canMarkAsSignedVersion =
+    const showMarkAsSignedButton =
       !isProposalEditingRestricted &&
       proposalWorkflowStatus === 'approved' &&
       isLivePublishedVersion;
-    const canSubmitAddendumVersion =
+    const canMarkAsSignedVersion = showMarkAsSignedButton && !vm.hasEquipmentChangeRequired;
+    const markAsSignedDisabledReason = vm.hasEquipmentChangeRequired
+      ? MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
+      : undefined;
+    const showSubmitAddendumButton =
       !isReadOnlyReviewerView &&
-      proposalWorkflowStatus === 'signed' &&
+      hasSignedBaseline &&
       !isProposalCompleted &&
-      !isSubmittedVersionLocked(vm.proposal) &&
-      versionId !== (livePublishedVersionId || '');
-    const showDeleteButton = !isReadOnlyReviewerView && !isOriginal && !isActive && !canMarkAsSignedVersion;
+      isEditableAddendumVersion(vm.proposal);
+    const canSubmitAddendumVersion = showSubmitAddendumButton && !vm.hasEquipmentChangeRequired;
+    const addendumSubmitDisabledReason = vm.hasEquipmentChangeRequired
+      ? ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
+      : undefined;
+    const showDeleteButton = !isReadOnlyReviewerView && !isOriginal && !isActive && !showMarkAsSignedButton;
     const versionActionReason =
       !canManageVersionDrafts
         ? editDisabledReason
@@ -2919,24 +3044,29 @@ function ProposalView() {
                   Edit Proposal
                 </button>
               </TooltipAnchor>
-              {canSubmitAddendumVersion && (
-                <button
-                  className="action-button primary"
-                  onClick={() => {
-                    void handleSubmitProposal(versionId);
-                  }}
-                >
-                  Add as Proposal Addendum
-                </button>
+              {showSubmitAddendumButton && (
+                <TooltipAnchor tooltip={addendumSubmitDisabledReason}>
+                  <button
+                    className="action-button primary"
+                    onClick={() => {
+                      void handleSubmitProposal(versionId);
+                    }}
+                    disabled={!canSubmitAddendumVersion}
+                  >
+                    Add as Proposal Addendum
+                  </button>
+                </TooltipAnchor>
               )}
-              {canMarkAsSignedVersion && (
-                <button
-                  className="action-button primary"
-                  onClick={() => setShowMarkSignedConfirm(true)}
-                  disabled={reviewerActionSaving}
-                >
-                  Mark as Signed
-                </button>
+              {showMarkAsSignedButton && (
+                <TooltipAnchor tooltip={markAsSignedDisabledReason}>
+                  <button
+                    className="action-button primary"
+                    onClick={() => setShowMarkSignedConfirm(true)}
+                    disabled={!canMarkAsSignedVersion || reviewerActionSaving}
+                  >
+                    Mark as Signed
+                  </button>
+                </TooltipAnchor>
               )}
               {showDeleteButton && (
                 <TooltipAnchor tooltip={versionActionReason}>
@@ -3082,21 +3212,13 @@ function ProposalView() {
               )}
             </div>
             <div className="action-bar-right">
-              <TooltipAnchor
-                tooltip={
-                  !canEditProposal
-                    ? submitDisabledReason
-                    : !canSubmitProposal
-                    ? 'Must include Customer Name'
-                    : undefined
-                }
-              >
+              <TooltipAnchor tooltip={submitActionDisabledReason}>
                 <button
                   className="action-button primary workflow-summary-submit-button"
                   onClick={() => {
                     void handleSubmitProposal();
                   }}
-                  disabled={!canEditProposal || loading || !canSubmitProposal}
+                  disabled={isSubmitActionDisabled}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3155,15 +3277,22 @@ function ProposalView() {
                       Request Changes
                     </button>
                   )}
-                  {(proposalWorkflowStatus === 'approved' || proposalWorkflowStatus === 'signed') && (
+                  {proposalWorkflowStatus === 'approved' && (
                     <button
                       className="action-button primary workflow-summary-reviewer-button"
-                      onClick={() => {
-                        void handleReviewerComplete();
-                      }}
+                      onClick={() => setShowMarkSignedConfirm(true)}
                       disabled={reviewerActionSaving}
                     >
-                      Mark Completed
+                      Mark as Signed
+                    </button>
+                  )}
+                  {proposalWorkflowStatus === 'signed' && (
+                    <button
+                      className="action-button primary workflow-summary-reviewer-button"
+                      onClick={() => setShowCompleteConfirm(true)}
+                      disabled={reviewerActionSaving}
+                    >
+                      Mark Complete
                     </button>
                   )}
                 </>
@@ -3401,6 +3530,19 @@ function ProposalView() {
           void handleConfirmMarkProposalAsSigned();
         }}
         onCancel={() => setShowMarkSignedConfirm(false)}
+      />
+      <ConfirmDialog
+        open={showCompleteConfirm}
+        title="Are you sure?"
+        message="Are you sure you want to mark this proposal as complete? No further edits can be made, and it will be reconsiled in the Archive"
+        confirmLabel="Yes, I'm sure"
+        cancelLabel="No, take me back"
+        isLoading={reviewerActionSaving}
+        onConfirm={() => {
+          setShowCompleteConfirm(false);
+          void handleReviewerComplete();
+        }}
+        onCancel={() => setShowCompleteConfirm(false)}
       />
       {contractVersionId && contractModalView && (
         <div className="modal-overlay contract-printable" onClick={() => setContractVersionId(null)}>

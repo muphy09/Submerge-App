@@ -1,23 +1,11 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
 
-Proposal Notes:
-
-
-
-Fiberglass pricing notes:
-- Plumbing is reduced to 40% of the normal subtotal cost (hard math)
-- Steel is forced to 0
-- Shotcrete is forced to 0
-- Tile is forced to 0
-- Interior Finish is forced to 0
-- Tile Coping adds Concrete Band (Fiber pool count * perimeter * 1.25)
-
 - Int finihs  need to tell what tier they are, should not transfer material color only tier to contract
-SHould only display matierial tier not the color attached
+    - Should only display matierial tier not the color attached
     But in the tool it should show up what materials are in what tiers. only transfer tier to contract not color.
     after picking tier '1' it shows 'these colors are included in tier 1'
-
+    - *** INT finishes in excel are priced indiviudual, not by tier. selecting a tier without a type is not possible (color is possible), they are all different prices
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Cleanup visuals on Contract export
@@ -39,8 +27,6 @@ Long Term -
         - No microglass
         - Only NPT pool color options (ivory quartz)
         - No comparison options, completely seperate
-    
-
 - Admin proposal large screen
 - Performance Data for Admin overhaul
 - Keyboard Nav dropdown selection trouble
@@ -52,11 +38,7 @@ Long Term -
 Ideas - 
 - Potential column for "Included Items"
     - Base equipment, base options, etc
-
 - Potential pictures for interior finish styles (out and in pool), equipment selected.
-
-- Hide the COGS cost block and buttons until a key is held? Or a button is pushed on the main menu?
-
 ----------------------------------------------------------------------------------------------------------
 Help Needed - 
 - Permitting and County associated costs tied to City / State field
@@ -64,11 +46,6 @@ Help Needed -
     - Remodel**
     - Commercial Pool Pricing
     - Sales Templates (when not in effect)
-- Commission amount needs to be set per user - set up by admin (place inside of designers block) - same with discount threshold (default 18%)
-    - Need Matt for clarification
-- Wireless autofill run. No conduit run needed
-    - Need price for this
-- Regular Bubbler option
 ** - Booster Pump for Spa Jets logic
 ----------------------------------------------------------------------------------------------------------
 Confusion -

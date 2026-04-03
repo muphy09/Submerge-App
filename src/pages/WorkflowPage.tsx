@@ -18,9 +18,11 @@ import {
   getSignedVersion,
   getWorkflowStatus,
   hasUnreadWorkflowEvents,
+  markProposalAsSigned,
   markWorkflowRead,
   requestWorkflowChanges,
 } from '../services/proposalWorkflow';
+import { listFranchiseUsers, type FranchiseUser } from '../services/franchiseUsersAdapter';
 import { getProposal, listProposals, saveProposal } from '../services/proposalsAdapter';
 import type { UserSession } from '../services/session';
 import './WorkflowPage.css';
@@ -32,7 +34,10 @@ type WorkflowPageProps = {
 type QueueFilter = 'needs_approval' | 'approved' | 'signed' | 'archive';
 type WorkflowLocationState = {
   selectedFilter?: QueueFilter;
+  selectedUserId?: string | null;
 };
+
+const normalizeIdentity = (value?: string | null) => String(value || '').trim().toLowerCase();
 
 const normalizeStatusLabel = (value?: string | null) =>
   (() => {
@@ -54,6 +59,19 @@ const getQueueFilterForProposal = (proposal: Proposal): QueueFilter => {
   if (matchesQueueFilter(proposal, 'signed')) return 'signed';
   if (matchesQueueFilter(proposal, 'archive')) return 'archive';
   return 'approved';
+};
+
+const proposalBelongsToUser = (proposal: Proposal, user?: FranchiseUser | null) => {
+  if (!user) return true;
+  const proposalDesigner = normalizeIdentity(proposal.designerName);
+  if (!proposalDesigner) return false;
+  const candidates = [normalizeIdentity(user.name), normalizeIdentity(user.email)].filter(Boolean);
+  return candidates.some((candidate) => candidate === proposalDesigner);
+};
+
+const getUserFilterLabel = (user: FranchiseUser) => {
+  const name = String(user.name || '').trim();
+  return name ? `${name} (${user.email})` : user.email;
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -103,14 +121,20 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const { proposalNumber } = useParams();
   const { showToast } = useToast();
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [franchiseUsers, setFranchiseUsers] = useState<FranchiseUser[]>([]);
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
   const workflowLocationState = (location.state as WorkflowLocationState | null) ?? null;
   const [selectedFilter, setSelectedFilter] = useState<QueueFilter>(
-    workflowLocationState?.selectedFilter || 'needs_approval'
+    () => workflowLocationState?.selectedFilter || 'needs_approval'
   );
+  const [selectedUserId, setSelectedUserId] = useState<string>(
+    () => workflowLocationState?.selectedUserId || ''
+  );
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [showNoteComposer, setShowNoteComposer] = useState(false);
+  const [showMarkSignedConfirm, setShowMarkSignedConfirm] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const [expandedCostCategories, setExpandedCostCategories] = useState<string[]>([]);
@@ -182,11 +206,49 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   }, [canAccess, proposalNumber, session?.franchiseId]);
 
   useEffect(() => {
-    const requestedFilter = workflowLocationState?.selectedFilter;
-    if (requestedFilter && requestedFilter !== selectedFilter) {
-      setSelectedFilter(requestedFilter);
+    if (!canAccess || !session?.franchiseId) {
+      setFranchiseUsers([]);
+      setUsersLoaded(true);
+      return;
     }
-  }, [selectedFilter, workflowLocationState?.selectedFilter]);
+
+    let cancelled = false;
+    setUsersLoaded(false);
+
+    const loadUsers = async () => {
+      try {
+        const rows = await listFranchiseUsers(session.franchiseId as string);
+        if (!cancelled) {
+          setFranchiseUsers(rows);
+          setUsersLoaded(true);
+        }
+      } catch (error) {
+        console.error('Failed to load franchise users for workflow filter', error);
+        if (!cancelled) {
+          setFranchiseUsers([]);
+          setUsersLoaded(true);
+        }
+      }
+    };
+
+    void loadUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccess, session?.franchiseId]);
+
+  useEffect(() => {
+    const hasFilterOverride = workflowLocationState?.selectedFilter !== undefined;
+    const hasUserOverride = workflowLocationState?.selectedUserId !== undefined;
+    if (!hasFilterOverride && !hasUserOverride) return;
+    if (hasFilterOverride) {
+      setSelectedFilter(workflowLocationState?.selectedFilter || 'needs_approval');
+    }
+    if (hasUserOverride) {
+      setSelectedUserId(workflowLocationState?.selectedUserId || '');
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, navigate, workflowLocationState?.selectedFilter, workflowLocationState?.selectedUserId]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -218,23 +280,50 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     }
   }, [proposalNumber, selectedFilter, selectedProposal, workflowLocationState?.selectedFilter]);
 
+  const selectedUser = useMemo(
+    () => franchiseUsers.find((entry) => entry.id === selectedUserId) || null,
+    [franchiseUsers, selectedUserId]
+  );
+
+  useEffect(() => {
+    if (!usersLoaded || !selectedUserId) return;
+    if (!selectedUser) {
+      setSelectedUserId('');
+    }
+  }, [selectedUser, selectedUserId, usersLoaded]);
+
+  useEffect(() => {
+    if (!selectedProposal) return;
+    if (matchesQueueFilter(selectedProposal, selectedFilter) && proposalBelongsToUser(selectedProposal, selectedUser)) {
+      return;
+    }
+    setSelectedProposal(null);
+    if (proposalNumber) {
+      navigate('/workflow', { replace: true });
+    }
+  }, [navigate, proposalNumber, selectedFilter, selectedProposal, selectedUser]);
+
   const counts = useMemo(() => {
-    const needsApproval = proposals.filter((entry) => getWorkflowStatus(entry) === 'needs_approval').length;
-    const approved = proposals.filter((entry) => matchesQueueFilter(entry, 'approved')).length;
-    const signed = proposals.filter((entry) => matchesQueueFilter(entry, 'signed')).length;
-    const archive = proposals.filter((entry) => getWorkflowStatus(entry) === 'completed').length;
-    return { needsApproval, approved, signed, archive };
-  }, [proposals]);
+    const countForFilter = (filter: QueueFilter) =>
+      proposals.filter((entry) => matchesQueueFilter(entry, filter) && proposalBelongsToUser(entry, selectedUser)).length;
+    return {
+      needsApproval: countForFilter('needs_approval'),
+      approved: countForFilter('approved'),
+      signed: countForFilter('signed'),
+      archive: countForFilter('archive'),
+    };
+  }, [proposals, selectedUser]);
 
   const filteredProposals = useMemo(() => {
     return proposals
       .filter((entry) => matchesQueueFilter(entry, selectedFilter))
+      .filter((entry) => proposalBelongsToUser(entry, selectedUser))
       .sort((a, b) => {
         const aTs = new Date(a.workflow?.submittedAt || a.lastModified || a.createdDate || 0).getTime();
         const bTs = new Date(b.workflow?.submittedAt || b.lastModified || b.createdDate || 0).getTime();
         return bTs - aTs;
       });
-  }, [proposals, selectedFilter]);
+  }, [proposals, selectedFilter, selectedUser]);
 
   const selectedDiff = useMemo(
     () => (selectedProposal ? buildVersionDiffSummary(selectedProposal) : null),
@@ -259,8 +348,11 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const selectedTotalCogs = Number(selectedDisplayVersion?.pricing?.totalCOGS || 0);
   const selectedGrossProfitPercent = Number(selectedDisplayVersion?.pricing?.grossProfitMargin || 0);
   const selectedDiscountAmount = getNonPapDiscountTotal(selectedDisplayVersion);
+  const selectedUserLabel = selectedUser ? getUserFilterLabel(selectedUser) : null;
   const emptyDetailMessage =
-    selectedFilter === 'needs_approval' && filteredProposals.length > 0
+    filteredProposals.length === 0 && selectedUserLabel
+      ? `No proposals for ${selectedUserLabel} in this view.`
+      : selectedFilter === 'needs_approval' && filteredProposals.length > 0
       ? 'Select a Proposal that is Awaiting Approval on the left'
       : selectedFilter === 'signed' && filteredProposals.length > 0
       ? 'Select a signed proposal to review its addendum history.'
@@ -273,7 +365,19 @@ function WorkflowPage({ session }: WorkflowPageProps) {
       if (proposalNumber) {
         navigate('/workflow', {
           replace: true,
-          state: { selectedFilter: nextFilter },
+        });
+      }
+    }
+  };
+
+  const handleUserFilterChange = (nextUserId: string) => {
+    setSelectedUserId(nextUserId);
+    const nextUser = franchiseUsers.find((entry) => entry.id === nextUserId) || null;
+    if (selectedProposal && !proposalBelongsToUser(selectedProposal, nextUser)) {
+      setSelectedProposal(null);
+      if (proposalNumber) {
+        navigate('/workflow', {
+          replace: true,
         });
       }
     }
@@ -287,9 +391,14 @@ function WorkflowPage({ session }: WorkflowPageProps) {
         entry.proposalNumber === saved.proposalNumber ? saved : entry
       );
       const nextSelected =
-        matchesQueueFilter(saved, selectedFilter)
+        matchesQueueFilter(saved, selectedFilter) && proposalBelongsToUser(saved, selectedUser)
           ? saved
-          : nextRows.find((entry) => entry.proposalNumber !== saved.proposalNumber && matchesQueueFilter(entry, selectedFilter)) ||
+          : nextRows.find(
+              (entry) =>
+                entry.proposalNumber !== saved.proposalNumber &&
+                matchesQueueFilter(entry, selectedFilter) &&
+                proposalBelongsToUser(entry, selectedUser)
+            ) ||
             null;
 
       setSelectedProposal(nextSelected);
@@ -329,8 +438,16 @@ function WorkflowPage({ session }: WorkflowPageProps) {
     );
   };
 
-  const handleComplete = async () => {
+  const handleMarkAsSigned = async () => {
     if (!selectedProposal) return;
+    await persistSelectedProposal(
+      markProposalAsSigned(selectedProposal, session),
+      'Proposal marked as signed.'
+    );
+  };
+
+  const handleComplete = async () => {
+    if (!selectedProposal || getWorkflowStatus(selectedProposal) !== 'signed') return;
     await persistSelectedProposal(
       completeWorkflowProposal(selectedProposal, noteDraft.trim() || undefined, session),
       'Proposal marked as completed.'
@@ -410,12 +527,30 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 ? 'Archived Proposals'
                 : 'Approved Proposals'}
             </div>
-            <div className="workflow-queue-meta">{filteredProposals.length} shown</div>
+            <div className="workflow-queue-header-controls">
+              <label className="workflow-user-filter">
+                <span className="workflow-user-filter-label">User</span>
+                <select
+                  className="workflow-user-filter-select"
+                  value={selectedUserId}
+                  onChange={(event) => handleUserFilterChange(event.target.value)}
+                >
+                  <option value="">All Franchise Users</option>
+                  {franchiseUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {getUserFilterLabel(user)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
           {loading ? (
             <div className="workflow-empty">Loading workflow queue...</div>
           ) : filteredProposals.length === 0 ? (
-            <div className="workflow-empty">No proposals match this view.</div>
+            <div className="workflow-empty">
+              {selectedUserLabel ? `No proposals for ${selectedUserLabel} in this view.` : 'No proposals match this view.'}
+            </div>
           ) : (
             <div className="workflow-queue-list">
               {filteredProposals.map((entry) => {
@@ -565,6 +700,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                               reviewerReturnTo: 'workflow',
                               reviewerReturnPath: '/workflow',
                               reviewerReturnFilter: selectedFilter,
+                              reviewerReturnUserId: selectedUserId || null,
                             },
                           })
                         }
@@ -609,6 +745,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                                   reviewerReturnTo: 'workflow',
                                   reviewerReturnPath: '/workflow',
                                   reviewerReturnFilter: selectedFilter,
+                                  reviewerReturnUserId: selectedUserId || null,
                                 },
                               })
                             }
@@ -646,6 +783,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                               reviewerReturnTo: 'workflow',
                               reviewerReturnPath: '/workflow',
                               reviewerReturnFilter: selectedFilter,
+                              reviewerReturnUserId: selectedUserId || null,
                             },
                           })
                         }
@@ -663,6 +801,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                                 reviewerReturnTo: 'workflow',
                                 reviewerReturnPath: '/workflow',
                                 reviewerReturnFilter: selectedFilter,
+                                reviewerReturnUserId: selectedUserId || null,
                               },
                             })
                           }
@@ -781,7 +920,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                       {getWorkflowStatus(selectedProposal) === 'signed'
                         ? 'Open the signed proposal history or mark it complete.'
                         : getWorkflowStatus(selectedProposal) === 'approved'
-                        ? 'Mark Complete or Request Changes'
+                        ? 'Mark as Signed or Request Changes'
                         : 'Approve or Request Changes'}
                     </div>
                   </div>
@@ -796,6 +935,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                           reviewerReturnTo: 'workflow',
                           reviewerReturnPath: '/workflow',
                           reviewerReturnFilter: selectedFilter,
+                          reviewerReturnUserId: selectedUserId || null,
                         },
                       })
                     }
@@ -826,8 +966,17 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                         Request Changes
                       </button>
                     )}
-                    {(getWorkflowStatus(selectedProposal) === 'approved' ||
-                      getWorkflowStatus(selectedProposal) === 'signed') && (
+                    {getWorkflowStatus(selectedProposal) === 'approved' && (
+                      <button
+                        type="button"
+                        className="workflow-primary-btn"
+                        disabled={Boolean(savingAction)}
+                        onClick={() => setShowMarkSignedConfirm(true)}
+                      >
+                        Mark as Signed
+                      </button>
+                    )}
+                    {getWorkflowStatus(selectedProposal) === 'signed' && (
                       <button
                         type="button"
                         className="workflow-primary-btn"
@@ -872,9 +1021,22 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 )}
               </div>
               <ConfirmDialog
+                open={showMarkSignedConfirm}
+                title="Are you sure?"
+                message="Marking as Signed will lock the current approved version. Additional changes made afterwards will be added as a Proposal Addendum"
+                confirmLabel="Yes I'm sure. Mark as Signed"
+                cancelLabel="No, take me back"
+                isLoading={Boolean(savingAction)}
+                onConfirm={() => {
+                  setShowMarkSignedConfirm(false);
+                  void handleMarkAsSigned();
+                }}
+                onCancel={() => setShowMarkSignedConfirm(false)}
+              />
+              <ConfirmDialog
                 open={showCompleteConfirm}
                 title="Are you sure?"
-                message="Marking as complete will not allow any edits to be made afterwards. This should be done after the pool is complete"
+                message="Are you sure you want to mark this proposal as complete? No further edits can be made, and it will be reconsiled in the Archive"
                 confirmLabel="Yes, I'm sure"
                 cancelLabel="No, take me back"
                 isLoading={Boolean(savingAction)}
