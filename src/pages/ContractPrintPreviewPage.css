@@ -1,0 +1,210 @@
+.contract-print-preview-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(83, 126, 214, 0.18), transparent 34%),
+    linear-gradient(180deg, #eef3ff 0%, #d8e3ff 100%);
+  color: #10233e;
+}
+
+.contract-print-preview-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 22px;
+  background: rgba(245, 248, 255, 0.9);
+  border-bottom: 1px solid rgba(105, 136, 192, 0.24);
+  backdrop-filter: blur(14px);
+}
+
+.contract-print-preview-title-group h1 {
+  margin: 2px 0 0;
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 700;
+}
+
+.contract-print-preview-eyebrow {
+  margin: 0;
+  color: #5474a8;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.contract-print-preview-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.contract-print-preview-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(105, 136, 192, 0.3);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 28px rgba(26, 41, 72, 0.12);
+}
+
+.contract-print-preview-zoom-group span {
+  min-width: 52px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #29446d;
+}
+
+.contract-print-preview-toolbar button {
+  border: 1px solid rgba(84, 116, 168, 0.28);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #17325c;
+  font: inherit;
+  cursor: pointer;
+}
+
+.contract-print-preview-zoom-group button {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.contract-print-preview-primary,
+.contract-print-preview-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  font-weight: 700;
+}
+
+.contract-print-preview-primary {
+  background: #204f93;
+  border-color: #204f93;
+  color: #ffffff;
+}
+
+.contract-print-preview-secondary {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.contract-print-preview-toolbar button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(26, 41, 72, 0.14);
+}
+
+.contract-print-preview-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.contract-print-preview-toolbar-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.contract-print-preview-content {
+  padding: 28px 20px 40px;
+}
+
+.contract-print-preview-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.contract-print-preview-sheet {
+  display: block;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(121, 144, 182, 0.35);
+  box-shadow: 0 28px 60px rgba(34, 55, 97, 0.18);
+}
+
+.contract-print-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+}
+
+.contract-print-preview-status {
+  width: min(540px, calc(100vw - 48px));
+  margin: 80px auto 0;
+  padding: 24px 28px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(105, 136, 192, 0.24);
+  box-shadow: 0 20px 44px rgba(34, 55, 97, 0.12);
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.contract-print-preview-status.error {
+  color: #8c1d1d;
+}
+
+@media (max-width: 900px) {
+  .contract-print-preview-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .contract-print-preview-toolbar-actions {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0;
+  }
+
+  .contract-print-preview-page {
+    background: #ffffff !important;
+  }
+
+  .contract-print-preview-toolbar {
+    display: none !important;
+  }
+
+  .contract-print-preview-content {
+    padding: 0 !important;
+  }
+
+  .contract-print-preview-pages {
+    gap: 0 !important;
+  }
+
+  .contract-print-preview-sheet {
+    width: 8.5in !important;
+    height: 11in !important;
+    border: none !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .contract-print-preview-canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+}

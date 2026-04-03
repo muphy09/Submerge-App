@@ -88,6 +88,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminPanelPage = lazy(() => import('./pages/AdminPanelPage'));
 const AdminPricingPage = lazy(() => import('./pages/AdminPricingPage'));
 const MasterPage = lazy(() => import('./pages/MasterPage'));
+const ContractPrintPreviewPage = lazy(() => import('./pages/ContractPrintPreviewPage'));
 
 type PendingSessionTakeover = {
   session: UserSession;
@@ -407,6 +408,7 @@ function AppContent() {
     !globalFeedbackEnabledLoading &&
     Boolean(effectiveSession?.franchiseId) &&
     (!isMaster || Boolean(masterImpersonation?.franchiseId));
+  const isContractPrintPreviewRoute = location.pathname === '/contract-print-preview';
   const isProposalBuilderRoute =
     location.pathname === '/proposal/new' || location.pathname.startsWith('/proposal/edit/');
   const adminPanelRequiresPin =
@@ -716,7 +718,7 @@ function AppContent() {
   const showOfflineGate = isOffline && !allowOfflineEditing;
 
   // Show navigation bar on main pages, hide it on proposal form/view pages
-  const showNavigation = !location.pathname.startsWith('/proposal/');
+  const showNavigation = !location.pathname.startsWith('/proposal/') && !isContractPrintPreviewRoute;
   const isAdminPanelUnlocked = adminPanelAccessFranchiseId === (effectiveSession?.franchiseId || null);
   const canRenderAdminPanel = !adminPanelRequiresPin || isAdminPanelUnlocked;
   const isAdminPanelLocked = Boolean(adminPanelLockoutUntil && adminPanelLockoutUntil > Date.now());
@@ -1063,9 +1065,10 @@ function AppContent() {
             }
           />
           <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
+          <Route path="/contract-print-preview" element={<ContractPrintPreviewPage />} />
         </Routes>
       </Suspense>
-      {(actingLabel || location.pathname === '/') && (
+      {!isContractPrintPreviewRoute && (actingLabel || location.pathname === '/') && (
         <div className="app-bottom-left-meta">
           {actingLabel && (
             <div className="app-acting">
@@ -1080,27 +1083,29 @@ function AppContent() {
           )}
         </div>
       )}
-      {canSubmitFeedback && !isProposalBuilderRoute && (
+      {!isContractPrintPreviewRoute && canSubmitFeedback && !isProposalBuilderRoute && (
         <div
           className={`app-feedback-anchor${updateStatus ? ' has-update' : ''}${effectiveSession && location.pathname === '/' ? ' has-session-meta' : ''}`}
         >
           <FeedbackLauncher ref={feedbackLauncherRef} onClick={handleOpenFeedbackModal} />
         </div>
       )}
-      {shouldShowFeedbackTutorial && feedbackLauncherRect && (
+      {!isContractPrintPreviewRoute && shouldShowFeedbackTutorial && feedbackLauncherRect && (
         <FeedbackTutorialOverlay
           isOpen={shouldShowFeedbackTutorial}
           targetRect={feedbackLauncherRect}
           onDismiss={dismissFeedbackTutorial}
         />
       )}
-      <UpdateNotification
-        status={updateStatus}
-        onInstall={handleInstallUpdate}
-        errorMessage={updateError}
-      />
-      <CloudConnectionNotice reason={cloudIssue} />
-      {showOfflineGate && (
+      {!isContractPrintPreviewRoute && (
+        <UpdateNotification
+          status={updateStatus}
+          onInstall={handleInstallUpdate}
+          errorMessage={updateError}
+        />
+      )}
+      {!isContractPrintPreviewRoute && <CloudConnectionNotice reason={cloudIssue} />}
+      {!isContractPrintPreviewRoute && showOfflineGate && (
         <div className="offline-gate" role="alert" aria-live="assertive">
           <div className="offline-gate-card">
             <div className="offline-gate-title">
@@ -1114,96 +1119,110 @@ function AppContent() {
           </div>
         </div>
       )}
-      {effectiveSession && location.pathname === '/' && (
+      {!isContractPrintPreviewRoute && effectiveSession && location.pathname === '/' && (
         <div className="app-session-meta">
           <div className="app-session-line">
             {effectiveSession.franchiseName || effectiveSession.franchiseCode || effectiveSession.franchiseId || 'Unknown'}
           </div>
         </div>
       )}
-      {showLogin && (
+      {!isContractPrintPreviewRoute && showLogin && (
         <LoginModal onSubmit={handleLogin} existingEmail={session?.userEmail} />
       )}
-      {showPasswordReset && (
+      {!isContractPrintPreviewRoute && showPasswordReset && (
         <PasswordResetModal onSubmit={handlePasswordReset} onLogout={handleLogout} />
       )}
-      <UserProfileModal
-        isOpen={showProfileSettings}
-        session={session}
-        onClose={() => setShowProfileSettings(false)}
-        onLogout={handleLogout}
-        onSessionUpdated={handleProfileSessionUpdate}
-      />
-      <ConfirmDialog
-        open={Boolean(pendingSessionTakeover)}
-        title="Account logged in on another device"
-        message="Account logged in on another device. Sign out the other device?"
-        confirmLabel="Yes, log me in"
-        cancelLabel="No, go back"
-        errorMessage={pendingSessionTakeoverError}
-        isLoading={pendingSessionTakeoverLoading}
-        onConfirm={() => {
-          void handleConfirmPendingSessionTakeover();
-        }}
-        onCancel={() => {
-          void handleCancelPendingSessionTakeover();
-        }}
-      />
-      <ConfirmDialog
-        open={showLoggedOutElsewhereNotice}
-        title="Account logged in elsewhere"
-        message="Account logged in elsewhere."
-        confirmLabel="OK"
-        hideCancel
-        onConfirm={() => {
-          clearRemoteSignoutNotice();
-          setShowLoggedOutElsewhereNotice(false);
-        }}
-        onCancel={() => {
-          clearRemoteSignoutNotice();
-          setShowLoggedOutElsewhereNotice(false);
-        }}
-      />
-      <ConfirmDialog
-        open={showSessionEndedNotice}
-        title="Session ended"
-        message="Your session ended. Please sign in again."
-        confirmLabel="OK"
-        hideCancel
-        onConfirm={() => {
-          setShowSessionEndedNotice(false);
-        }}
-        onCancel={() => {
-          setShowSessionEndedNotice(false);
-        }}
-      />
-      <AdminPinModal
-        isOpen={adminPanelPinPrompt.isOpen}
-        pin={adminPanelPin}
-        error={adminPanelPinError}
-        statusMessage={adminPanelPinLoading ? 'Loading current franchise PIN...' : ''}
-        isDisabled={isAdminPanelLocked || adminPanelPinLoading}
-        onPinChange={(value) => {
-          setAdminPanelPin(value);
-          if (adminPanelPinError && adminPanelPinError !== ADMIN_PANEL_PIN_LOCKOUT_MESSAGE) {
-            setAdminPanelPinError('');
-          }
-        }}
-        onSubmit={submitAdminPanelPin}
-        onClose={closeAdminPanelPrompt}
-      />
-      <ChangelogModal isOpen={showChangelogPrompt} onClose={handleCloseChangelogPrompt} />
-      <FeedbackSubmissionModal
-        isOpen={showFeedbackModal}
-        message={feedbackMessage}
-        isSubmitting={feedbackSubmitting}
-        errorMessage={feedbackError}
-        onMessageChange={setFeedbackMessage}
-        onSubmit={() => {
-          void handleSubmitFeedback();
-        }}
-        onClose={handleCloseFeedbackModal}
-      />
+      {!isContractPrintPreviewRoute && (
+        <UserProfileModal
+          isOpen={showProfileSettings}
+          session={session}
+          onClose={() => setShowProfileSettings(false)}
+          onLogout={handleLogout}
+          onSessionUpdated={handleProfileSessionUpdate}
+        />
+      )}
+      {!isContractPrintPreviewRoute && (
+        <ConfirmDialog
+          open={Boolean(pendingSessionTakeover)}
+          title="Account logged in on another device"
+          message="Account logged in on another device. Sign out the other device?"
+          confirmLabel="Yes, log me in"
+          cancelLabel="No, go back"
+          errorMessage={pendingSessionTakeoverError}
+          isLoading={pendingSessionTakeoverLoading}
+          onConfirm={() => {
+            void handleConfirmPendingSessionTakeover();
+          }}
+          onCancel={() => {
+            void handleCancelPendingSessionTakeover();
+          }}
+        />
+      )}
+      {!isContractPrintPreviewRoute && (
+        <ConfirmDialog
+          open={showLoggedOutElsewhereNotice}
+          title="Account logged in elsewhere"
+          message="Account logged in elsewhere."
+          confirmLabel="OK"
+          hideCancel
+          onConfirm={() => {
+            clearRemoteSignoutNotice();
+            setShowLoggedOutElsewhereNotice(false);
+          }}
+          onCancel={() => {
+            clearRemoteSignoutNotice();
+            setShowLoggedOutElsewhereNotice(false);
+          }}
+        />
+      )}
+      {!isContractPrintPreviewRoute && (
+        <ConfirmDialog
+          open={showSessionEndedNotice}
+          title="Session ended"
+          message="Your session ended. Please sign in again."
+          confirmLabel="OK"
+          hideCancel
+          onConfirm={() => {
+            setShowSessionEndedNotice(false);
+          }}
+          onCancel={() => {
+            setShowSessionEndedNotice(false);
+          }}
+        />
+      )}
+      {!isContractPrintPreviewRoute && (
+        <AdminPinModal
+          isOpen={adminPanelPinPrompt.isOpen}
+          pin={adminPanelPin}
+          error={adminPanelPinError}
+          statusMessage={adminPanelPinLoading ? 'Loading current franchise PIN...' : ''}
+          isDisabled={isAdminPanelLocked || adminPanelPinLoading}
+          onPinChange={(value) => {
+            setAdminPanelPin(value);
+            if (adminPanelPinError && adminPanelPinError !== ADMIN_PANEL_PIN_LOCKOUT_MESSAGE) {
+              setAdminPanelPinError('');
+            }
+          }}
+          onSubmit={submitAdminPanelPin}
+          onClose={closeAdminPanelPrompt}
+        />
+      )}
+      {!isContractPrintPreviewRoute && (
+        <ChangelogModal isOpen={showChangelogPrompt} onClose={handleCloseChangelogPrompt} />
+      )}
+      {!isContractPrintPreviewRoute && (
+        <FeedbackSubmissionModal
+          isOpen={showFeedbackModal}
+          message={feedbackMessage}
+          isSubmitting={feedbackSubmitting}
+          errorMessage={feedbackError}
+          onMessageChange={setFeedbackMessage}
+          onSubmit={() => {
+            void handleSubmitFeedback();
+          }}
+          onClose={handleCloseFeedbackModal}
+        />
+      )}
     </div>
   );
 }

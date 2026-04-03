@@ -1,7 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { pathToFileURL } = require('url');
 
 // Lightweight env loader so dev runs pick up Supabase config from .env/.env.local
 function loadLocalEnv() {
@@ -68,6 +67,7 @@ let db = null;
 let proposalsDir = null;
 let updateClient = null;
 const contractPreviewWindows = new Set();
+const contractPreviewPayloads = new Map();
 
 const UPDATE_FEED = {
   provider: 'github',
@@ -119,6 +119,19 @@ function getAutoUpdater() {
   }
 
   return updateClient;
+}
+
+function buildRendererUrl(hashPath = '') {
+  const normalizedHashPath = hashPath
+    ? `#${hashPath.startsWith('/') ? hashPath : `/${hashPath}`}`
+    : '';
+
+  if (isDev) {
+    return `http://localhost:5173/${normalizedHashPath}`;
+  }
+
+  const indexPath = `file://${path.join(appPath, 'dist/renderer/index.html').replace(/\\/g, '/')}`;
+  return `${indexPath}${normalizedHashPath}`;
 }
 
 function sendUpdateError(message = 'Error checking for updates') {
@@ -832,15 +845,6 @@ function toPdfBuffer(input) {
   throw new Error('Unsupported PDF payload for printing.');
 }
 
-function cleanupTempPath(targetPath) {
-  if (!targetPath) return;
-  try {
-    fs.rmSync(targetPath, { recursive: true, force: true });
-  } catch (error) {
-    console.warn('Failed to clean up temporary print file:', error);
-  }
-}
-
 ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   if (!mainWindow || !mainWindow.webContents) {
     throw new Error('Main window is not available.');
@@ -887,10 +891,12 @@ ipcMain.handle('open-contract-print-preview', async (_, payload) => {
   }
 
   const pdfBuffer = toPdfBuffer(payload?.pdfBytes);
-  const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'submerge-contract-print-'));
   const pdfFileName = sanitizePdfFileName(payload?.fileName, 'contract-print.pdf');
-  const pdfPath = path.join(tempDir, pdfFileName);
-  fs.writeFileSync(pdfPath, pdfBuffer);
+  const previewToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  contractPreviewPayloads.set(previewToken, {
+    fileName: pdfFileName,
+    pdfBytes: Buffer.from(pdfBuffer),
+  });
 
   return new Promise((resolve, reject) => {
     const previewWindow = new BrowserWindow({
@@ -903,19 +909,19 @@ ipcMain.handle('open-contract-print-preview', async (_, payload) => {
       backgroundColor: '#ffffff',
       title: 'Contract Print Preview',
       webPreferences: {
-        plugins: true,
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload-script.js'),
       },
     });
+    previewWindow.removeMenu();
     contractPreviewWindows.add(previewWindow);
 
     let settled = false;
-    let cleanedUp = false;
 
     const cleanup = () => {
-      if (cleanedUp) return;
-      cleanedUp = true;
       contractPreviewWindows.delete(previewWindow);
-      cleanupTempPath(tempDir);
+      contractPreviewPayloads.delete(previewToken);
     };
 
     const fail = (error) => {
@@ -947,8 +953,27 @@ ipcMain.handle('open-contract-print-preview', async (_, payload) => {
       }
     });
 
-    previewWindow.loadURL(pathToFileURL(pdfPath).toString()).catch(fail);
+    previewWindow.loadURL(
+      buildRendererUrl(`/contract-print-preview?previewToken=${encodeURIComponent(previewToken)}`)
+    ).catch(fail);
   });
+});
+
+ipcMain.handle('get-contract-print-preview-data', async (_, payload) => {
+  const previewToken = payload?.previewToken;
+  if (!previewToken || typeof previewToken !== 'string') {
+    return null;
+  }
+
+  const previewPayload = contractPreviewPayloads.get(previewToken);
+  if (!previewPayload) {
+    return null;
+  }
+
+  return {
+    fileName: previewPayload.fileName,
+    pdfBytes: Uint8Array.from(previewPayload.pdfBytes),
+  };
 });
 
 // Reference data handlers

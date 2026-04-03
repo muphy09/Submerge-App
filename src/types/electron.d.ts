@@ -31,6 +31,12 @@ declare global {
         pdfBytes: Uint8Array | ArrayBuffer | number[];
         fileName?: string;
       }) => Promise<{ success?: boolean }>;
+      getContractPrintPreviewData: (payload: {
+        previewToken: string;
+      }) => Promise<{
+        fileName?: string;
+        pdfBytes: Uint8Array | number[];
+      } | null>;
 
       // Franchise + pricing
       listFranchises: () => Promise<
