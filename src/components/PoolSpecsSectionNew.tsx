@@ -207,16 +207,6 @@ function PoolSpecsSectionNew({
       <div className="spec-block">
         <h2 className="spec-block-title">Customer Information</h2>
         <div className="spec-grid-3">
-          <div className="spec-field spec-full-width">
-            <label className="spec-label required">Job Site Address</label>
-            <input
-              type="text"
-              className="compact-input"
-              value={customerInfo.address || ''}
-              onChange={(e) => onChangeCustomerInfo({ ...customerInfo, address: e.target.value })}
-              placeholder="Enter street address"
-            />
-          </div>
           <div className="spec-field">
             <label className="spec-label required">Customer Name</label>
             <input
