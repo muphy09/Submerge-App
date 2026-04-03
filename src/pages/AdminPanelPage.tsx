@@ -37,7 +37,11 @@ import {
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
-import { getReviewerPrimaryVersionId, getReviewerVisibleVersions } from '../services/proposalWorkflow';
+import {
+  getReviewerPrimaryVersionId,
+  getReviewerVisibleVersions,
+  isApprovedButNotSigned,
+} from '../services/proposalWorkflow';
 import TempPasswordModal from '../components/TempPasswordModal';
 import AdminSettingsModal from '../components/AdminSettingsModal';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
@@ -1327,7 +1331,8 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                     ? 'proposal-model-pill removed'
                     : 'proposal-model-pill inactive';
                   const normalizedStatus = normalizeStatus(proposal.status) || 'draft';
-                  const statusLabel = `${formatStatusLabel(proposal.status)}${proposal.workflow?.approved ? '*' : ''}`;
+                  const showApprovalMarker = isApprovedButNotSigned(proposal);
+                  const statusLabel = `${formatStatusLabel(proposal.status)}${showApprovalMarker ? '*' : ''}`;
                   const statusClassName = `status-badge-table is-${normalizedStatus}`;
 
                   return (
@@ -1348,7 +1353,10 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
                       <td>{new Date(displayProposal.lastModified || displayProposal.createdDate).toLocaleDateString()}</td>
                       <td>
                         <div className="proposal-status-cell">
-                          <span className={statusClassName}>
+                          <span
+                            className={statusClassName}
+                            data-tooltip={showApprovalMarker ? 'Proposal Approved but not Signed' : undefined}
+                          >
                             {statusLabel}
                           </span>
                         </div>

@@ -934,6 +934,7 @@
 
 .admin-table .status-badge-table,
 .admin-table .proposal-model-pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -951,6 +952,62 @@
   text-transform: none;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
   box-sizing: border-box;
+}
+
+.admin-table .status-badge-table[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(0);
+  width: min(260px, 70vw);
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: #0f2a4f;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  box-shadow: 0 12px 28px rgba(15, 42, 79, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+  z-index: 20;
+}
+
+.admin-table .status-badge-table[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  width: 10px;
+  height: 10px;
+  background: #0f2a4f;
+  transform: translateX(-50%) rotate(45deg);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+  z-index: 19;
+}
+
+.admin-table .status-badge-table[data-tooltip]:hover::after,
+.admin-table .status-badge-table[data-tooltip]:hover::before,
+.admin-table .status-badge-table[data-tooltip]:focus-visible::after,
+.admin-table .status-badge-table[data-tooltip]:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-2px);
+  transition-delay: 0.5s;
+}
+
+.admin-table .status-badge-table[data-tooltip]:hover::before,
+.admin-table .status-badge-table[data-tooltip]:focus-visible::before {
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .admin-table .status-badge-table.is-draft {

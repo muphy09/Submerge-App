@@ -788,6 +788,10 @@ export function getWorkflowStatus(proposal?: Partial<Proposal> | null): Proposal
   return 'draft';
 }
 
+export function isApprovedButNotSigned(proposal?: Partial<Proposal> | null) {
+  return getWorkflowStatus(proposal) === 'approved' && !getSignedVersionId(proposal);
+}
+
 export function getVersionRecordStatus(proposal?: Partial<Proposal> | null): ProposalWorkflowStatus {
   const status = normalizeText(proposal?.status).toLowerCase();
   if (status === 'completed') return 'completed';

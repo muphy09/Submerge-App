@@ -8,7 +8,9 @@ Immediate Changes -
     But in the tool it should show up what materials are in what tiers. only transfer tier to contract not color.
     after picking tier '1' it shows 'these colors are included in tier 1'
     - *** INT finishes in excel are priced indiviudual, not by tier. selecting a tier without a type is not possible (color is possible), they are all different prices
----------------------------------------------------------------------------------------------------------
+- Needs to be a 'Signed by' block in the proposal summary
+- 'Other versions' need to be collapsable
+    ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Cleanup visuals on Contract export
 - Workflow for Addendum (contract changes after original) must show cost comparison of before and after 

@@ -3,7 +3,7 @@ import { Proposal } from '../types/proposal-new';
 import ConfirmDialog from './ConfirmDialog';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
-import { getReviewerVisibleVersions } from '../services/proposalWorkflow';
+import { getReviewerVisibleVersions, isApprovedButNotSigned } from '../services/proposalWorkflow';
 import { listAllVersions } from '../utils/proposalVersions';
 import './DashboardProposalsPanel.css';
 
@@ -505,8 +505,7 @@ function DashboardProposalsPanel({
                   </thead>
                   <tbody>
                     {filteredProposals.map((proposal) => {
-                      const normalizedStatus = String(proposal.status || '').trim().toLowerCase();
-                      const showApprovalMarker = proposal.workflow?.approved && normalizedStatus !== 'signed';
+                      const showApprovalMarker = isApprovedButNotSigned(proposal);
                       const contractTypeLabel = getContractTypeLabel(proposal);
                       const versionCount = getVersionCount(proposal, viewerRole);
                       const pricingModelClass = getPricingModelClass(
@@ -537,7 +536,10 @@ function DashboardProposalsPanel({
                             {new Date(proposal.lastModified || proposal.createdDate || 0).toLocaleDateString()}
                           </td>
                           <td>
-                            <span className={getStatusBadgeClass(proposal.status)}>
+                            <span
+                              className={getStatusBadgeClass(proposal.status)}
+                              data-tooltip={showApprovalMarker ? 'Proposal Approved but not Signed' : undefined}
+                            >
                               {formatStatusLabel(proposal.status)}
                               {showApprovalMarker ? '*' : ''}
                             </span>

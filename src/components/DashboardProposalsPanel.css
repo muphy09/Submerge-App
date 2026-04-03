@@ -310,6 +310,7 @@
 
 .dashboard-status-pill,
 .dashboard-model-pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -321,6 +322,62 @@
   font-weight: 800;
   letter-spacing: 0.02em;
   white-space: nowrap;
+}
+
+.dashboard-status-pill[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(0);
+  width: min(260px, 70vw);
+  padding: 0.6rem 0.7rem;
+  border-radius: 10px;
+  background: #0f2a4f;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: normal;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 12px 28px rgba(15, 42, 79, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+  z-index: 20;
+}
+
+.dashboard-status-pill[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  width: 10px;
+  height: 10px;
+  background: #0f2a4f;
+  transform: translateX(-50%) rotate(45deg);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+  z-index: 19;
+}
+
+.dashboard-status-pill[data-tooltip]:hover::after,
+.dashboard-status-pill[data-tooltip]:hover::before,
+.dashboard-status-pill[data-tooltip]:focus-visible::after,
+.dashboard-status-pill[data-tooltip]:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-2px);
+  transition-delay: 0.5s;
+}
+
+.dashboard-status-pill[data-tooltip]:hover::before,
+.dashboard-status-pill[data-tooltip]:focus-visible::before {
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .dashboard-status-pill.is-draft {
