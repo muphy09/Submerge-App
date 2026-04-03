@@ -75,9 +75,11 @@ import {
   getReviewerPrimaryVersionId,
   getReviewerVisibleVersions,
   getSignedVersionId,
+  getVersionRecordStatus,
   getWorkflowSubmissionPreview,
   getWorkflowStatus,
   isSubmittedVersionLocked,
+  isVersionPermanentlyLocked,
   markProposalAsSigned,
   markWorkflowRead,
   reconcileWorkflowVersionStates,
@@ -191,10 +193,7 @@ const getFrozenVersionSyncMeta = (proposal?: Partial<Proposal> | null): Proposal
   equipmentFlags: getEmptyRetiredEquipmentFlags(),
 });
 
-const isHistoricalVersionState = (proposal?: Partial<Proposal> | null) => {
-  const status = getWorkflowStatus(proposal);
-  return status === 'signed' || status === 'completed';
-};
+const isHistoricalVersionState = (proposal?: Partial<Proposal> | null) => isVersionPermanentlyLocked(proposal);
 
 const hasEquipmentChangeRequired = (equipmentFlags?: RetiredEquipmentFlags | null) => Boolean(equipmentFlags?.any);
 
@@ -668,10 +667,11 @@ function ProposalView() {
     !isProposalEditingRestricted &&
     !isReadOnlyReviewerView &&
     !isProposalCompleted;
+  const activeVersionRecordStatus = getVersionRecordStatus(activeEditableVersion);
   const canEditProposal =
     canManageVersionDrafts &&
     Boolean(activeEditableVersion) &&
-    !isSubmittedVersionLocked(activeEditableVersion);
+    !isVersionPermanentlyLocked(activeEditableVersion);
   const canSendWorkflowMessages = Boolean(proposal?.workflow?.submittedAt) && !isProposalCompleted;
   const editDisabledReason =
     isProposalEditingRestricted
@@ -680,15 +680,12 @@ function ProposalView() {
       ? 'Proposals opened from the reviewer workspace are read-only. Return to Dashboard to edit drafts.'
       : isProposalCompleted
       ? 'Completed proposals are locked.'
-      : proposalWorkflowStatus === 'signed' && isSubmittedVersionLocked(activeEditableVersion)
+      : activeVersionRecordStatus === 'signed'
       ? 'Signed proposal versions are locked. Use Modify Signed Proposal to create an addendum draft.'
-      : isSubmittedVersionLocked(activeEditableVersion)
-      ? 'Submitted versions are locked. Create a new version to make changes.'
+      : activeVersionRecordStatus === 'completed'
+      ? 'Completed proposal versions are locked.'
       : undefined;
-  const submitDisabledReason =
-    proposalWorkflowStatus === 'changes_requested' && isSubmittedVersionLocked(activeEditableVersion)
-      ? 'Returned proposals are locked. Build Another Version to resubmit a new Proposal.'
-      : editDisabledReason;
+  const submitDisabledReason = editDisabledReason;
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const reviewerReturnTo = locationState?.reviewerReturnTo === 'admin-panel' ? 'admin-panel' : 'workflow';
@@ -1069,7 +1066,7 @@ function ProposalView() {
 
   const handleEdit = (version?: Proposal) => {
     if (!canManageVersionDrafts) return;
-    if (!version || isSubmittedVersionLocked(version) || isProposalCompleted) return;
+    if (!version || isVersionPermanentlyLocked(version) || isProposalCompleted) return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
   };
@@ -1289,6 +1286,10 @@ function ProposalView() {
     if (!proposal) return;
     try {
       const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+      const targetVersion = all.find((entry) => (entry.versionId || 'original') === versionId);
+      if (!targetVersion || isVersionPermanentlyLocked(targetVersion) || isProposalCompleted) {
+        return;
+      }
       const updated = all.map((v) => {
         const id = v.versionId || 'original';
         if (id !== versionId) return v;
@@ -2420,7 +2421,7 @@ function ProposalView() {
       ? allVersionsForRender.find(
           (entry) =>
             (entry.versionId || 'original') !== livePublishedVersionId &&
-            !isSubmittedVersionLocked(entry)
+            !isVersionPermanentlyLocked(entry)
         ) || null
       : null;
   const renderPrimaryVersionId =
@@ -2478,13 +2479,13 @@ function ProposalView() {
   );
   const workflowStatusTooltip =
     proposalWorkflowStatus === 'needs_approval'
-      ? 'Proposal submitted and awaiting approval'
+      ? 'Proposal submitted and awaiting approval. It can still be edited until it is marked as signed.'
       : proposalWorkflowStatus === 'changes_requested'
-      ? 'Changes were requested. Create a new version and resubmit for approval.'
+      ? 'Changes were requested. Continue editing this version and resubmit when ready.'
       : proposalWorkflowStatus === 'signed'
       ? 'Proposal is signed. Future changes must be added as proposal addendums.'
       : proposalWorkflowStatus === 'approved'
-      ? 'Proposal was approved and can now be marked as signed.'
+      ? 'Proposal was approved and can still be edited until it is marked as signed.'
       : undefined;
   const versionActionLabel =
     proposalWorkflowStatus === 'signed' ? 'Modify Signed Proposal' : 'Build Another Version';
@@ -2498,11 +2499,8 @@ function ProposalView() {
     'Current Version';
   const isEditableAddendumVersion = (version?: Partial<Proposal> | null) => {
     if (!hasSignedBaseline || !version) return false;
-    const versionStatus = getWorkflowStatus(version);
     return (
-      !isSubmittedVersionLocked(version) &&
-      versionStatus !== 'signed' &&
-      versionStatus !== 'completed' &&
+      !isVersionPermanentlyLocked(version) &&
       getVersionIdKey(version) !== (livePublishedVersionId || '')
     );
   };
@@ -2529,6 +2527,19 @@ function ProposalView() {
     ? versionMap.get(offContractVersionId) || primaryView
     : null;
   const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
+  const contractVersionRecordStatus = getVersionRecordStatus(contractModalView?.proposal);
+  const canEditContractVersion =
+    canManageVersionDrafts &&
+    Boolean(contractModalView?.proposal) &&
+    !isVersionPermanentlyLocked(contractModalView?.proposal);
+  const contractEditDisabledReason =
+    !canManageVersionDrafts
+      ? editDisabledReason
+      : contractVersionRecordStatus === 'signed'
+      ? 'Signed proposal versions are locked. Use Modify Signed Proposal to create an addendum draft.'
+      : contractVersionRecordStatus === 'completed'
+      ? 'Completed proposal versions are locked.'
+      : undefined;
   const submitTargetVersion =
     (submitTargetVersionId
       ? allVersionsForRender.find((entry) => (entry.versionId || 'original') === submitTargetVersionId)
@@ -2957,9 +2968,10 @@ function ProposalView() {
     const isSubmittedVersion = Boolean(submittedVersionId) && versionId === submittedVersionId;
     const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
+    const versionRecordStatus = getVersionRecordStatus(vm.proposal);
     const canEditVersion =
       canManageVersionDrafts &&
-      !isSubmittedVersionLocked(vm.proposal) &&
+      !isVersionPermanentlyLocked(vm.proposal) &&
       !isProposalCompleted;
     const canDeleteVersion =
       canManageVersionDrafts &&
@@ -2989,10 +3001,10 @@ function ProposalView() {
         ? editDisabledReason
         : isProposalCompleted
         ? 'Completed proposals are locked.'
-        : proposalWorkflowStatus === 'signed' && isLivePublishedVersion
+        : versionRecordStatus === 'signed'
         ? 'Signed proposal versions are locked. Create a new version to prepare an addendum.'
-        : isSubmittedVersionLocked(vm.proposal)
-        ? 'Submitted versions are locked. Create a new version to make changes.'
+        : versionRecordStatus === 'completed'
+        ? 'Completed proposal versions are locked.'
         : undefined;
 
     return (
@@ -3594,12 +3606,12 @@ function ProposalView() {
                     </div>
                   )}
                 </div>
-                <TooltipAnchor tooltip={!canEditProposal ? editDisabledReason : undefined}>
+                <TooltipAnchor tooltip={!canEditContractVersion ? contractEditDisabledReason : undefined}>
                   <button
                     className="action-button primary"
                     type="button"
                     onClick={handleContractSaveClick}
-                    disabled={!canEditProposal || !contractDirty || contractSaving || !contractViewReady}
+                    disabled={!canEditContractVersion || !contractDirty || contractSaving || !contractViewReady}
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M3 2h8l2 2v10H3V2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
@@ -3623,7 +3635,7 @@ function ProposalView() {
                   onSave={(next: ContractOverrides) =>
                     handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)
                   }
-                  readOnly={!canEditProposal}
+                  readOnly={!canEditContractVersion}
                   onDirtyChange={setContractDirty}
                   onExportingChange={setContractExporting}
                   onSavingChange={setContractSaving}

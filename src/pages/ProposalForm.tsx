@@ -90,8 +90,9 @@ import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   ensureProposalWorkflow,
+  getVersionRecordStatus,
   getWorkflowStatus,
-  isSubmittedVersionLocked,
+  isVersionPermanentlyLocked,
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
 
@@ -1126,11 +1127,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       const sanitizedTarget: Proposal = ensureProposalWorkflow({ ...(targetVersion as Proposal), versions: [] });
       const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
 
-      if (isSubmittedVersionLocked(sanitizedTarget) || getWorkflowStatus(versioned) === 'completed') {
+      const targetVersionStatus = getVersionRecordStatus(sanitizedTarget);
+      if (isVersionPermanentlyLocked(sanitizedTarget) || getWorkflowStatus(versioned) === 'completed') {
         showToast({
           type: 'warning',
           message:
-            'This version is locked from editing. Create a new version from the proposal summary to make changes.',
+            targetVersionStatus === 'signed'
+              ? 'This signed version is locked from editing. Create a proposal addendum from the proposal summary to make changes.'
+              : 'Completed proposals are locked from editing.',
         });
         navigate(`/proposal/view/${num}`, { replace: true });
         return;
@@ -1441,6 +1445,18 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       setHasEdits(false);
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
       const isSignedAddendumSubmission = getWorkflowStatus(containerToSave as Proposal) === 'signed';
+      const nonSubmitSuccessMessage =
+        options?.forceDraftStatus || savedWorkflowStatus === 'draft'
+          ? 'Proposal saved as draft.'
+          : savedWorkflowStatus === 'needs_approval' || savedWorkflowStatus === 'submitted'
+          ? 'Proposal changes saved. Proposal remains submitted for approval.'
+          : savedWorkflowStatus === 'approved'
+          ? 'Proposal changes saved. Proposal remains approved.'
+          : savedWorkflowStatus === 'changes_requested'
+          ? 'Proposal changes saved. Resubmit when ready.'
+          : savedWorkflowStatus === 'signed'
+          ? 'Proposal addendum changes saved.'
+          : 'Proposal saved successfully!';
       showToast({
         type: 'success',
         message:
@@ -1452,9 +1468,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               : savedWorkflowStatus === 'signed' && isSignedAddendumSubmission
               ? 'Proposal addendum added successfully.'
               : 'Proposal submitted successfully.'
-            : options?.forceDraftStatus
-            ? 'Proposal saved as draft.'
-            : 'Proposal saved successfully!',
+            : nonSubmitSuccessMessage,
       });
 
       const shouldNavigateToSummary =
@@ -1827,7 +1841,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   const handleProposalSummaryClick = () => {
     if (isSaving || isOffline) return;
-    void handleSave('draft', { navigateToSummary: true, forceDraftStatus: true });
+    void handleSave('draft', { navigateToSummary: true });
   };
 
   return (

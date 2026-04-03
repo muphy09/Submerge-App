@@ -788,6 +788,22 @@ export function getWorkflowStatus(proposal?: Partial<Proposal> | null): Proposal
   return 'draft';
 }
 
+export function getVersionRecordStatus(proposal?: Partial<Proposal> | null): ProposalWorkflowStatus {
+  const status = normalizeText(proposal?.status).toLowerCase();
+  if (status === 'completed') return 'completed';
+  if (status === 'needs_approval') return 'needs_approval';
+  if (status === 'changes_requested') return 'changes_requested';
+  if (status === 'signed') return 'signed';
+  if (status === 'approved') return 'approved';
+  if (status === 'submitted') return 'submitted';
+  return 'draft';
+}
+
+export function isVersionPermanentlyLocked(proposal?: Partial<Proposal> | null) {
+  const status = getVersionRecordStatus(proposal);
+  return status === 'signed' || status === 'completed';
+}
+
 export function ensureProposalWorkflow(proposal: Proposal): Proposal {
   const rawStatus = normalizeText(proposal.status).toLowerCase();
   const workflow = proposal.workflow || ({} as ProposalWorkflowState);
@@ -1029,7 +1045,7 @@ export function reconcileWorkflowVersionStates(proposal: Proposal): Proposal {
 
     if (pendingReviewVersionId && entryId === pendingReviewVersionId) {
       return setVersionWorkflowState(entry, status, {
-        locked: true,
+        locked: false,
         submittedAt: entry.versionSubmittedAt || normalized.workflow?.submittedAt || null,
         submittedBy: entry.versionSubmittedBy || normalized.workflow?.submittedBy || null,
       });
@@ -1070,7 +1086,7 @@ export function reconcileWorkflowVersionStates(proposal: Proposal): Proposal {
     if (approvedVersionId && entryId === approvedVersionId) {
       const baselineStatus = status === 'completed' && !pendingReviewVersionId ? 'completed' : 'approved';
       return setVersionWorkflowState(entry, baselineStatus, {
-        locked: true,
+        locked: baselineStatus === 'completed',
         submittedAt:
           entry.versionSubmittedAt ||
           normalized.workflow?.approvedAt ||
@@ -1310,12 +1326,13 @@ export function submitProposalForWorkflow(
           targetVersion.versionId || ORIGINAL_VERSION_ID,
         ])
       : currentSignedAddendumVersionIds;
+  const targetVersionShouldBeLocked = nextStatus === 'signed';
 
   const updatedVersions = allVersions.map((entry) => {
     const entryId = entry.versionId || ORIGINAL_VERSION_ID;
     if (entryId === (targetVersion.versionId || ORIGINAL_VERSION_ID)) {
       return setVersionWorkflowState(entry, nextStatus, {
-        locked: true,
+        locked: targetVersionShouldBeLocked,
         submittedAt,
         submittedBy: actor,
       });
@@ -1394,11 +1411,12 @@ function updateReviewVersionStatus(proposal: Proposal, nextStatus: ProposalWorkf
   const reviewVersionId = getPendingReviewVersionId(normalized) || getReviewVersionId(normalized);
   const signedVersionId = getSignedVersionId(normalized);
   const signedAddendumVersionIds = new Set(getSignedAddendumVersionIds(normalized));
+  const reviewVersionShouldBeLocked = nextStatus === 'signed' || nextStatus === 'completed';
   return listAllVersions(normalized).map((entry) => {
     const entryId = entry.versionId || ORIGINAL_VERSION_ID;
     if (entryId === reviewVersionId) {
       return setVersionWorkflowState(entry, nextStatus, {
-        locked: true,
+        locked: reviewVersionShouldBeLocked,
         submittedAt: entry.versionSubmittedAt || normalized.workflow?.submittedAt || null,
         submittedBy: entry.versionSubmittedBy || normalized.workflow?.submittedBy || null,
       });
@@ -1492,11 +1510,12 @@ export function approveWorkflowProposal(
   const nextSignedAddendumVersionIds = isSignedWorkflow
     ? dedupeVersionIds([...currentSignedAddendumVersionIds, targetApprovedVersionId])
     : [];
+  const targetVersionShouldBeLocked = nextStatus === 'signed';
   const updatedVersions = listAllVersions(normalized).map((entry) => {
     const entryId = entry.versionId || ORIGINAL_VERSION_ID;
     if (entryId === targetApprovedVersionId) {
       return setVersionWorkflowState(entry, nextStatus, {
-        locked: true,
+        locked: targetVersionShouldBeLocked,
         submittedAt: entry.versionSubmittedAt || normalized.workflow?.submittedAt || null,
         submittedBy: entry.versionSubmittedBy || normalized.workflow?.submittedBy || null,
       });

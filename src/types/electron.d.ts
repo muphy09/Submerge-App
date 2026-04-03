@@ -27,6 +27,10 @@ declare global {
       getFinishRates: () => Promise<any[]>;
       getDrainageRates: () => Promise<any[]>;
       exportBreakdownPdf: (payload: { filename: string }) => Promise<{ canceled?: boolean; filePath?: string }>;
+      printContractPdf: (payload: {
+        pdfBytes: Uint8Array | ArrayBuffer | number[];
+        fileName?: string;
+      }) => Promise<{ canceled?: boolean; success?: boolean; errorType?: string }>;
 
       // Franchise + pricing
       listFranchises: () => Promise<

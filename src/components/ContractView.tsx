@@ -136,6 +136,14 @@ function clampDisplayScale(value: number): number {
   return Math.max(MIN_DISPLAY_SCALE, Math.min(MAX_DISPLAY_SCALE, rounded));
 }
 
+function sanitizeFileNameSegment(value?: string | null): string {
+  const normalized = (value || '')
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalized || 'Proposal';
+}
+
 function ZoomIcon({ direction }: { direction: 'in' | 'out' }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="contract-zoom-icon">
@@ -544,6 +552,27 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     return savePromise;
   }, [hasUnsavedChanges, onSave, overrides, showToast]);
 
+  const getContractPdfFileName = useCallback(() => {
+    const customerName = sanitizeFileNameSegment(proposal.customerInfo.customerName);
+    const today = new Date();
+    const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+      today.getDate()
+    ).padStart(2, '0')}`;
+    return `${customerName}-contract-${formattedDate}.pdf`;
+  }, [proposal.customerInfo.customerName]);
+
+  const buildFlattenedContractPdf = useCallback(async () => {
+    const result = await buildContractPdf(fields, {
+      flatten: true,
+      includeFormFields: true,
+      templateId: resolvedTemplateId,
+    });
+    return {
+      pdfBytes: new Uint8Array(result.pdfBytes),
+      fileName: getContractPdfFileName(),
+    };
+  }, [fields, getContractPdfFileName, resolvedTemplateId]);
+
   const exportPdf = useCallback(async (): Promise<boolean> => {
     if (!fields.length || exporting) return false;
     const saveSucceeded = await handleSave();
@@ -556,23 +585,12 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
           message: `Missing data: ${warnings.join(', ')}`,
         });
       }
-      const result = await buildContractPdf(fields, {
-        flatten: true,
-        includeFormFields: true,
-        templateId: resolvedTemplateId,
-      });
-
-      const customerName = proposal.customerInfo.customerName || 'Proposal';
-      const today = new Date();
-      const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-        today.getDate()
-      ).padStart(2, '0')}`;
-      const pdfBytes = new Uint8Array(result.pdfBytes);
+      const { pdfBytes, fileName } = await buildFlattenedContractPdf();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${customerName}-contract-${formattedDate}.pdf`;
+      link.download = fileName;
       link.click();
       URL.revokeObjectURL(url);
       showToast({ type: 'success', message: 'Contract PDF generated.' });
@@ -584,20 +602,34 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     } finally {
       setExporting(false);
     }
-  }, [exporting, fields, handleSave, proposal.customerInfo.customerName, resolvedTemplateId, showToast, warnings]);
+  }, [buildFlattenedContractPdf, exporting, fields, handleSave, showToast, warnings]);
 
   const printContract = useCallback(async (): Promise<boolean> => {
+    if (!fields.length || exporting) return false;
     const saveSucceeded = await handleSave();
     if (!saveSucceeded) return false;
+    setExporting(true);
     if (warnings.length) {
       showToast({
         type: 'warning',
         message: `Missing data: ${warnings.join(', ')}`,
       });
     }
-    window.print();
-    return true;
-  }, [handleSave, showToast, warnings]);
+    try {
+      const { pdfBytes, fileName } = await buildFlattenedContractPdf();
+      const result = await window.electron.printContractPdf({
+        pdfBytes,
+        fileName,
+      });
+      return Boolean(result?.success) && !result?.canceled;
+    } catch (error) {
+      console.error('Failed to print contract PDF', error);
+      showToast({ type: 'error', message: 'Could not open contract print preview.' });
+      return false;
+    } finally {
+      setExporting(false);
+    }
+  }, [buildFlattenedContractPdf, exporting, fields, handleSave, showToast, warnings]);
 
   const handleZoomOut = useCallback(() => {
     setDisplayScale((prev) => clampDisplayScale(prev - DISPLAY_SCALE_STEP));

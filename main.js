@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { pathToFileURL } = require('url');
 
 // Lightweight env loader so dev runs pick up Supabase config from .env/.env.local
 function loadLocalEnv() {
@@ -805,6 +806,42 @@ function ensurePdfExtension(filePath) {
   return path.extname(filePath) ? filePath : `${filePath}.pdf`;
 }
 
+function sanitizePdfFileName(fileName, fallback = 'contract.pdf') {
+  const rawName = typeof fileName === 'string' ? fileName.trim() : '';
+  const safeName = rawName.replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ').replace(/\s+/g, ' ').trim();
+  return ensurePdfExtension(safeName || fallback);
+}
+
+function toPdfBuffer(input) {
+  if (!input) {
+    throw new Error('No PDF data was provided for printing.');
+  }
+  if (Buffer.isBuffer(input)) {
+    return input;
+  }
+  if (ArrayBuffer.isView(input)) {
+    return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  }
+  if (input instanceof ArrayBuffer) {
+    return Buffer.from(input);
+  }
+  if (Array.isArray(input)) {
+    return Buffer.from(input);
+  }
+  throw new Error('Unsupported PDF payload for printing.');
+}
+
+function scheduleTempPathCleanup(targetPath) {
+  if (!targetPath) return;
+  setTimeout(() => {
+    try {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+    } catch (error) {
+      console.warn('Failed to clean up temporary print file:', error);
+    }
+  }, 60000);
+}
+
 ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   if (!mainWindow || !mainWindow.webContents) {
     throw new Error('Main window is not available.');
@@ -843,6 +880,96 @@ ipcMain.handle('export-breakdown-pdf', async (_, payload) => {
   const filePath = ensurePdfExtension(selectedPath);
   fs.writeFileSync(filePath, pdfData);
   return { filePath };
+});
+
+ipcMain.handle('print-contract-pdf', async (_, payload) => {
+  if (!mainWindow) {
+    throw new Error('Main window is not available.');
+  }
+
+  const pdfBuffer = toPdfBuffer(payload?.pdfBytes);
+  const tempDir = fs.mkdtempSync(path.join(app.getPath('temp'), 'submerge-contract-print-'));
+  const pdfFileName = sanitizePdfFileName(payload?.fileName, 'contract-print.pdf');
+  const pdfPath = path.join(tempDir, pdfFileName);
+  fs.writeFileSync(pdfPath, pdfBuffer);
+
+  return new Promise((resolve, reject) => {
+    const showPreviewWindow = process.platform === 'win32';
+    const printWindow = new BrowserWindow({
+      width: 980,
+      height: 1240,
+      parent: mainWindow,
+      modal: false,
+      show: false,
+      autoHideMenuBar: true,
+      backgroundColor: '#ffffff',
+      title: 'Contract Print Preview',
+      paintWhenInitiallyHidden: true,
+      webPreferences: {
+        plugins: true,
+      },
+    });
+
+    let settled = false;
+
+    const finalize = (result) => {
+      if (settled) return;
+      settled = true;
+      if (!printWindow.isDestroyed()) {
+        printWindow.close();
+      }
+      scheduleTempPathCleanup(tempDir);
+      resolve(result);
+    };
+
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      if (!printWindow.isDestroyed()) {
+        printWindow.destroy();
+      }
+      scheduleTempPathCleanup(tempDir);
+      reject(error);
+    };
+
+    printWindow.webContents.once('did-fail-load', (_, errorCode, errorDescription) => {
+      fail(new Error(`Failed to load contract print preview (${errorCode}): ${errorDescription}`));
+    });
+
+    if (showPreviewWindow) {
+      printWindow.once('ready-to-show', () => {
+        if (!printWindow.isDestroyed()) {
+          printWindow.show();
+        }
+      });
+    }
+
+    printWindow.webContents.once('did-stop-loading', () => {
+      setTimeout(() => {
+        if (settled || printWindow.isDestroyed()) return;
+        printWindow.webContents.print(
+          {
+            silent: false,
+            printBackground: true,
+          },
+          (success, errorType) => {
+            if (!success && errorType && errorType !== 'Print job canceled') {
+              fail(new Error(`Failed to print contract: ${errorType}`));
+              return;
+            }
+
+            finalize({
+              success,
+              canceled: !success && errorType === 'Print job canceled',
+              errorType: success ? undefined : errorType,
+            });
+          }
+        );
+      }, 350);
+    });
+
+    printWindow.loadURL(pathToFileURL(pdfPath).toString()).catch(fail);
+  });
 });
 
 // Reference data handlers
