@@ -1,4 +1,4 @@
-## [2.2.6] - 4/3/26
+## [2.2.6] - 4/6/26
 ### Fixed
 - Chosen Water Features now populate in the correct area to display their cost
     - Previously were appearing in the Equipment Set instead of Water Features

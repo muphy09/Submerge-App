@@ -10,6 +10,10 @@ Immediate Changes -
     - *** INT finishes in excel are priced indiviudual, not by tier. selecting a tier without a type is not possible (color is possible), they are all different prices
 - Needs to be a 'Signed by' block in the proposal summary
 - 'Other versions' need to be collapsable
+- When opening a proposal summary in the reviewer workspace, show cogs show be toggled ON by default
+    - Approved proposals tooltip for Edit Proposal should say 'Approved Proposals in the reviewer workspace are Read-Only. Designer must create another version to make edits'
+        - Ensure non-approved proposals (not auto approved) can be edited by the reviwer before approving
+- Ability to drag/drop for reorder in tables in Admin Menu
     ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Cleanup visuals on Contract export
