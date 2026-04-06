@@ -1595,6 +1595,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const currentSectionKey = sections[currentSection]?.key;
     const hasSpa = proposal.poolSpecs?.spaType !== 'none';
     const isFiberglass = proposal.poolSpecs?.poolType === 'fiberglass';
+    const allowSpaRunInput = hasSpa || isFiberglass;
     const hasPool = hasPoolDefinition(proposal.poolSpecs);
     const selectedPackage = getSelectedEquipmentPackage(proposal.equipment as any);
     const disableSpaSelections = Boolean(selectedPackage && !packageSupportsSpa(selectedPackage));
@@ -1646,6 +1647,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             <PlumbingSectionNew
               data={proposal.plumbing!}
               onChange={(data) => updateProposal('plumbing', data)}
+              allowSpaRunInput={allowSpaRunInput}
               hasSpa={hasSpa}
             />
           );

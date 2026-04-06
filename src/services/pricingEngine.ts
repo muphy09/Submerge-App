@@ -382,10 +382,13 @@ export class PlumbingCalculations {
     const items: CostLineItem[] = [];
     const prices = pricingData.plumbing;
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
+    const hasFiberglassIntegratedSpa = poolSpecs.poolType === 'fiberglass' && (plumbing.runs.spaRun || 0) > 0;
+    const hasPlumbingSpa = hasSpa || hasFiberglassIntegratedSpa;
     const isGuniteSpa = poolSpecs.spaType === 'gunite';
     const skimmerRun = plumbing.runs.skimmerRun || 0;
     const mainDrainRun = plumbing.runs.mainDrainRun || 0;
     const cleanerRun = plumbing.runs.cleanerRun || 0;
+    const spaRun = plumbing.runs.spaRun || 0;
     const infloorValveToEQ = plumbing.runs.infloorValveToEQ || 0;
     const infloorValveToPool = plumbing.runs.infloorValveToPool || 0;
     const infloorCalc = infloorValveToEQ + (infloorValveToPool * 6 * 1.15);
@@ -427,9 +430,10 @@ export class PlumbingCalculations {
       total: prices.shortStub,
     });
 
-    // Drennen workbook PLUM!C5/D5 keys Spa Base off the generic spa trigger,
-    // not a gunite-only branch, so fiberglass spas still carry the base plumbing charge.
-    if (hasSpa) {
+    // Drennen workbook PLUM!C5/D5 keys Spa Base off the plumbing spa trigger,
+    // so fiberglass shells with an integrated spa can still bill spa plumbing
+    // even when Pool Specs keeps "No Spa" selected.
+    if (hasPlumbingSpa) {
       items.push({
         category: 'Plumbing',
         description: 'Spa Base',
@@ -452,8 +456,8 @@ export class PlumbingCalculations {
     }
 
     // Drennen workbook PLUM!C9/D9 uses the entered spa run for any spa type.
-    if (hasSpa && plumbing.runs.spaRun > prices.spaOverrunThreshold) {
-      const overrun = plumbing.runs.spaRun - prices.spaOverrunThreshold;
+    if (hasPlumbingSpa && spaRun > prices.spaOverrunThreshold) {
+      const overrun = spaRun - prices.spaOverrunThreshold;
       items.push({
         category: 'Plumbing',
         description: 'Spa Overrun',

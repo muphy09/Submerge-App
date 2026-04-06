@@ -2286,12 +2286,26 @@ function ProposalView() {
       : 'N/A';
 
     const hasSpaSelected = mergedProposal.poolSpecs.spaType !== 'none';
+    const hasIntegratedFiberglassSpa =
+      mergedProposal.poolSpecs.poolType === 'fiberglass' &&
+      mergedProposal.poolSpecs.spaType === 'none' &&
+      (mergedProposal.plumbing?.runs?.spaRun ?? 0) > 0;
+    const showFiberglassSpaSummary =
+      mergedProposal.poolSpecs.spaType === 'fiberglass' || hasIntegratedFiberglassSpa;
     const maxWidth = formatNumber(mergedProposal.poolSpecs.maxWidth, 'ft');
     const maxLength = formatNumber(mergedProposal.poolSpecs.maxLength, 'ft');
     const shallowDepth = formatNumber(mergedProposal.poolSpecs.shallowDepth, 'ft');
     const endDepth = formatNumber(mergedProposal.poolSpecs.endDepth, 'ft');
-    const spaLength = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft') : 'No Spa';
-    const spaWidth = hasSpaSelected ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft') : 'No Spa';
+    const spaLengthLabel = showFiberglassSpaSummary ? 'Spa' : 'Spa Length';
+    const spaLength = showFiberglassSpaSummary
+      ? 'Fiberglass Spa'
+      : hasSpaSelected
+      ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft')
+      : 'No Spa';
+    const spaWidthLabel = 'Spa Width';
+    const spaWidth = hasSpaSelected && !showFiberglassSpaSummary
+      ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft')
+      : 'No Spa';
     const equipmentSummary = buildEquipmentSummary(mergedProposal.equipment, equipmentFlags);
 
     const tileLaborItems = costBreakdownForDisplay?.tileLabor || [];
@@ -2464,8 +2478,11 @@ function ProposalView() {
       maxLength,
       shallowDepth,
       endDepth,
+      spaLengthLabel,
       spaLength,
+      spaWidthLabel,
       spaWidth,
+      showFiberglassSpaSummary,
       ...equipmentSummary,
       offContractTotal,
       offContractItemGroups,
@@ -3256,13 +3273,15 @@ function ProposalView() {
               <div className="hero-line"><span className="hero-label">Pool Type:</span><OverflowTooltipText>{vm.poolTypeLabel}</OverflowTooltipText></div>
               <div className="hero-line"><span className="hero-label">Max Width:</span><OverflowTooltipText>{vm.maxWidth}</OverflowTooltipText></div>
               <div className="hero-line"><span className="hero-label">Shallow Depth:</span><OverflowTooltipText>{vm.shallowDepth}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Spa Length:</span><OverflowTooltipText>{vm.spaLength}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">{vm.spaLengthLabel}:</span><OverflowTooltipText>{vm.spaLength}</OverflowTooltipText></div>
             </div>
             <div className="hero-column">
               <div className="hero-line"><span className="hero-label">Approx. Gallons:</span><OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText></div>
               <div className="hero-line"><span className="hero-label">Max Length:</span><OverflowTooltipText>{vm.maxLength}</OverflowTooltipText></div>
               <div className="hero-line"><span className="hero-label">End Depth:</span><OverflowTooltipText>{vm.endDepth}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Spa Width:</span><OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText></div>
+              {!vm.showFiberglassSpaSummary && (
+                <div className="hero-line"><span className="hero-label">{vm.spaWidthLabel}:</span><OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText></div>
+              )}
             </div>
             <div className="hero-column">
               <div className="hero-line"><span className="hero-label">Pump:</span><OverflowTooltipText>{vm.pumpSummary}</OverflowTooltipText></div>

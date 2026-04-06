@@ -6,6 +6,7 @@ import './SectionStyles.css';
 interface Props {
   data: Plumbing;
   onChange: (data: Plumbing) => void;
+  allowSpaRunInput: boolean;
   hasSpa: boolean;
 }
 
@@ -50,7 +51,7 @@ const CompactInput = ({
   );
 };
 
-function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
+function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa }: Props) {
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
     onChange({
       ...data,
@@ -102,8 +103,12 @@ function PlumbingSectionNew({ data, onChange, hasSpa }: Props) {
         <div className="spec-grid spec-grid-3">
           {renderRunInput('Total Skimmer Run', 'skimmerRun', 'All skimmers to equipment pad')}
           {renderRunInput('Main Drain Run', 'mainDrainRun', 'Main drain to equipment; each added pump repeats this run')}
-          {hasSpa
-            ? renderRunInput('Spa Run', 'spaRun', 'Spa to equipment')
+          {allowSpaRunInput
+            ? renderRunInput(
+                'Spa Run',
+                'spaRun',
+                hasSpa ? 'Spa to equipment' : 'Spa to equipment for integrated fiberglass spas'
+              )
             : renderRunInput('Spa Run', 'spaRun', 'Enable a spa in Pool Specs to activate', { readOnly: true, placeholder: '0' })}
         </div>
 
