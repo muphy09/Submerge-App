@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjustment } from '../types/proposal-new';
 import SubmergeAdvantageWarranty from './SubmergeAdvantageWarranty';
 import FranchiseLogo from './FranchiseLogo';
+import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay';
 import { hasIncludedDecking } from '../utils/decking';
 import './CostBreakdownView.css';
 
@@ -82,6 +83,10 @@ function CostBreakdownView({
     () => retailAdjustments.map((adj) => (adj.amount === 0 ? '' : String(adj.amount)))
   );
   const [focusedAdjustmentIndex, setFocusedAdjustmentIndex] = useState<number | null>(null);
+  const displayCostBreakdown = useMemo(
+    () => normalizeCostBreakdownForDisplay(costBreakdown),
+    [costBreakdown]
+  );
 
   useEffect(() => {
     setAdjustmentInputs((prev) =>
@@ -103,7 +108,7 @@ function CostBreakdownView({
   const roundToTwo = (value: number): number =>
     Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 
-  const baseTotals = costBreakdown?.totals || ({} as CostBreakdown['totals']);
+  const baseTotals = displayCostBreakdown?.totals || ({} as CostBreakdown['totals']);
   const costBasis =
     pricing?.totalCostsBeforeOverhead ??
     proposal?.pricing?.totalCostsBeforeOverhead ??
@@ -136,33 +141,33 @@ function CostBreakdownView({
   };
 
   const allItems: CostLineItem[] = [
-    ...(costBreakdown.plansAndEngineering || []),
-    ...(costBreakdown.layout || []),
-    ...(costBreakdown.permit || []),
-    ...(costBreakdown.excavation || []),
-    ...(costBreakdown.plumbing || []),
-    ...(costBreakdown.gas || []),
-    ...(costBreakdown.steel || []),
-    ...(costBreakdown.electrical || []),
-    ...(costBreakdown.shotcreteLabor || []),
-    ...(costBreakdown.shotcreteMaterial || []),
-    ...(costBreakdown.tileLabor || []),
-    ...(costBreakdown.tileMaterial || []),
-    ...(costBreakdown.copingDeckingLabor || []),
-    ...(costBreakdown.copingDeckingMaterial || []),
-    ...(costBreakdown.stoneRockworkLabor || []),
-    ...(costBreakdown.stoneRockworkMaterial || []),
-    ...(costBreakdown.drainage || []),
-    ...(costBreakdown.waterFeatures || []),
-    ...(costBreakdown.equipmentOrdered || []),
-    ...(costBreakdown.equipmentSet || []),
-    ...(costBreakdown.cleanup || []),
-    ...(costBreakdown.interiorFinish || []),
-    ...(costBreakdown.waterTruck || []),
-    ...(costBreakdown.fiberglassShell || []),
-    ...(costBreakdown.fiberglassInstall || []),
-    ...(costBreakdown.startupOrientation || []),
-    ...(costBreakdown.customFeatures || []),
+    ...(displayCostBreakdown.plansAndEngineering || []),
+    ...(displayCostBreakdown.layout || []),
+    ...(displayCostBreakdown.permit || []),
+    ...(displayCostBreakdown.excavation || []),
+    ...(displayCostBreakdown.plumbing || []),
+    ...(displayCostBreakdown.gas || []),
+    ...(displayCostBreakdown.steel || []),
+    ...(displayCostBreakdown.electrical || []),
+    ...(displayCostBreakdown.shotcreteLabor || []),
+    ...(displayCostBreakdown.shotcreteMaterial || []),
+    ...(displayCostBreakdown.tileLabor || []),
+    ...(displayCostBreakdown.tileMaterial || []),
+    ...(displayCostBreakdown.copingDeckingLabor || []),
+    ...(displayCostBreakdown.copingDeckingMaterial || []),
+    ...(displayCostBreakdown.stoneRockworkLabor || []),
+    ...(displayCostBreakdown.stoneRockworkMaterial || []),
+    ...(displayCostBreakdown.drainage || []),
+    ...(displayCostBreakdown.waterFeatures || []),
+    ...(displayCostBreakdown.equipmentOrdered || []),
+    ...(displayCostBreakdown.equipmentSet || []),
+    ...(displayCostBreakdown.cleanup || []),
+    ...(displayCostBreakdown.interiorFinish || []),
+    ...(displayCostBreakdown.waterTruck || []),
+    ...(displayCostBreakdown.fiberglassShell || []),
+    ...(displayCostBreakdown.fiberglassInstall || []),
+    ...(displayCostBreakdown.startupOrientation || []),
+    ...(displayCostBreakdown.customFeatures || []),
   ];
 
   const overrideItems = allItems.filter((item) => getRetailOverride(item) !== null);
@@ -175,39 +180,39 @@ function CostBreakdownView({
 
   // Map cost totals into retail-valued rows that sum to the retail price.
   const categoryRows = [
-    { label: 'Plans & Engineering', cost: baseTotals.plansAndEngineering ?? 0, items: costBreakdown.plansAndEngineering || [] },
-    { label: 'Layout', cost: baseTotals.layout ?? 0, items: costBreakdown.layout || [] },
-    { label: 'Permit', cost: baseTotals.permit ?? 0, items: costBreakdown.permit || [] },
-    { label: 'Excavation', cost: baseTotals.excavation ?? 0, items: costBreakdown.excavation || [] },
-    { label: 'Plumbing', cost: baseTotals.plumbing ?? 0, items: costBreakdown.plumbing || [] },
-    { label: 'Gas', cost: baseTotals.gas ?? 0, items: costBreakdown.gas || [] },
-    { label: 'Steel', cost: baseTotals.steel ?? 0, items: costBreakdown.steel || [] },
-    { label: 'Electrical', cost: baseTotals.electrical ?? 0, items: costBreakdown.electrical || [] },
-    { label: 'Shotcrete Labor', cost: baseTotals.shotcreteLabor ?? 0, items: costBreakdown.shotcreteLabor || [] },
-    { label: 'Shotcrete Material', cost: baseTotals.shotcreteMaterial ?? 0, items: costBreakdown.shotcreteMaterial || [] },
-    { label: 'Tile Labor', cost: baseTotals.tileLabor ?? 0, items: costBreakdown.tileLabor || [] },
-    { label: 'Tile Material', cost: baseTotals.tileMaterial ?? 0, items: costBreakdown.tileMaterial || [] },
-    { label: copingDeckingLaborLabel, cost: baseTotals.copingDeckingLabor ?? 0, items: costBreakdown.copingDeckingLabor || [] },
-    { label: copingDeckingMaterialLabel, cost: baseTotals.copingDeckingMaterial ?? 0, items: costBreakdown.copingDeckingMaterial || [] },
+    { label: 'Plans & Engineering', cost: baseTotals.plansAndEngineering ?? 0, items: displayCostBreakdown.plansAndEngineering || [] },
+    { label: 'Layout', cost: baseTotals.layout ?? 0, items: displayCostBreakdown.layout || [] },
+    { label: 'Permit', cost: baseTotals.permit ?? 0, items: displayCostBreakdown.permit || [] },
+    { label: 'Excavation', cost: baseTotals.excavation ?? 0, items: displayCostBreakdown.excavation || [] },
+    { label: 'Plumbing', cost: baseTotals.plumbing ?? 0, items: displayCostBreakdown.plumbing || [] },
+    { label: 'Gas', cost: baseTotals.gas ?? 0, items: displayCostBreakdown.gas || [] },
+    { label: 'Steel', cost: baseTotals.steel ?? 0, items: displayCostBreakdown.steel || [] },
+    { label: 'Electrical', cost: baseTotals.electrical ?? 0, items: displayCostBreakdown.electrical || [] },
+    { label: 'Shotcrete Labor', cost: baseTotals.shotcreteLabor ?? 0, items: displayCostBreakdown.shotcreteLabor || [] },
+    { label: 'Shotcrete Material', cost: baseTotals.shotcreteMaterial ?? 0, items: displayCostBreakdown.shotcreteMaterial || [] },
+    { label: 'Tile Labor', cost: baseTotals.tileLabor ?? 0, items: displayCostBreakdown.tileLabor || [] },
+    { label: 'Tile Material', cost: baseTotals.tileMaterial ?? 0, items: displayCostBreakdown.tileMaterial || [] },
+    { label: copingDeckingLaborLabel, cost: baseTotals.copingDeckingLabor ?? 0, items: displayCostBreakdown.copingDeckingLabor || [] },
+    { label: copingDeckingMaterialLabel, cost: baseTotals.copingDeckingMaterial ?? 0, items: displayCostBreakdown.copingDeckingMaterial || [] },
     {
       label: 'Stone/Rockwork',
       cost: (baseTotals.stoneRockworkLabor ?? 0) + (baseTotals.stoneRockworkMaterial ?? 0),
       items: [
-        ...(costBreakdown.stoneRockworkLabor || []),
-        ...(costBreakdown.stoneRockworkMaterial || []),
+        ...(displayCostBreakdown.stoneRockworkLabor || []),
+        ...(displayCostBreakdown.stoneRockworkMaterial || []),
       ],
     },
-    { label: 'Drainage', cost: baseTotals.drainage ?? 0, items: costBreakdown.drainage || [] },
-    { label: 'Equipment Ordered', cost: baseTotals.equipmentOrdered ?? 0, items: costBreakdown.equipmentOrdered || [] },
-    { label: 'Equipment Set', cost: baseTotals.equipmentSet ?? 0, items: costBreakdown.equipmentSet || [] },
-    { label: 'Water Features', cost: baseTotals.waterFeatures ?? 0, items: costBreakdown.waterFeatures || [] },
-    { label: 'Cleanup', cost: baseTotals.cleanup ?? 0, items: costBreakdown.cleanup || [] },
-    { label: 'Interior Finish', cost: baseTotals.interiorFinish ?? 0, items: costBreakdown.interiorFinish || [] },
-    { label: 'Water Truck', cost: baseTotals.waterTruck ?? 0, items: costBreakdown.waterTruck || [] },
-    { label: 'Fiberglass Shell', cost: baseTotals.fiberglassShell ?? 0, items: costBreakdown.fiberglassShell || [] },
-    { label: 'Fiberglass Install', cost: baseTotals.fiberglassInstall ?? 0, items: costBreakdown.fiberglassInstall || [] },
-    { label: 'Startup/Orientation', cost: baseTotals.startupOrientation ?? 0, items: costBreakdown.startupOrientation || [] },
-    { label: 'Custom Features', cost: baseTotals.customFeatures ?? 0, items: costBreakdown.customFeatures || [] },
+    { label: 'Drainage', cost: baseTotals.drainage ?? 0, items: displayCostBreakdown.drainage || [] },
+    { label: 'Equipment Ordered', cost: baseTotals.equipmentOrdered ?? 0, items: displayCostBreakdown.equipmentOrdered || [] },
+    { label: 'Equipment Set', cost: baseTotals.equipmentSet ?? 0, items: displayCostBreakdown.equipmentSet || [] },
+    { label: 'Water Features', cost: baseTotals.waterFeatures ?? 0, items: displayCostBreakdown.waterFeatures || [] },
+    { label: 'Cleanup', cost: baseTotals.cleanup ?? 0, items: displayCostBreakdown.cleanup || [] },
+    { label: 'Interior Finish', cost: baseTotals.interiorFinish ?? 0, items: displayCostBreakdown.interiorFinish || [] },
+    { label: 'Water Truck', cost: baseTotals.waterTruck ?? 0, items: displayCostBreakdown.waterTruck || [] },
+    { label: 'Fiberglass Shell', cost: baseTotals.fiberglassShell ?? 0, items: displayCostBreakdown.fiberglassShell || [] },
+    { label: 'Fiberglass Install', cost: baseTotals.fiberglassInstall ?? 0, items: displayCostBreakdown.fiberglassInstall || [] },
+    { label: 'Startup/Orientation', cost: baseTotals.startupOrientation ?? 0, items: displayCostBreakdown.startupOrientation || [] },
+    { label: 'Custom Features', cost: baseTotals.customFeatures ?? 0, items: displayCostBreakdown.customFeatures || [] },
   ];
 
   let runningRetailTotal = 0;

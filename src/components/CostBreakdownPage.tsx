@@ -8,6 +8,7 @@ import {
   hasLineItemSubcategory,
   isCustomOptionItem,
 } from '../utils/costBreakdownSubcategories';
+import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import './CostBreakdownPage.css';
 
@@ -79,7 +80,8 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
 
   // Recalculate with current PAP discounts and manual adjustments
   const result = MasterPricingEngine.calculateCompleteProposal(proposalForCalc, papDiscounts);
-  const { costBreakdown, pricing } = result;
+  const pricing = result.pricing;
+  const costBreakdown = normalizeCostBreakdownForDisplay(result.costBreakdown);
 
   const toggleCategory = (categoryName: string) => {
     const newExpanded = new Set(expandedCategories);

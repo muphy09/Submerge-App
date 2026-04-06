@@ -50,6 +50,7 @@ import { normalizeEquipmentLighting } from '../utils/lighting';
 import { applyActiveVersion, createVersionFromProposal, listAllVersions } from '../utils/proposalVersions';
 import { getEmptyRetiredEquipmentFlags, getRetiredEquipmentFlags, type RetiredEquipmentFlags } from '../utils/retiredEquipment';
 import { validateProposal } from '../utils/validation';
+import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay';
 import { ContractOverrides } from '../services/contractGenerator';
 import {
   buildLineItemSubcategories,
@@ -2084,7 +2085,9 @@ function ProposalView() {
       console.error('Failed to recalculate proposal for view:', error);
     }
 
-    const costBreakdownForDisplay = calculated?.costBreakdown || mergedProposal.costBreakdown;
+    const costBreakdownForDisplay = normalizeCostBreakdownForDisplay(
+      calculated?.costBreakdown || mergedProposal.costBreakdown
+    );
     const subtotal = calculated?.subtotal ?? mergedProposal.subtotal ?? 0;
     const totalCost = calculated?.totalCost ?? mergedProposal.totalCost ?? 0;
     const pricing = calculated?.pricing ?? mergedProposal.pricing;

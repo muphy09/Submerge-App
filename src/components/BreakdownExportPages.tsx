@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { resolveWarrantySections } from '../utils/warranty';
+import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay';
 import { hasIncludedDecking } from '../utils/decking';
 import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjustment } from '../types/proposal-new';
 import type { WarrantySection } from '../types/warranty';
@@ -131,10 +132,14 @@ const allItems = (costBreakdown: CostBreakdown): CostLineItem[] => [
 ];
 
 export function BreakdownCostExportPage({ costBreakdown, customerName, proposal, pricing }: CostExportProps) {
+  const displayCostBreakdown = useMemo(
+    () => normalizeCostBreakdownForDisplay(costBreakdown),
+    [costBreakdown]
+  );
   const franchiseId = proposal?.franchiseId;
   const rows = useMemo(() => {
-    const baseRows = toCostRows(costBreakdown, proposal);
-    const baseTotals = costBreakdown?.totals || ({} as CostBreakdown['totals']);
+    const baseRows = toCostRows(displayCostBreakdown, proposal);
+    const baseTotals = displayCostBreakdown?.totals || ({} as CostBreakdown['totals']);
     const costBasis =
       pricing?.totalCostsBeforeOverhead ??
       proposal?.pricing?.totalCostsBeforeOverhead ??
@@ -162,7 +167,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
 
     const retailTarget = retailPrice - adjustmentsTotal - offContractTotal;
     const retailFactor = costBasis > 0 ? retailTarget / costBasis : 1;
-    const overrideItems = allItems(costBreakdown).filter((item) => getRetailOverride(item) !== null);
+    const overrideItems = allItems(displayCostBreakdown).filter((item) => getRetailOverride(item) !== null);
     const overrideCostBasis = overrideItems.reduce((sum, item) => sum + (item.total ?? 0), 0);
     const overrideRetailTotal = overrideItems.reduce((sum, item) => sum + (getRetailOverride(item) || 0), 0);
     const remainingCostBasis = costBasis - overrideCostBasis;
@@ -206,7 +211,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
       right: combined.slice(split),
       displayRetailPrice: roundToTwo(retailPrice || (runningRetailTotal + adjustmentsTotal + offContractTotal)),
     };
-  }, [costBreakdown, pricing, proposal]);
+  }, [displayCostBreakdown, pricing, proposal]);
   const maxColumnRows = Math.max(rows.left.length, rows.right.length);
 
   return (

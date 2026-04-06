@@ -1305,6 +1305,10 @@ export class WaterFeaturesCalculations {
         quantity: selection.quantity,
         total: unitPrice * selection.quantity,
         notes: feature.note,
+        details: {
+          sourceCategory: 'Water Features',
+          waterFeatureId: feature.id,
+        },
       });
     });
 
