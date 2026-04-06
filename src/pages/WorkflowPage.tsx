@@ -21,6 +21,7 @@ import {
   markProposalAsSigned,
   markWorkflowRead,
   requestWorkflowChanges,
+  willSigningRemoveNonActiveVersions,
 } from '../services/proposalWorkflow';
 import { listFranchiseUsers, type FranchiseUser } from '../services/franchiseUsersAdapter';
 import { getProposal, listProposals, saveProposal } from '../services/proposalsAdapter';
@@ -339,6 +340,9 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const selectedApprovedVersion = selectedProposal ? getApprovedVersion(selectedProposal) : null;
   const selectedSignedVersion = selectedProposal ? getSignedVersion(selectedProposal) : null;
   const selectedDisplayVersion = selectedReviewVersion || selectedApprovedVersion || selectedSignedVersion || selectedProposal;
+  const markSignedConfirmMessage = willSigningRemoveNonActiveVersions(selectedProposal)
+    ? 'Marking as Signed will lock the current approved version, make it the signed baseline, and remove all non-active versions. All non-active versions will be removed when you do this. If changes are needed afterwards, they must be made through a Proposal Addendum.'
+    : 'Marking as Signed will lock the current approved version and make it the signed baseline. If changes are needed afterwards, they must be made through a Proposal Addendum.';
   const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
@@ -1023,7 +1027,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
               <ConfirmDialog
                 open={showMarkSignedConfirm}
                 title="Are you sure?"
-                message="Marking as Signed will lock the current approved version. Additional changes made afterwards will be added as a Proposal Addendum"
+                message={markSignedConfirmMessage}
                 confirmLabel="Yes I'm sure. Mark as Signed"
                 cancelLabel="No, take me back"
                 isLoading={Boolean(savingAction)}
@@ -1036,7 +1040,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
               <ConfirmDialog
                 open={showCompleteConfirm}
                 title="Are you sure?"
-                message="Are you sure you want to mark this proposal as complete? No further edits can be made, and it will be reconsiled in the Archive"
+                message="Are you sure you want to mark this proposal as complete? No further edits can be made, and it will be reconciled in the Archive."
                 confirmLabel="Yes, I'm sure"
                 cancelLabel="No, take me back"
                 isLoading={Boolean(savingAction)}

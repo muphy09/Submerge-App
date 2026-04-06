@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { CostLineItem, Proposal, RetailAdjustment } from '../types/proposal-new';
+import { CostLineItem, Proposal, ProposalWorkflowActor, ProposalWorkflowEvent, RetailAdjustment } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import type { ContractViewHandle } from '../components/ContractView';
 import FranchiseLogo from '../components/FranchiseLogo';
@@ -76,6 +76,7 @@ import {
   getReviewerPrimaryVersionId,
   getReviewerVisibleVersions,
   getSignedVersionId,
+  hasVersionSubmissionHistory,
   getVersionRecordStatus,
   getWorkflowSubmissionPreview,
   getWorkflowStatus,
@@ -86,6 +87,7 @@ import {
   reconcileWorkflowVersionStates,
   requestWorkflowChanges,
   submitProposalForWorkflow,
+  willSigningRemoveNonActiveVersions,
 } from '../services/proposalWorkflow';
 
 type PricingModelStatus = 'active' | 'inactive' | 'removed';
@@ -607,6 +609,7 @@ function ProposalView() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [versions, setVersions] = useState<Proposal[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
+  const [selectedVersionId, setSelectedVersionId] = useState<string>('original');
   const [loading, setLoading] = useState(true);
   const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
@@ -639,7 +642,6 @@ function ProposalView() {
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
   const [reviewerActionSaving, setReviewerActionSaving] = useState(false);
   const [versionSyncMeta, setVersionSyncMeta] = useState<Record<string, ProposalVersionSyncMeta>>({});
-  const [pendingScrollVersionId, setPendingScrollVersionId] = useState<string | null>(null);
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
   const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
@@ -647,18 +649,10 @@ function ProposalView() {
   const contractViewRef = useRef<ContractViewHandle | null>(null);
   const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const versionSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { showToast } = useToast();
   const handleContractViewRef = useCallback((instance: ContractViewHandle | null) => {
     contractViewRef.current = instance;
     setContractViewReady(Boolean(instance));
-  }, []);
-  const setVersionSectionRef = useCallback((versionId: string, node: HTMLDivElement | null) => {
-    if (node) {
-      versionSectionRefs.current[versionId] = node;
-      return;
-    }
-    delete versionSectionRefs.current[versionId];
   }, []);
   const locationState = (location.state as ProposalViewLocationState | null) ?? null;
   const sessionRole = getSessionRole();
@@ -672,11 +666,16 @@ function ProposalView() {
       ? versions.find((entry) => (entry.versionId || 'original') === activeVersionId)
       : proposal) || proposal;
   const proposalWorkflowStatus = getWorkflowStatus(proposal);
+  const hasSignedBaseline = Boolean(getSignedVersionId(proposal as Proposal));
+  const markSignedConfirmMessage = willSigningRemoveNonActiveVersions(proposal as Proposal)
+    ? 'Marking as Signed will lock the current active version, make it the signed baseline, and remove all non-active versions. All non-active versions will be removed when you do this. If changes are needed afterwards, they must be made through a Proposal Addendum.'
+    : 'Marking as Signed will lock the current active version and make it the signed baseline. If changes are needed afterwards, they must be made through a Proposal Addendum.';
   const isProposalCompleted = proposalWorkflowStatus === 'completed';
   const canManageVersionDrafts =
     !isProposalEditingRestricted &&
     !isReadOnlyReviewerView &&
     !isProposalCompleted;
+  const canChangeActiveVersion = canManageVersionDrafts && !hasSignedBaseline;
   const activeVersionRecordStatus = getVersionRecordStatus(activeEditableVersion);
   const canEditProposal =
     canManageVersionDrafts &&
@@ -691,7 +690,7 @@ function ProposalView() {
       : isProposalCompleted
       ? 'Completed proposals are locked.'
       : activeVersionRecordStatus === 'signed'
-      ? 'Signed proposal versions are locked. Use Modify Signed Proposal to create an addendum draft.'
+      ? 'Signed proposal versions are locked. Use Create Proposal Addendum to create an addendum draft.'
       : activeVersionRecordStatus === 'completed'
       ? 'Completed proposal versions are locked.'
       : undefined;
@@ -938,11 +937,13 @@ function ProposalView() {
           ? requestedVersionId
           : undefined;
       const activeId =
-        requestedVisibleVersionId ||
-        reviewerPrimaryVersionId ||
         activeApplied.activeVersionId ||
         activeApplied.versionId ||
         'original';
+      const initialSelectedVersionId =
+        requestedVisibleVersionId ||
+        reviewerPrimaryVersionId ||
+        activeId;
       const activeVersion =
         allVersions.find((v) => v.versionId === activeId) ||
         ((await mergeWithPricingSnapshot(activeApplied)) as Proposal);
@@ -955,6 +956,7 @@ function ProposalView() {
 
       setVersions(allVersions);
       setActiveVersionId(activeId);
+      setSelectedVersionId(initialSelectedVersionId);
       setProposal(ensureProposalWorkflow({ ...(activeVersion as Proposal), workflow: sourceProposal.workflow, status: sourceProposal.status }));
     } catch (error) {
       console.error('Failed to load proposal:', error);
@@ -972,6 +974,40 @@ function ProposalView() {
   useEffect(() => {
     setIsWorkflowHistoryExpanded(false);
   }, [proposal?.proposalNumber]);
+
+  useEffect(() => {
+    if (loading || !proposal) return;
+
+    const allVersionsForSelection = versions.length ? versions : listAllVersions(proposal as Proposal);
+    if (!allVersionsForSelection.length) return;
+
+    const displayContainer =
+      buildContainerFromVersions(
+        allVersionsForSelection.map((entry) => ({ ...(entry as Proposal), versions: [] })),
+        (proposal as Proposal).activeVersionId || activeVersionId
+      ) || proposal;
+    const visibleVersions = isReadOnlyReviewerView
+      ? getReviewerVisibleVersions(displayContainer as Proposal)
+      : allVersionsForSelection;
+    const hasSelectedVersion = visibleVersions.some(
+      (entry) => (entry.versionId || 'original') === selectedVersionId
+    );
+
+    if (hasSelectedVersion) return;
+
+    const fallbackSelectedVersionId =
+      (locationState?.versionId &&
+      visibleVersions.some((entry) => (entry.versionId || 'original') === locationState.versionId)
+        ? locationState.versionId
+        : undefined) ||
+      (isReadOnlyReviewerView ? getReviewerPrimaryVersionId(displayContainer as Proposal) : undefined) ||
+      activeVersionId ||
+      (proposal as Proposal).activeVersionId ||
+      visibleVersions[0]?.versionId ||
+      'original';
+
+    setSelectedVersionId(fallbackSelectedVersionId);
+  }, [activeVersionId, isReadOnlyReviewerView, loading, locationState?.versionId, proposal, selectedVersionId, versions]);
 
   useEffect(() => {
     if (!breakdownExportOpen) return;
@@ -1049,21 +1085,6 @@ function ProposalView() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!pendingScrollVersionId || typeof window === 'undefined') return;
-
-    const frame = window.requestAnimationFrame(() => {
-      const section = versionSectionRefs.current[pendingScrollVersionId];
-      if (!section) return;
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setPendingScrollVersionId(null);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [pendingScrollVersionId, proposal, versions]);
-
   const buildContainerFromVersions = (
     nextVersions: Proposal[],
     desiredActiveId?: string,
@@ -1092,11 +1113,17 @@ function ProposalView() {
     if (!canManageVersionDrafts) return;
     if (!version || isVersionPermanentlyLocked(version) || isProposalCompleted) return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
-    navigate(`/proposal/edit/${proposalNumber}`, { state: { versionId: targetVersionId, versionName: version?.versionName } });
+    navigate(`/proposal/edit/${proposalNumber}`, {
+      state: {
+        versionId: targetVersionId,
+        versionName: version?.versionName,
+        versionSnapshot: { ...version, versions: [] },
+      },
+    });
   };
 
   const handleSetActiveVersion = async (versionId: string) => {
-    if (!canManageVersionDrafts) return;
+    if (!canChangeActiveVersion) return;
     if (!proposal) return;
     const all = versions.length ? versions : listAllVersions(proposal as Proposal);
     const target = all.find((v) => (v.versionId || 'original') === versionId);
@@ -1153,6 +1180,10 @@ function ProposalView() {
 
     const remaining = all.filter((v) => (v.versionId || 'original') !== versionId);
     const nextActive = remaining.find((v) => (v.versionId || 'original') === activeVersionId) || remaining[0];
+    const nextSelected =
+      (selectedVersionId && selectedVersionId !== versionId
+        ? remaining.find((v) => (v.versionId || 'original') === selectedVersionId)
+        : null) || nextActive || remaining[0];
 
     try {
       const container = buildContainerFromVersions(
@@ -1176,6 +1207,7 @@ function ProposalView() {
       }));
       const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setActiveVersionId(activeApplied.activeVersionId || nextActive.versionId || 'original');
+      setSelectedVersionId(nextSelected?.versionId || 'original');
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
       showToast({ type: 'success', message: 'Version deleted.' });
@@ -1195,11 +1227,18 @@ function ProposalView() {
       showToast({ type: 'warning', message: 'Completed proposals cannot create new versions.' });
       return;
     }
-    if (proposalWorkflowStatus === 'signed') {
+    if (hasSignedBaseline) {
+      if (proposalWorkflowStatus !== 'signed') {
+        showToast({
+          type: 'warning',
+          message: 'Mark the current addendum as signed before creating another proposal addendum.',
+        });
+        return;
+      }
       if (existingEditableAddendumVersion) {
         showToast({
           type: 'warning',
-          message: 'A proposal addendum draft already exists. Continue editing that version or add it as a proposal addendum.',
+          message: 'A proposal addendum is already in progress. Continue working in that version before creating another addendum.',
         });
         return;
       }
@@ -1229,14 +1268,20 @@ function ProposalView() {
         activeVersionId,
       } as Proposal;
       const containerWorkflowStatus = getWorkflowStatus(container);
-      const approvedVersionId = getApprovedVersionId(container);
-      const pendingReviewVersionId = getPendingReviewVersionId(container);
       const sourceVersionId =
-        pendingReviewVersionId ||
-        approvedVersionId ||
-        proposal.versionId ||
-        activeVersionId;
-      const isAddendumDraft = containerWorkflowStatus === 'signed';
+        containerWorkflowStatus === 'signed'
+          ? getLatestSignedBaselineVersionId(container) ||
+            getApprovedVersionId(container) ||
+            getPendingReviewVersionId(container) ||
+            container.activeVersionId ||
+            proposal.versionId ||
+            activeVersionId
+          : resolvedSelectedVersionId ||
+            selectedVersionId ||
+            container.activeVersionId ||
+            proposal.versionId ||
+            activeVersionId;
+      const isAddendumDraft = Boolean(getSignedVersionId(container));
       const resolvedVersionName =
         explicitName && explicitName.trim()
           ? explicitName.trim()
@@ -1269,9 +1314,7 @@ function ProposalView() {
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
       setActiveVersionId(activeApplied.activeVersionId || preservedActiveVersionId);
-      if (isAddendumDraft && newVersion.versionId) {
-        setPendingScrollVersionId(newVersion.versionId);
-      }
+      setSelectedVersionId(newVersion.versionId || activeApplied.activeVersionId || preservedActiveVersionId);
       showToast({
         type: 'success',
         message: isAddendumDraft ? 'Proposal addendum draft created.' : 'New version created.',
@@ -1659,6 +1702,12 @@ function ProposalView() {
       return true;
     }
 
+    const baselineVersion = getSignedBaselineVersion(container);
+    if (!versionsHaveMeaningfulDifferences(version, baselineVersion)) {
+      showToast({ type: 'error', message: 'Proposal addendums must include changes before they can be submitted.' });
+      return false;
+    }
+
     const syncMeta = await resolveVersionSyncMetaForVersion(version, container);
     if (hasEquipmentChangeRequired(syncMeta?.equipmentFlags)) {
       showToast({ type: 'error', message: ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE });
@@ -1724,6 +1773,7 @@ function ProposalView() {
       }
 
       const container = draftContainer;
+      const isSignedAddendumSubmission = getWorkflowStatus(container) === 'signed';
       const payload =
         nextStatus === 'submitted'
           ? submitProposalForWorkflow(container, active.versionId || 'original', {
@@ -1738,21 +1788,34 @@ function ProposalView() {
         container.pricingModelFranchiseId || undefined
       );
       const saved = await saveProposalRemote(payload);
-      const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
+      const persistedActiveVersionId =
+        nextStatus === 'submitted'
+          ? isSignedAddendumSubmission
+            ? (saved as Proposal).activeVersionId ||
+              container.activeVersionId ||
+              activeVersionId ||
+              active.versionId ||
+              'original'
+            : active.versionId || 'original'
+          : (saved as Proposal).activeVersionId || active.versionId || 'original';
+      const savedWithPreferredActive =
+        nextStatus === 'submitted'
+          ? ({ ...(saved as Proposal), activeVersionId: persistedActiveVersionId } as Proposal)
+          : (saved as Proposal);
+      const updatedVersions = listAllVersions(savedWithPreferredActive as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
         versionId: v.versionId || 'original',
         versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
         isOriginalVersion: v.isOriginalVersion,
-        activeVersionId: v.activeVersionId,
+        activeVersionId: persistedActiveVersionId,
         versions: [],
       }));
-      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(savedWithPreferredActive as Proposal));
       const isPending = (saved as any).syncStatus === 'pending';
       setVersions(updatedVersions);
-      setActiveVersionId(activeApplied.activeVersionId || active.versionId || 'original');
+      setActiveVersionId(persistedActiveVersionId);
       setProposal(activeApplied as Proposal);
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
-      const isSignedAddendumSubmission = getWorkflowStatus(container) === 'signed';
       showToast({
         type: isPending ? 'warning' : 'success',
         message:
@@ -1763,8 +1826,10 @@ function ProposalView() {
               ? isSignedAddendumSubmission
                 ? 'Proposal addendum submitted for approval.'
                 : 'Proposal submitted for approval.'
-              : savedWorkflowStatus === 'signed' && isSignedAddendumSubmission
-              ? 'Proposal addendum added successfully.'
+              : savedWorkflowStatus === 'approved'
+              ? isSignedAddendumSubmission
+                ? 'Proposal addendum submitted. Mark it as signed when ready.'
+                : 'Proposal submitted. Mark it as signed when ready.'
               : 'Proposal submitted successfully.'
             : isPending
             ? 'Saved locally. Will sync when back online.'
@@ -2067,6 +2132,27 @@ function ProposalView() {
 
   const formatSubmittedVersionLabel = (submissionCount: number) =>
     submissionCount > 1 ? 'Resubmitted' : 'Submitted';
+
+  const getLatestWorkflowEventForVersion = (
+    history: ProposalWorkflowEvent[],
+    versionId: string,
+    type: ProposalWorkflowEvent['type']
+  ) =>
+    [...history]
+      .reverse()
+      .find((entry) => entry.type === type && (entry.versionId || 'original') === versionId) || null;
+
+  const formatWorkflowActorSummary = (
+    actor?: ProposalWorkflowActor | null,
+    at?: string | null,
+    fallback = 'Not available'
+  ) => {
+    const actorLabel = actor?.name || actor?.email || '';
+    if (!actorLabel && !at) return fallback;
+    if (actorLabel && at) return `${actorLabel} - ${new Date(at).toLocaleString()}`;
+    if (actorLabel) return actorLabel;
+    return at ? new Date(at).toLocaleString() : fallback;
+  };
 
   const getDisplayVersionLabel = (input: Proposal): string => {
     const name = input.versionName?.trim() || '';
@@ -2428,7 +2514,6 @@ function ProposalView() {
     ? getReviewerVisibleVersions(displayVersionContainer as Proposal)
     : allVersionsForRender;
   const approvedVersionId = proposal ? getApprovedVersionId(proposal as Proposal) : null;
-  const hasSignedBaseline = Boolean(getSignedVersionId(proposal as Proposal));
   const latestSignedBaselineVersionId = proposal ? getLatestSignedBaselineVersionId(proposal as Proposal) : null;
   const livePublishedVersionId =
     proposalWorkflowStatus === 'signed'
@@ -2442,52 +2527,36 @@ function ProposalView() {
             !isVersionPermanentlyLocked(entry)
         ) || null
       : null;
-  const submitDisabledReason =
-    existingEditableAddendumVersion &&
-    activeVersionRecordStatus === 'signed' &&
-    !isProposalEditingRestricted &&
-    !isReadOnlyReviewerView
-      ? 'Select the addendum draft as the Active Version or use Submit Addendum on that version card.'
-      : editDisabledReason;
   const renderPrimaryVersionId =
     (isReadOnlyReviewerView ? getReviewerPrimaryVersionId(displayVersionContainer as Proposal) : activeVersionId) ||
     activeVersionId ||
     (proposal as Proposal).activeVersionId ||
     (proposal as Proposal).versionId ||
     'original';
-  const shouldPromoteEditableVersion =
-    Boolean(renderPrimaryVersionId) &&
-    renderPrimaryVersionId !== livePublishedVersionId &&
-    versionsForRender.some((entry) => (entry.versionId || 'original') === renderPrimaryVersionId);
+  const sortVersionsByCreatedDateDesc = (left: Proposal, right: Proposal) => {
+    const leftCreated = new Date(left.createdDate || left.lastModified || 0).getTime();
+    const rightCreated = new Date(right.createdDate || right.lastModified || 0).getTime();
+    if (leftCreated !== rightCreated) return rightCreated - leftCreated;
 
-  const sortedVersions = [...versionsForRender].sort((a, b) => {
-    const aId = a.versionId || 'original';
-    const bId = b.versionId || 'original';
+    const leftUpdated = new Date(left.lastModified || left.createdDate || 0).getTime();
+    const rightUpdated = new Date(right.lastModified || right.createdDate || 0).getTime();
+    return rightUpdated - leftUpdated;
+  };
 
-    if (livePublishedVersionId) {
-      const aIsPublished = aId === livePublishedVersionId;
-      const bIsPublished = bId === livePublishedVersionId;
-      if (aIsPublished !== bIsPublished) return aIsPublished ? -1 : 1;
-    }
-
-    if (shouldPromoteEditableVersion) {
-      const aIsPrimary = aId === renderPrimaryVersionId;
-      const bIsPrimary = bId === renderPrimaryVersionId;
-      if (aIsPrimary !== bIsPrimary) return aIsPrimary ? -1 : 1;
-    }
-
-    const aIsOriginal = a.isOriginalVersion ?? (a.versionId || 'original') === 'original';
-    const bIsOriginal = b.isOriginalVersion ?? (b.versionId || 'original') === 'original';
-    if (aIsOriginal && !bIsOriginal) return -1;
-    if (bIsOriginal && !aIsOriginal) return 1;
-    return new Date(b.lastModified || b.createdDate).getTime() - new Date(a.lastModified || a.createdDate).getTime();
-  });
-
-  const viewModels = sortedVersions.map((v) => buildViewModel(v));
+  const navigationVersions = [...versionsForRender].sort(sortVersionsByCreatedDateDesc);
+  const viewModels = navigationVersions.map((v) => buildViewModel(v));
   const versionMap = new Map<string, ReturnType<typeof buildViewModel>>();
   viewModels.forEach((vm) => {
     versionMap.set(vm.proposal.versionId || 'original', vm);
   });
+  const displayPrimaryVersionId = renderPrimaryVersionId;
+  const resolvedSelectedVersionId =
+    selectedVersionId && versionMap.has(selectedVersionId)
+      ? selectedVersionId
+      : versionMap.has(displayPrimaryVersionId)
+      ? displayPrimaryVersionId
+      : viewModels[0]?.proposal.versionId || 'original';
+  const selectedView = versionMap.get(resolvedSelectedVersionId) || viewModels[0];
   const workflowHistory = [...(proposal?.workflow?.history || [])].sort(
     (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
   );
@@ -2498,30 +2567,17 @@ function ProposalView() {
     getPendingReviewVersionId(proposal as Proposal) ||
     null;
   const submittedVersionLabel =
-    proposalWorkflowStatus === 'signed' ? 'Signed' : formatSubmittedVersionLabel(submissionCount);
-  const workflowReasons = (proposal?.workflow?.approvalReasons || []).filter(
-    (reason) => reason.code !== 'manual_review'
-  );
-  const workflowStatusTooltip =
-    proposalWorkflowStatus === 'needs_approval'
-      ? 'Proposal submitted and awaiting approval. It can still be edited until it is marked as signed.'
-      : proposalWorkflowStatus === 'changes_requested'
-      ? 'Changes were requested. Continue editing this version and resubmit when ready.'
-      : proposalWorkflowStatus === 'signed'
-      ? 'Proposal is signed. Future changes must be added as proposal addendums.'
+    proposalWorkflowStatus === 'signed'
+      ? 'Signed'
       : proposalWorkflowStatus === 'approved'
-      ? 'Proposal was approved and can still be edited until it is marked as signed.'
-      : undefined;
+      ? 'Approved'
+      : formatSubmittedVersionLabel(submissionCount);
+  const activeVersionCanComplete = proposalWorkflowStatus === 'signed';
+  const completeActionDisabledReason = activeVersionCanComplete
+    ? undefined
+    : 'A proposal version must be signed before the proposal can be completed.';
   const versionActionLabel =
-    proposalWorkflowStatus === 'signed' ? 'Modify Signed Proposal' : 'Build Another Version';
-  const workflowReviewVersionLabel =
-    sortedVersions.find(
-      (entry) =>
-        (entry.versionId || 'original') ===
-        (getPendingReviewVersionId(proposal as Proposal) || livePublishedVersionId || '')
-    )?.versionName ||
-    proposal?.versionName ||
-    'Current Version';
+    proposalWorkflowStatus === 'signed' ? 'Create Proposal Addendum' : 'Build Another Version';
   const isEditableAddendumVersion = (version?: Partial<Proposal> | null) => {
     if (!hasSignedBaseline || !version) return false;
     return (
@@ -2529,14 +2585,78 @@ function ProposalView() {
       getVersionIdKey(version) !== (livePublishedVersionId || '')
     );
   };
-  const activeVersionIsSignedAddendumDraft = isEditableAddendumVersion(activeEditableVersion);
-  const submitActionLabel = hasSignedBaseline ? 'Submit Addendum' : 'Submit Proposal';
-  const activeVersionHasEquipmentChangeRequired = hasEquipmentChangeRequired(
-    getCachedVersionSyncMeta(activeEditableVersion)?.equipmentFlags
-  );
-  const activeAddendumSubmitBlocked = activeVersionIsSignedAddendumDraft && activeVersionHasEquipmentChangeRequired;
-  const displayPrimaryVersionId = renderPrimaryVersionId;
   const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
+  const selectedViewModel = selectedView || primaryView;
+  const selectedVersionIdKey = selectedViewModel?.proposal.versionId || 'original';
+  const selectedVersionRecordStatus = getVersionRecordStatus(selectedViewModel?.proposal);
+  const selectedVersionSubmittedEvent = getLatestWorkflowEventForVersion(
+    workflowHistory,
+    selectedVersionIdKey,
+    'submitted'
+  );
+  const selectedVersionApprovedEvent = getLatestWorkflowEventForVersion(
+    workflowHistory,
+    selectedVersionIdKey,
+    'approved'
+  );
+  const selectedVersionSignedEvent = getLatestWorkflowEventForVersion(
+    workflowHistory,
+    selectedVersionIdKey,
+    'signed'
+  );
+  const selectedVersionCompletedEvent = getLatestWorkflowEventForVersion(
+    workflowHistory,
+    selectedVersionIdKey,
+    'completed'
+  );
+  const selectedVersionStatusLabel =
+    selectedViewModel &&
+    hasSignedBaseline &&
+    isEditableAddendumVersion(selectedViewModel.proposal) &&
+    selectedVersionRecordStatus === 'draft'
+      ? 'Addendum Draft'
+      : formatWorkflowStatusLabel(selectedVersionRecordStatus);
+  const selectedVersionStatusTone =
+    selectedViewModel &&
+    hasSignedBaseline &&
+    isEditableAddendumVersion(selectedViewModel.proposal) &&
+    selectedVersionRecordStatus === 'draft'
+      ? 'draft'
+      : selectedVersionRecordStatus;
+  const selectedWorkflowStatusTooltip =
+    selectedViewModel &&
+    hasSignedBaseline &&
+    isEditableAddendumVersion(selectedViewModel.proposal) &&
+    selectedVersionRecordStatus === 'draft'
+      ? 'This proposal addendum is still a draft. Submit it, then mark it as signed when ready to make it the next signed baseline.'
+      : selectedVersionRecordStatus === 'needs_approval'
+      ? 'This proposal version is submitted and awaiting approval.'
+      : !hasSignedBaseline &&
+        selectedVersionRecordStatus === 'draft' &&
+        hasVersionSubmissionHistory(proposal as Proposal, selectedVersionIdKey)
+      ? 'This proposal version was edited after submission and must be resubmitted before it can be signed.'
+      : selectedVersionRecordStatus === 'changes_requested'
+      ? 'Changes were requested for this version. Continue editing and resubmit when ready.'
+      : selectedVersionRecordStatus === 'signed'
+      ? 'This proposal version is signed. Future changes must be added as proposal addendums.'
+      : selectedVersionRecordStatus === 'approved'
+      ? 'This proposal version was approved and can still be marked as signed.'
+      : selectedVersionRecordStatus === 'completed'
+      ? 'This proposal version is complete.'
+      : undefined;
+  const selectedWorkflowReasons = (
+    (selectedVersionSubmittedEvent?.metadata?.reasons as Array<{ code?: string; label?: string; detail?: string }> | undefined) || []
+  ).filter((reason) => reason.code !== 'manual_review' && reason.label);
+  const selectedVersionSubmittedAt =
+    selectedVersionSubmittedEvent?.createdAt || selectedViewModel?.proposal.versionSubmittedAt || null;
+  const selectedVersionSubmittedBy =
+    selectedVersionSubmittedEvent?.actor || selectedViewModel?.proposal.versionSubmittedBy || null;
+  const selectedVersionApprovalAt = selectedVersionApprovedEvent?.createdAt || null;
+  const selectedVersionApprovalBy = selectedVersionApprovedEvent?.actor || null;
+  const selectedVersionSignedAt = selectedVersionSignedEvent?.createdAt || null;
+  const selectedVersionSignedBy = selectedVersionSignedEvent?.actor || null;
+  const selectedVersionCompletedAt = selectedVersionCompletedEvent?.createdAt || null;
+  const selectedVersionCompletedBy = selectedVersionCompletedEvent?.actor || null;
   const customerModalView = customerBreakdownVersionId
     ? versionMap.get(customerBreakdownVersionId) || primaryView
     : null;
@@ -2559,7 +2679,7 @@ function ProposalView() {
     !canManageVersionDrafts
       ? editDisabledReason
       : contractVersionRecordStatus === 'signed'
-      ? 'Signed proposal versions are locked. Use Modify Signed Proposal to create an addendum draft.'
+      ? 'Signed proposal versions are locked. Use Create Proposal Addendum to create an addendum draft.'
       : contractVersionRecordStatus === 'completed'
       ? 'Completed proposal versions are locked.'
       : undefined;
@@ -2575,17 +2695,15 @@ function ProposalView() {
     : null;
   const isSubmittingSignedAddendum =
     isEditableAddendumVersion(submitTargetVersion);
-  const hasMultipleVersions = viewModels.length > 1;
-  const submitActionDisabledReason =
-    activeAddendumSubmitBlocked
-      ? ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
-      : !canEditProposal
-      ? submitDisabledReason
-      : !canSubmitProposal
-      ? 'Must include Customer Name'
-      : undefined;
-  const isSubmitActionDisabled =
-    !canEditProposal || loading || !canSubmitProposal || activeAddendumSubmitBlocked;
+  const activeVersionForDisplay =
+    allVersionsForRender.find((entry) => (entry.versionId || 'original') === activeVersionId) || proposal;
+  const activeVersionLabel = activeVersionForDisplay ? getDisplayVersionLabel(activeVersionForDisplay as Proposal) : 'Original';
+  const activeVersionLockTooltip =
+    proposalWorkflowStatus === 'approved'
+      ? 'Active version is locked after signing. Mark this approved addendum as signed to promote the new baseline.'
+      : proposalWorkflowStatus === 'needs_approval'
+      ? 'Active version is locked after signing. This addendum must be approved before it can be marked as signed and become the new baseline.'
+      : 'Active version is locked after signing. Submit and sign an addendum to promote a new signed baseline.';
   const shouldRenderBreakdownExport = breakdownExportActive || breakdownExporting;
   const ContractViewComponent = loadedContractView;
   const BreakdownCostExportPageComponent = loadedBreakdownExportPages?.BreakdownCostExportPage;
@@ -2612,6 +2730,115 @@ function ProposalView() {
 
   const renderTotal = (item: CostLineItem): string =>
     isOffContractLineItem(item) ? 'OFF CONTRACT' : formatCurrency(item.total);
+
+  const formatVersionDateTime = (value?: string | null): string => {
+    if (!value) return 'Unknown';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return 'Unknown';
+    return parsed.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const getSignedBaselineVersion = (container?: Proposal | null) => {
+    if (!container) return null;
+    const baselineVersionId = getLatestSignedBaselineVersionId(container);
+    if (!baselineVersionId) return null;
+    return (
+      listAllVersions(container).find((entry) => (entry.versionId || 'original') === baselineVersionId) || null
+    );
+  };
+
+  const buildComparableVersionSnapshot = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map((entry) => buildComparableVersionSnapshot(entry));
+    }
+    if (value && typeof value === 'object') {
+      const ignoredKeys = new Set([
+        'activeVersionId',
+        'createdDate',
+        'isOriginalVersion',
+        'lastModified',
+        'proposalNumber',
+        'status',
+        'syncMessage',
+        'syncStatus',
+        'versionId',
+        'versionLocked',
+        'versionLockedAt',
+        'versionName',
+        'versionSubmittedAt',
+        'versionSubmittedBy',
+        'versions',
+        'workflow',
+      ]);
+      return Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => !ignoredKeys.has(key))
+        .sort(([left], [right]) => left.localeCompare(right))
+        .reduce<Record<string, unknown>>((accumulator, [key, entryValue]) => {
+          accumulator[key] = buildComparableVersionSnapshot(entryValue);
+          return accumulator;
+        }, {});
+    }
+    return value ?? null;
+  };
+
+  const versionsHaveMeaningfulDifferences = (
+    candidateVersion?: Proposal | null,
+    baselineVersion?: Proposal | null
+  ) => {
+    if (!candidateVersion || !baselineVersion) return true;
+    return (
+      JSON.stringify(buildComparableVersionSnapshot(candidateVersion)) !==
+      JSON.stringify(buildComparableVersionSnapshot(baselineVersion))
+    );
+  };
+
+  const getVersionStatusTone = (version: Proposal): string => {
+    const versionId = version.versionId || 'original';
+    const versionStatus = getVersionRecordStatus(version);
+
+    if (versionId === activeVersionId) return 'active';
+    if (versionId === submittedVersionId) {
+      if (proposalWorkflowStatus === 'signed') return 'signed';
+      if (proposalWorkflowStatus === 'approved') return 'approved';
+      return 'submitted';
+    }
+    if (versionStatus === 'approved') return 'approved';
+    if (versionStatus === 'signed') return 'signed';
+    if (versionStatus === 'completed') return 'completed';
+    if (versionStatus === 'submitted') return 'submitted';
+    return 'draft';
+  };
+
+  const getVersionStatusLabel = (version: Proposal): string => {
+    const versionId = version.versionId || 'original';
+    const versionStatus = getVersionRecordStatus(version);
+
+    if (versionId === submittedVersionId) {
+      return submittedVersionLabel;
+    }
+    if (hasSignedBaseline && isEditableAddendumVersion(version)) {
+      return 'Addendum Draft';
+    }
+    return formatWorkflowStatusLabel(versionStatus);
+  };
+
+  const getVersionNavBadges = (version: Proposal) => {
+    const versionId = version.versionId || 'original';
+    const badges: Array<{ label: string; tone: string }> = [];
+
+    if (versionId === activeVersionId) {
+      badges.push({ label: 'Active', tone: 'active' });
+    }
+    badges.push({ label: getVersionStatusLabel(version), tone: getVersionStatusTone(version) });
+
+    return badges;
+  };
 
   const getCategoryClassName = (categoryName: string): string => {
     const classMap: { [key: string]: string } = {
@@ -2983,70 +3210,16 @@ function ProposalView() {
     </div>
   );
 
-  const renderVersionSection = (vm: ReturnType<typeof buildViewModel>, index: number) => {
-    const versionId = vm.proposal.versionId || `version-${index}`;
-    const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
+  const renderSelectedVersionSection = (vm: ReturnType<typeof buildViewModel>) => {
+    const versionId = vm.proposal.versionId || 'original';
     const versionLabel = getDisplayVersionLabel(vm.proposal);
     const isActive = versionId === activeVersionId;
     const isSubmittedVersion = Boolean(submittedVersionId) && versionId === submittedVersionId;
     const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
-    const versionRecordStatus = getVersionRecordStatus(vm.proposal);
-    const canEditVersion =
-      canManageVersionDrafts &&
-      !isVersionPermanentlyLocked(vm.proposal) &&
-      !isProposalCompleted;
-    const canDeleteVersion =
-      canManageVersionDrafts &&
-      !isOriginal &&
-      !isSubmittedVersionLocked(vm.proposal) &&
-      !isProposalCompleted;
-    const showMarkAsSignedButton =
-      !isProposalEditingRestricted &&
-      proposalWorkflowStatus === 'approved' &&
-      isLivePublishedVersion;
-    const canMarkAsSignedVersion = showMarkAsSignedButton && !vm.hasEquipmentChangeRequired;
-    const markAsSignedDisabledReason = vm.hasEquipmentChangeRequired
-      ? MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
-      : undefined;
-    const showSubmitAddendumButton =
-      !isReadOnlyReviewerView &&
-      hasSignedBaseline &&
-      !isProposalCompleted &&
-      isEditableAddendumVersion(vm.proposal);
-    const canSubmitAddendumVersion = showSubmitAddendumButton && !vm.hasEquipmentChangeRequired;
-    const addendumSubmitDisabledReason = vm.hasEquipmentChangeRequired
-      ? ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
-      : undefined;
-    const showDeleteButton = !isReadOnlyReviewerView && !isOriginal && !isActive && !showMarkAsSignedButton;
-    const versionActionReason =
-      !canManageVersionDrafts
-        ? editDisabledReason
-        : isProposalCompleted
-        ? 'Completed proposals are locked.'
-        : versionRecordStatus === 'signed'
-        ? 'Signed proposal versions are locked. Create a new version to prepare an addendum.'
-        : versionRecordStatus === 'completed'
-        ? 'Completed proposal versions are locked.'
-        : undefined;
-    const versionDividerTitle = hasSignedBaseline
-      ? versionLabel
-      : index === 1 && livePublishedVersionId
-      ? 'Other Versions'
-      : `Additional Version - ${versionLabel}`;
 
     return (
-      <div
-        key={versionId}
-        ref={(node) => setVersionSectionRef(versionId, node)}
-        className={`version-section ${index > 0 ? 'has-divider' : ''}`}
-      >
-        {index > 0 && (
-          <>
-            <div className="version-divider-title">{versionDividerTitle}</div>
-            <div className="version-divider" />
-          </>
-        )}
+      <div className="version-section">
         <div
           className={`hero-card${isLivePublishedVersion ? ' is-live-published-version' : ''}${
             proposalWorkflowStatus === 'signed' && isLivePublishedVersion ? ' is-signed-version' : ''
@@ -3060,57 +3233,9 @@ function ProposalView() {
               <h2 className="hero-title">
                 <span className="hero-title-text">{vm.customerLocation}</span>
                 <span className="hero-title-separator">-</span>
-                <span className={`version-pill ${isActive ? 'active' : 'inactive'}`}>
-                  {versionLabel}
-                </span>
+                <span className={`version-pill ${isActive ? 'active' : 'inactive'}`}>{versionLabel}</span>
                 {isSubmittedVersion && <span className="version-status-pill">{submittedVersionLabel}</span>}
               </h2>
-            </div>
-            <div className="hero-actions">
-              {showSubmitAddendumButton && (
-                <TooltipAnchor tooltip={addendumSubmitDisabledReason}>
-                  <button
-                    className="action-button primary"
-                    onClick={() => {
-                      void handleSubmitProposal(versionId);
-                    }}
-                    disabled={!canSubmitAddendumVersion}
-                  >
-                    Submit Addendum
-                  </button>
-                </TooltipAnchor>
-              )}
-              <TooltipAnchor tooltip={versionActionReason}>
-                <button
-                  className="action-button"
-                  onClick={() => handleEdit(vm.proposal)}
-                  disabled={!canEditVersion}
-                >
-                  Edit Proposal
-                </button>
-              </TooltipAnchor>
-              {showMarkAsSignedButton && (
-                <TooltipAnchor tooltip={markAsSignedDisabledReason}>
-                  <button
-                    className="action-button primary"
-                    onClick={() => setShowMarkSignedConfirm(true)}
-                    disabled={!canMarkAsSignedVersion || reviewerActionSaving}
-                  >
-                    Mark as Signed
-                  </button>
-                </TooltipAnchor>
-              )}
-              {showDeleteButton && (
-                <TooltipAnchor tooltip={versionActionReason}>
-                  <button
-                    className="action-button danger"
-                    onClick={() => handleDeleteVersion(versionId)}
-                    disabled={!canDeleteVersion}
-                  >
-                    Delete Version
-                  </button>
-                </TooltipAnchor>
-              )}
             </div>
           </div>
 
@@ -3118,91 +3243,38 @@ function ProposalView() {
             <p className="hero-section-title hero-section-title-specs">
               <span>Pool Specifications</span>
               <TooltipAnchor tooltip={getPricingModelStatusTooltip(vm.priceModelStatus)}>
-                <span
-                  className={`hero-price-model ${vm.priceModelStatus}`}
-                  aria-label={getPricingModelStatusTooltip(vm.priceModelStatus)}
-                >
+                <span className={`hero-price-model ${vm.priceModelStatus}`} aria-label={getPricingModelStatusTooltip(vm.priceModelStatus)}>
                   {getPricingModelDisplayName(vm.priceModel, vm.priceModelStatus)}
                 </span>
               </TooltipAnchor>
             </p>
             <p className="hero-section-title hero-section-title-equipment">
               <span>Pool Equipment</span>
-              {vm.equipmentPackageLabel && (
-                <span className="hero-equipment-package-pill">{vm.equipmentPackageLabel}</span>
-              )}
+              {vm.equipmentPackageLabel && <span className="hero-equipment-package-pill">{vm.equipmentPackageLabel}</span>}
             </p>
             <div className="hero-column">
-              <div className="hero-line">
-                <span className="hero-label">Pool Type:</span>
-                <OverflowTooltipText>{vm.poolTypeLabel}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Max Width:</span>
-                <OverflowTooltipText>{vm.maxWidth}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Shallow Depth:</span>
-                <OverflowTooltipText>{vm.shallowDepth}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Spa Length:</span>
-                <OverflowTooltipText>{vm.spaLength}</OverflowTooltipText>
-              </div>
+              <div className="hero-line"><span className="hero-label">Pool Type:</span><OverflowTooltipText>{vm.poolTypeLabel}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Max Width:</span><OverflowTooltipText>{vm.maxWidth}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Shallow Depth:</span><OverflowTooltipText>{vm.shallowDepth}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Spa Length:</span><OverflowTooltipText>{vm.spaLength}</OverflowTooltipText></div>
             </div>
             <div className="hero-column">
-              <div className="hero-line">
-                <span className="hero-label">Approx. Gallons:</span>
-                <OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Max Length:</span>
-                <OverflowTooltipText>{vm.maxLength}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">End Depth:</span>
-                <OverflowTooltipText>{vm.endDepth}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Spa Width:</span>
-                <OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText>
-              </div>
+              <div className="hero-line"><span className="hero-label">Approx. Gallons:</span><OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Max Length:</span><OverflowTooltipText>{vm.maxLength}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">End Depth:</span><OverflowTooltipText>{vm.endDepth}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Spa Width:</span><OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText></div>
             </div>
             <div className="hero-column">
-              <div className="hero-line">
-                <span className="hero-label">Pump:</span>
-                <OverflowTooltipText>{vm.pumpSummary}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Filter:</span>
-                <OverflowTooltipText>{vm.filterSummary}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Heater:</span>
-                <OverflowTooltipText>{vm.heaterSummary}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Cleaner:</span>
-                <OverflowTooltipText>{vm.cleanerSummary}</OverflowTooltipText>
-              </div>
+              <div className="hero-line"><span className="hero-label">Pump:</span><OverflowTooltipText>{vm.pumpSummary}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Filter:</span><OverflowTooltipText>{vm.filterSummary}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Heater:</span><OverflowTooltipText>{vm.heaterSummary}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Cleaner:</span><OverflowTooltipText>{vm.cleanerSummary}</OverflowTooltipText></div>
             </div>
             <div className="hero-column">
-              <div className="hero-line">
-                <span className="hero-label">Automation:</span>
-                <OverflowTooltipText>{vm.automationSummary}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Sanitation:</span>
-                <OverflowTooltipText>{vm.sanitationSummary}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Autofill:</span>
-                <OverflowTooltipText>{vm.autoFillSummary}</OverflowTooltipText>
-              </div>
-              <div className="hero-line">
-                <span className="hero-label">Pool Light:</span>
-                <OverflowTooltipText>{vm.poolLightSummary}</OverflowTooltipText>
-              </div>
+              <div className="hero-line"><span className="hero-label">Automation:</span><OverflowTooltipText>{vm.automationSummary}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Sanitation:</span><OverflowTooltipText>{vm.sanitationSummary}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Autofill:</span><OverflowTooltipText>{vm.autoFillSummary}</OverflowTooltipText></div>
+              <div className="hero-line"><span className="hero-label">Pool Light:</span><OverflowTooltipText>{vm.poolLightSummary}</OverflowTooltipText></div>
             </div>
           </div>
 
@@ -3219,283 +3291,580 @@ function ProposalView() {
     );
   };
 
-  return (
-    <div className="proposal-view">
-      {!isReadOnlyReviewerView && (
-        <div className="view-actions no-print">
-          <div className="action-bar">
-            <div className="action-bar-left">
-              <button className="action-button" onClick={() => navigate('/')}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M10 13L5 8L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Back to Home
-              </button>
-            </div>
-            <div className="action-bar-center">
-              {hasMultipleVersions && (
-                <div className="version-switcher">
-                  <label htmlFor="active-version">Active Version:</label>
-                  <TooltipAnchor tooltip={editDisabledReason}>
-                    <select
-                      id="active-version"
-                      value={isReadOnlyReviewerView ? displayPrimaryVersionId : activeVersionId}
-                      onChange={(e) => handleSetActiveVersion(e.target.value)}
-                      disabled={!canManageVersionDrafts}
-                    >
-                      {viewModels.map((vm) => (
-                        <option key={vm.proposal.versionId || 'original'} value={vm.proposal.versionId || 'original'}>
-                          {getDisplayVersionLabel(vm.proposal)}
-                        </option>
-                      ))}
-                    </select>
-                  </TooltipAnchor>
-                </div>
-              )}
-            </div>
-            <div className="action-bar-right">
+  const renderVersionActionsCard = (vm: ReturnType<typeof buildViewModel>) => {
+    const versionId = vm.proposal.versionId || 'original';
+    const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
+    const isActive = versionId === activeVersionId;
+    const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
+    const versionRecordStatus = getVersionRecordStatus(vm.proposal);
+    const isEditableAddendum = hasSignedBaseline && isEditableAddendumVersion(vm.proposal);
+    const baselineVersion = hasSignedBaseline ? getSignedBaselineVersion(proposal as Proposal) : null;
+    const hasAddendumDifferences = isEditableAddendum
+      ? versionsHaveMeaningfulDifferences(vm.proposal, baselineVersion)
+      : true;
+    const versionHasSubmissionHistory =
+      !hasSignedBaseline && hasVersionSubmissionHistory(proposal as Proposal, versionId);
+    const hasVersionBeenSubmitted =
+      versionRecordStatus === 'submitted' ||
+      versionRecordStatus === 'needs_approval' ||
+      versionRecordStatus === 'approved';
+    const canEditVersion =
+      canManageVersionDrafts &&
+      !isVersionPermanentlyLocked(vm.proposal) &&
+      !isProposalCompleted;
+    const showMarkAsSignedButton =
+      !isProposalEditingRestricted &&
+      versionRecordStatus === 'approved' &&
+      isLivePublishedVersion &&
+      isActive;
+    const canMarkAsSignedVersion = showMarkAsSignedButton && !vm.hasEquipmentChangeRequired;
+    const markAsSignedDisabledReason = vm.hasEquipmentChangeRequired
+      ? MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
+      : undefined;
+    const editVersionDisabledReason =
+      !canManageVersionDrafts
+        ? editDisabledReason
+        : isProposalCompleted
+        ? 'Completed proposals are locked.'
+        : versionRecordStatus === 'signed'
+        ? 'Signed proposal versions are locked. Create a proposal addendum to make changes.'
+        : versionRecordStatus === 'completed'
+        ? 'Completed proposal versions are locked.'
+        : undefined;
+    const deleteVersionDisabledReason =
+      !canManageVersionDrafts
+        ? editDisabledReason
+        : isProposalCompleted
+        ? 'Completed proposals are locked.'
+        : isOriginal
+        ? 'The original version cannot be deleted.'
+        : isActive
+        ? 'Select a different Active Version before deleting this version.'
+        : isSubmittedVersionLocked(vm.proposal)
+        ? 'Submitted versions cannot be deleted.'
+        : undefined;
+    const canDeleteVersion = !deleteVersionDisabledReason;
+    const shouldRenderModifySignedAction =
+      !isReadOnlyReviewerView &&
+      proposalWorkflowStatus === 'signed' &&
+      isActive &&
+      versionRecordStatus === 'signed';
+    const modifySignedDisabledReason =
+      !canManageVersionDrafts
+        ? editDisabledReason
+        : existingEditableAddendumVersion
+        ? 'A proposal addendum is already in progress. Continue working in that version before creating another addendum.'
+        : undefined;
+    const shouldRenderSubmitAction = shouldRenderModifySignedAction || !(
+      proposalWorkflowStatus === 'signed' &&
+      versionRecordStatus === 'signed' &&
+      !isEditableAddendum
+    );
+    const shouldRenderPrimarySubmitAction =
+      shouldRenderModifySignedAction ||
+      (shouldRenderSubmitAction && !hasVersionBeenSubmitted && !showMarkAsSignedButton);
+    const submitActionLabel = shouldRenderModifySignedAction
+      ? 'Create Proposal Addendum'
+      : isEditableAddendum
+      ? 'Submit Addendum'
+      : versionHasSubmissionHistory
+      ? 'Resubmit Proposal'
+      : 'Submit Proposal';
+    const submitActionDisabledReason = shouldRenderModifySignedAction
+      ? modifySignedDisabledReason
+      : !canManageVersionDrafts
+      ? editDisabledReason
+      : isEditableAddendum && !hasAddendumDifferences
+      ? 'Proposal addendums must differ from the current signed baseline before they can be submitted.'
+      : isEditableAddendum && vm.hasEquipmentChangeRequired
+      ? ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
+      : !canSubmitProposal
+      ? 'Must include Customer Name'
+      : undefined;
+    const canUseSubmitAction = !submitActionDisabledReason;
+
+    return (
+      <div className="proposal-side-card">
+        <div className="proposal-side-card-header">
+          <div>
+            <p className="proposal-side-card-kicker">Selected Version Actions</p>
+            <h2>{getDisplayVersionLabel(vm.proposal)}</h2>
+          </div>
+        </div>
+        <div className="proposal-side-card-body">
+          <div className="side-action-stack">
+            {showMarkAsSignedButton && (
+              <TooltipAnchor tooltip={markAsSignedDisabledReason}>
+                <button
+                  className="action-button primary side-action-button"
+                  onClick={() => setShowMarkSignedConfirm(true)}
+                  disabled={!canMarkAsSignedVersion || reviewerActionSaving}
+                >
+                  Mark as Signed
+                </button>
+              </TooltipAnchor>
+            )}
+            {shouldRenderPrimarySubmitAction && (
               <TooltipAnchor tooltip={submitActionDisabledReason}>
                 <button
-                  className="action-button primary workflow-summary-submit-button"
+                  className="action-button primary side-action-button"
                   onClick={() => {
-                    void handleSubmitProposal();
+                    if (shouldRenderModifySignedAction) {
+                      handleBuildAnotherVersion();
+                      return;
+                    }
+                    void handleSubmitProposal(versionId);
                   }}
-                  disabled={isSubmitActionDisabled}
+                  disabled={!canUseSubmitAction}
                 >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
                   {submitActionLabel}
                 </button>
               </TooltipAnchor>
-            </div>
+            )}
+            <TooltipAnchor tooltip={editVersionDisabledReason}>
+              <button
+                className="action-button side-action-button"
+                onClick={() => handleEdit(vm.proposal)}
+                disabled={!canEditVersion}
+              >
+                Edit Proposal
+              </button>
+            </TooltipAnchor>
+            <TooltipAnchor tooltip={deleteVersionDisabledReason}>
+              <button
+                className="action-button danger side-action-button"
+                onClick={() => handleDeleteVersion(versionId)}
+                disabled={!canDeleteVersion}
+              >
+                Delete Version
+              </button>
+            </TooltipAnchor>
           </div>
         </div>
-      )}
+      </div>
+    );
+  };
 
-      {proposal?.workflow && (
-        <div className="workflow-summary-card no-print">
-          <div className="workflow-summary-header">
-            <div className="workflow-summary-heading">
-              <p className="workflow-summary-kicker">Submission Workflow</p>
-              <TooltipAnchor as="div" tooltip={workflowStatusTooltip}>
-                <div className={`workflow-summary-pill is-${proposalWorkflowStatus}`}>
-                  {formatWorkflowStatusLabel(proposalWorkflowStatus)}
-                </div>
+  const renderProposalActionsCard = () => {
+    const showBuildAnotherVersionButton =
+      !isReadOnlyReviewerView &&
+      !hasSignedBaseline &&
+      proposalWorkflowStatus !== 'signed';
+    const hasReviewerActions =
+      isReadOnlyReviewerView &&
+      (proposalWorkflowStatus === 'needs_approval' ||
+        proposalWorkflowStatus === 'approved' ||
+        (proposalWorkflowStatus !== 'completed' && proposalWorkflowStatus !== 'signed') ||
+        proposalWorkflowStatus === 'signed');
+
+    if (!showBuildAnotherVersionButton && !hasReviewerActions) return null;
+
+    return (
+      <div className="proposal-side-card no-print">
+        <div className="proposal-side-card-header">
+          <div>
+            <p className="proposal-side-card-kicker">Proposal Actions</p>
+            <h2>Workflow Controls</h2>
+          </div>
+        </div>
+        <div className="proposal-side-card-body">
+          <div className="side-action-stack">
+            {!isReadOnlyReviewerView && (
+              <TooltipAnchor tooltip={!canManageVersionDrafts ? editDisabledReason : undefined}>
+                <button
+                  className="action-button action-button-version side-action-button"
+                  onClick={handleBuildAnotherVersion}
+                  disabled={!canManageVersionDrafts}
+                >
+                  {versionActionLabel}
+                </button>
               </TooltipAnchor>
-            </div>
-            <div className="workflow-summary-header-actions">
-              {isReadOnlyReviewerView ? (
-                <>
-                  <button
-                    className="action-button workflow-summary-reviewer-button"
-                    onClick={handleReviewerBack}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M10 13L5 8L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    {reviewerBackLabel}
-                  </button>
-                  {proposalWorkflowStatus === 'needs_approval' && (
-                    <button
-                      className="action-button primary workflow-summary-reviewer-button"
-                      onClick={() => {
-                        void handleReviewerApprove();
-                      }}
-                      disabled={reviewerActionSaving}
-                    >
-                      Approve
-                    </button>
-                  )}
-                  {proposalWorkflowStatus !== 'completed' && proposalWorkflowStatus !== 'signed' && (
-                    <button
-                      className="action-button danger workflow-summary-reviewer-button"
-                      onClick={() => {
-                        void handleReviewerRequestChanges();
-                      }}
-                      disabled={reviewerActionSaving}
-                    >
-                      Request Changes
-                    </button>
-                  )}
-                  {proposalWorkflowStatus === 'approved' && (
-                    <button
-                      className="action-button primary workflow-summary-reviewer-button"
-                      onClick={() => setShowMarkSignedConfirm(true)}
-                      disabled={reviewerActionSaving}
-                    >
-                      Mark as Signed
-                    </button>
-                  )}
-                  {proposalWorkflowStatus === 'signed' && (
-                    <button
-                      className="action-button primary workflow-summary-reviewer-button"
-                      onClick={() => setShowCompleteConfirm(true)}
-                      disabled={reviewerActionSaving}
-                    >
-                      Mark Complete
-                    </button>
-                  )}
-                </>
-              ) : (
-                <TooltipAnchor tooltip={!canManageVersionDrafts ? editDisabledReason : undefined}>
-                  <button
-                    className="action-button action-button-version workflow-summary-version-button"
-                    onClick={handleBuildAnotherVersion}
-                    disabled={!canManageVersionDrafts}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M8 1v14M1 8h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    {versionActionLabel}
-                  </button>
-                </TooltipAnchor>
+            )}
+            {isReadOnlyReviewerView && proposalWorkflowStatus === 'needs_approval' && (
+              <button
+                className="action-button primary side-action-button"
+                onClick={() => {
+                  void handleReviewerApprove();
+                }}
+                disabled={reviewerActionSaving}
+              >
+                Approve
+              </button>
+            )}
+            {isReadOnlyReviewerView && proposalWorkflowStatus !== 'completed' && proposalWorkflowStatus !== 'signed' && (
+              <button
+                className="action-button danger side-action-button"
+                onClick={() => {
+                  void handleReviewerRequestChanges();
+                }}
+                disabled={reviewerActionSaving}
+              >
+                Request Changes
+              </button>
+            )}
+            {isReadOnlyReviewerView && proposalWorkflowStatus === 'approved' && (
+              <button
+                className="action-button primary side-action-button"
+                onClick={() => setShowMarkSignedConfirm(true)}
+                disabled={reviewerActionSaving}
+              >
+                Mark as Signed
+              </button>
+            )}
+            {isReadOnlyReviewerView && proposalWorkflowStatus === 'signed' && (
+              <button
+                className="action-button primary side-action-button"
+                onClick={() => setShowCompleteConfirm(true)}
+                disabled={reviewerActionSaving}
+              >
+                Mark Complete
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderWorkflowSummaryCard = () => (
+    <div className="proposal-side-card no-print">
+      <div className="proposal-side-card-header">
+        <div className="workflow-summary-heading">
+          <p className="proposal-side-card-kicker">Submission Workflow</p>
+          <h2>Proposal Status</h2>
+        </div>
+        <TooltipAnchor as="div" tooltip={selectedWorkflowStatusTooltip}>
+          <div className={`workflow-summary-pill is-${selectedVersionStatusTone}`}>
+            {selectedVersionStatusLabel}
+          </div>
+        </TooltipAnchor>
+      </div>
+
+      <div className="proposal-side-card-body">
+        <div className="workflow-summary-grid">
+          <div className="workflow-summary-block">
+            <div className="workflow-summary-label">Selected Version</div>
+            <div className="workflow-summary-value">{getDisplayVersionLabel(selectedViewModel.proposal)}</div>
+          </div>
+          <div className="workflow-summary-block">
+            <div className="workflow-summary-label">Submitted</div>
+            <div className="workflow-summary-value">
+              {formatWorkflowActorSummary(
+                selectedVersionSubmittedBy,
+                selectedVersionSubmittedAt,
+                'Not submitted'
               )}
             </div>
           </div>
-
-          <div className="workflow-summary-grid">
-            <div className="workflow-summary-block">
-              <div className="workflow-summary-label">Review Version</div>
-              <div className="workflow-summary-value">{workflowReviewVersionLabel}</div>
-            </div>
-            <div className="workflow-summary-block">
-              <div className="workflow-summary-label">{submittedVersionLabel}</div>
-              <div className="workflow-summary-value">
-                {proposal.workflow.submittedAt
-                  ? `${
-                      proposal.workflow.submittedBy?.name ||
-                      proposal.workflow.submittedBy?.email ||
-                      proposal.designerName ||
-                      'Design Team'
-                    } - ${new Date(proposal.workflow.submittedAt).toLocaleString()}`
-                  : 'Not submitted'}
-              </div>
-            </div>
-            <div className="workflow-summary-block">
-              <div className="workflow-summary-label">Approved By</div>
-              <div className="workflow-summary-value">
-                {proposal.workflow.approvalNotRequired
-                  ? 'Not required'
-                  : proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email
-                  ? `${proposal.workflow.approvedBy?.name || proposal.workflow.approvedBy?.email}${
-                      proposal.workflow.approvedAt ? ` - ${new Date(proposal.workflow.approvedAt).toLocaleString()}` : ''
-                    }`
-                  : 'Not approved'}
-              </div>
-            </div>
-            <div className="workflow-summary-block">
-              <div className="workflow-summary-label">
-                {proposal.workflow.signedVersionId ? 'Signed By' : 'Completed By'}
-              </div>
-              <div className="workflow-summary-value">
-                {proposal.workflow.signedVersionId
-                  ? proposal.workflow.signedBy?.name || proposal.workflow.signedBy?.email
-                    ? `${proposal.workflow.signedBy?.name || proposal.workflow.signedBy?.email}${
-                        proposal.workflow.signedAt ? ` - ${new Date(proposal.workflow.signedAt).toLocaleString()}` : ''
-                      }`
-                    : 'Not signed'
-                  : proposal.workflow.completedBy?.name || proposal.workflow.completedBy?.email || 'Not completed'}
-              </div>
+          <div className="workflow-summary-block">
+            <div className="workflow-summary-label">Approved By</div>
+            <div className="workflow-summary-value">
+              {formatWorkflowActorSummary(
+                selectedVersionApprovalBy,
+                selectedVersionApprovalAt,
+                'Not approved'
+              )}
             </div>
           </div>
+          <div className="workflow-summary-block">
+            <div className="workflow-summary-label">
+              {selectedVersionRecordStatus === 'completed' ? 'Completed By' : 'Signed By'}
+            </div>
+            <div className="workflow-summary-value">
+              {selectedVersionRecordStatus === 'completed'
+                ? formatWorkflowActorSummary(
+                    selectedVersionCompletedBy,
+                    selectedVersionCompletedAt,
+                    'Not completed'
+                  )
+                : formatWorkflowActorSummary(
+                    selectedVersionSignedBy,
+                    selectedVersionSignedAt,
+                    'Not signed'
+                  )}
+            </div>
+          </div>
+        </div>
 
-          {workflowReasons.length > 0 && (
-            <div className="workflow-summary-reasons">
-              {workflowReasons.map((reason) => (
-                <div key={`${reason.code}-${reason.label}`} className="workflow-summary-reason">
-                  <strong>{reason.label}</strong>
-                  {reason.detail ? ` - ${reason.detail}` : ''}
+        {selectedWorkflowReasons.length > 0 && (
+          <div className="workflow-summary-reasons">
+            {selectedWorkflowReasons.map((reason) => (
+              <div key={`${reason.code}-${reason.label}`} className="workflow-summary-reason">
+                <strong>{reason.label}</strong>
+                {reason.detail ? ` - ${reason.detail}` : ''}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderWorkflowActivityCard = () => {
+    if (!(workflowHistory.length > 0 || canSendWorkflowMessages)) return null;
+
+    return (
+      <div className="proposal-side-card no-print">
+        <div className="proposal-side-card-header">
+          <div>
+            <p className="proposal-side-card-kicker">Workflow Activity</p>
+            <h2>Messages & History</h2>
+          </div>
+          <button
+            type="button"
+            className="workflow-summary-history-toggle"
+            onClick={() =>
+              setIsWorkflowHistoryExpanded((current) => {
+                const nextExpanded = !current;
+                if (!nextExpanded) {
+                  setShowWorkflowMessageComposer(false);
+                }
+                return nextExpanded;
+              })
+            }
+          >
+            {isWorkflowHistoryExpanded ? 'Compress' : 'Expand'}
+          </button>
+        </div>
+
+        <div className="proposal-side-card-body">
+          {isWorkflowHistoryExpanded && (
+            <div className="workflow-summary-history-list">
+              {workflowHistory.map((entry) => (
+                <div key={entry.id} className="workflow-summary-history-item">
+                  <div className="workflow-summary-history-meta">
+                    <span>{formatWorkflowStatusLabel(entry.type)}</span>
+                    <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                    <span>{entry.actor?.name || entry.actor?.email || 'User'}</span>
+                  </div>
+                  {entry.message && <div className="workflow-summary-history-message">{entry.message}</div>}
                 </div>
               ))}
             </div>
           )}
 
-          {(workflowHistory.length > 0 || canSendWorkflowMessages) && (
-            <div className="workflow-summary-history">
-              <div className="workflow-summary-history-header">
-                <div className="workflow-summary-history-title">Workflow Activity</div>
+          {isWorkflowHistoryExpanded && canSendWorkflowMessages && !showWorkflowMessageComposer && (
+            <div className="workflow-summary-message-actions">
+              <button
+                type="button"
+                className="action-button workflow-summary-message-trigger"
+                onClick={() => setShowWorkflowMessageComposer(true)}
+                disabled={workflowMessageSaving || loading}
+              >
+                {isReadOnlyReviewerView ? 'Add Note' : 'Send Another Note'}
+              </button>
+            </div>
+          )}
+
+          {isWorkflowHistoryExpanded && canSendWorkflowMessages && showWorkflowMessageComposer && (
+            <div className="workflow-summary-message-composer">
+              <textarea
+                className="workflow-summary-message-input"
+                value={workflowMessageDraft}
+                onChange={(event) => setWorkflowMessageDraft(event.target.value)}
+                placeholder="Add a message here"
+                disabled={workflowMessageSaving || loading}
+                rows={4}
+              />
+              <div className="workflow-summary-message-actions">
                 <button
                   type="button"
-                  className="workflow-summary-history-toggle"
-                  onClick={() => setIsWorkflowHistoryExpanded((current) => !current)}
+                  className="action-button"
+                  onClick={() => {
+                    setWorkflowMessageDraft('');
+                    setShowWorkflowMessageComposer(false);
+                  }}
+                  disabled={workflowMessageSaving}
                 >
-                  {isWorkflowHistoryExpanded ? 'Compress' : 'Expand'}
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="action-button primary workflow-summary-message-button"
+                  onClick={() => {
+                    void handleSendWorkflowMessage();
+                  }}
+                  disabled={!workflowMessageDraft.trim() || workflowMessageSaving || loading}
+                >
+                  {workflowMessageSaving ? 'Sending...' : 'Send Message'}
                 </button>
               </div>
-              {isWorkflowHistoryExpanded && (
-                <>
-                  {workflowHistory.map((entry) => (
-                    <div key={entry.id} className="workflow-summary-history-item">
-                      <div className="workflow-summary-history-meta">
-                        <span>{formatWorkflowStatusLabel(entry.type)}</span>
-                        <span>{new Date(entry.createdAt).toLocaleString()}</span>
-                        <span>{entry.actor?.name || entry.actor?.email || 'User'}</span>
-                      </div>
-                      {entry.message && <div className="workflow-summary-history-message">{entry.message}</div>}
-                    </div>
-                  ))}
-                  {canSendWorkflowMessages && !showWorkflowMessageComposer && (
-                    <div className="workflow-summary-message-actions">
-                      <button
-                        type="button"
-                        className="action-button workflow-summary-message-trigger"
-                        onClick={() => setShowWorkflowMessageComposer(true)}
-                        disabled={workflowMessageSaving || loading}
-                      >
-                        {isReadOnlyReviewerView ? 'Add Note' : 'Send Another Note'}
-                      </button>
-                    </div>
-                  )}
-                  {canSendWorkflowMessages && showWorkflowMessageComposer && (
-                    <div className="workflow-summary-message-composer">
-                      <textarea
-                        className="workflow-summary-message-input"
-                        value={workflowMessageDraft}
-                        onChange={(event) => setWorkflowMessageDraft(event.target.value)}
-                        placeholder="Add a message here"
-                        disabled={workflowMessageSaving || loading}
-                        rows={4}
-                      />
-                      <div className="workflow-summary-message-actions">
-                        <button
-                          type="button"
-                          className="action-button"
-                          onClick={() => {
-                            setWorkflowMessageDraft('');
-                            setShowWorkflowMessageComposer(false);
-                          }}
-                          disabled={workflowMessageSaving}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="action-button primary workflow-summary-message-button"
-                          onClick={() => {
-                            void handleSendWorkflowMessage();
-                          }}
-                          disabled={!workflowMessageDraft.trim() || workflowMessageSaving || loading}
-                        >
-                          {workflowMessageSaving ? 'Sending...' : 'Send Message'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
             </div>
           )}
         </div>
-      )}
+      </div>
+    );
+  };
 
-      <div ref={proposalRef} className="proposal-summary-page">
-        <div className="proposal-summary-header">
-          <h1 className="page-title">Active Version</h1>
-          {renderCogsToggle()}
+  if (!selectedViewModel) {
+    return (
+      <div className="proposal-view">
+        <div className="error-container">
+          <h2>Proposal versions are unavailable</h2>
+          <button className="btn btn-primary" onClick={() => navigate('/')}>
+            Back to Home
+          </button>
         </div>
-        {viewModels.map((vm, index) => renderVersionSection(vm, index))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="proposal-view">
+      <div className="view-actions no-print">
+        <div className="action-bar">
+          <div className="action-bar-left">
+            <button className="action-button" onClick={isReadOnlyReviewerView ? handleReviewerBack : () => navigate('/')}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 13L5 8L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {isReadOnlyReviewerView ? reviewerBackLabel : 'Back to Home'}
+            </button>
+          </div>
+          <div className="action-bar-center" />
+          <div className="action-bar-right">
+            {!isReadOnlyReviewerView && (
+              <TooltipAnchor tooltip={completeActionDisabledReason}>
+                <button
+                  className="action-button primary workflow-summary-submit-button"
+                  onClick={() => {
+                    setShowCompleteConfirm(true);
+                  }}
+                  disabled={!activeVersionCanComplete || reviewerActionSaving || loading}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  Complete Proposal
+                </button>
+              </TooltipAnchor>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="proposal-view-shell">
+        <aside className="proposal-column proposal-column--nav no-print">
+          <div className="proposal-side-card proposal-active-card">
+            <div className="proposal-side-card-header">
+              <div>
+                <p className="proposal-side-card-kicker">Active Version</p>
+              </div>
+            </div>
+            <div className="proposal-side-card-body">
+              {canChangeActiveVersion ? (
+                <div className="version-switcher version-switcher--stacked">
+                  <TooltipAnchor tooltip={editDisabledReason}>
+                    <select
+                      id="active-version"
+                      aria-label="Choose Active Version"
+                      value={activeVersionId}
+                      onChange={(e) => handleSetActiveVersion(e.target.value)}
+                      disabled={!canChangeActiveVersion}
+                    >
+                      {navigationVersions.map((version) => (
+                        <option key={version.versionId || 'original'} value={version.versionId || 'original'}>
+                          {getDisplayVersionLabel(version)}
+                        </option>
+                      ))}
+                    </select>
+                  </TooltipAnchor>
+                </div>
+              ) : (
+                <div className="proposal-active-version-readonly">
+                  {hasSignedBaseline ? (
+                    <TooltipAnchor tooltip={activeVersionLockTooltip}>
+                      <span className="version-switcher-pill">{activeVersionLabel}</span>
+                    </TooltipAnchor>
+                  ) : (
+                    <>
+                      <span className="version-switcher-pill">{activeVersionLabel}</span>
+                      <p className="proposal-side-empty">
+                        {editDisabledReason || 'Active version cannot be changed in this mode.'}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="proposal-side-card proposal-nav-card">
+            <div className="proposal-side-card-header">
+              <div>
+                <p className="proposal-side-card-kicker">Versions & Addendums</p>
+                <h2>{viewModels.length} Available</h2>
+              </div>
+            </div>
+            <div className="proposal-side-card-body proposal-nav-list">
+              {viewModels.map((vm) => {
+                const versionId = vm.proposal.versionId || 'original';
+                const isSelected = versionId === resolvedSelectedVersionId;
+                return (
+                  <button
+                    key={versionId}
+                    type="button"
+                    className={`proposal-nav-item${isSelected ? ' is-selected' : ''}`}
+                    onClick={() => setSelectedVersionId(versionId)}
+                  >
+                    <div className="proposal-nav-item-header">
+                      <div className="proposal-nav-item-top-row">
+                        <div className="proposal-nav-item-location">{vm.customerLocation}</div>
+                        {isSelected && (
+                          <span className="proposal-nav-item-viewing-indicator" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                d="M1.5 8C2.8 5.2 5.1 3.5 8 3.5C10.9 3.5 13.2 5.2 14.5 8C13.2 10.8 10.9 12.5 8 12.5C5.1 12.5 2.8 10.8 1.5 8Z"
+                                stroke="currentColor"
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.4" />
+                            </svg>
+                          </span>
+                        )}
+                      </div>
+                      <div className="proposal-nav-item-title-row">
+                        <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>
+                        <span className="proposal-nav-item-total">{formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}</span>
+                      </div>
+                    </div>
+                    <div className="proposal-nav-badges">
+                      {getVersionNavBadges(vm.proposal).map((badge) => (
+                        <span key={`${versionId}-${badge.label}`} className={`proposal-nav-badge tone-${badge.tone}`}>
+                          {badge.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="proposal-nav-item-dates">
+                      <span>Created {formatVersionDateTime(vm.proposal.createdDate || vm.proposal.lastModified)}</span>
+                      <span>Updated {formatVersionDateTime(vm.proposal.lastModified || vm.proposal.createdDate)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
+
+        <div ref={proposalRef} className="proposal-summary-page">
+          <div className="proposal-summary-header">
+            <div className="proposal-summary-heading">
+              <p className="proposal-side-card-kicker">Proposal Summary</p>
+              <h1 className="page-title">{getDisplayVersionLabel(selectedViewModel.proposal)}</h1>
+            </div>
+            {renderCogsToggle()}
+          </div>
+          {renderSelectedVersionSection(selectedViewModel)}
+        </div>
+
+        <aside className="proposal-column proposal-column--side no-print">
+          {renderVersionActionsCard(selectedViewModel)}
+          {renderProposalActionsCard()}
+          {proposal?.workflow && renderWorkflowSummaryCard()}
+          {proposal?.workflow && renderWorkflowActivityCard()}
+        </aside>
       </div>
       {showVersionNameModal && (
         <div className="modal-overlay" onClick={() => setShowVersionNameModal(false)}>
@@ -3553,7 +3922,7 @@ function ProposalView() {
       <ConfirmDialog
         open={showModifySignedConfirm}
         title="Start proposal addendum?"
-        message="Making changes to this signed proposal will create a new editable version. The book keeper and admins will continue to see the signed proposal until you add the new version as a proposal addendum. Do you want to continue?"
+        message="Making changes to this signed proposal will create a new editable version. The book keeper and admins will continue to see the current signed proposal until the new addendum is submitted, approved if needed, and marked as signed. Do you want to continue?"
         confirmLabel="Continue"
         cancelLabel="Cancel"
         onConfirm={() => {
@@ -3564,7 +3933,7 @@ function ProposalView() {
       <ConfirmDialog
         open={showMarkSignedConfirm}
         title="Are you sure?"
-        message="Marking as Signed will lock the current active version. All other non-active versions will be deleted. Additional changes made afterwards will be added as a Proposal Addendum"
+        message={markSignedConfirmMessage}
         confirmLabel="Yes I'm sure. Mark as Signed"
         cancelLabel="No, take me back"
         isLoading={reviewerActionSaving}
@@ -3576,7 +3945,7 @@ function ProposalView() {
       <ConfirmDialog
         open={showCompleteConfirm}
         title="Are you sure?"
-        message="Are you sure you want to mark this proposal as complete? No further edits can be made, and it will be reconsiled in the Archive"
+        message="Are you sure you want to mark this proposal as complete? No further edits can be made, and it will be reconciled in the Archive."
         confirmLabel="Yes, I'm sure"
         cancelLabel="No, take me back"
         isLoading={reviewerActionSaving}

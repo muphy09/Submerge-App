@@ -90,9 +90,12 @@ import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   ensureProposalWorkflow,
+  hasVersionSubmissionHistory,
   getVersionRecordStatus,
+  getSignedVersionId,
   getWorkflowStatus,
   isVersionPermanentlyLocked,
+  resetWorkflowAfterVersionEdit,
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
 
@@ -284,6 +287,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const canOpenCogsBreakdown = canViewCostBreakdown;
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
   const versionNameFromState = (location.state as any)?.versionName as string | undefined;
+  const versionSnapshotFromState = (location.state as any)?.versionSnapshot as Proposal | undefined;
   const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
   const getInitialLeftNav = () => {
     if (typeof window === 'undefined') return true;
@@ -658,8 +662,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ? 'Master accounts acting as owner can view proposals but cannot edit them.'
         : 'Master accounts acting as owner cannot create proposals.',
     });
-    navigate(proposalNumber ? `/proposal/view/${proposalNumber}` : '/', { replace: true });
-  }, [isProposalEditingRestricted, navigate, proposalNumber, showToast]);
+    navigate(
+      proposalNumber ? `/proposal/view/${proposalNumber}` : '/',
+      proposalNumber && versionIdFromState
+        ? { replace: true, state: { versionId: versionIdFromState } }
+        : { replace: true }
+    );
+  }, [isProposalEditingRestricted, navigate, proposalNumber, showToast, versionIdFromState]);
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
@@ -1119,10 +1128,39 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       ) as Proposal[];
       const desiredVersionId =
         versionIdFromState || versioned.activeVersionId || versioned.versionId || 'original';
+      const stateVersionSnapshot = versionSnapshotFromState
+        ? ({
+            ...(versionSnapshotFromState as Proposal),
+            waterFeatures: normalizeWaterFeatures((versionSnapshotFromState as Proposal).waterFeatures),
+            versionId: versionSnapshotFromState.versionId || 'original',
+            versionName:
+              versionSnapshotFromState.versionName ||
+              (versionSnapshotFromState.isOriginalVersion ? 'Original Version' : 'Version'),
+            versions: [],
+            workflow: sourceProposal.workflow,
+          } as Proposal)
+        : null;
+      const fetchedRequestedVersion =
+        allVersionsWithDefaults.find((v) => v.versionId === desiredVersionId) || null;
+      const shouldPreferStateSnapshot =
+        Boolean(stateVersionSnapshot) &&
+        (stateVersionSnapshot?.versionId || 'original') === desiredVersionId &&
+        (!fetchedRequestedVersion ||
+          (isVersionPermanentlyLocked(fetchedRequestedVersion) &&
+            !isVersionPermanentlyLocked(stateVersionSnapshot)));
+      const hydratedVersions = shouldPreferStateSnapshot
+        ? fetchedRequestedVersion
+          ? allVersionsWithDefaults.map((v) =>
+              v.versionId === desiredVersionId
+                ? ({ ...stateVersionSnapshot, workflow: sourceProposal.workflow, versions: [] } as Proposal)
+                : v
+            )
+          : [...allVersionsWithDefaults, { ...stateVersionSnapshot, workflow: sourceProposal.workflow, versions: [] } as Proposal]
+        : allVersionsWithDefaults;
       const targetVersion =
-        allVersionsWithDefaults.find((v) => v.versionId === desiredVersionId) ||
-        allVersionsWithDefaults.find((v) => v.versionId === versioned.versionId) ||
-        allVersionsWithDefaults[0] ||
+        (shouldPreferStateSnapshot ? stateVersionSnapshot : fetchedRequestedVersion) ||
+        hydratedVersions.find((v) => v.versionId === versioned.versionId) ||
+        hydratedVersions[0] ||
         ((await mergeWithPricingSnapshot(versioned)) as Proposal);
       const sanitizedTarget: Proposal = {
         ...(targetVersion as Proposal),
@@ -1140,14 +1178,17 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               ? 'This signed version is locked from editing. Create a proposal addendum from the proposal summary to make changes.'
               : 'Completed proposals are locked from editing.',
         });
-        navigate(`/proposal/view/${num}`, { replace: true });
+        navigate(`/proposal/view/${num}`, {
+          replace: true,
+          state: versionIdFromState ? { versionId: versionIdFromState } : undefined,
+        });
         return;
       }
 
       if (loadRequestRef.current === requestId) {
         previousSpaTypeRef.current = sanitizedTarget.poolSpecs?.spaType ?? 'none';
         setProposal(sanitizedTarget);
-        setVersionList(allVersionsWithDefaults);
+        setVersionList(hydratedVersions);
         setActiveVersionId(nextActiveId);
         setEditingVersionId(sanitizedTarget.versionId || 'original');
         setSelectedPricingModelId(sanitizedTarget.pricingModelId || null);
@@ -1423,18 +1464,33 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         finalProposal as Proposal,
         activeVersionId || finalProposal.versionId || currentVersionId
       );
+      const existingVersion =
+        listAllVersions(ensureProposalWorkflow(proposal as Proposal)).find(
+          (entry) => (entry.versionId || 'original') === currentVersionId
+        ) || null;
+      const existingVersionStatus = getVersionRecordStatus(existingVersion);
+      const versionRequiresResubmission =
+        effectiveMode !== 'submit' &&
+        hasEdits &&
+        (existingVersionStatus === 'submitted' ||
+          existingVersionStatus === 'needs_approval' ||
+          existingVersionStatus === 'approved' ||
+          hasVersionSubmissionHistory(proposal as Proposal, currentVersionId));
+      const normalizedContainerToSave = versionRequiresResubmission
+        ? resetWorkflowAfterVersionEdit(containerToSave as Proposal, currentVersionId)
+        : ensureProposalWorkflow(containerToSave as Proposal);
 
       const workflowReady =
         effectiveMode === 'submit'
           ? submitProposalForWorkflow(
-              ensureProposalWorkflow(containerToSave as Proposal),
+              normalizedContainerToSave,
               currentVersionId,
               {
                 manualReviewRequested: options?.submissionRequest?.manualReviewRequested,
                 message: options?.submissionRequest?.note,
               }
             )
-          : ensureProposalWorkflow(containerToSave as Proposal);
+          : normalizedContainerToSave;
 
       const saved = await saveProposalRemote(
         workflowReady,
@@ -1448,10 +1504,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       setEditingVersionId(savedActive.versionId || currentVersionId);
       setHasEdits(false);
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
-      const isSignedAddendumSubmission = getWorkflowStatus(containerToSave as Proposal) === 'signed';
+      const isSignedAddendumSubmission = Boolean(getSignedVersionId(containerToSave as Proposal));
       const nonSubmitSuccessMessage =
         options?.forceDraftStatus || savedWorkflowStatus === 'draft'
-          ? 'Proposal saved as draft.'
+          ? versionRequiresResubmission
+            ? 'Proposal changes saved. Resubmit when ready.'
+            : 'Proposal saved as draft.'
           : savedWorkflowStatus === 'needs_approval' || savedWorkflowStatus === 'submitted'
           ? 'Proposal changes saved. Proposal remains submitted for approval.'
           : savedWorkflowStatus === 'approved'
@@ -1469,8 +1527,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               ? isSignedAddendumSubmission
                 ? 'Proposal addendum submitted for approval.'
                 : 'Proposal submitted for approval.'
-              : savedWorkflowStatus === 'signed' && isSignedAddendumSubmission
-              ? 'Proposal addendum added successfully.'
+              : savedWorkflowStatus === 'approved'
+              ? isSignedAddendumSubmission
+                ? 'Proposal addendum submitted. Mark it as signed when ready.'
+                : 'Proposal submitted. Mark it as signed when ready.'
               : 'Proposal submitted successfully.'
             : nonSubmitSuccessMessage,
       });
@@ -1478,7 +1538,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       const shouldNavigateToSummary =
         options?.navigateToSummary || effectiveMode === 'submit' || isVersionEdit;
       if (shouldNavigateToSummary) {
-        navigate(`/proposal/view/${saved.proposalNumber}`);
+        navigate(`/proposal/view/${saved.proposalNumber}`, {
+          state: { versionId: finalProposal.versionId || currentVersionId },
+        });
       } else {
         navigate('/');
       }

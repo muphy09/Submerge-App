@@ -52,6 +52,7 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     spaShape: 'round',
     spaPerimeter: 0,
     spaFiberglassModelName: undefined,
+    needsFiberglassSpaCrane: false,
     spaFiberglassModelPrice: undefined,
     isRaisedSpa: false,
     raisedSpaFacing: 'none',

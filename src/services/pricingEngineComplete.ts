@@ -1738,14 +1738,20 @@ export class FiberglassCalculations {
 
   static calculateFiberglassInstallCost(poolSpecs: PoolSpecs): CostLineItem[] {
     const items: CostLineItem[] = [];
-    if (poolSpecs.poolType !== 'fiberglass') {
+    const prices = pricingData.fiberglass as any;
+    const poolIsFiberglass = poolSpecs.poolType === 'fiberglass';
+    const spaIsFiberglass = poolSpecs.spaType === 'fiberglass';
+
+    if (!poolIsFiberglass && !spaIsFiberglass) {
       return items;
     }
 
-    const poolModel = findFiberglassPoolModel(poolSpecs.fiberglassModelName, poolSpecs.fiberglassSize);
-    if (!poolModel) {
-      return items;
-    }
+    const poolModel = poolIsFiberglass
+      ? findFiberglassPoolModel(poolSpecs.fiberglassModelName, poolSpecs.fiberglassSize)
+      : undefined;
+    const spaOption = spaIsFiberglass
+      ? findFiberglassNamedOption('spaOptions', poolSpecs.spaFiberglassModelName)
+      : undefined;
 
     const addInstallItem = (description: string, cost: number) => {
       if (cost <= 0) return;
@@ -1758,11 +1764,23 @@ export class FiberglassCalculations {
       });
     };
 
-    if (poolSpecs.needsFiberglassCrane) {
+    if (poolModel && poolSpecs.needsFiberglassCrane) {
       addInstallItem('Crane', Number(poolModel.crane) || 0);
     }
-    addInstallItem('Install', Number(poolModel.install) || 0);
-    addInstallItem('Gravel', Number(poolModel.gravel) || 0);
+    if (poolModel) {
+      addInstallItem('Install', Number(poolModel.install) || 0);
+      addInstallItem('Gravel', Number(poolModel.gravel) || 0);
+    }
+
+    // Drennen workbook FIBER!G74 / COST - NEW!D320 applies spa install labor
+    // whenever a fiberglass spa shell is selected, even without a fiberglass pool shell.
+    if (spaOption && poolSpecs.needsFiberglassSpaCrane) {
+      addInstallItem('Crane - Spa', Number(spaOption.crane ?? 0) || 0);
+    }
+
+    if (spaOption) {
+      addInstallItem('Install - Spa', Number(prices.spaInstall ?? 0) || 0);
+    }
 
     return items;
   }

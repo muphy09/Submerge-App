@@ -1,15 +1,14 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
 - Book Keeper notifications stacks total, not new
-- Needs to be a 'Signed by' block in the proposal summary
-- 'Other versions' need to be collapsable
 - When opening a proposal summary in the reviewer workspace, show cogs show be toggled ON by default
     - Approved proposals tooltip for Edit Proposal should say 'Approved Proposals in the reviewer workspace are Read-Only. Designer must create another version to make edits'
         - Ensure non-approved proposals (not auto approved) can be edited by the reviwer before approving
 - Ability to drag/drop for reorder in tables in Admin Menu
 
-Proposal Version should be displayed on the left side as a nav menu, like the book keeper tab. Option to create version button in that navigation menu. Right side column should display the Submission workflow statistics
-    ---------------------------------------------------------------------------------------------------------
+
+- Stamped and Dyed concrete
+---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Cleanup visuals on Contract export
 - Workflow for Addendum (contract changes after original) must show cost comparison of before and after 

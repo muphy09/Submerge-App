@@ -180,14 +180,8 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
       : retailFactor;
 
     let runningRetailTotal = 0;
-    const retailRows = baseRows.map((row, idx) => {
-      const isLastRow = idx === baseRows.length - 1;
-      let retailValue = roundToTwo(row.value * safeAdjustedRetailFactor);
-      if (isLastRow) {
-        const targetTotal = retailTarget || runningRetailTotal + retailValue;
-        const adjustment = roundToTwo(targetTotal - (runningRetailTotal + retailValue));
-        retailValue = roundToTwo(retailValue + adjustment);
-      }
+    const retailRows = baseRows.map((row) => {
+      const retailValue = roundToTwo(row.value * safeAdjustedRetailFactor);
       runningRetailTotal += retailValue;
       return {
         label: row.label,

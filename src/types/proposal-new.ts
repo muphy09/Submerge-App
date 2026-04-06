@@ -61,6 +61,7 @@ export interface PoolSpecs {
   spaShape: SpaShape;
   spaPerimeter: number; // Auto-calculated
   spaFiberglassModelName?: string;
+  needsFiberglassSpaCrane?: boolean;
   // Legacy fallback fields retained for compatibility with older saved data.
   spaFiberglassModelPrice?: number;
   isRaisedSpa: boolean; // +18"

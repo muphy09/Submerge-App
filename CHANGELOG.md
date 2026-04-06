@@ -1,13 +1,18 @@
 ## [2.2.7] - 4/6/26
-### Changed
-- Minor changes to the Proposal Summary screen
-
+### Fiberglass Spa Plumbing
+- Fixed the bug causing Fiberglass Spas to not bill Spa Base and Plubming Overruns like Shotcrete does
+### Proposal Summary Screen
+- Changed the UI of the Proposal Summary to a 3-Column layout
+    - Proposal Version Navigation in the left column
+    - Proposal Summary in the middle column
+    - Proposal Actions & Activity in the right column
+*This change will hopefully make the Summary section easier to navigate*
 
 
 -----
 ## [2.2.6] - 4/6/26
 ### Fixed
-- Chosen Water Features now populate in the correct area to display their cost
+- Chosen Water Features now populate in the correct areas to display their cost
     - Previously were appearing in the Equipment Set instead of Water Features
 -----
 ## [2.2.5] - 4/3/26

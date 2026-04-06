@@ -704,7 +704,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
       designerName: (proposal as any).designerName || getSessionUserName(),
       designerRole: (proposal as any).designerRole || getSessionRole(),
       designerCode: (proposal as any).designerCode || getSessionFranchiseCode(),
-      lastModified: proposal.lastModified || now,
+      lastModified: now,
     } as Proposal)),
     session
   );

@@ -427,8 +427,9 @@ export class PlumbingCalculations {
       total: prices.shortStub,
     });
 
-    // Spa base plumbing
-    if (hasSpa && isGuniteSpa) {
+    // Drennen workbook PLUM!C5/D5 keys Spa Base off the generic spa trigger,
+    // not a gunite-only branch, so fiberglass spas still carry the base plumbing charge.
+    if (hasSpa) {
       items.push({
         category: 'Plumbing',
         description: 'Spa Base',
@@ -450,8 +451,8 @@ export class PlumbingCalculations {
       });
     }
 
-    // Spa overrun
-    if (hasSpa && isGuniteSpa && plumbing.runs.spaRun > prices.spaOverrunThreshold) {
+    // Drennen workbook PLUM!C9/D9 uses the entered spa run for any spa type.
+    if (hasSpa && plumbing.runs.spaRun > prices.spaOverrunThreshold) {
       const overrun = plumbing.runs.spaRun - prices.spaOverrunThreshold;
       items.push({
         category: 'Plumbing',

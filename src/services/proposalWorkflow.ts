@@ -313,6 +313,47 @@ function normalizeVisibleVersionList(proposal: Proposal, versionIds: string[]) {
     .filter((entry): entry is Proposal => Boolean(entry));
 }
 
+function isLikelyPostSignAddendumVersion(
+  version: Partial<Proposal> | null | undefined,
+  signedAt?: string | null
+) {
+  const versionName = normalizeText(version?.versionName).toLowerCase();
+  if (versionName.includes('addendum')) return true;
+
+  const signedTimestamp = Date.parse(normalizeText(signedAt));
+  const versionTimestamp = Date.parse(normalizeText(version?.createdDate || version?.lastModified));
+  return Number.isFinite(signedTimestamp) && Number.isFinite(versionTimestamp) && versionTimestamp > signedTimestamp;
+}
+
+function shouldDowngradeLegacySignedProposal(proposal: Proposal) {
+  const rawStatus = normalizeText(proposal.status).toLowerCase();
+  if (rawStatus !== 'signed') return false;
+
+  const workflow = proposal.workflow || ({} as ProposalWorkflowState);
+  const signedVersionId =
+    normalizeText(workflow.signedVersionId) ||
+    normalizeText(proposal.activeVersionId) ||
+    normalizeText(proposal.versionId) ||
+    ORIGINAL_VERSION_ID;
+  if (!signedVersionId) return false;
+
+  if (getEffectiveSignedAddendumVersionIds(workflow.signedAddendumVersionIds).length > 0) return false;
+
+  const approvedVersionId = normalizeText(workflow.approvedVersionId);
+  const reviewVersionId = normalizeText(workflow.reviewVersionId);
+  if ((approvedVersionId && approvedVersionId !== signedVersionId) || (reviewVersionId && reviewVersionId !== signedVersionId)) {
+    return false;
+  }
+
+  const extraVersions = listAllVersions(proposal).filter(
+    (entry) => (entry.versionId || ORIGINAL_VERSION_ID) !== signedVersionId
+  );
+  if (!extraVersions.length) return false;
+
+  const signedAt = normalizeText(workflow.signedAt || proposal.versionLockedAt || null);
+  return !extraVersions.some((entry) => isLikelyPostSignAddendumVersion(entry, signedAt));
+}
+
 function buildDetailedDiffCategories(current: Proposal, previous: Proposal) {
   return COST_DIFF_GROUPS
     .map((group) => {
@@ -762,6 +803,10 @@ export function getSignedAddendumVersionIds(proposal?: Partial<Proposal> | null)
   );
 }
 
+export function willSigningRemoveNonActiveVersions(proposal?: Partial<Proposal> | null) {
+  return !Boolean(getSignedVersionId(proposal));
+}
+
 export function getLatestSignedAddendumVersionId(proposal?: Partial<Proposal> | null) {
   const signedAddendumVersionIds = getSignedAddendumVersionIds(proposal);
   return signedAddendumVersionIds[signedAddendumVersionIds.length - 1] || null;
@@ -774,11 +819,18 @@ export function getLatestSignedBaselineVersionId(proposal?: Partial<Proposal> | 
 export function getWorkflowStatus(proposal?: Partial<Proposal> | null): ProposalWorkflowStatus {
   const status = normalizeText(proposal?.workflow?.status || proposal?.status).toLowerCase();
   const hasSignedBaseline = Boolean(getSignedVersionId(proposal));
-  const hasApprovedBaseline = Boolean(proposal?.workflow?.approved === true || getApprovedVersionId(proposal));
+  const latestSignedBaselineVersionId = getLatestSignedBaselineVersionId(proposal);
+  const approvedVersionId = getApprovedVersionId(proposal);
+  const hasApprovedBaseline = Boolean(proposal?.workflow?.approved === true || approvedVersionId);
   const hasPendingReview = Boolean(normalizeText(proposal?.workflow?.reviewVersionId));
+  const hasUnsignedApprovedVersion =
+    Boolean(approvedVersionId) &&
+    approvedVersionId !== latestSignedBaselineVersionId &&
+    !hasPendingReview;
   if (status === 'completed') return 'completed';
   if (status === 'needs_approval') return 'needs_approval';
   if (status === 'changes_requested') return 'changes_requested';
+  if (hasUnsignedApprovedVersion) return 'approved';
   if (status === 'signed') return hasPendingReview ? 'needs_approval' : 'signed';
   if (hasSignedBaseline && !hasPendingReview) return 'signed';
   if (status === 'approved') return 'approved';
@@ -809,9 +861,12 @@ export function isVersionPermanentlyLocked(proposal?: Partial<Proposal> | null) 
 }
 
 export function ensureProposalWorkflow(proposal: Proposal): Proposal {
-  const rawStatus = normalizeText(proposal.status).toLowerCase();
   const workflow = proposal.workflow || ({} as ProposalWorkflowState);
   const history = normalizeHistory(workflow.history);
+  const shouldDowngradeLegacySigned = shouldDowngradeLegacySignedProposal(proposal);
+  const rawStatus = shouldDowngradeLegacySigned
+    ? 'approved'
+    : normalizeText(proposal.status).toLowerCase();
   const hasWorkflowState = Boolean(
     proposal.workflow &&
       (
@@ -829,7 +884,16 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
     !hasWorkflowState &&
     (rawStatus === 'submitted' || rawStatus === 'approved' || rawStatus === 'rejected');
   const currentVersionId = proposal.activeVersionId || proposal.versionId || ORIGINAL_VERSION_ID;
-  let signedVersionId = shouldResetLegacySubmittedProposal
+  const legacyApprovedVersionId = shouldDowngradeLegacySigned
+    ? normalizeText(
+        workflow.approvedVersionId ||
+          workflow.submittedVersionId ||
+          workflow.signedVersionId ||
+          currentVersionId
+      ) || currentVersionId
+    : null;
+  const shouldClearSignedLock = shouldResetLegacySubmittedProposal || shouldDowngradeLegacySigned;
+  let signedVersionId = shouldClearSignedLock
     ? null
     : normalizeText(
         workflow.signedVersionId ||
@@ -837,7 +901,7 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
             ? workflow.approvedVersionId || workflow.submittedVersionId || currentVersionId
             : null)
       ) || null;
-  const signedAddendumVersionIds = shouldResetLegacySubmittedProposal
+  const signedAddendumVersionIds = shouldClearSignedLock
     ? []
     : getEffectiveSignedAddendumVersionIds(workflow.signedAddendumVersionIds).filter(
         (versionId) => versionId !== signedVersionId
@@ -848,6 +912,7 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
     ? null
     : normalizeText(
         workflow.approvedVersionId ||
+          legacyApprovedVersionId ||
           (workflow.approved === true || rawStatus === 'completed' || rawStatus === 'signed'
             ? workflow.submittedVersionId ||
               workflow.reviewVersionId ||
@@ -876,6 +941,11 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
             : null)
       ) || null;
 
+  const hasUnsignedApprovedVersion = Boolean(
+    approvedVersionId &&
+    approvedVersionId !== latestSignedBaselineVersionId
+  );
+
   let normalizedStatus: ProposalWorkflowStatus = shouldResetLegacySubmittedProposal
     ? 'draft'
     : rawStatus === 'completed'
@@ -884,6 +954,8 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
     ? 'changes_requested'
     : pendingReviewVersionId
     ? 'needs_approval'
+    : hasUnsignedApprovedVersion
+    ? 'approved'
     : signedVersionId
     ? 'signed'
     : approvedVersionId
@@ -926,8 +998,8 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
   return {
     ...proposal,
     status: normalizedStatus,
-    versionLocked: shouldResetLegacySubmittedProposal ? false : proposal.versionLocked === true,
-    versionLockedAt: shouldResetLegacySubmittedProposal ? null : proposal.versionLockedAt || null,
+    versionLocked: shouldClearSignedLock ? false : proposal.versionLocked === true,
+    versionLockedAt: shouldClearSignedLock ? null : proposal.versionLockedAt || null,
     versionSubmittedAt: shouldResetLegacySubmittedProposal ? null : proposal.versionSubmittedAt || null,
     versionSubmittedBy: shouldResetLegacySubmittedProposal ? null : proposal.versionSubmittedBy || null,
     workflow: {
@@ -944,12 +1016,12 @@ export function ensureProposalWorkflow(proposal: Proposal): Proposal {
       needsApproval: shouldResetLegacySubmittedProposal ? false : isPendingReviewStatus(normalizedStatus),
       approvalReasons: shouldResetLegacySubmittedProposal ? [] : Array.isArray(workflow.approvalReasons) ? workflow.approvalReasons : [],
       approved,
-      approvedAt: shouldResetLegacySubmittedProposal || !approved ? null : workflow.approvedAt || null,
-      approvedBy: shouldResetLegacySubmittedProposal || !approved ? null : workflow.approvedBy || null,
+      approvedAt: shouldResetLegacySubmittedProposal || !approved ? null : workflow.approvedAt || workflow.signedAt || null,
+      approvedBy: shouldResetLegacySubmittedProposal || !approved ? null : workflow.approvedBy || workflow.signedBy || null,
       signedVersionId,
       signedAddendumVersionIds,
-      signedAt: shouldResetLegacySubmittedProposal || !signedVersionId ? null : workflow.signedAt || null,
-      signedBy: shouldResetLegacySubmittedProposal || !signedVersionId ? null : workflow.signedBy || null,
+      signedAt: shouldClearSignedLock || !signedVersionId ? null : workflow.signedAt || null,
+      signedBy: shouldClearSignedLock || !signedVersionId ? null : workflow.signedBy || null,
       completedAt: shouldResetLegacySubmittedProposal ? null : workflow.completedAt || null,
       completedBy: shouldResetLegacySubmittedProposal ? null : workflow.completedBy || null,
       history: shouldResetLegacySubmittedProposal ? [] : history,
@@ -1033,6 +1105,112 @@ export function getReviewerPrimaryVersionId(proposal?: Partial<Proposal> | null)
 
 export function isSubmittedVersionLocked(proposal?: Partial<Proposal> | null) {
   return proposal?.versionLocked === true || Boolean(proposal?.versionSubmittedAt);
+}
+
+export function hasVersionSubmissionHistory(
+  proposal?: Partial<Proposal> | null,
+  versionId?: string | null
+) {
+  const targetId = normalizeText(versionId) || ORIGINAL_VERSION_ID;
+  const history = normalizeHistory(proposal?.workflow?.history);
+  if (
+    history.some(
+      (entry) =>
+        (entry.versionId || ORIGINAL_VERSION_ID) === targetId &&
+        (entry.type === 'submitted' || entry.type === 'approved')
+    )
+  ) {
+    return true;
+  }
+  const matchingVersion =
+    proposal && 'versionId' in proposal && proposal
+      ? getVersionById(ensureProposalWorkflow(proposal as Proposal), targetId)
+      : null;
+  return Boolean(matchingVersion?.versionSubmittedAt);
+}
+
+export function resetWorkflowAfterVersionEdit(
+  proposal: Proposal,
+  versionId?: string | null
+): Proposal {
+  const normalized = ensureProposalWorkflow(proposal);
+  if (getWorkflowStatus(normalized) === 'completed') {
+    return normalized;
+  }
+
+  const targetVersionId =
+    normalizeText(versionId) ||
+    normalized.activeVersionId ||
+    normalized.versionId ||
+    ORIGINAL_VERSION_ID;
+  const workflow = normalized.workflow as ProposalWorkflowState;
+  const signedVersionId = getSignedVersionId(normalized);
+  const signedAddendumVersionIds = getSignedAddendumVersionIds(normalized);
+  const latestSignedBaselineVersionId = getLatestSignedBaselineVersionId(normalized);
+  const hasSignedBaseline = Boolean(signedVersionId);
+  const nextStatus: ProposalWorkflowStatus = hasSignedBaseline ? 'signed' : 'draft';
+
+  const updatedVersions = listAllVersions(normalized).map((entry) => {
+    const entryId = entry.versionId || ORIGINAL_VERSION_ID;
+    if (entryId === targetVersionId) {
+      return setVersionWorkflowState(entry, 'draft', {
+        locked: false,
+        submittedAt: null,
+        submittedBy: null,
+      });
+    }
+    if (hasSignedBaseline && signedVersionId && entryId === signedVersionId) {
+      return setVersionWorkflowState(entry, 'signed', {
+        locked: true,
+        submittedAt: entry.versionSubmittedAt || workflow.signedAt || workflow.submittedAt || null,
+        submittedBy: entry.versionSubmittedBy || workflow.signedBy || workflow.submittedBy || null,
+      });
+    }
+    if (hasSignedBaseline && signedAddendumVersionIds.includes(entryId)) {
+      return setVersionWorkflowState(entry, 'signed', {
+        locked: true,
+        submittedAt: entry.versionSubmittedAt || workflow.approvedAt || workflow.submittedAt || null,
+        submittedBy: entry.versionSubmittedBy || workflow.approvedBy || workflow.submittedBy || null,
+      });
+    }
+    return setVersionWorkflowState(entry, 'draft', {
+      locked: false,
+      submittedAt: null,
+      submittedBy: null,
+    });
+  });
+
+  const nextWorkflow: ProposalWorkflowState = {
+    ...workflow,
+    status: nextStatus,
+    reviewVersionId: null,
+    submittedVersionId: hasSignedBaseline ? latestSignedBaselineVersionId : null,
+    approvedVersionId: hasSignedBaseline ? latestSignedBaselineVersionId : null,
+    approvedVersionIds: hasSignedBaseline
+      ? dedupeVersionIds([signedVersionId, ...signedAddendumVersionIds], latestSignedBaselineVersionId)
+      : [],
+    approvalNotRequired: false,
+    manualReviewRequested: false,
+    manualReviewMessage: null,
+    needsApproval: false,
+    approvalReasons: [],
+    approved: hasSignedBaseline,
+    approvedAt: hasSignedBaseline ? workflow.approvedAt || null : null,
+    approvedBy: hasSignedBaseline ? workflow.approvedBy || null : null,
+    signedVersionId: hasSignedBaseline ? signedVersionId : null,
+    signedAddendumVersionIds: hasSignedBaseline ? signedAddendumVersionIds : [],
+    signedAt: hasSignedBaseline ? workflow.signedAt || null : null,
+    signedBy: hasSignedBaseline ? workflow.signedBy || null : null,
+    history: normalizeHistory(workflow.history),
+  };
+
+  return mergeVersionsIntoContainer(
+    normalized,
+    updatedVersions,
+    normalized.activeVersionId,
+    nextStatus,
+    nextWorkflow
+  );
 }
 
 export function reconcileWorkflowVersionStates(proposal: Proposal): Proposal {
@@ -1289,11 +1467,7 @@ export function submitProposalForWorkflow(
   const reviewKind = isSignedWorkflow ? 'proposal_addendum' : 'initial_submission';
   const reasons = collectApprovalReasons(targetVersion, options, session);
   const shouldAutoApprove = shouldAutoApproveWorkflowSubmission(reasons);
-  const nextStatus: ProposalWorkflowStatus = shouldAutoApprove
-    ? isSignedWorkflow
-      ? 'signed'
-      : 'approved'
-    : 'needs_approval';
+  const nextStatus: ProposalWorkflowStatus = shouldAutoApprove ? 'approved' : 'needs_approval';
   const submittedAt = nowIso();
   const nextHistory = [
     ...normalizeHistory(workflow.history),
@@ -1323,14 +1497,8 @@ export function submitProposalForWorkflow(
     );
   }
 
-  const nextSignedAddendumVersionIds =
-    shouldAutoApprove && isSignedWorkflow
-      ? dedupeVersionIds([
-          ...currentSignedAddendumVersionIds,
-          targetVersion.versionId || ORIGINAL_VERSION_ID,
-        ])
-      : currentSignedAddendumVersionIds;
-  const targetVersionShouldBeLocked = nextStatus === 'signed';
+  const nextSignedAddendumVersionIds = currentSignedAddendumVersionIds;
+  const targetVersionShouldBeLocked = false;
 
   const updatedVersions = allVersions.map((entry) => {
     const entryId = entry.versionId || ORIGINAL_VERSION_ID;
@@ -1392,8 +1560,8 @@ export function submitProposalForWorkflow(
     needsApproval: !shouldAutoApprove,
     approvalReasons: reasons,
     approved: shouldAutoApprove || Boolean(isSignedWorkflow ? currentSignedBaselineVersionId : null),
-    approvedAt: shouldAutoApprove ? null : isSignedWorkflow ? workflow.approvedAt || null : null,
-    approvedBy: shouldAutoApprove ? null : isSignedWorkflow ? workflow.approvedBy || null : null,
+    approvedAt: shouldAutoApprove ? submittedAt : isSignedWorkflow ? workflow.approvedAt || null : null,
+    approvedBy: shouldAutoApprove ? actor : isSignedWorkflow ? workflow.approvedBy || null : null,
     signedVersionId: currentSignedVersionId,
     signedAddendumVersionIds: nextSignedAddendumVersionIds,
     signedAt: workflow.signedAt || null,
@@ -1401,10 +1569,14 @@ export function submitProposalForWorkflow(
     history: nextHistory,
   };
 
+  const nextActiveVersionId = isSignedWorkflow
+    ? normalized.activeVersionId || currentSignedBaselineVersionId || currentSignedVersionId || ORIGINAL_VERSION_ID
+    : targetVersion.versionId || normalized.activeVersionId;
+
   return mergeVersionsIntoContainer(
     normalized,
     updatedVersions,
-    shouldAutoApprove ? targetVersion.versionId || normalized.activeVersionId : normalized.activeVersionId,
+    nextActiveVersionId,
     nextStatus,
     nextWorkflow
   );
@@ -1499,7 +1671,7 @@ export function approveWorkflowProposal(
 ): Proposal {
   const normalizedForState = ensureProposalWorkflow(proposal);
   const isSignedWorkflow = Boolean(getSignedVersionId(normalizedForState));
-  const nextStatus: ProposalWorkflowStatus = isSignedWorkflow ? 'signed' : 'approved';
+  const nextStatus: ProposalWorkflowStatus = 'approved';
   const { normalized, workflow } = appendWorkflowEvent(
     proposal,
     'approved',
@@ -1511,10 +1683,8 @@ export function approveWorkflowProposal(
   const targetApprovedVersionId = pendingReviewVersionId || getReviewVersionId(normalized);
   const currentSignedVersionId = getSignedVersionId(normalized);
   const currentSignedAddendumVersionIds = getSignedAddendumVersionIds(normalized);
-  const nextSignedAddendumVersionIds = isSignedWorkflow
-    ? dedupeVersionIds([...currentSignedAddendumVersionIds, targetApprovedVersionId])
-    : [];
-  const targetVersionShouldBeLocked = nextStatus === 'signed';
+  const nextSignedAddendumVersionIds = currentSignedAddendumVersionIds;
+  const targetVersionShouldBeLocked = false;
   const updatedVersions = listAllVersions(normalized).map((entry) => {
     const entryId = entry.versionId || ORIGINAL_VERSION_ID;
     if (entryId === targetApprovedVersionId) {
@@ -1565,10 +1735,13 @@ export function approveWorkflowProposal(
     signedAt: workflow.signedAt || null,
     signedBy: workflow.signedBy || null,
   };
+  const nextActiveVersionId = isSignedWorkflow
+    ? normalized.activeVersionId || currentSignedVersionId || ORIGINAL_VERSION_ID
+    : targetApprovedVersionId;
   return mergeVersionsIntoContainer(
     normalized,
     updatedVersions,
-    targetApprovedVersionId,
+    nextActiveVersionId,
     nextStatus,
     nextWorkflow
   );
@@ -1694,6 +1867,9 @@ export function markProposalAsSigned(
   const actor = buildWorkflowActor(session);
   const targetVersionId = getApprovedVersionId(normalized) || getReviewVersionId(normalized);
   const targetVersion = getVersionById(normalized, targetVersionId);
+  const currentSignedVersionId = getSignedVersionId(normalized);
+  const currentSignedAddendumVersionIds = getSignedAddendumVersionIds(normalized);
+  const shouldPruneNonActiveVersions = !currentSignedVersionId;
   if (!targetVersion) {
     return normalized;
   }
@@ -1707,30 +1883,98 @@ export function markProposalAsSigned(
       toStatus: 'signed',
     }),
   ];
-  const signedVersion = setVersionWorkflowState(targetVersion, 'signed', {
-    locked: true,
-    submittedAt:
-      targetVersion.versionSubmittedAt ||
-      normalized.workflow?.approvedAt ||
-      normalized.workflow?.submittedAt ||
-      null,
-    submittedBy:
-      targetVersion.versionSubmittedBy ||
-      normalized.workflow?.approvedBy ||
-      normalized.workflow?.submittedBy ||
-      null,
-  });
+  const nextSignedVersionId = currentSignedVersionId || targetVersionId;
+  const nextSignedAddendumVersionIds =
+    currentSignedVersionId && targetVersionId !== currentSignedVersionId
+      ? dedupeVersionIds([...currentSignedAddendumVersionIds, targetVersionId])
+      : currentSignedAddendumVersionIds;
+  const updatedVersions = shouldPruneNonActiveVersions
+    ? [
+        setVersionWorkflowState(targetVersion, 'signed', {
+          locked: true,
+          submittedAt:
+            targetVersion.versionSubmittedAt ||
+            normalized.workflow?.approvedAt ||
+            normalized.workflow?.submittedAt ||
+            null,
+          submittedBy:
+            targetVersion.versionSubmittedBy ||
+            normalized.workflow?.approvedBy ||
+            normalized.workflow?.submittedBy ||
+            null,
+        }),
+      ]
+    : listAllVersions(normalized).map((entry) => {
+        const entryId = entry.versionId || ORIGINAL_VERSION_ID;
+        if (entryId === targetVersionId) {
+          return setVersionWorkflowState(entry, 'signed', {
+            locked: true,
+            submittedAt:
+              entry.versionSubmittedAt ||
+              normalized.workflow?.approvedAt ||
+              normalized.workflow?.submittedAt ||
+              null,
+            submittedBy:
+              entry.versionSubmittedBy ||
+              normalized.workflow?.approvedBy ||
+              normalized.workflow?.submittedBy ||
+              null,
+          });
+        }
+        if (currentSignedVersionId && entryId === currentSignedVersionId) {
+          return setVersionWorkflowState(entry, 'signed', {
+            locked: true,
+            submittedAt:
+              entry.versionSubmittedAt ||
+              normalized.workflow?.signedAt ||
+              normalized.workflow?.submittedAt ||
+              null,
+            submittedBy:
+              entry.versionSubmittedBy ||
+              normalized.workflow?.signedBy ||
+              normalized.workflow?.submittedBy ||
+              null,
+          });
+        }
+        if (currentSignedAddendumVersionIds.includes(entryId)) {
+          return setVersionWorkflowState(entry, 'signed', {
+            locked: true,
+            submittedAt:
+              entry.versionSubmittedAt ||
+              normalized.workflow?.approvedAt ||
+              normalized.workflow?.submittedAt ||
+              null,
+            submittedBy:
+              entry.versionSubmittedBy ||
+              normalized.workflow?.approvedBy ||
+              normalized.workflow?.submittedBy ||
+              null,
+          });
+        }
+        return setVersionWorkflowState(entry, 'draft', {
+          locked: false,
+          submittedAt: null,
+          submittedBy: null,
+        });
+      });
   const nextWorkflow: ProposalWorkflowState = {
     ...(normalized.workflow as ProposalWorkflowState),
     status: 'signed',
     reviewVersionId: null,
     submittedVersionId: targetVersionId,
     approvedVersionId: targetVersionId,
-    approvedVersionIds: dedupeVersionIds([targetVersionId]),
+    approvedVersionIds: shouldPruneNonActiveVersions
+      ? [targetVersionId]
+      : dedupeVersionIds(
+          [...(((normalized.workflow as ProposalWorkflowState).approvedVersionIds || [])), targetVersionId],
+          currentSignedVersionId || targetVersionId
+        ),
     needsApproval: false,
     approved: true,
-    signedVersionId: targetVersionId,
-    signedAddendumVersionIds: [],
+    approvedAt: (normalized.workflow as ProposalWorkflowState).approvedAt || signedAt,
+    approvedBy: (normalized.workflow as ProposalWorkflowState).approvedBy || actor,
+    signedVersionId: nextSignedVersionId,
+    signedAddendumVersionIds: nextSignedAddendumVersionIds,
     signedAt,
     signedBy: actor,
     history,
@@ -1738,7 +1982,7 @@ export function markProposalAsSigned(
 
   return mergeVersionsIntoContainer(
     normalized,
-    [signedVersion],
+    updatedVersions,
     targetVersionId,
     'signed',
     nextWorkflow

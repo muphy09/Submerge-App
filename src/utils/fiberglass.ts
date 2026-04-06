@@ -16,6 +16,7 @@ export interface FiberglassNamedPriceOption {
   id?: string;
   name: string;
   price: number;
+  crane?: number;
   spilloverPrice?: number;
 }
 

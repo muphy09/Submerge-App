@@ -35,7 +35,7 @@ function SubmitProposalModal({
     <div className="submit-proposal-backdrop" role="dialog" aria-modal="true" aria-labelledby="submit-proposal-title">
       <div className="submit-proposal-modal">
         <div className="submit-proposal-header">
-          <p className="submit-proposal-kicker">Submission Lock</p>
+          <p className="submit-proposal-kicker">Submission Review</p>
           <h2 id="submit-proposal-title">
             {isAddendum ? `Add ${trimmedVersionName} as a Proposal Addendum?` : `Submit ${trimmedVersionName}?`}
           </h2>
@@ -44,19 +44,19 @@ function SubmitProposalModal({
         <div className="submit-proposal-body">
           <p className="submit-proposal-message">
             {willAutoApprove
-              ? 'This Proposal will be automatically Approved, set up by your Admin.'
+              ? 'This Proposal will be automatically Approved, based on your Admin settings.'
               : 'This Proposal version will be sent for Approval.'}
           </p>
           <p className="submit-proposal-message">
-            This Proposal version will be locked from editing after it is Submitted.
+            This Proposal version will remain editable after submission. If more changes are made, it must be submitted again before it can be marked as signed.
           </p>
           {isAddendum ? (
             <p className="submit-proposal-message">
-              The signed proposal remains in effect until this addendum is approved.
+              The current signed proposal remains in effect until this addendum is approved if needed and marked as signed.
             </p>
           ) : (
             <p className="submit-proposal-message">
-              Other proposal versions will stay available until the approved proposal is marked as signed.
+              Other proposal versions will stay available until one proposal version is marked as signed.
             </p>
           )}
 

@@ -78,7 +78,7 @@ E) Plumbing
 - Added only when a pool definition exists.
 - Line items can include:
   - Short Stub (always)
-  - Spa Base (gunite spa)
+  - Spa Base (any spa; Drennen workbook behavior)
   - Pool Overrun / Spa Overrun (when runs exceed thresholds)
   - 2.0" pipe, 2.5" pipe, 3.0" pipe (from run formulas)
   - Water Feature run setup + overage lines
@@ -247,7 +247,9 @@ Q) Fiberglass Shell + Fiberglass Install
 - Freight by size
 - Optional surcharge
 - Crane options (pool + spa)
+  - Fiberglass spa crane uses the selected spa option's `Crane` value when the proposal marks spa crane required.
 - Install labor by size/spa
+  - Fiberglass spa install still applies when the spa is fiberglass even if the pool shell is not.
 - Gravel by size
 - Water by size
 

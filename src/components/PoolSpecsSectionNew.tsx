@@ -575,6 +575,17 @@ function PoolSpecsSectionNew({
                   <option value="yes">Yes</option>
                 </select>
               </div>
+              <div className="spec-field">
+                <label className="spec-label">Crane Required</label>
+                <select
+                  className="compact-input"
+                  value={data.needsFiberglassSpaCrane ? 'yes' : 'no'}
+                  onChange={(e) => handleChange('needsFiberglassSpaCrane', e.target.value === 'yes')}
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
             </div>
           </>
         )}

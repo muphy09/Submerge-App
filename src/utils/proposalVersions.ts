@@ -140,6 +140,7 @@ export const createVersionFromProposal = (
     ...active,
     status: normalized.status,
     workflow: normalized.workflow,
+    lastModified: now,
     activeVersionId: nextActiveVersionId,
     versions: [...remaining, newVersion],
   };

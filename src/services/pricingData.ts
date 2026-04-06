@@ -48,11 +48,11 @@ const defaultFiberglassLargeModels = [
 ];
 
 const defaultFiberglassSpaOptions = [
-  { name: 'Meridian', price: 4794 },
-  { name: 'Mystic', price: 4575 },
-  { name: 'Regal', price: 5000 },
-  { name: 'Royal', price: 5000 },
-  { name: 'Shasta', price: 4150 },
+  { name: 'Meridian', price: 4794, crane: 150 },
+  { name: 'Mystic', price: 4575, crane: 150 },
+  { name: 'Regal', price: 5000, crane: 150 },
+  { name: 'Royal', price: 5000, crane: 150 },
+  { name: 'Shasta', price: 4150, crane: 150 },
 ];
 
 const defaultFiberglassTanningLedgeOptions = [
@@ -646,6 +646,7 @@ const pricingData = {
     tanningLedgeOptions: defaultFiberglassTanningLedgeOptions,
     finishUpgrades: defaultFiberglassFinishUpgrades,
     spillover: 525,
+    spaInstall: 2600,
     shellTaxRate: 0.0725,
     equipmentPadCost: 250,
     small: 12192,

@@ -928,6 +928,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         tooltip: 'Used when fiberglass spa spillover is set to None.',
       },
       {
+        key: 'crane',
+        label: 'Crane',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Used only when the proposal marks crane required for this fiberglass spa option.',
+      },
+      {
         key: 'spilloverPrice',
         label: 'Spillover Cost',
         type: 'number',
@@ -2997,6 +3005,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 tooltip: 'Added to Equipment Ordered for fiberglass shells at a quantity of 1 + heater quantity.',
                 prefix: '$',
               },
+              {
+                label: 'Spa install cost',
+                path: ['fiberglass', 'spaInstall'],
+                type: 'number',
+                tooltip:
+                  'Workbook-style install labor added when a fiberglass spa option is selected, even if the pool shell is not fiberglass.',
+                prefix: '$',
+              },
             ],
           },
           {
@@ -3064,6 +3080,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 defaultItem: () => ({
                   name: '',
                   price: 0,
+                  crane: 0,
                 }),
                 fields: fiberglassSpaOptionFields,
               },
