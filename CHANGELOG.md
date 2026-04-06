@@ -1,3 +1,10 @@
+## [2.2.7] - 4/6/26
+### Changed
+- Minor changes to the Proposal Summary screen
+
+
+
+-----
 ## [2.2.6] - 4/6/26
 ### Fixed
 - Chosen Water Features now populate in the correct area to display their cost
@@ -32,7 +39,7 @@
     - Additional modifications can be made to the signed proposal and reflect as a Proposal Addendum
     - All users can see the comparison breakdown of Proposal Addendums
 ### Changed
-- 'Hide COGS' option now lives in the Proposal Summary screen to toggle On/Off from view
+- 'Show COGS' option now lives in the Proposal Summary screen to toggle On/Off from view
     - Designers can now see this option
 - Hidden Proposal Gross Profit % now appears in the Customer Job Cost Breakdown
     - Visual only, will not export along with the breakdown

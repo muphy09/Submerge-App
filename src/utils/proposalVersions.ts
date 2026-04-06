@@ -106,6 +106,7 @@ export const createVersionFromProposal = (
 ): { container: Proposal; newVersion: Proposal } => {
   const normalized = ensureVersionDefaults(proposal);
   const allVersions = listAllVersions(normalized);
+  const now = new Date().toISOString();
   const source =
     allVersions.find((v) => v.versionId === sourceVersionId) ||
     allVersions.find((v) => v.versionId === normalized.activeVersionId) ||
@@ -121,22 +122,26 @@ export const createVersionFromProposal = (
     versionLockedAt: null,
     versionSubmittedAt: null,
     versionSubmittedBy: null,
+    createdDate: now,
+    lastModified: now,
   });
 
   const currentActiveVersionId = normalized.activeVersionId || normalized.versionId || ORIGINAL_VERSION_ID;
   const active =
-    allVersions.find((v) => v.versionId === currentActiveVersionId) ||
+    allVersions.find((v) => (v.versionId || ORIGINAL_VERSION_ID) === currentActiveVersionId) ||
     stripNestedVersions({ ...normalized, versionId: currentActiveVersionId });
-  const remaining = allVersions.filter((v) => v.versionId !== active.versionId);
-  const nextActiveVersionId = newVersion.versionId || ORIGINAL_VERSION_ID;
+  const remaining = allVersions.filter(
+    (v) => (v.versionId || ORIGINAL_VERSION_ID) !== (active.versionId || ORIGINAL_VERSION_ID)
+  );
+  const nextActiveVersionId = active.versionId || currentActiveVersionId || ORIGINAL_VERSION_ID;
 
   const container: Proposal = {
     ...normalized,
-    ...newVersion,
+    ...active,
     status: normalized.status,
     workflow: normalized.workflow,
     activeVersionId: nextActiveVersionId,
-    versions: [...remaining, active],
+    versions: [...remaining, newVersion],
   };
 
   return { container, newVersion };

@@ -1124,7 +1124,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         allVersionsWithDefaults.find((v) => v.versionId === versioned.versionId) ||
         allVersionsWithDefaults[0] ||
         ((await mergeWithPricingSnapshot(versioned)) as Proposal);
-      const sanitizedTarget: Proposal = ensureProposalWorkflow({ ...(targetVersion as Proposal), versions: [] });
+      const sanitizedTarget: Proposal = {
+        ...(targetVersion as Proposal),
+        versions: [],
+        workflow: sourceProposal.workflow,
+      };
       const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
 
       const targetVersionStatus = getVersionRecordStatus(sanitizedTarget);

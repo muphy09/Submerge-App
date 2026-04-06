@@ -90,7 +90,7 @@ function SubmitProposalModal({
             Mark for Manual Review
           </button>
           <button type="button" className="submit-proposal-button submit-proposal-button--primary" onClick={onConfirm} disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : 'Submit'}
+            {isSubmitting ? 'Submitting...' : isAddendum ? 'Submit Addendum' : 'Submit Proposal'}
           </button>
         </div>
       </div>

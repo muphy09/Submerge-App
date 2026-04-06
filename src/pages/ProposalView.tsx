@@ -639,6 +639,7 @@ function ProposalView() {
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
   const [reviewerActionSaving, setReviewerActionSaving] = useState(false);
   const [versionSyncMeta, setVersionSyncMeta] = useState<Record<string, ProposalVersionSyncMeta>>({});
+  const [pendingScrollVersionId, setPendingScrollVersionId] = useState<string | null>(null);
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
   const breakdownExportAreaRef = useRef<HTMLDivElement>(null);
@@ -646,10 +647,18 @@ function ProposalView() {
   const contractViewRef = useRef<ContractViewHandle | null>(null);
   const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const versionSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { showToast } = useToast();
   const handleContractViewRef = useCallback((instance: ContractViewHandle | null) => {
     contractViewRef.current = instance;
     setContractViewReady(Boolean(instance));
+  }, []);
+  const setVersionSectionRef = useCallback((versionId: string, node: HTMLDivElement | null) => {
+    if (node) {
+      versionSectionRefs.current[versionId] = node;
+      return;
+    }
+    delete versionSectionRefs.current[versionId];
   }, []);
   const locationState = (location.state as ProposalViewLocationState | null) ?? null;
   const sessionRole = getSessionRole();
@@ -686,7 +695,6 @@ function ProposalView() {
       : activeVersionRecordStatus === 'completed'
       ? 'Completed proposal versions are locked.'
       : undefined;
-  const submitDisabledReason = editDisabledReason;
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const reviewerReturnTo = locationState?.reviewerReturnTo === 'admin-panel' ? 'admin-panel' : 'workflow';
@@ -1041,6 +1049,21 @@ function ProposalView() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!pendingScrollVersionId || typeof window === 'undefined') return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const section = versionSectionRefs.current[pendingScrollVersionId];
+      if (!section) return;
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setPendingScrollVersionId(null);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [pendingScrollVersionId, proposal, versions]);
+
   const buildContainerFromVersions = (
     nextVersions: Proposal[],
     desiredActiveId?: string,
@@ -1220,25 +1243,14 @@ function ProposalView() {
           : isAddendumDraft
           ? getNextAddendumName(container)
           : undefined;
-      const hasSubmissionHistory =
-        Boolean(container.workflow?.submittedVersionId || container.workflow?.submittedAt) ||
-        (container.workflow?.history || []).some((entry) => entry.type === 'submitted');
       const preservedActiveVersionId =
         container.activeVersionId || container.versionId || activeVersionId || 'original';
-      const { container: createdContainer } = createVersionFromProposal(
+      const { container: createdContainer, newVersion } = createVersionFromProposal(
         container,
         sourceVersionId,
         resolvedVersionName
       );
-      const nextContainer =
-        hasSubmissionHistory &&
-        (createdContainer.activeVersionId || createdContainer.versionId || 'original') !== preservedActiveVersionId
-          ? buildContainerFromVersions(
-              listAllVersions(createdContainer).map((entry) => ({ ...entry, versions: [] })),
-              preservedActiveVersionId,
-              createdContainer.status
-            ) || createdContainer
-          : createdContainer;
+      const nextContainer = createdContainer;
       await initPricingDataStore(
         nextContainer.franchiseId,
         nextContainer.pricingModelId || undefined,
@@ -1256,7 +1268,10 @@ function ProposalView() {
       const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
-      setActiveVersionId(activeApplied.activeVersionId || activeVersionId);
+      setActiveVersionId(activeApplied.activeVersionId || preservedActiveVersionId);
+      if (isAddendumDraft && newVersion.versionId) {
+        setPendingScrollVersionId(newVersion.versionId);
+      }
       showToast({
         type: 'success',
         message: isAddendumDraft ? 'Proposal addendum draft created.' : 'New version created.',
@@ -2427,6 +2442,13 @@ function ProposalView() {
             !isVersionPermanentlyLocked(entry)
         ) || null
       : null;
+  const submitDisabledReason =
+    existingEditableAddendumVersion &&
+    activeVersionRecordStatus === 'signed' &&
+    !isProposalEditingRestricted &&
+    !isReadOnlyReviewerView
+      ? 'Select the addendum draft as the Active Version or use Submit Addendum on that version card.'
+      : editDisabledReason;
   const renderPrimaryVersionId =
     (isReadOnlyReviewerView ? getReviewerPrimaryVersionId(displayVersionContainer as Proposal) : activeVersionId) ||
     activeVersionId ||
@@ -2508,9 +2530,7 @@ function ProposalView() {
     );
   };
   const activeVersionIsSignedAddendumDraft = isEditableAddendumVersion(activeEditableVersion);
-  const submitActionLabel = activeVersionIsSignedAddendumDraft
-    ? 'Add as Proposal Addendum'
-    : 'Submit Proposal';
+  const submitActionLabel = hasSignedBaseline ? 'Submit Addendum' : 'Submit Proposal';
   const activeVersionHasEquipmentChangeRequired = hasEquipmentChangeRequired(
     getCachedVersionSyncMeta(activeEditableVersion)?.equipmentFlags
   );
@@ -3009,14 +3029,21 @@ function ProposalView() {
         : versionRecordStatus === 'completed'
         ? 'Completed proposal versions are locked.'
         : undefined;
+    const versionDividerTitle = hasSignedBaseline
+      ? versionLabel
+      : index === 1 && livePublishedVersionId
+      ? 'Other Versions'
+      : `Additional Version - ${versionLabel}`;
 
     return (
-      <div key={versionId} className={`version-section ${index > 0 ? 'has-divider' : ''}`}>
+      <div
+        key={versionId}
+        ref={(node) => setVersionSectionRef(versionId, node)}
+        className={`version-section ${index > 0 ? 'has-divider' : ''}`}
+      >
         {index > 0 && (
           <>
-            <div className="version-divider-title">
-              {index === 1 && livePublishedVersionId ? 'Other Versions' : `Additional Version - ${versionLabel}`}
-            </div>
+            <div className="version-divider-title">{versionDividerTitle}</div>
             <div className="version-divider" />
           </>
         )}
@@ -3039,27 +3066,7 @@ function ProposalView() {
                 {isSubmittedVersion && <span className="version-status-pill">{submittedVersionLabel}</span>}
               </h2>
             </div>
-            <TooltipAnchor
-              as="div"
-              tooltip={getPricingModelStatusTooltip(vm.priceModelStatus)}
-            >
-              <div
-                className={`hero-price-model ${vm.priceModelStatus}`}
-                aria-label={getPricingModelStatusTooltip(vm.priceModelStatus)}
-              >
-                {getPricingModelDisplayName(vm.priceModel, vm.priceModelStatus)}
-              </div>
-            </TooltipAnchor>
             <div className="hero-actions">
-              <TooltipAnchor tooltip={versionActionReason}>
-                <button
-                  className="action-button"
-                  onClick={() => handleEdit(vm.proposal)}
-                  disabled={!canEditVersion}
-                >
-                  Edit Proposal
-                </button>
-              </TooltipAnchor>
               {showSubmitAddendumButton && (
                 <TooltipAnchor tooltip={addendumSubmitDisabledReason}>
                   <button
@@ -3069,10 +3076,19 @@ function ProposalView() {
                     }}
                     disabled={!canSubmitAddendumVersion}
                   >
-                    Add as Proposal Addendum
+                    Submit Addendum
                   </button>
                 </TooltipAnchor>
               )}
+              <TooltipAnchor tooltip={versionActionReason}>
+                <button
+                  className="action-button"
+                  onClick={() => handleEdit(vm.proposal)}
+                  disabled={!canEditVersion}
+                >
+                  Edit Proposal
+                </button>
+              </TooltipAnchor>
               {showMarkAsSignedButton && (
                 <TooltipAnchor tooltip={markAsSignedDisabledReason}>
                   <button
@@ -3099,7 +3115,17 @@ function ProposalView() {
           </div>
 
           <div className="hero-grid">
-            <p className="hero-section-title hero-section-title-specs">Pool Specifications</p>
+            <p className="hero-section-title hero-section-title-specs">
+              <span>Pool Specifications</span>
+              <TooltipAnchor tooltip={getPricingModelStatusTooltip(vm.priceModelStatus)}>
+                <span
+                  className={`hero-price-model ${vm.priceModelStatus}`}
+                  aria-label={getPricingModelStatusTooltip(vm.priceModelStatus)}
+                >
+                  {getPricingModelDisplayName(vm.priceModel, vm.priceModelStatus)}
+                </span>
+              </TooltipAnchor>
+            </p>
             <p className="hero-section-title hero-section-title-equipment">
               <span>Pool Equipment</span>
               {vm.equipmentPackageLabel && (
@@ -3466,7 +3492,7 @@ function ProposalView() {
 
       <div ref={proposalRef} className="proposal-summary-page">
         <div className="proposal-summary-header">
-          <h1 className="page-title">Proposal Summary</h1>
+          <h1 className="page-title">Active Version</h1>
           {renderCogsToggle()}
         </div>
         {viewModels.map((vm, index) => renderVersionSection(vm, index))}

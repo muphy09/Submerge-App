@@ -1,19 +1,14 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
-- Proposal summary when submitting an addendum, 'Submit Proposal' should say 'Submit Addendum', there should also be a button to do this from the version summary screen
-    - submitting addendum warning needs to change
 - Book Keeper notifications stacks total, not new
-- Int finihs  need to tell what tier they are, should not transfer material color only tier to contract
-    - Should only display matierial tier not the color attached
-    But in the tool it should show up what materials are in what tiers. only transfer tier to contract not color.
-    after picking tier '1' it shows 'these colors are included in tier 1'
-    - *** INT finishes in excel are priced indiviudual, not by tier. selecting a tier without a type is not possible (color is possible), they are all different prices
 - Needs to be a 'Signed by' block in the proposal summary
 - 'Other versions' need to be collapsable
 - When opening a proposal summary in the reviewer workspace, show cogs show be toggled ON by default
     - Approved proposals tooltip for Edit Proposal should say 'Approved Proposals in the reviewer workspace are Read-Only. Designer must create another version to make edits'
         - Ensure non-approved proposals (not auto approved) can be edited by the reviwer before approving
 - Ability to drag/drop for reorder in tables in Admin Menu
+
+Proposal Version should be displayed on the left side as a nav menu, like the book keeper tab. Option to create version button in that navigation menu. Right side column should display the Submission workflow statistics
     ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Cleanup visuals on Contract export
@@ -22,6 +17,11 @@ Mid Term -
 - Supporting Documents (measurments) included when submitting proposal
 - Lighted Sheer (needs electric run and price) Is this lighted? checkbox (maybe)
         - Will add pool light and housing cost, Has conduit run and match WF run.
+- Int finihs  need to tell what tier they are, should not transfer material color only tier to contract
+    - Should only display matierial tier not the color attached
+    But in the tool it should show up what materials are in what tiers. only transfer tier to contract not color.
+    after picking tier '1' it shows 'these colors are included in tier 1'
+    - *** INT finishes in excel are priced indiviudual, not by tier. selecting a tier without a type is not possible (color is possible), they are all different prices
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
 - Ability to select the indiviudual material instead of tiers
@@ -59,3 +59,6 @@ Help Needed -
 KNOWN ISSUES -
 - Mac version does not print preview / print contracts
 ----------------------------------------------------------------------------------------------------------
+Confusion -
+- Pricing for Bubbler:
+    - Hayward breakdown lists the name as 'Colorlogic Bubbler'. What should normal bubbler be called? Is normal bubbler this cost minus the pool light cost & no electric run (only WF Run)?
