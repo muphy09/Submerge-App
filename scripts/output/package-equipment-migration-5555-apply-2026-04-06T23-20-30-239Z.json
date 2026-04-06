@@ -1,0 +1,210 @@
+{
+  "apply": true,
+  "migrationTimestamp": "2026-04-06T23:20:28.932Z",
+  "profileDir": "C:\\Users\\bkumm\\AppData\\Roaming\\submerge-proposal-builder",
+  "authenticatedUser": "brian@bkummer.com",
+  "franchise": {
+    "id": "b4c27ce1-1485-4211-8336-3e2d2ef18a14",
+    "code": "5555",
+    "source": "local-profile"
+  },
+  "scannedProposals": 24,
+  "updatedProposals": 4,
+  "updatedVersions": 5,
+  "warnings": [],
+  "results": [
+    {
+      "proposalNumber": "PROP-1775327831706",
+      "versionChanges": [
+        {
+          "versionId": "original",
+          "versionName": "Original Version",
+          "changes": [
+            {
+              "label": "Primary Sanitation",
+              "before": "Salt System with Automation",
+              "after": "25K Salt System x1"
+            },
+            {
+              "label": "Pool Light 1",
+              "before": "Hydura Pool Light",
+              "after": "Hydura Colored LED Light"
+            }
+          ],
+          "remainingRetiredFlags": {
+            "pump": true,
+            "additionalPumps": [],
+            "auxiliaryPumps": [],
+            "filter": true,
+            "cleaner": true,
+            "heater": false,
+            "automation": true,
+            "saltSystem": true,
+            "sanitationAccessory": false,
+            "autoFillSystem": false,
+            "poolLights": [
+              true,
+              true,
+              true
+            ],
+            "spaLights": [],
+            "any": true
+          }
+        }
+      ]
+    },
+    {
+      "proposalNumber": "PROP-1775513854819",
+      "versionChanges": [
+        {
+          "versionId": "original",
+          "versionName": "Original Version",
+          "changes": [
+            {
+              "label": "Primary Sanitation",
+              "before": "Salt System with Automation",
+              "after": "25K Salt System x1"
+            },
+            {
+              "label": "Pool Light 1",
+              "before": "Hydura Pool Light",
+              "after": "Hydura Colored LED Light"
+            }
+          ],
+          "remainingRetiredFlags": {
+            "pump": true,
+            "additionalPumps": [],
+            "auxiliaryPumps": [],
+            "filter": true,
+            "cleaner": true,
+            "heater": false,
+            "automation": true,
+            "saltSystem": true,
+            "sanitationAccessory": false,
+            "autoFillSystem": false,
+            "poolLights": [
+              true,
+              true
+            ],
+            "spaLights": [],
+            "any": true
+          }
+        }
+      ]
+    },
+    {
+      "proposalNumber": "PROP-1775269396758",
+      "versionChanges": [
+        {
+          "versionId": "original",
+          "versionName": "Original Version",
+          "changes": [
+            {
+              "label": "Primary Sanitation",
+              "before": "Salt System with Automation",
+              "after": "25K Salt System x1"
+            },
+            {
+              "label": "Pool Light 1",
+              "before": "Hydura Pool Light",
+              "after": "Hydura Colored LED Light"
+            }
+          ],
+          "remainingRetiredFlags": {
+            "pump": true,
+            "additionalPumps": [],
+            "auxiliaryPumps": [
+              true
+            ],
+            "filter": true,
+            "cleaner": true,
+            "heater": false,
+            "automation": true,
+            "saltSystem": true,
+            "sanitationAccessory": false,
+            "autoFillSystem": false,
+            "poolLights": [
+              true,
+              true
+            ],
+            "spaLights": [],
+            "any": true
+          }
+        }
+      ]
+    },
+    {
+      "proposalNumber": "PROP-1775315635056",
+      "versionChanges": [
+        {
+          "versionId": "version-c5bdsio",
+          "versionName": "Version 2",
+          "changes": [
+            {
+              "label": "Primary Sanitation",
+              "before": "Salt System with Automation",
+              "after": "25K Salt System x1"
+            },
+            {
+              "label": "Pool Light 1",
+              "before": "Hydura Pool Light",
+              "after": "Hydura Colored LED Light"
+            }
+          ],
+          "remainingRetiredFlags": {
+            "pump": true,
+            "additionalPumps": [],
+            "auxiliaryPumps": [],
+            "filter": true,
+            "cleaner": true,
+            "heater": false,
+            "automation": true,
+            "saltSystem": true,
+            "sanitationAccessory": false,
+            "autoFillSystem": false,
+            "poolLights": [
+              true,
+              true
+            ],
+            "spaLights": [],
+            "any": true
+          }
+        },
+        {
+          "versionId": "original",
+          "versionName": "Original Version",
+          "changes": [
+            {
+              "label": "Primary Sanitation",
+              "before": "Salt System with Automation",
+              "after": "25K Salt System x1"
+            },
+            {
+              "label": "Pool Light 1",
+              "before": "Hydura Pool Light",
+              "after": "Hydura Colored LED Light"
+            }
+          ],
+          "remainingRetiredFlags": {
+            "pump": true,
+            "additionalPumps": [],
+            "auxiliaryPumps": [],
+            "filter": true,
+            "cleaner": true,
+            "heater": false,
+            "automation": true,
+            "saltSystem": true,
+            "sanitationAccessory": false,
+            "autoFillSystem": false,
+            "poolLights": [
+              true,
+              true
+            ],
+            "spaLights": [],
+            "any": true
+          }
+        }
+      ]
+    }
+  ]
+}

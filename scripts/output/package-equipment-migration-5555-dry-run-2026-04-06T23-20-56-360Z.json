@@ -1,0 +1,16 @@
+{
+  "apply": false,
+  "migrationTimestamp": "2026-04-06T23:20:55.854Z",
+  "profileDir": "C:\\Users\\bkumm\\AppData\\Roaming\\submerge-proposal-builder",
+  "authenticatedUser": "brian@bkummer.com",
+  "franchise": {
+    "id": "b4c27ce1-1485-4211-8336-3e2d2ef18a14",
+    "code": "5555",
+    "source": "local-profile"
+  },
+  "scannedProposals": 24,
+  "updatedProposals": 0,
+  "updatedVersions": 0,
+  "warnings": [],
+  "results": []
+}

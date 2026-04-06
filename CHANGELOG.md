@@ -1,6 +1,12 @@
+## [2.2.9] - 4/6/26
+### 
+
+-----
 ## [2.2.8] - 4/6/26
 ### Fiberglass Spa Plumbing
 - Fiberglass Pool Shell with 'No Spa' selection no longer disables Spa logic
+### Fixed
+- Fixed old equipment data in equipment package selection and migrated proposals that were affected
 -----
 ## [2.2.7] - 4/6/26
 ### Fiberglass Spa Plumbing
