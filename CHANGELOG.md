@@ -1,3 +1,7 @@
+## [2.2.8] - 4/6/26
+### Fiberglass Spa Plumbing
+- Fiberglass Pool Shell with 'No Spa' selection no longer disables Spa logic
+-----
 ## [2.2.7] - 4/6/26
 ### Fiberglass Spa Plumbing
 - Fixed the bug causing Fiberglass Spas to not bill Spa Base and Plubming Overruns like Shotcrete does
