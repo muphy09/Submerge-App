@@ -7,8 +7,6 @@
     - Proposal Summary in the middle column
     - Proposal Actions & Activity in the right column
 *This change will hopefully make the Summary section easier to navigate*
-
-
 -----
 ## [2.2.6] - 4/6/26
 ### Fixed
