@@ -9,7 +9,7 @@ import {
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
-import { getDefaultCleanerOption, getDefaultCleanerQuantity } from '../utils/cleanerDefaults';
+import { getDefaultCleanerOption, getDefaultCleanerQuantity, getNoCleanerOption, isNoCleanerSelection } from '../utils/cleanerDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { getRetiredEquipmentFlags } from '../utils/retiredEquipment';
 import {
@@ -117,15 +117,20 @@ function EquipmentSectionNew({
     const pump = getNoPumpSelection();
     const filter = byCost(pricingData.equipment.filters);
     const cleaner = getDefaultCleanerOption(pricingData.equipment.cleaners) || byCost(pricingData.equipment.cleaners);
+    const noCleaner = getNoCleanerOption(pricingData.equipment.cleaners) || byCost(pricingData.equipment.cleaners);
     const heater = byCost(pricingData.equipment.heaters);
     const automation = byCost(pricingData.equipment.automation);
     const autoFillSystem = byCost(pricingData.equipment.autoFillSystem);
-    return { pump, filter, cleaner, heater, automation, autoFillSystem };
+    return { pump, filter, cleaner, noCleaner, heater, automation, autoFillSystem };
   }, []);
 
   const selectableDefaults = useMemo(() => ({
     pump: pricingData.equipment.pumps.find(p => !p.name.toLowerCase().includes('no pump')) || pricingData.equipment.pumps[0],
     filter: pricingData.equipment.filters.find(f => !f.name.toLowerCase().includes('no filter')) || pricingData.equipment.filters[0],
+    cleaner:
+      getDefaultCleanerOption(pricingData.equipment.cleaners) ||
+      pricingData.equipment.cleaners.find(cleaner => !isNoCleanerSelection(cleaner.name)) ||
+      pricingData.equipment.cleaners[0],
     heater: pricingData.equipment.heaters.find(h => !h.name.toLowerCase().includes('no heater')) || pricingData.equipment.heaters[0],
     automation: pricingData.equipment.automation.find(a => !a.name.toLowerCase().includes('no automation')) || pricingData.equipment.automation[0],
     saltSystem: pricingData.equipment.saltSystem.find(s => !isNoSaltSystemName(s.name)) || pricingData.equipment.saltSystem[0],
@@ -233,13 +238,13 @@ function EquipmentSectionNew({
     },
     filterQuantity: data?.filterQuantity ?? 0,
     cleaner: data?.cleaner || {
-      name: defaults.cleaner.name,
-      basePrice: (defaults.cleaner as any).basePrice,
-      addCost1: (defaults.cleaner as any).addCost1,
-      addCost2: (defaults.cleaner as any).addCost2,
-      price: costOf(defaults.cleaner),
+      name: defaults.noCleaner.name,
+      basePrice: (defaults.noCleaner as any).basePrice,
+      addCost1: (defaults.noCleaner as any).addCost1,
+      addCost2: (defaults.noCleaner as any).addCost2,
+      price: costOf(defaults.noCleaner),
     },
-    cleanerQuantity: data?.cleanerQuantity ?? getDefaultCleanerQuantity(data?.cleaner || defaults.cleaner),
+    cleanerQuantity: data?.cleanerQuantity ?? getDefaultCleanerQuantity(data?.cleaner),
     heater: data?.heater || {
       name: defaults.heater.name,
       btu: (defaults.heater as any).btu,
@@ -734,7 +739,7 @@ function EquipmentSectionNew({
   const toggleCleaner = (val: boolean) => {
     setIncludeCleaner(val);
     if (val) {
-      const selected = safeData.cleaner?.name ? safeData.cleaner : defaults.cleaner;
+      const selected = hasRealSelection(safeData.cleaner?.name, 'no cleaner') ? safeData.cleaner : selectableDefaults.cleaner;
       const baseQty = 1;
       updateData({
         cleaner: {
@@ -749,11 +754,11 @@ function EquipmentSectionNew({
     } else {
       updateData({
         cleaner: {
-          name: defaults.cleaner.name,
-          basePrice: (defaults.cleaner as any).basePrice,
-          addCost1: (defaults.cleaner as any).addCost1,
-          addCost2: (defaults.cleaner as any).addCost2,
-          price: costOf(defaults.cleaner),
+          name: defaults.noCleaner.name,
+          basePrice: (defaults.noCleaner as any).basePrice,
+          addCost1: (defaults.noCleaner as any).addCost1,
+          addCost2: (defaults.noCleaner as any).addCost2,
+          price: costOf(defaults.noCleaner),
         },
         cleanerQuantity: 0,
       });

@@ -563,14 +563,18 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       getEnabledEquipmentPackageOptions().find((option) => option.id === CUSTOM_PACKAGE_ID) ||
       getEnabledEquipmentPackageOptions().find((option) => option.mode === 'custom');
 
-    if (selectedPackage && isFixedEquipmentPackage(selectedPackage)) {
+    if (selectedPackage) {
       return createFreshEquipmentForPackage(selectedPackage, { hasPool, hasSpa });
+    }
+
+    if (defaultCustomPackage) {
+      return createFreshEquipmentForPackage(defaultCustomPackage, { hasPool, hasSpa });
     }
 
     return normalizeEquipmentLighting(
       {
         ...getDefaultEquipment(),
-        packageSelectionId: selectedPackage?.id || currentEquipment?.packageSelectionId || defaultCustomPackage?.id || CUSTOM_PACKAGE_ID,
+        packageSelectionId: currentEquipment?.packageSelectionId || CUSTOM_PACKAGE_ID,
       } as Proposal['equipment'],
       { poolSpecs, hasPool, hasSpa }
     );
@@ -815,8 +819,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const poolJustAdded = !previousHasPool && hasPool;
     const poolRemoved = previousHasPool && !hasPool;
     const hasPoolLightSelection = (proposal.equipment?.poolLights?.length ?? 0) > 0;
+    const shouldAutoAddPoolLight = proposal.equipment?.includePoolLights !== false;
 
-    if (poolJustAdded && !hasPoolLightSelection) {
+    if (poolJustAdded && !hasPoolLightSelection && shouldAutoAddPoolLight) {
       setProposal(prev => {
         const nextEquipment = normalizeEquipmentLighting(
           {
@@ -1187,6 +1192,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
       if (loadRequestRef.current === requestId) {
         previousSpaTypeRef.current = sanitizedTarget.poolSpecs?.spaType ?? 'none';
+        previousHasPoolRef.current = hasPoolDefinition(sanitizedTarget.poolSpecs);
         setProposal(sanitizedTarget);
         setVersionList(hydratedVersions);
         setActiveVersionId(nextActiveId);

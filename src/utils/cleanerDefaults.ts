@@ -35,5 +35,12 @@ export const getDefaultCleanerOption = <T extends CleanerLike>(cleaners?: T[] | 
   return defaultIndex >= 0 ? source[defaultIndex] : null;
 };
 
+export const getNoCleanerOption = <T extends CleanerLike>(cleaners?: T[] | null): T | null => {
+  const source =
+    cleaners ??
+    ((((pricingData as any).equipment?.cleaners as T[] | undefined) || []) as T[]);
+  return source.find((cleaner) => isNoCleanerSelection(cleaner?.name)) || source[0] || null;
+};
+
 export const getDefaultCleanerQuantity = (cleaner?: CleanerLike | null): number =>
   cleaner && !isNoCleanerSelection(cleaner.name) ? 1 : 0;

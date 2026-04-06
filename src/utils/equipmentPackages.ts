@@ -1,6 +1,6 @@
 import pricingData from '../services/pricingData';
 import { getEquipmentItemCost } from './equipmentCost';
-import { getDefaultCleanerOption, getDefaultCleanerQuantity } from './cleanerDefaults';
+import { getDefaultCleanerOption, getNoCleanerOption } from './cleanerDefaults';
 import { normalizeEquipmentLighting } from './lighting';
 import { getNoPumpSelection } from './pumpDefaults';
 import {
@@ -378,6 +378,8 @@ export const createFreshEquipmentForPackage = (
   const defaultFilter = findZeroCostItem(pricingData.equipment.filters);
   const defaultCleaner =
     getDefaultCleanerOption(pricingData.equipment.cleaners) || findZeroCostItem(pricingData.equipment.cleaners);
+  const noCleaner =
+    getNoCleanerOption(pricingData.equipment.cleaners) || defaultCleaner;
   const defaultHeater = findZeroCostItem(pricingData.equipment.heaters);
   const defaultAutomation = findZeroCostItem(pricingData.equipment.automation);
   const defaultEquipment: Equipment = {
@@ -396,13 +398,13 @@ export const createFreshEquipmentForPackage = (
     },
     filterQuantity: 0,
     cleaner: {
-      name: defaultCleaner.name,
-      basePrice: (defaultCleaner as any).basePrice,
-      addCost1: (defaultCleaner as any).addCost1,
-      addCost2: (defaultCleaner as any).addCost2,
-      price: getEquipmentItemCost(defaultCleaner as any, 1),
+      name: noCleaner.name,
+      basePrice: (noCleaner as any).basePrice,
+      addCost1: (noCleaner as any).addCost1,
+      addCost2: (noCleaner as any).addCost2,
+      price: getEquipmentItemCost(noCleaner as any, 1),
     },
-    cleanerQuantity: getDefaultCleanerQuantity(defaultCleaner),
+    cleanerQuantity: 0,
     heater: {
       name: defaultHeater.name,
       btu: (defaultHeater as any).btu,
@@ -483,7 +485,17 @@ export const createFreshEquipmentForPackage = (
     pumpQuantity: resolvePackageQty(option.includedPumpQuantity),
     filter: filterSelection || defaultEquipment.filter,
     filterQuantity: resolvePackageQty(option.includedFilterQuantity),
-    cleaner: cleanerSelection || defaultEquipment.cleaner,
+    cleaner:
+      cleanerSelection ||
+      (defaultCleanerQty > 0 || resolvePackageQty(option.includedCleanerQuantity) > 0
+        ? {
+            name: defaultCleaner.name,
+            basePrice: (defaultCleaner as any).basePrice,
+            addCost1: (defaultCleaner as any).addCost1,
+            addCost2: (defaultCleaner as any).addCost2,
+            price: getEquipmentItemCost(defaultCleaner as any, 1),
+          }
+        : defaultEquipment.cleaner),
     cleanerQuantity:
       defaultCleanerQty > 0
         ? defaultCleanerQty

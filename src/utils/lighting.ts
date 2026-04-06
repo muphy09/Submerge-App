@@ -54,8 +54,16 @@ export const normalizeEquipmentLighting = (
   const hasSpa = opts?.hasSpa ?? (opts?.poolSpecs?.spaType !== 'none');
   const preserveEmpty = opts?.preserveEmpty ?? false;
 
-  const includePoolLightsFlag = equipment.includePoolLights !== false;
-  const includeSpaLightsFlag = equipment.includeSpaLights !== false;
+  const includePoolLightsFlag =
+    typeof equipment.includePoolLights === 'boolean'
+      ? equipment.includePoolLights
+      : (Array.isArray(equipment.poolLights) && equipment.poolLights.length > 0) ||
+        Math.max(equipment.numberOfLights ?? 0, 0) > 0;
+  const includeSpaLightsFlag =
+    typeof equipment.includeSpaLights === 'boolean'
+      ? equipment.includeSpaLights
+      : (Array.isArray(equipment.spaLights) && equipment.spaLights.length > 0) ||
+        Boolean(equipment.hasSpaLight);
   const allowPoolLights = includePoolLightsFlag && hasPool;
   const allowSpaLights = includeSpaLightsFlag && hasSpa;
 

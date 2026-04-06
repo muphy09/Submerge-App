@@ -23,7 +23,7 @@ import {
 import pricingData from '../services/pricingData';
 import { CURRENT_CONTRACT_TEMPLATE_REVISION } from '../services/contractTemplateUpgrade';
 import { getEquipmentItemCost } from './equipmentCost';
-import { getDefaultCleanerOption, getDefaultCleanerQuantity } from './cleanerDefaults';
+import { getDefaultCleanerOption, getNoCleanerOption } from './cleanerDefaults';
 import { getNoPumpSelection } from './pumpDefaults';
 
 export function getDefaultPoolSpecs(): PoolSpecs {
@@ -178,11 +178,13 @@ export function getDefaultEquipment(): Equipment {
 
   const defaultPump = getNoPumpSelection(pumpOverhead);
   const defaultFilter = pickDefault(pricingData.equipment.filters, 1);
-  const defaultCleaner = getDefaultCleanerOption(pricingData.equipment.cleaners) || pickDefault(pricingData.equipment.cleaners, 1);
+  const defaultCleaner =
+    getNoCleanerOption(pricingData.equipment.cleaners) ||
+    getDefaultCleanerOption(pricingData.equipment.cleaners) ||
+    pickDefault(pricingData.equipment.cleaners, 1);
   const defaultHeater = pickDefault(pricingData.equipment.heaters, 1);
   const defaultAutomation = pickDefault(pricingData.equipment.automation, 1);
   const otherOverhead = 1;
-  const defaultCleanerQuantity = getDefaultCleanerQuantity(defaultCleaner);
 
   return {
     pump: { ...defaultPump },
@@ -205,7 +207,7 @@ export function getDefaultEquipment(): Equipment {
       addCost2: (defaultCleaner as any).addCost2,
       price: getEquipmentItemCost(defaultCleaner as any, otherOverhead),
     },
-    cleanerQuantity: defaultCleanerQuantity,
+    cleanerQuantity: 0,
     heater: {
       name: defaultHeater.name,
       btu: (defaultHeater as any).btu,
