@@ -3,6 +3,8 @@ import { Equipment, LightSelection, PoolSpecs } from '../types/proposal-new';
 
 type LightType = 'pool' | 'spa';
 
+const normalizeName = (value?: string | null) => (value ?? '').trim().toLowerCase();
+
 const getLightOptions = (type: LightType) =>
   (type === 'pool' ? pricingData.equipment.lights.poolLights : pricingData.equipment.lights.spaLights) || [];
 
@@ -24,10 +26,18 @@ const buildLightSelection = (option: any, type: LightType): LightSelection => ({
 const hydrateLight = (light: Partial<LightSelection> | undefined, type: LightType): LightSelection | null => {
   const options = getLightOptions(type);
   if (!options.length) return null;
-  const match = light?.name ? options.find(opt => opt.name === light.name) : undefined;
+  const targetName = normalizeName(light?.name);
+  const match = targetName ? options.find(opt => normalizeName(opt.name) === targetName) : undefined;
   const option = match || getDefaultLightOption(type);
   if (!option) return null;
-  return buildLightSelection({ ...option, ...light }, type);
+  return buildLightSelection(
+    {
+      ...option,
+      ...light,
+      name: match?.name || light?.name?.trim() || option?.name || '',
+    },
+    type
+  );
 };
 
 const hydrateLightList = (list: Partial<LightSelection>[] | undefined, type: LightType): LightSelection[] =>

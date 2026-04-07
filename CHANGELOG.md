@@ -1,6 +1,7 @@
 ## [2.2.9] - 4/6/26
-### 
-
+### Fixed
+- Legacy equipment data no longer fills into blank proposals
+- Custom Equip Package now includes a Default Pool Light selection, configured in Admin Panel
 -----
 ## [2.2.8] - 4/6/26
 ### Fiberglass Spa Plumbing

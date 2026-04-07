@@ -1098,6 +1098,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       includedSanitationAccessoryQuantity: 0,
       defaultCleanerName: '',
       defaultCleanerQuantity: 0,
+      defaultPoolLightName: '',
+      defaultPoolLightQuantity: 0,
       defaultAutoFillSystemName: '',
       defaultAutoFillSystemQuantity: 0,
       defaultSanitationAccessoryName: '',
@@ -1338,6 +1340,22 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                     </label>
                   </div>
                 </>
+              )}
+
+              {isCustom && (
+                <div className="pricing-package-section">
+                  <h6>Default Equipment Selections</h6>
+                  <div className="pricing-package-items">
+                    {renderPackageNameSelect(
+                      pkg,
+                      index,
+                      'Default Pool Lights',
+                      'defaultPoolLightName',
+                      'defaultPoolLightQuantity',
+                      equipmentOptions.poolLights
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           );

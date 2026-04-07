@@ -219,6 +219,7 @@ export function getDefaultEquipment(): Equipment {
     heaterQuantity: 0,
     poolLights: [],
     spaLights: [],
+    applyCustomPackageDefaultPoolLights: false,
     numberOfLights: 0,
     hasSpaLight: false,
     automation: {
@@ -245,6 +246,7 @@ export function getDefaultEquipment(): Equipment {
     hasHandrail: false,
     hasStartupChemicals: false,
     packageSelectionId: undefined,
+    packageSelectionTouched: undefined,
     customOptions: [],
     totalCost: 0,
     hasBeenEdited: false,

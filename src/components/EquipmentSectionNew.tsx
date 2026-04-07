@@ -255,6 +255,7 @@ function EquipmentSectionNew({
     },
     heaterQuantity: hasHeaterSelection ? Math.max(data?.heaterQuantity ?? 1, 1) : 0,
     includePoolLights: data?.includePoolLights,
+    applyCustomPackageDefaultPoolLights: data?.applyCustomPackageDefaultPoolLights,
     includeSpaLights: data?.includeSpaLights,
     poolLights: data?.poolLights,
     spaLights: data?.spaLights,
@@ -289,6 +290,7 @@ function EquipmentSectionNew({
     hasHandrail: data?.hasHandrail ?? false,
     hasStartupChemicals: data?.hasStartupChemicals ?? false,
     packageSelectionId: data?.packageSelectionId,
+    packageSelectionTouched: data?.packageSelectionTouched,
     customOptions: data?.customOptions ?? [],
     totalCost: data?.totalCost ?? 0,
     hasBeenEdited: data?.hasBeenEdited ?? false,
@@ -332,10 +334,6 @@ function EquipmentSectionNew({
     !safeData.sanitationAccessory.name.toLowerCase().includes('no sanitation');
   const packageButtonDisabledMessage = 'This equipment package is not possible with a Spa';
   const packageLockedCategoryMessage = `${selectedPackageName} includes this selection. Change the package to modify it.`;
-  const addPoolLightDisabledReason =
-    isFixedPackage && !packageAllowsPoolLightChanges
-      ? 'This equipment package does not allow additional pool lights.'
-      : undefined;
   const addSpaLightDisabledReason =
     isFixedPackage && !packageAllowsSpaLightChanges
       ? 'This equipment package does not allow spa light upgrades.'
@@ -557,10 +555,37 @@ function EquipmentSectionNew({
       pushRow('Additional Options', summarizeQuantity(safeData.sanitationAccessory.name, sanitationAccessoryQuantity));
     }
 
-    const poolLightSummary = summarizeSelectionNames(poolLights.map((light) => light?.name));
+    const poolLightSummary =
+      summarizeSelectionNames(poolLights.map((light) => light?.name)) ||
+      (packageIncludesPoolLights &&
+      selectedPackage?.includedPoolLightName &&
+      Math.max(selectedPackage?.includedPoolLightQuantity ?? 0, 0) > 0
+        ? summarizeQuantity(
+            selectedPackage.includedPoolLightName,
+            Math.max(selectedPackage.includedPoolLightQuantity ?? 0, 0)
+          )
+        : hasPool &&
+            !isFixedPackage &&
+            safeData.applyCustomPackageDefaultPoolLights !== false &&
+            selectedPackage?.defaultPoolLightName &&
+            Math.max(selectedPackage?.defaultPoolLightQuantity ?? 0, 0) > 0
+          ? summarizeQuantity(
+              selectedPackage.defaultPoolLightName,
+              Math.max(selectedPackage.defaultPoolLightQuantity ?? 0, 0)
+            )
+          : '');
     pushRow('Pool Lights', poolLightSummary);
 
-    const spaLightSummary = summarizeSelectionNames(spaLights.map((light) => light?.name));
+    const spaLightSummary =
+      summarizeSelectionNames(spaLights.map((light) => light?.name)) ||
+      (packageIncludesSpaLights &&
+      selectedPackage?.includedSpaLightName &&
+      Math.max(selectedPackage?.includedSpaLightQuantity ?? 0, 0) > 0
+        ? summarizeQuantity(
+            selectedPackage.includedSpaLightName,
+            Math.max(selectedPackage.includedSpaLightQuantity ?? 0, 0)
+          )
+        : '');
     pushRow('Spa Lights', spaLightSummary);
 
     if (
@@ -593,9 +618,11 @@ function EquipmentSectionNew({
     packageIncludesCleaner,
     packageIncludesFilter,
     packageIncludesHeater,
+    packageIncludesPoolLights,
     packageIncludesPump,
     packageIncludesSalt,
     packageIncludesSanitationAccessory,
+    packageIncludesSpaLights,
     poolLights,
     primaryPumpSummaryQuantity,
     safeData.additionalSaltSystem?.name,
@@ -603,12 +630,19 @@ function EquipmentSectionNew({
     safeData.automation?.name,
     safeData.cleaner?.name,
     safeData.filter?.name,
+    safeData.applyCustomPackageDefaultPoolLights,
     safeData.heater?.name,
     safeData.pump?.name,
     safeData.saltSystem,
     safeData.sanitationAccessory?.name,
+    selectedPackage?.defaultPoolLightName,
+    selectedPackage?.defaultPoolLightQuantity,
+    selectedPackage?.includedPoolLightName,
+    selectedPackage?.includedPoolLightQuantity,
     selectedPackage?.includedSanitationAccessoryName,
     selectedPackage?.includedSanitationAccessoryQuantity,
+    selectedPackage?.includedSpaLightName,
+    selectedPackage?.includedSpaLightQuantity,
     sanitationAccessoryQuantity,
     saltSystemQuantity,
     spaLights,
@@ -640,6 +674,13 @@ function EquipmentSectionNew({
     return list.find(light => (light as any)?.defaultLightChoice) || list[0];
   };
 
+  const findConfiguredLightOption = (name: string | undefined, type: 'pool' | 'spa') => {
+    const list = type === 'pool' ? poolLightOptions : spaLightOptions;
+    const normalizedName = (name || '').trim().toLowerCase();
+    if (!normalizedName) return undefined;
+    return list.find((option) => option.name.trim().toLowerCase() === normalizedName);
+  };
+
   const buildLightSelection = (option: any, type: 'pool' | 'spa'): LightSelection => ({
     type,
     name: option?.name || '',
@@ -649,11 +690,52 @@ function EquipmentSectionNew({
     price: (option as any)?.price,
   });
 
+  const customPackageDefaultPoolLightQuantity =
+    hasPool &&
+    selectedPackage &&
+    isCustomEquipmentPackage(selectedPackage) &&
+    safeData.applyCustomPackageDefaultPoolLights !== false
+      ? Math.max(selectedPackage.defaultPoolLightQuantity ?? 0, 0)
+      : 0;
+  const customPackageDefaultPoolLightOption =
+    customPackageDefaultPoolLightQuantity > 0
+      ? (
+          selectedPackage?.defaultPoolLightName
+            ? findConfiguredLightOption(selectedPackage.defaultPoolLightName, 'pool')
+            : undefined
+        ) || getDefaultLightOption('pool')
+      : null;
+  const customPackageDefaultPoolLightName =
+    selectedPackage?.defaultPoolLightName ||
+    customPackageDefaultPoolLightOption?.name ||
+    '';
+  const effectivePoolLights =
+    poolLights.length > 0
+      ? poolLights
+      : customPackageDefaultPoolLightQuantity > 0 && customPackageDefaultPoolLightName
+      ? Array.from({ length: customPackageDefaultPoolLightQuantity }, () =>
+          buildLightSelection(
+            customPackageDefaultPoolLightOption || { name: customPackageDefaultPoolLightName },
+            'pool'
+          )
+        )
+      : [];
+  const hasEffectivePoolLights = effectivePoolLights.length > 0;
+  const isPoolLightMissingFromCatalog = (name?: string) =>
+    Boolean(name) && !poolLightOptions.some((option) => option.name === name);
+  const addPoolLightDisabledReason =
+    poolLightOptions.length === 0
+      ? 'No pool light options are configured in the active pricing model.'
+      : isFixedPackage && !packageAllowsPoolLightChanges
+        ? 'This equipment package does not allow additional pool lights.'
+        : undefined;
+
   const commitLighting = (
     nextPoolLights: LightSelection[],
     nextSpaLights: LightSelection[],
     nextIncludePool: boolean,
     nextIncludeSpa: boolean,
+    overrides?: Partial<Equipment>,
   ) => {
     updateData({
       includePoolLights: nextIncludePool,
@@ -662,6 +744,7 @@ function EquipmentSectionNew({
       spaLights: nextIncludeSpa && hasSpa ? nextSpaLights : [],
       numberOfLights: nextIncludePool ? Math.max(nextPoolLights.length - 1, 0) : 0,
       hasSpaLight: nextIncludeSpa && hasSpa && nextSpaLights.length > 0,
+      ...(overrides || {}),
     });
   };
 
@@ -804,11 +887,44 @@ function EquipmentSectionNew({
   }, [hasPool, includePoolLights, poolLights.length, spaLights, includeSpaLights]);
 
   useEffect(() => {
+    if (!hasPool) return;
+    if (!selectedPackage || !isCustomEquipmentPackage(selectedPackage)) return;
+    if (safeData.applyCustomPackageDefaultPoolLights === false) return;
+    if ((poolLights.length ?? 0) > 0) return;
+
+    const configuredQuantity = Math.max(selectedPackage.defaultPoolLightQuantity ?? 0, 0);
+    if (configuredQuantity <= 0) return;
+
+    const configuredOption =
+      (selectedPackage.defaultPoolLightName
+        ? findConfiguredLightOption(selectedPackage.defaultPoolLightName, 'pool')
+        : undefined) || getDefaultLightOption('pool');
+    if (!configuredOption && !selectedPackage.defaultPoolLightName) return;
+
+    const nextPoolLights = Array.from({ length: configuredQuantity }, () =>
+      buildLightSelection(configuredOption || { name: selectedPackage.defaultPoolLightName }, 'pool')
+    );
+    setIncludePoolLights(true);
+    commitLighting(nextPoolLights, spaLights, true, includeSpaLights, {
+      applyCustomPackageDefaultPoolLights: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    hasPool,
+    selectedPackage?.id,
+    selectedPackage?.defaultPoolLightName,
+    selectedPackage?.defaultPoolLightQuantity,
+    safeData.applyCustomPackageDefaultPoolLights,
+    poolLights.length,
+    poolLightOptions.length,
+  ]);
+
+  useEffect(() => {
     if (!hasSpa && (includeSpaLights || spaLights.length > 0)) {
       setIncludeSpaLights(false);
-      commitLighting(poolLights, [], includePoolLights, false);
+      commitLighting(effectivePoolLights, [], includePoolLights || hasEffectivePoolLights, false);
     }
-  }, [hasSpa, includeSpaLights, spaLights.length, poolLights, includePoolLights]);
+  }, [hasSpa, includeSpaLights, spaLights.length, effectivePoolLights.length, includePoolLights, hasEffectivePoolLights]);
 
   useEffect(() => {
     if (packageHasNoSanitationSystem) {
@@ -953,12 +1069,14 @@ function EquipmentSectionNew({
   const handlePoolLightSelect = (name: string) => {
     if (name === noneOptionValue) {
       setIncludePoolLights(false);
-      commitLighting([], spaLights, false, includeSpaLights);
+      commitLighting([], spaLights, false, includeSpaLights, {
+        applyCustomPackageDefaultPoolLights: false,
+      });
       return;
     }
     const option = findLightOption(name, 'pool');
     if (!option) return;
-    const nextPoolLights = poolLights.length > 0 ? [...poolLights] : [];
+    const nextPoolLights = effectivePoolLights.length > 0 ? [...effectivePoolLights] : [];
     const primary = buildLightSelection(option, 'pool');
     if (nextPoolLights.length > 0) {
       nextPoolLights[0] = primary;
@@ -966,13 +1084,15 @@ function EquipmentSectionNew({
       nextPoolLights.push(primary);
     }
     setIncludePoolLights(true);
-    commitLighting(nextPoolLights, spaLights, true, includeSpaLights);
+    commitLighting(nextPoolLights, spaLights, true, includeSpaLights, {
+      applyCustomPackageDefaultPoolLights: true,
+    });
   };
 
   const handleSpaLightSelect = (name: string) => {
     if (name === noneOptionValue) {
       setIncludeSpaLights(false);
-      commitLighting(poolLights, [], includePoolLights, false);
+      commitLighting(effectivePoolLights, [], includePoolLights || hasEffectivePoolLights, false);
       return;
     }
     if (!hasSpa) return;
@@ -986,49 +1106,57 @@ function EquipmentSectionNew({
       nextSpaLights.push(primary);
     }
     setIncludeSpaLights(true);
-    commitLighting(poolLights, nextSpaLights, includePoolLights, true);
+    commitLighting(effectivePoolLights, nextSpaLights, includePoolLights || hasEffectivePoolLights, true);
   };
 
   const addPoolLight = () => {
     const defaultLight = getDefaultLightOption('pool');
     if (!defaultLight) return;
-    const nextPoolLights = [...poolLights, buildLightSelection(defaultLight, 'pool')];
-    commitLighting(nextPoolLights, spaLights, true, includeSpaLights);
+    const nextPoolLights = [...effectivePoolLights, buildLightSelection(defaultLight, 'pool')];
+    commitLighting(nextPoolLights, spaLights, true, includeSpaLights, {
+      applyCustomPackageDefaultPoolLights: true,
+    });
   };
 
   const removePoolLight = (index: number) => {
-    const next = poolLights.filter((_, i) => i !== index);
+    const next = effectivePoolLights.filter((_, i) => i !== index);
     if (next.length === 0) {
       setIncludePoolLights(false);
-      commitLighting([], spaLights, false, includeSpaLights);
+      commitLighting([], spaLights, false, includeSpaLights, {
+        applyCustomPackageDefaultPoolLights: false,
+      });
       return;
     }
-    commitLighting(next, spaLights, true, includeSpaLights);
+    commitLighting(next, spaLights, true, includeSpaLights, {
+      applyCustomPackageDefaultPoolLights: true,
+    });
   };
 
   const handlePoolLightChange = (index: number, name: string) => {
     const option = findLightOption(name, 'pool');
     if (!option) return;
-    const next = [...poolLights];
+    const next = [...effectivePoolLights];
     next[index] = buildLightSelection(option, 'pool');
-    commitLighting(next, spaLights, true, includePoolLights);
+    commitLighting(next, spaLights, true, includeSpaLights, {
+      applyCustomPackageDefaultPoolLights: true,
+    });
   };
 
   const addSpaLight = () => {
     const defaultLight = getDefaultLightOption('spa');
     if (!defaultLight || !hasSpa) return;
     const nextSpaLights = [...spaLights, buildLightSelection(defaultLight, 'spa')];
-    commitLighting(poolLights, nextSpaLights, includePoolLights, true);
+    commitLighting(effectivePoolLights, nextSpaLights, includePoolLights || hasEffectivePoolLights, true);
   };
 
   const removeSpaLight = (index: number) => {
     const next = spaLights.filter((_, i) => i !== index);
     if (next.length === 0) {
       setIncludeSpaLights(false);
-      commitLighting(poolLights, [], includePoolLights, false);
+      commitLighting(effectivePoolLights, [], includePoolLights || hasEffectivePoolLights, false);
       return;
     }
-    commitLighting(poolLights, next, includePoolLights, true);
+    commitLighting(effectivePoolLights, next, includePoolLights || hasEffectivePoolLights, true);
   };
 
   const handleSpaLightChange = (index: number, name: string) => {
@@ -1036,7 +1164,7 @@ function EquipmentSectionNew({
     if (!option) return;
     const next = [...spaLights];
     next[index] = buildLightSelection(option, 'spa');
-    commitLighting(poolLights, next, includePoolLights, true);
+    commitLighting(effectivePoolLights, next, includePoolLights || hasEffectivePoolLights, true);
   };
 
   const toggleAutomation = (val: boolean) => {
@@ -1423,7 +1551,7 @@ function EquipmentSectionNew({
         </div>
         <div className="equipment-package-options">
           {packageOptions.map((option) => {
-            const isSelected = safeData.packageSelectionId === option.id;
+            const isSelected = selectedPackage?.id === option.id;
             const isDisabled = hasSpa && !packageSupportsSpa(option);
             const buttonTitle = isDisabled ? packageButtonDisabledMessage : undefined;
             const isCustom = isCustomEquipmentPackage(option);
@@ -1440,7 +1568,7 @@ function EquipmentSectionNew({
                 aria-pressed={isSelected}
                 onClick={() => {
                   if (isDisabled) return;
-                  if (option.id !== safeData.packageSelectionId) {
+                  if (option.id !== selectedPackage?.id) {
                     onSelectPackage(option.id);
                   }
                 }}
@@ -1780,11 +1908,12 @@ function EquipmentSectionNew({
                 <LabelWithRetired text="Pool Light 1 (Added Automatically)" showRetired={retiredFlags.poolLights[0]} />
                 <select
                   className="compact-input equipment-select"
-                  value={includePoolLights && poolLights.length > 0 ? poolLights[0]?.name || noneOptionValue : noneOptionValue}
+                  value={effectivePoolLights.length > 0 ? effectivePoolLights[0]?.name || noneOptionValue : noneOptionValue}
                   onChange={(e) => handlePoolLightSelect(e.target.value)}
                 >
                   <option value={noneOptionValue}>None</option>
-                  {retiredFlags.poolLights[0] && renderRetiredOption(poolLights[0]?.name)}
+                  {(retiredFlags.poolLights[0] || isPoolLightMissingFromCatalog(effectivePoolLights[0]?.name)) &&
+                    renderRetiredOption(effectivePoolLights[0]?.name)}
                   {poolLightOptions.map(option => (
                     <option key={option.name} value={option.name}>
                       {formatOptionLabel(option.name, costOf(option))}
@@ -1793,9 +1922,9 @@ function EquipmentSectionNew({
                 </select>
               </div>
             )}
-          {(includePoolLights || packageIncludesPoolLights) && (
+          {(includePoolLights || packageIncludesPoolLights || effectivePoolLights.length > 0) && (
             <>
-              {poolLights.slice(1).map((light, idx) => (
+              {effectivePoolLights.slice(1).map((light, idx) => (
                 <div key={`pool-light-${idx + 1}`} className="spec-field equipment-extra-field">
                   <LabelWithRetired
                     text={
@@ -1815,7 +1944,8 @@ function EquipmentSectionNew({
                       value={light?.name || getDefaultLightOption('pool')?.name || ''}
                       onChange={(e) => handlePoolLightChange(idx + 1, e.target.value)}
                     >
-                      {retiredFlags.poolLights[idx + 1] && renderRetiredOption(light?.name)}
+                      {(retiredFlags.poolLights[idx + 1] || isPoolLightMissingFromCatalog(light?.name)) &&
+                        renderRetiredOption(light?.name)}
                       {poolLightOptions.map(option => (
                         <option key={option.name} value={option.name}>
                           {formatOptionLabel(option.name, costOf(option))}

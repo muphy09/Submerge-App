@@ -354,81 +354,50 @@ const pricingData = {
     pumpOverheadMultiplier: 1.1, // Legacy fallback when a pump entry has no overhead multiplier
     pumps: [
       { name: 'No Pump (Select pump)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
-      { name: 'Jandy 1.65HP Variable Pump', basePrice: 2310, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
-      { name: 'Jandy 1.85HP Variable Pump', basePrice: 2540, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
-      { name: 'Jandy 2.7HP Variable Pump', basePrice: 2174.15, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
-      { name: 'Jandy 1.0HP Single Speed Pump', basePrice: 1900, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
-      { name: 'Jandy 2.0HP Single Speed Pump', basePrice: 2060, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
     ],
     auxiliaryPumps: [
       { name: 'No Auxiliary Pump (Select aux pump)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
-      { name: 'Jandy 1.65HP Variable Pump', basePrice: 2310, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: true },
-      { name: 'Jandy 1.85HP Variable Pump', basePrice: 2540, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
-      { name: 'Jandy 2.7HP Variable Pump', basePrice: 2174.15, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
-      { name: 'Jandy 1.0HP Single Speed Pump', basePrice: 1900, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
-      { name: 'Jandy 2.0HP Single Speed Pump', basePrice: 2060, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
     ],
     filters: [
       { name: 'No Filter (Select filter)', sqft: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
-      { name: '200 SQFT Cartridge Filter', sqft: 200, basePrice: 1103.57, addCost1: 0, addCost2: 0 },
-      { name: '340 SQFT Cartridge Filter', sqft: 340, basePrice: 1618.57, addCost1: 0, addCost2: 0 },
-      { name: '460 SQFT Cartridge Filter', sqft: 460, basePrice: 1174.20, addCost1: 0, addCost2: 0 },
-      { name: '580 SQFT Cartridge Filter', sqft: 580, basePrice: 2133.57, addCost1: 0, addCost2: 0 },
-      { name: '4.9 SQFT Sand Filter', sqft: 0, basePrice: 1115.2, addCost1: 0, addCost2: 0 },
-      { name: '60 SQFT DE Filter', sqft: 60, basePrice: 1224.37, addCost1: 0, addCost2: 0 },
     ],
     cleaners: [
-      { name: 'Polaris Epic IQ', basePrice: 1540, addCost1: 0, addCost2: 0, defaultCleaner: true },
-      { name: 'Polaris Alpha IQ', basePrice: 1397.13, addCost1: 0, addCost2: 0, defaultCleaner: false },
-      { name: 'Polaris 360 Standard', basePrice: 1618.57, addCost1: 0, addCost2: 0, defaultCleaner: false },
-      { name: 'Polaris 360 Black', basePrice: 1677.43, addCost1: 0, addCost2: 0, defaultCleaner: false },
-      { name: 'Polaris 280 w/ Booster', basePrice: 2133.57, addCost1: 0, addCost2: 0, defaultCleaner: false },
       { name: 'No Cleaner', basePrice: 0, addCost1: 0, addCost2: 0, defaultCleaner: false },
     ],
     heaters: [
       { name: 'No Heater (Select heater)', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy LXI 250K BTU', btu: 250000, basePrice: 1885, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy JXI 400K - No Bypass', btu: 400000, basePrice: 2308, addCost1: 0, addCost2: 0 },
-      { name: 'Jandy JXI 400K - w/ Bypass', btu: 400000, basePrice: 2475, addCost1: 0, addCost2: 0 },
-      { name: 'Heat Pump', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
     lights: {
-      poolLights: [
-        { name: '24W Nicheless LED (Included by default)', basePrice: 601, addCost1: 0, addCost2: 0, defaultLightChoice: true },
-        { name: 'Low Voltage LED', basePrice: 650, addCost1: 0, addCost2: 0, defaultLightChoice: false },
-      ],
-      spaLights: [
-        { name: 'Spa LED (Included by default)', basePrice: 528, addCost1: 0, addCost2: 0, defaultLightChoice: true },
-        { name: 'Spa Color LED', basePrice: 650, addCost1: 0, addCost2: 0, defaultLightChoice: false },
-      ],
+      // Light catalogs must come from the active pricing model.
+      // Do not fall back to legacy baked-in options here.
+      poolLights: [] as Array<{
+        name: string;
+        basePrice?: number;
+        addCost1?: number;
+        addCost2?: number;
+        defaultLightChoice?: boolean;
+      }>,
+      spaLights: [] as Array<{
+        name: string;
+        basePrice?: number;
+        addCost1?: number;
+        addCost2?: number;
+        defaultLightChoice?: boolean;
+      }>,
     },
     automation: [
       // Automation prices include the 6614 base panel and any required install adders (matches EQUIP sheet rows 61-69)
       { name: 'No Automation', basePrice: 0, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false },
-      { name: '6614 APL BASE PANEL', basePrice: 1600, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false },
-      { name: 'Additional JVA', basePrice: 1800, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base panel + JVA
-      { name: 'Jandy TCX Controler (1 JVA, Lights and Heater Control)', basePrice: 2250, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 650
-      { name: 'iAqualink Only P-4 (H.O. To Provide WiFi)', basePrice: 2575, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 650 + install
-      { name: 'iAqualink Only PS-4 (H.O. To Provide WiFi) Only use with Infinite Light System', basePrice: 3025, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 1100 + install
-      { name: 'iAqualink Only PS-6 (H.O. To Provide WiFi)', basePrice: 3722, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 1797 + install
-      { name: 'iAqualink Only PS-8 (H.O. To Provide WiFi)', basePrice: 4525, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 2600 + install
-      { name: 'IQ Pump 01', basePrice: 1721, addCost1: 0, addCost2: 0, addCost3: 0, includesSaltCell: false }, // base + 121
     ],
     automationZoneAddon: 365, // Per additional zone
     saltSystem: [
-      { name: 'Jandy AquaPure 1400', model: 'AquaPure', basePrice: 0, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
-      { name: 'Jandy Tru-Clear', model: 'TruClear', basePrice: 1150, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
-      { name: 'Salt/mineral System - Fusion Soft', model: 'FusionSoft', basePrice: 1000, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
-      { name: 'Chlorine Inline Feeder', model: 'InlineFeeder', basePrice: 0, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
       { name: 'No Salt System', model: 'None', basePrice: 0, addCost1: 0, addCost2: 0, excludedFromSaltCell: false },
     ],
     autoFillSystem: [
       { name: 'No Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0, requiresElectricRun: false },
-      { name: 'Auto-Fill System', basePrice: 0, addCost1: 0, addCost2: 0, requiresElectricRun: true },
     ],
     sanitationAccessories: [
       { name: 'No Sanitation Accessory', basePrice: 0, addCost1: 0, addCost2: 0 },
-      { name: 'Hydrapure UV Ozone', basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
     blanketReel: 0,
     solarBlanket: 0,
@@ -439,69 +408,6 @@ const pricingData = {
     baseWhiteGoods: 1046.1,
     taxRate: 0.0725, // Equipment tax rate (Excel shows 7.3% -> effective 7.25% with rounding)
     packageOptions: [
-      {
-        id: 'pfm01-basic-chlorine',
-        name: 'PFM01 Basic Chlorine Package',
-        mode: 'fixed',
-        enabled: true,
-        description: '4 bundled equipment selections for a streamlined fixed package.',
-        basePrice: 1739,
-        includeCheckValve: true,
-        supportsSpa: false,
-        allowAdditionalPumps: false,
-        allowHeaterUpgrade: false,
-        allowCleanerUpgrade: true,
-        allowAutoFillUpgrade: true,
-        allowPoolLightUpgrade: true,
-        allowSpaLightUpgrade: false,
-        allowWaterFeatureUpgrade: false,
-        allowSanitationAccessoryUpgrade: true,
-        includedWaterFeaturesBeforeExtraPump: 0,
-        includedPumpName: 'Jandy 1.65HP Variable Pump',
-        includedPumpQuantity: 1,
-        includedFilterName: '150CV Filter',
-        includedFilterQuantity: 1,
-        includedSaltSystemName: 'Chlorine Inline Feeder',
-        includedSaltSystemQuantity: 1,
-        includedPoolLightName: 'Pool Light',
-        includedPoolLightQuantity: 1,
-        defaultCleanerName: '7240 Sport',
-        defaultCleanerQuantity: 1,
-        notes: 'Cannot include a spa or any water features. Additional pumps are not allowed.',
-      },
-      {
-        id: 'pmf03-standard-automation',
-        name: 'PMF03 Standard Automation Package',
-        mode: 'fixed',
-        enabled: true,
-        description: '5 bundled equipment selections with automation already included.',
-        basePrice: 3864,
-        includeCheckValve: true,
-        supportsSpa: false,
-        allowAdditionalPumps: true,
-        allowHeaterUpgrade: true,
-        allowCleanerUpgrade: true,
-        allowAutoFillUpgrade: true,
-        allowPoolLightUpgrade: true,
-        allowSpaLightUpgrade: false,
-        allowWaterFeatureUpgrade: true,
-        allowSanitationAccessoryUpgrade: true,
-        includedWaterFeaturesBeforeExtraPump: 1,
-        includedPumpName: 'Jandy 1.65HP Variable Pump',
-        includedPumpQuantity: 1,
-        includedFilterName: 'CV3030 Filter',
-        includedFilterQuantity: 1,
-        includedAutomationName: 'HL Base',
-        includedAutomationQuantity: 1,
-        includedSaltSystemName: 'Salt System with Automation',
-        includedSaltSystemQuantity: 1,
-        includedPoolLightName: 'Pool Light',
-        includedPoolLightQuantity: 1,
-        defaultCleanerName: '7240 Sport',
-        defaultCleanerQuantity: 1,
-        notes:
-          'Supports one water feature without another pump. A second water feature will auto-add an additional pump.',
-      },
       {
         id: 'custom',
         name: 'Custom',
@@ -520,6 +426,8 @@ const pricingData = {
         allowWaterFeatureUpgrade: true,
         allowSanitationAccessoryUpgrade: true,
         includedWaterFeaturesBeforeExtraPump: 0,
+        defaultPoolLightName: '',
+        defaultPoolLightQuantity: 0,
         notes: 'Uses normal itemized equipment pricing plus the package check valve cost.',
       },
     ],

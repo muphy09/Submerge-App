@@ -106,6 +106,8 @@ const defaultPackageOptions: EquipmentPackageOption[] = [
     allowWaterFeatureUpgrade: true,
     allowSanitationAccessoryUpgrade: true,
     includedWaterFeaturesBeforeExtraPump: 0,
+    defaultPoolLightName: '',
+    defaultPoolLightQuantity: 0,
     notes: 'Uses normal itemized equipment pricing plus the package check valve cost.',
   },
 ];
@@ -176,7 +178,7 @@ export function normalizeEquipmentPackageOptions(
 ): EquipmentPackageOption[] {
   const configured = Array.isArray(options) ? options : [];
   if (!configured.length) {
-    return defaultPackageOptions.map((option) => ({ ...option }));
+    return ensureCustomPackage([]);
   }
   return ensureCustomPackage(configured.map((option) => mergeDefaultPackageOption(option)));
 }
@@ -305,7 +307,7 @@ const buildLightSelection = (name: string, type: 'pool' | 'spa'): LightSelection
   const entry = resolveCatalogItem(list, name);
   return {
     type,
-    name,
+    name: entry?.name || name,
     basePrice: (entry as any)?.basePrice,
     addCost1: (entry as any)?.addCost1,
     addCost2: (entry as any)?.addCost2,
@@ -327,7 +329,9 @@ export const getEquipmentPackageById = (packageId?: string | null): EquipmentPac
 };
 
 export const getSelectedEquipmentPackage = (equipment?: Partial<Equipment> | null): EquipmentPackageOption | null =>
-  getEquipmentPackageById(equipment?.packageSelectionId);
+  equipment?.packageSelectionTouched === false
+    ? null
+    : getEquipmentPackageById(equipment?.packageSelectionId);
 
 export const isCustomEquipmentPackage = (option?: EquipmentPackageOption | null) =>
   (option?.mode || 'fixed') === 'custom';
@@ -417,6 +421,7 @@ export const createFreshEquipmentForPackage = (
     poolLights: [],
     spaLights: [],
     includePoolLights: false,
+    applyCustomPackageDefaultPoolLights: false,
     includeSpaLights: false,
     numberOfLights: 0,
     hasSpaLight: false,
@@ -444,17 +449,11 @@ export const createFreshEquipmentForPackage = (
     hasHandrail: false,
     hasStartupChemicals: false,
     packageSelectionId: option.id,
+    packageSelectionTouched: true,
     customOptions: [],
     totalCost: 0,
     hasBeenEdited: true,
   };
-
-  if (isCustomEquipmentPackage(option)) {
-    return normalizeEquipmentLighting(defaultEquipment, {
-      hasPool: opts?.hasPool,
-      hasSpa: opts?.hasSpa,
-    });
-  }
 
   const pumpSelection = buildPumpSelection(option.includedPumpName);
   const filterSelection = buildFilterSelection(option.includedFilterName);
@@ -472,12 +471,37 @@ export const createFreshEquipmentForPackage = (
 
   const includedPoolLights = resolvePackageQty(option.includedPoolLightQuantity);
   const includedSpaLights = resolvePackageQty(option.includedSpaLightQuantity);
+  const defaultPoolLightQty = resolvePackageQty(option.defaultPoolLightQuantity) || (option.defaultPoolLightName ? 1 : 0);
   const poolLightName = option.includedPoolLightName || pricingData.equipment.lights.poolLights?.[0]?.name || 'Pool Light';
+  const defaultPoolLightName =
+    option.defaultPoolLightName ||
+    pricingData.equipment.lights.poolLights?.find((light: any) => Boolean(light?.defaultLightChoice))?.name ||
+    pricingData.equipment.lights.poolLights?.[0]?.name ||
+    '';
   const spaLightName = option.includedSpaLightName || pricingData.equipment.lights.spaLights?.[0]?.name || 'Spa Light';
   const defaultCleanerQty = resolvePackageQty(option.defaultCleanerQuantity) || (option.defaultCleanerName ? 1 : 0);
   const defaultAutoFillQty = resolvePackageQty(option.defaultAutoFillSystemQuantity) || (option.defaultAutoFillSystemName ? 1 : 0);
   const defaultAccessoryQty =
     resolvePackageQty(option.defaultSanitationAccessoryQuantity) || (option.defaultSanitationAccessoryName ? 1 : 0);
+
+  if (isCustomEquipmentPackage(option)) {
+    return normalizeEquipmentLighting(
+      {
+        ...defaultEquipment,
+        includePoolLights: defaultPoolLightQty > 0,
+        applyCustomPackageDefaultPoolLights: defaultPoolLightQty > 0,
+        poolLights:
+          defaultPoolLightQty > 0 && defaultPoolLightName
+            ? Array.from({ length: defaultPoolLightQty }, () => buildLightSelection(defaultPoolLightName, 'pool'))
+            : [],
+        numberOfLights: defaultPoolLightQty > 0 ? Math.max(defaultPoolLightQty - 1, 0) : 0,
+      },
+      {
+        hasPool: opts?.hasPool,
+        hasSpa: opts?.hasSpa,
+      }
+    );
+  }
 
   const nextEquipment: Equipment = {
     ...defaultEquipment,
@@ -514,6 +538,7 @@ export const createFreshEquipmentForPackage = (
         ? defaultAccessoryQty
         : resolvePackageQty(option.includedSanitationAccessoryQuantity),
     includePoolLights: includedPoolLights > 0,
+    applyCustomPackageDefaultPoolLights: false,
     includeSpaLights: includedSpaLights > 0 && packageSupportsSpa(option),
     poolLights:
       includedPoolLights > 0

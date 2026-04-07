@@ -718,8 +718,21 @@ function ProposalView() {
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
     const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
+    const sourceEquipment = (input.equipment || {}) as Proposal['equipment'];
+    const hasExplicitPackageTouchState = Object.prototype.hasOwnProperty.call(
+      sourceEquipment,
+      'packageSelectionTouched'
+    );
     const mergedEquipment = normalizeEquipmentLighting(
-      { ...getDefaultEquipment(), ...(input.equipment || {}) } as any,
+      {
+        ...getDefaultEquipment(),
+        ...sourceEquipment,
+        packageSelectionTouched: hasExplicitPackageTouchState
+          ? sourceEquipment.packageSelectionTouched
+          : sourceEquipment.packageSelectionId
+            ? true
+            : undefined,
+      } as Proposal['equipment'],
       { poolSpecs, hasSpa: poolSpecs.spaType !== 'none' }
     );
 

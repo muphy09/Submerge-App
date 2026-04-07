@@ -414,6 +414,8 @@ export interface EquipmentPackageOption {
   includedSanitationAccessoryQuantity?: number;
   defaultCleanerName?: string;
   defaultCleanerQuantity?: number;
+  defaultPoolLightName?: string;
+  defaultPoolLightQuantity?: number;
   defaultAutoFillSystemName?: string;
   defaultAutoFillSystemQuantity?: number;
   defaultSanitationAccessoryName?: string;
@@ -438,6 +440,7 @@ export interface Equipment {
   poolLights?: LightSelection[];
   spaLights?: LightSelection[];
   includePoolLights?: boolean;
+  applyCustomPackageDefaultPoolLights?: boolean;
   includeSpaLights?: boolean;
   numberOfLights: number; // Legacy: additional pool lights beyond the first
   hasSpaLight: boolean; // Legacy: spa light included
@@ -468,6 +471,7 @@ export interface Equipment {
 
   // Package pricing
   packageSelectionId?: string;
+  packageSelectionTouched?: boolean;
 
   // Custom options
   customOptions?: CustomOption[];

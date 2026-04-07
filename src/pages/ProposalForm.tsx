@@ -60,11 +60,11 @@ import {
 } from '../services/pricingDataStore';
 import pricingData from '../services/pricingData';
 import {
-  CUSTOM_PACKAGE_ID,
   createFreshEquipmentForPackage,
   getEnabledEquipmentPackageOptions,
   getSelectedEquipmentPackage,
   getPackageWaterFeaturesWithoutExtraPump,
+  isCustomEquipmentPackage,
   isFixedEquipmentPackage,
   packageAllowsAdditionalPumps,
   packageAllowsWaterFeatures,
@@ -229,13 +229,35 @@ const hasPoolDefinition = (poolSpecs?: Proposal['poolSpecs']) => {
   return hasGuniteDimensions || hasFiberglassSelection;
 };
 
+const mergeEquipmentDefaults = (
+  getDefaultEquipment: typeof import('../utils/proposalDefaults').getDefaultEquipment,
+  inputEquipment: Partial<Proposal['equipment']> | undefined,
+  poolSpecs: Proposal['poolSpecs']
+) => {
+  const sourceEquipment = (inputEquipment || {}) as Proposal['equipment'];
+  const hasExplicitPackageTouchState = Object.prototype.hasOwnProperty.call(
+    sourceEquipment,
+    'packageSelectionTouched'
+  );
+
+  return normalizeEquipmentLighting(
+    {
+      ...getDefaultEquipment(),
+      ...sourceEquipment,
+      packageSelectionTouched: hasExplicitPackageTouchState
+        ? sourceEquipment.packageSelectionTouched
+        : sourceEquipment.packageSelectionId
+          ? true
+          : undefined,
+    } as Proposal['equipment'],
+    { poolSpecs, hasSpa: poolSpecs.spaType !== 'none' }
+  );
+};
+
 const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   const base = getDefaultProposal();
   const mergedPoolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
-  const mergedEquipment = normalizeEquipmentLighting(
-    { ...getDefaultEquipment(), ...(input.equipment || {}) } as Proposal['equipment'],
-    { poolSpecs: mergedPoolSpecs, hasSpa: mergedPoolSpecs.spaType !== 'none' }
-  );
+  const mergedEquipment = mergeEquipmentDefaults(getDefaultEquipment, input.equipment, mergedPoolSpecs);
   return {
     ...base,
     ...input,
@@ -255,6 +277,18 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     papDiscounts: input.papDiscounts || base.papDiscounts,
     costBreakdown: input.costBreakdown || base.costBreakdown,
     warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
+  };
+};
+
+const markPersistedPackageSelectionTouched = (input: Partial<Proposal>): Partial<Proposal> => {
+  if (!input.equipment?.packageSelectionId) return input;
+
+  return {
+    ...input,
+    equipment: {
+      ...input.equipment,
+      packageSelectionTouched: true,
+    },
   };
 };
 
@@ -558,23 +592,26 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   ): Proposal['equipment'] => {
     const hasSpa = (poolSpecs?.spaType ?? 'none') !== 'none';
     const hasPool = hasPoolDefinition(poolSpecs);
+    const enabledPackageOptions = getEnabledEquipmentPackageOptions();
     const selectedPackage = getSelectedEquipmentPackage(currentEquipment as any);
-    const defaultCustomPackage =
-      getEnabledEquipmentPackageOptions().find((option) => option.id === CUSTOM_PACKAGE_ID) ||
-      getEnabledEquipmentPackageOptions().find((option) => option.mode === 'custom');
+    const onlyAvailablePackage =
+      enabledPackageOptions.length === 1 && !isCustomEquipmentPackage(enabledPackageOptions[0])
+        ? enabledPackageOptions[0]
+        : null;
 
     if (selectedPackage) {
       return createFreshEquipmentForPackage(selectedPackage, { hasPool, hasSpa });
     }
 
-    if (defaultCustomPackage) {
-      return createFreshEquipmentForPackage(defaultCustomPackage, { hasPool, hasSpa });
+    if (onlyAvailablePackage) {
+      return createFreshEquipmentForPackage(onlyAvailablePackage, { hasPool, hasSpa });
     }
 
     return normalizeEquipmentLighting(
       {
         ...getDefaultEquipment(),
-        packageSelectionId: currentEquipment?.packageSelectionId || CUSTOM_PACKAGE_ID,
+        packageSelectionId: undefined,
+        packageSelectionTouched: false,
       } as Proposal['equipment'],
       { poolSpecs, hasPool, hasSpa }
     );
@@ -823,17 +860,36 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
     if (poolJustAdded && !hasPoolLightSelection && shouldAutoAddPoolLight) {
       setProposal(prev => {
-        const nextEquipment = normalizeEquipmentLighting(
-          {
-            ...(prev.equipment || getDefaultEquipment()),
-            includePoolLights: true,
-          } as Proposal['equipment'],
-          {
-            poolSpecs: { ...(prev.poolSpecs || {}) } as any,
-            hasPool: true,
-            hasSpa: (prev.poolSpecs?.spaType ?? 'none') !== 'none',
-          }
-        );
+        const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+        const selectedPackage = getSelectedEquipmentPackage(baseEquipment as any);
+        const packageSeed = selectedPackage
+          ? createFreshEquipmentForPackage(selectedPackage, {
+              hasPool: true,
+              hasSpa: (prev.poolSpecs?.spaType ?? 'none') !== 'none',
+            })
+          : null;
+        const nextEquipment =
+          (packageSeed?.poolLights?.length ?? 0) > 0
+            ? {
+                ...baseEquipment,
+                includePoolLights: packageSeed?.includePoolLights,
+                applyCustomPackageDefaultPoolLights: packageSeed?.applyCustomPackageDefaultPoolLights,
+                poolLights: packageSeed?.poolLights || [],
+                numberOfLights:
+                  packageSeed?.numberOfLights ??
+                  Math.max((packageSeed?.poolLights?.length ?? 1) - 1, 0),
+              }
+            : normalizeEquipmentLighting(
+                {
+                  ...baseEquipment,
+                  includePoolLights: true,
+                } as Proposal['equipment'],
+                {
+                  poolSpecs: { ...(prev.poolSpecs || {}) } as any,
+                  hasPool: true,
+                  hasSpa: (prev.poolSpecs?.spaType ?? 'none') !== 'none',
+                }
+              );
         return { ...prev, equipment: nextEquipment };
       });
       setHasEdits(true);
@@ -852,6 +908,50 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
     previousHasPoolRef.current = hasPool;
   }, [proposal.poolSpecs, proposal.equipment?.poolLights?.length]);
+
+  useEffect(() => {
+    const hasPool = hasPoolDefinition(proposal.poolSpecs);
+    if (!hasPool) return;
+
+    const equipment = proposal.equipment || getDefaultEquipment();
+    if ((equipment.poolLights?.length ?? 0) > 0) return;
+    if (equipment.applyCustomPackageDefaultPoolLights === false) return;
+
+    const selectedPackage = getSelectedEquipmentPackage(equipment as any);
+    if (!selectedPackage || !isCustomEquipmentPackage(selectedPackage)) return;
+
+    const packageSeed = createFreshEquipmentForPackage(selectedPackage, {
+      hasPool: true,
+      hasSpa: (proposal.poolSpecs?.spaType ?? 'none') !== 'none',
+    });
+    if ((packageSeed.poolLights?.length ?? 0) === 0) return;
+
+    setProposal((prev) => {
+      const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
+      if ((baseEquipment.poolLights?.length ?? 0) > 0) return prev;
+      if (baseEquipment.applyCustomPackageDefaultPoolLights === false) return prev;
+
+      return {
+        ...prev,
+        equipment: {
+          ...baseEquipment,
+          includePoolLights: packageSeed.includePoolLights,
+          applyCustomPackageDefaultPoolLights: packageSeed.applyCustomPackageDefaultPoolLights,
+          poolLights: packageSeed.poolLights || [],
+          numberOfLights:
+            packageSeed.numberOfLights ?? Math.max((packageSeed.poolLights?.length ?? 1) - 1, 0),
+        },
+      };
+    });
+    setHasEdits(true);
+  }, [
+    proposal.poolSpecs,
+    proposal.equipment?.packageSelectionId,
+    proposal.equipment?.poolLights?.length,
+    proposal.equipment?.applyCustomPackageDefaultPoolLights,
+    proposal.pricingModelId,
+    proposal.pricingModelFranchiseId,
+  ]);
 
   useEffect(() => {
     const selectedPackage = getSelectedEquipmentPackage(proposal.equipment as any);
@@ -1099,7 +1199,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         return withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(input));
       };
 
-      const freshData = await mergeWithPricingSnapshot(sourceProposal);
+      const freshData = markPersistedPackageSelectionTouched(await mergeWithPricingSnapshot(sourceProposal));
 
       // Normalize water features to the new catalog-driven shape
       freshData.waterFeatures = normalizeWaterFeatures(freshData.waterFeatures);
@@ -1121,7 +1221,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       const allVersionsWithDefaults = (
         await Promise.all(
           allVersions.map(async (v) => ({
-            ...((await mergeWithPricingSnapshot(v)) as Proposal),
+            ...(markPersistedPackageSelectionTouched(await mergeWithPricingSnapshot(v)) as Proposal),
             waterFeatures: normalizeWaterFeatures((v as Proposal).waterFeatures),
             versionId: v.versionId || 'original',
             versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
@@ -1135,7 +1235,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         versionIdFromState || versioned.activeVersionId || versioned.versionId || 'original';
       const stateVersionSnapshot = versionSnapshotFromState
         ? ({
-            ...(versionSnapshotFromState as Proposal),
+            ...(markPersistedPackageSelectionTouched(versionSnapshotFromState as Proposal) as Proposal),
             waterFeatures: normalizeWaterFeatures((versionSnapshotFromState as Proposal).waterFeatures),
             versionId: versionSnapshotFromState.versionId || 'original',
             versionName:
@@ -1269,7 +1369,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
       return {
         ...prev,
-        equipment: nextEquipment,
+        equipment: {
+          ...nextEquipment,
+          packageSelectionTouched: true,
+        },
         waterFeatures: getDefaultWaterFeatures(),
         plumbing: {
           ...existingPlumbing,

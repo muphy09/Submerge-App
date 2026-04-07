@@ -4,10 +4,7 @@ Immediate Changes -
 - When opening a proposal summary in the reviewer workspace, show cogs show be toggled ON by default
     - Approved proposals tooltip for Edit Proposal should say 'Approved Proposals in the reviewer workspace are Read-Only. Designer must create another version to make edits'
         - Ensure non-approved proposals (not auto approved) can be edited by the reviwer before approving
-- Ability to drag/drop for reorder in tables in Admin Menu
-
-
-- Stamped and Dyed concrete
+- *Stamped and Dyed concrete
 ---------------------------------------------------------------------------------------------------------
 Mid Term - 
 - Cleanup visuals on Contract export
@@ -21,6 +18,7 @@ Mid Term -
     But in the tool it should show up what materials are in what tiers. only transfer tier to contract not color.
     after picking tier '1' it shows 'these colors are included in tier 1'
     - *** INT finishes in excel are priced indiviudual, not by tier. selecting a tier without a type is not possible (color is possible), they are all different prices
+- Ability to drag/drop for reorder in tables in Admin Menu
 ---------------------------------------------------------------------------------------------------------
 Long Term - 
 - Ability to select the indiviudual material instead of tiers
