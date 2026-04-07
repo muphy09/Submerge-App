@@ -25,6 +25,33 @@ const ensureVersionDefaults = (proposal: Proposal, defaultName?: string): Propos
   };
 };
 
+const inheritSharedVersionMetadata = (container: Proposal, version: Proposal): Proposal => {
+  const resolvedFranchiseId = version.franchiseId || container.franchiseId;
+  const resolvedPricingModelId = version.pricingModelId || container.pricingModelId;
+  const canReuseContainerPricingMeta =
+    !version.pricingModelId || version.pricingModelId === container.pricingModelId;
+
+  return {
+    ...version,
+    proposalNumber: version.proposalNumber || container.proposalNumber,
+    franchiseId: resolvedFranchiseId,
+    designerName: version.designerName || container.designerName,
+    designerRole: version.designerRole || container.designerRole,
+    designerCode: version.designerCode || container.designerCode,
+    pricingModelId: resolvedPricingModelId,
+    pricingModelName:
+      version.pricingModelName ||
+      (canReuseContainerPricingMeta ? container.pricingModelName : undefined),
+    pricingModelFranchiseId:
+      version.pricingModelFranchiseId ||
+      (canReuseContainerPricingMeta ? container.pricingModelFranchiseId : undefined) ||
+      (resolvedPricingModelId ? resolvedFranchiseId : undefined),
+    pricingModelIsDefault:
+      version.pricingModelIsDefault ??
+      (canReuseContainerPricingMeta ? container.pricingModelIsDefault : undefined),
+  };
+};
+
 export const listAllVersions = (proposal: Proposal): Proposal[] => {
   const normalized = ensureVersionDefaults(proposal);
   const baseVersion: Proposal = stripNestedVersions({
@@ -33,7 +60,10 @@ export const listAllVersions = (proposal: Proposal): Proposal[] => {
   });
 
   const extraVersions = (normalized.versions || []).map((entry) => {
-    const normalizedEntry = ensureVersionDefaults(entry);
+    const normalizedEntry = inheritSharedVersionMetadata(
+      normalized,
+      ensureVersionDefaults(entry)
+    );
     return stripNestedVersions({
       ...normalizedEntry,
       workflow: normalizedEntry.workflow || normalized.workflow,
