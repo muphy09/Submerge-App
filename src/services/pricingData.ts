@@ -282,6 +282,14 @@ const pricingData = {
       panelLedge: 1.15, // 15% material overage on panel ledge (matches TILE COPING sheet)
     },
     tile: {
+      options: [
+        { id: 'level1', name: 'Level 1', materialRate: 7, laborRate: 10 },
+        { id: 'level2', name: 'Level 2', materialRate: 27, laborRate: 10 },
+        { id: 'level3', name: 'Level 3', materialRate: 57, laborRate: 10 },
+      ],
+      stepTrimOptions: [
+        { id: 'step-trim', name: 'Step Trim', materialRate: 4, laborRate: 10 },
+      ],
       labor: {
         level1: 10,
         level2: 10,
@@ -296,6 +304,14 @@ const pricingData = {
       },
     },
     coping: {
+      options: [
+        { id: 'cantilever', name: 'Cantilever', materialRate: 0, laborRate: 0 },
+        { id: 'flagstone', name: 'Flagstone', materialRate: 25, laborRate: 15 },
+        { id: 'paver', name: 'Paver', materialRate: 9, laborRate: 12 },
+        { id: 'travertine-level1', name: 'Travertine - Level 1', materialRate: 11, laborRate: 12 },
+        { id: 'travertine-level2', name: 'Travertine - Level 2', materialRate: 12, laborRate: 12 },
+        { id: 'concrete', name: 'Concrete', materialRate: 0, laborRate: 0 },
+      ],
       cantilever: 0,
       flagstone: 15,
       pavers: 12,
@@ -307,6 +323,13 @@ const pricingData = {
       spillwayLabor: 150,
     },
     decking: {
+      options: [
+        { id: 'paver', name: 'Paver', materialRate: 7, laborRate: 8 },
+        { id: 'travertine-level1', name: 'Travertine - Level 1', materialRate: 7.5, laborRate: 8 },
+        { id: 'travertine-level2', name: 'Travertine - Level 2', materialRate: 9.75, laborRate: 8 },
+        { id: 'travertine-level3', name: 'Travertine - Level 3', materialRate: 11.25, laborRate: 8 },
+        { id: 'concrete', name: 'Concrete', materialRate: 7, laborRate: 16.5 },
+      ],
       additionalOptions: [],
       labor: {
         pavers: 8,
@@ -349,6 +372,10 @@ const pricingData = {
       spillwayLabor: 150,
       spillwayMaterial: 150,
     },
+    specialtyOptions: [
+      { id: 'bullnose', name: 'Bullnose', materialRate: 0, laborRate: 8 },
+      { id: 'spillway', name: 'Spillway', materialRate: 150, laborRate: 150 },
+    ],
   },
   equipment: {
     pumpOverheadMultiplier: 1.1, // Legacy fallback when a pump entry has no overhead multiplier

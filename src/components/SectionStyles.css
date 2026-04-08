@@ -376,13 +376,21 @@
 }
 
 .compact-input {
-  flex: 1;
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  height: 38px;
   padding: 8px 12px;
   border: 2px solid #e5e7eb;
   border-radius: 6px;
   font-size: 0.95rem;
   transition: all 0.2s ease;
   min-width: 0;
+  box-sizing: border-box;
+}
+
+.compact-input-wrapper > .compact-input {
+  flex: 1 1 auto;
 }
 
 select.compact-input {
@@ -433,6 +441,12 @@ select.compact-input {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.compact-input.kbd-nav-selected {
+  outline: 2px solid #f6d24a;
+  outline-offset: 0;
+  font-weight: inherit;
 }
 
 .compact-input-unit {
@@ -572,7 +586,7 @@ select.compact-input {
 
 .water-feature-row {
   grid-template-columns: minmax(220px, 2fr) minmax(120px, 1fr) minmax(160px, 1fr) auto;
-  align-items: end;
+  align-items: start;
 }
 
 .water-feature-row-with-conduit {
@@ -582,9 +596,17 @@ select.compact-input {
 .water-feature-action {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: flex-start;
   gap: 6px;
+}
+
+.water-feature-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 38px;
 }
 
 .water-feature-action .link-btn {
@@ -692,6 +714,7 @@ select.compact-input {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .spa-facing-field {

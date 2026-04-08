@@ -99,17 +99,10 @@ import {
   resetWorkflowAfterVersionEdit,
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
+import { sanitizeWaterFeatureSelections } from '../utils/waterFeatureCost';
 
 const normalizeWaterFeatureSelections = (selections: any): WaterFeatureSelection[] => {
-  if (!Array.isArray(selections)) return [];
-
-  return selections
-    .filter((selection) => typeof selection?.featureId === 'string' && selection.featureId.trim().length > 0)
-    .map((selection) => ({
-      featureId: selection.featureId,
-      quantity: Number.isFinite(Number(selection?.quantity)) ? Number(selection.quantity) : 0,
-      includeValveActuator: selection?.includeValveActuator !== false,
-    }));
+  return sanitizeWaterFeatureSelections(selections, pricingData.waterFeatures);
 };
 
 const normalizeWaterFeatures = (waterFeatures: any): WaterFeatures => {

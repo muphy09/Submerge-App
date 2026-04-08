@@ -131,6 +131,7 @@ export function getDefaultElectrical(): Electrical {
 export function getDefaultTileCopingDecking(): TileCopingDecking {
   return {
     tileLevel: 1,
+    tileOptionId: 'level1',
     additionalTileLength: 0,
     hasTrimTileOnSteps: false,
     copingType: 'travertine-level1',

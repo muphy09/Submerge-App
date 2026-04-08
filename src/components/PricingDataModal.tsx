@@ -27,6 +27,11 @@ import {
 import { getDefaultCleanerIndex } from '../utils/cleanerDefaults';
 import { normalizeEquipmentPackageOptions } from '../utils/equipmentPackages';
 import { slugifyMasonryFacingId } from '../utils/masonryFacing';
+import {
+  normalizeCopingOptionId,
+  normalizeDeckingOptionId,
+  normalizeTileOptionId,
+} from '../utils/tileCopingCatalogs';
 import './PricingDataModal.css';
 
 type Path = (string | number)[];
@@ -67,6 +72,7 @@ type ListField = {
   defaultValue?: string | number | boolean;
   allowBlank?: boolean;
   hidden?: (entry: any) => boolean;
+  readOnly?: boolean | ((entry: any, index: number) => boolean);
 };
 
 type ListConfig = {
@@ -77,6 +83,8 @@ type ListConfig = {
   defaultItem?: Record<string, any> | (() => Record<string, any>);
   variant?: 'card' | 'table';
   emptyMessage?: string;
+  allowAdd?: boolean;
+  allowRemove?: boolean;
 };
 
 type Group = {
@@ -559,11 +567,51 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       list.path[0] === 'tileCoping' &&
       list.path[1] === 'decking' &&
       list.path[2] === 'additionalOptions';
+    const isTileCatalogOptionName =
+      field.key === 'name' &&
+      list.path[0] === 'tileCoping' &&
+      list.path[1] === 'tile' &&
+      list.path[2] === 'options';
+    const isCopingCatalogOptionName =
+      field.key === 'name' &&
+      list.path[0] === 'tileCoping' &&
+      list.path[1] === 'coping' &&
+      list.path[2] === 'options';
+    const isDeckingCatalogOptionName =
+      field.key === 'name' &&
+      list.path[0] === 'tileCoping' &&
+      list.path[1] === 'decking' &&
+      list.path[2] === 'options';
     if (isAdditionalDeckingOptionName) {
       const entries = (getValue(data, list.path) as any[]) || [];
       const existing = entries[index] || {};
       if (!existing.id) {
         const baseId = slugify(String(parsed)) || `additional-decking-${index + 1}`;
+        let nextId = baseId;
+        let suffix = 2;
+        while (
+          nextId &&
+          entries.some((entry, entryIndex) => entryIndex !== index && String(entry?.id || '').trim() === nextId)
+        ) {
+          nextId = `${baseId}-${suffix}`;
+          suffix += 1;
+        }
+        if (nextId) {
+          updatePricingListItem(list.path, index, 'id', nextId);
+        }
+      }
+    }
+
+    if (isTileCatalogOptionName || isCopingCatalogOptionName || isDeckingCatalogOptionName) {
+      const entries = (getValue(data, list.path) as any[]) || [];
+      const existing = entries[index] || {};
+      if (!existing.id) {
+        const normalizeId = isTileCatalogOptionName
+          ? normalizeTileOptionId
+          : isCopingCatalogOptionName
+            ? normalizeCopingOptionId
+            : normalizeDeckingOptionId;
+        const baseId = normalizeId(String(parsed)) || `option-${index + 1}`;
         let nextId = baseId;
         let suffix = 2;
         while (
@@ -804,6 +852,60 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     []
   );
+  const tileCopingRateFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Option Name',
+        type: 'text',
+        placeholder: 'Option name',
+        tooltip: 'Label shown in the corresponding proposal-builder dropdown.',
+      },
+      {
+        key: 'materialRate',
+        label: 'Material Rate',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Material cost for this option.',
+      },
+      {
+        key: 'laborRate',
+        label: 'Labor Rate',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Labor cost for this option.',
+      },
+    ],
+    []
+  );
+  const fixedTileCopingRateFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        label: 'Option Name',
+        type: 'text',
+        readOnly: true,
+        tooltip: 'Fixed row name used in the pricing engine.',
+      },
+      {
+        key: 'materialRate',
+        label: 'Material Rate',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+      },
+      {
+        key: 'laborRate',
+        label: 'Labor Rate',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+      },
+    ],
+    []
+  );
   const additionalDeckingFields: ListField[] = useMemo(
     () => [
       {
@@ -955,6 +1057,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const getListFieldLabel = (list: ListConfig, field: ListField) =>
     fieldLabelOverrides[getListFieldOverrideKey(list, field)] || field.label;
   const isListFieldHidden = (field: ListField, entry: any) => Boolean(field.hidden?.(entry));
+  const isListFieldReadOnly = (field: ListField, entry: any, index: number) =>
+    Boolean(typeof field.readOnly === 'function' ? field.readOnly(entry, index) : field.readOnly);
   const getListFieldOptions = (list: ListConfig, field: ListField, entry?: any, index?: number): ListFieldOption[] => {
     const resolved =
       typeof field.options === 'function' ? field.options({ data, list, entry, index }) : field.options || [];
@@ -2302,211 +2406,80 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Tile, Coping & Decking',
         groups: [
           {
-            title: 'Tile labor',
-            scalars: [
+            title: 'Tile catalog',
+            lists: [
               {
-                label: 'Tile Labor (per lnft)',
-                path: ['tileCoping', 'tile', 'labor', 'level1'],
-                type: 'number',
-                tooltip: 'Applied per lnft of tile (all tile levels use this rate).',
-                prefix: '$',
+                title: 'Tile options',
+                path: ['tileCoping', 'tile', 'options'],
+                addLabel: 'Add tile option',
+                emptyMessage: 'No tile options yet. Add one to expose it in the proposal builder.',
+                defaultItem: () => ({
+                  id: '',
+                  name: '',
+                  materialRate: 0,
+                  laborRate: 0,
+                }),
+                fields: tileCopingRateFields,
               },
               {
-                label: 'Step trim (per unit)',
-                path: ['tileCoping', 'tile', 'labor', 'stepTrim'],
-                type: 'number',
-                tooltip: 'Applied to spa perimeter + total steps/bench when trim tile is selected.',
-                prefix: '$',
-              },
-            ],
-          },
-          {
-            title: 'Tile material',
-            scalars: [
-              {
-                label: 'Level 1 (per lnft)',
-                path: ['tileCoping', 'tile', 'material', 'level1'],
-                type: 'number',
-                tooltip: 'Base tile material per lnft of pool + spa perimeter when tile is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Level 2 upgrade (per lnft)',
-                path: ['tileCoping', 'tile', 'material', 'level2Upgrade'],
-                type: 'number',
-                tooltip: 'Added per lnft when Level 2 tile is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Level 3 upgrade (per lnft)',
-                path: ['tileCoping', 'tile', 'material', 'level3Upgrade'],
-                type: 'number',
-                tooltip: 'Added per lnft when Level 3 tile is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Step trim (per unit)',
-                path: ['tileCoping', 'tile', 'material', 'stepTrim'],
-                type: 'number',
-                tooltip: 'Applied to spa perimeter + total steps/bench when trim tile is selected.',
-                prefix: '$',
+                title: 'Step Trim',
+                path: ['tileCoping', 'tile', 'stepTrimOptions'],
+                addLabel: 'Add step trim row',
+                allowAdd: false,
+                allowRemove: false,
+                fields: fixedTileCopingRateFields,
               },
             ],
           },
           {
-            title: 'Coping labor (per lnft)',
-            scalars: [
+            title: 'Coping catalog',
+            lists: [
               {
-                label: 'Cantilever',
-                path: ['tileCoping', 'coping', 'cantilever'],
-                type: 'number',
-                tooltip: 'Applied per lnft when cantilever coping is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Flagstone',
-                path: ['tileCoping', 'coping', 'flagstone'],
-                type: 'number',
-                tooltip: 'Applied per lnft when flagstone coping is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Pavers',
-                path: ['tileCoping', 'coping', 'pavers'],
-                type: 'number',
-                tooltip: 'Applied per lnft when paver coping is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine level 1',
-                path: ['tileCoping', 'coping', 'travertineLevel1'],
-                type: 'number',
-                tooltip: 'Applied per lnft when Level 1 travertine coping is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine level 2',
-                path: ['tileCoping', 'coping', 'travertineLevel2'],
-                type: 'number',
-                tooltip: 'Applied per lnft when Level 2 travertine coping is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Concrete',
-                path: ['tileCoping', 'coping', 'concrete'],
-                type: 'number',
-                tooltip: 'Applied per lnft when concrete coping is selected.',
-                prefix: '$',
+                title: 'Coping options',
+                path: ['tileCoping', 'coping', 'options'],
+                addLabel: 'Add coping option',
+                emptyMessage: 'No coping options yet. Add one to expose it in the proposal builder.',
+                defaultItem: () => ({
+                  id: '',
+                  name: '',
+                  materialRate: 0,
+                  laborRate: 0,
+                }),
+                fields: tileCopingRateFields,
               },
             ],
           },
           {
-            title: 'Coping material (per lnft)',
-            scalars: [
+            title: 'Decking catalog',
+            lists: [
               {
-                label: 'Paver',
-                path: ['tileCoping', 'decking', 'material', 'coping', 'paver'],
-                type: 'number',
-                tooltip: 'Material rate per lnft for paver coping.',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine level 1',
-                path: ['tileCoping', 'decking', 'material', 'coping', 'travertinelevel1'],
-                type: 'number',
-                tooltip: 'Material rate per lnft for Level 1 travertine coping.',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine level 2',
-                path: ['tileCoping', 'decking', 'material', 'coping', 'travertinelevel2'],
-                type: 'number',
-                tooltip: 'Material rate per lnft for Level 2 travertine coping.',
-                prefix: '$',
-              },
-              {
-                label: 'Concrete',
-                path: ['tileCoping', 'decking', 'material', 'coping', 'concrete'],
-                type: 'number',
-                tooltip: 'Material rate per lnft for concrete coping.',
-                prefix: '$',
+                title: 'Decking options',
+                path: ['tileCoping', 'decking', 'options'],
+                addLabel: 'Add decking option',
+                emptyMessage: 'No decking options yet. Add one to expose it in the proposal builder.',
+                defaultItem: () => ({
+                  id: '',
+                  name: '',
+                  materialRate: 0,
+                  laborRate: 0,
+                }),
+                fields: tileCopingRateFields,
               },
             ],
           },
           {
-            title: 'Decking labor',
+            title: 'Concrete steps',
             scalars: [
               {
-                label: 'Pavers (per sqft)',
-                path: ['tileCoping', 'decking', 'labor', 'pavers'],
-                type: 'number',
-                tooltip: 'Applied to decking area for paver decks (includes 5% overhead).',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine (per sqft)',
-                path: ['tileCoping', 'decking', 'labor', 'travertine'],
-                type: 'number',
-                tooltip: 'Applied to decking area for travertine decks (includes 5% overhead).',
-                prefix: '$',
-              },
-              {
-                label: 'Concrete (per lnft)',
-                path: ['tileCoping', 'decking', 'labor', 'concrete'],
-                type: 'number',
-                tooltip: 'Applied per lnft of pool perimeter when decking is concrete and coping is concrete.',
-                prefix: '$',
-              },
-              {
-                label: 'Concrete steps (per lnft)',
-                path: ['tileCoping', 'decking', 'labor', 'concreteSteps'],
+                label: 'Material Rate',
+                path: ['tileCoping', 'decking', 'material', 'concreteSteps'],
                 type: 'number',
                 tooltip: 'Applied per lnft of concrete steps length.',
                 prefix: '$',
               },
-            ],
-          },
-          {
-            title: 'Decking material',
-            scalars: [
               {
-                label: 'Pavers (per sqft)',
-                path: ['tileCoping', 'decking', 'material', 'pavers'],
-                type: 'number',
-                tooltip: 'Applied to decking area for paver decks (includes 5% overhead).',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine level 1 (per sqft)',
-                path: ['tileCoping', 'decking', 'material', 'travertineLevel1'],
-                type: 'number',
-                tooltip: 'Applied to decking area for Level 1 travertine (includes 5% overhead).',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine level 2 (per sqft)',
-                path: ['tileCoping', 'decking', 'material', 'travertineLevel2'],
-                type: 'number',
-                tooltip: 'Applied to decking area for Level 2 travertine (includes 5% overhead).',
-                prefix: '$',
-              },
-              {
-                label: 'Travertine level 3 (per sqft)',
-                path: ['tileCoping', 'decking', 'material', 'travertineLevel3'],
-                type: 'number',
-                tooltip: 'Applied to decking area for Level 3 travertine (includes 5% overhead).',
-                prefix: '$',
-              },
-              {
-                label: 'Concrete (per sqft)',
-                path: ['tileCoping', 'decking', 'material', 'concrete'],
-                type: 'number',
-                tooltip: 'Used for concrete deck base/additional quantities (4 ft band + additional area).',
-                prefix: '$',
-              },
-              {
-                label: 'Concrete steps (per lnft)',
-                path: ['tileCoping', 'decking', 'material', 'concreteSteps'],
+                label: 'Labor Rate',
+                path: ['tileCoping', 'decking', 'labor', 'concreteSteps'],
                 type: 'number',
                 tooltip: 'Applied per lnft of concrete steps length.',
                 prefix: '$',
@@ -2528,86 +2501,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           },
           {
             title: 'Bullnose & spillway',
-            scalars: [
+            lists: [
               {
-                label: 'Bullnose labor (per lnft)',
-                path: ['tileCoping', 'coping', 'bullnoseLabor'],
-                type: 'number',
-                tooltip: 'Applied to bullnose + double bullnose lnft.',
-                prefix: '$',
-              },
-              {
-                label: 'Bullnose material (per lnft)',
-                path: ['tileCoping', 'decking', 'material', 'bullnose'],
-                type: 'number',
-                tooltip: 'Material rate for bullnose + double bullnose lnft.',
-                prefix: '$',
-              },
-              {
-                label: 'Spillway labor (per unit)',
-                path: ['tileCoping', 'decking', 'spillwayLabor'],
-                type: 'number',
-                tooltip: 'Applied once when spillway length is entered.',
-                prefix: '$',
-              },
-              {
-                label: 'Spillway material (per unit)',
-                path: ['tileCoping', 'decking', 'spillwayMaterial'],
-                type: 'number',
-                tooltip: 'Applied once when spillway length is entered.',
-                prefix: '$',
-              },
-            ],
-          },
-          {
-            title: 'Rockwork labor (per sqft)',
-            scalars: [
-              {
-                label: 'Panel ledge',
-                path: ['tileCoping', 'decking', 'rockworkLabor', 'panelLedge'],
-                type: 'number',
-                tooltip: 'Applied per sqft of panel ledge rockwork.',
-                prefix: '$',
-              },
-              {
-                label: 'Stacked stone',
-                path: ['tileCoping', 'decking', 'rockworkLabor', 'stackedStone'],
-                type: 'number',
-                tooltip: 'Applied per sqft of stacked stone rockwork.',
-                prefix: '$',
-              },
-              {
-                label: 'Tile rockwork',
-                path: ['tileCoping', 'decking', 'rockworkLabor', 'tile'],
-                type: 'number',
-                tooltip: 'Applied per sqft of tile rockwork.',
-                prefix: '$',
-              },
-            ],
-          },
-          {
-            title: 'Rockwork material (per sqft)',
-            scalars: [
-              {
-                label: 'Panel ledge',
-                path: ['tileCoping', 'decking', 'material', 'rockwork', 'panelLedge'],
-                type: 'number',
-                tooltip: 'Applied to panel ledge material sqft (uses material sqft input if provided).',
-                prefix: '$',
-              },
-              {
-                label: 'Stacked stone',
-                path: ['tileCoping', 'decking', 'material', 'rockwork', 'stackedStone'],
-                type: 'number',
-                tooltip: 'Applied to stacked stone rockwork material sqft.',
-                prefix: '$',
-              },
-              {
-                label: 'Tile rockwork',
-                path: ['tileCoping', 'decking', 'material', 'rockwork', 'tile'],
-                type: 'number',
-                tooltip: 'Applied to tile rockwork material sqft.',
-                prefix: '$',
+                title: 'Bullnose & spillway rates',
+                path: ['tileCoping', 'specialtyOptions'],
+                addLabel: 'Add specialty row',
+                allowAdd: false,
+                allowRemove: false,
+                fields: fixedTileCopingRateFields,
               },
             ],
           },
@@ -2626,7 +2527,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Coping/decking material tax rate',
                 path: ['tileCoping', 'materialTaxRate'],
                 type: 'number',
-                tooltip: 'Applied to coping/decking and rockwork material subtotals.',
+                tooltip: 'Applied to coping and decking material subtotals.',
                 prefix: '%',
                 isPercent: true,
               },
@@ -2635,12 +2536,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 path: ['tileCoping', 'flagstoneQuantityMultiplier'],
                 type: 'number',
                 tooltip: 'Multiplies flagstone coping material quantity (1.1 = 10% overage).',
-              },
-              {
-                label: 'Panel ledge material multiplier',
-                path: ['tileCoping', 'rockworkMaterialWaste', 'panelLedge'],
-                type: 'number',
-                tooltip: 'Multiplies panel ledge material sqft when none is provided (1.15 = 15% overhead).',
               },
             ],
           },
@@ -2794,12 +2689,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           },
           {
             title: 'Sanitation & accessories',
-            scalars: [
-              { label: 'Blanket reel', path: ['equipment', 'blanketReel'], type: 'number' },
-              { label: 'Solar blanket', path: ['equipment', 'solarBlanket'], type: 'number' },
-              { label: 'Handrail', path: ['equipment', 'handrail'], type: 'number' },
-              { label: 'Startup chemicals', path: ['equipment', 'startupChemicals'], type: 'number' },
-            ],
             lists: [
               {
                 title: 'Sanitation systems',
@@ -3537,7 +3426,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     [
       data,
       additionalDeckingFields,
+      fixedTileCopingRateFields,
       masonryFacingFields,
+      tileCopingRateFields,
       data.electrical.overrunThreshold,
       data.electrical.heatPumpOverrunThreshold,
       data.plumbing.gasOverrunThreshold,
@@ -3785,22 +3676,24 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             <h5>{config.title}</h5>
             <span className="pricing-browser-card__meta">{entryCountLabel}</span>
           </div>
-          <button
-            type="button"
-            className="pricing-chip-button"
-            onClick={() => {
-              const nextIndex = entries.length;
-              handleAddListItem(config);
-              setSelectedListItem({
-                sectionTitle,
-                groupTitle,
-                listPathKey: getPathKey(config.path),
-                index: nextIndex,
-              });
-            }}
-          >
-            {config.addLabel || 'Add'}
-          </button>
+          {config.allowAdd !== false && (
+            <button
+              type="button"
+              className="pricing-chip-button"
+              onClick={() => {
+                const nextIndex = entries.length;
+                handleAddListItem(config);
+                setSelectedListItem({
+                  sectionTitle,
+                  groupTitle,
+                  listPathKey: getPathKey(config.path),
+                  index: nextIndex,
+                });
+              }}
+            >
+              {config.addLabel || 'Add'}
+            </button>
+          )}
         </div>
         <div className="pricing-browser-card__body">
           <div className="pricing-table-wrapper">
@@ -3925,6 +3818,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {list.fields.map((field) => {
             const cellKey = `${list.path.join('.')}.${index}.${field.key}`;
             const fieldValue = getListFieldValue(list, entry, field, index);
+            const isReadOnly = isListFieldReadOnly(field, entry, index);
 
             if (isListFieldHidden(field, entry)) {
               return null;
@@ -3937,6 +3831,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                     <input
                       type="checkbox"
                       checked={Boolean(fieldValue)}
+                      disabled={isReadOnly}
                       onChange={(e) => handleListChange(list, index, field, e.target.checked)}
                     />
                     {renderListFieldLabelText(list, field, cellKey)}
@@ -4004,6 +3899,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                         key={option.value}
                         type="button"
                         className={`pricing-choice-toggle__option${fieldValue === option.value ? ' is-active' : ''}`}
+                        disabled={isReadOnly}
                         onClick={() => handleListChange(list, index, field, option.value)}
                       >
                         {option.label}
@@ -4067,6 +3963,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                         : fieldValue ?? ''
                     }
                     placeholder={field.placeholder}
+                    readOnly={isReadOnly}
                     onChange={(e) => handleListChange(list, index, field, e.target.value)}
                   />
                 </div>
@@ -4074,18 +3971,20 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             );
           })}
         </div>
-        <div className="pricing-rail-card__footer">
-          <button
-            type="button"
-            className="pricing-chip-button danger"
-            onClick={() => {
-              handleRemoveListItem(list, index);
-              setSelectedListItem(null);
-            }}
-          >
-            Delete Item
-          </button>
-        </div>
+        {list.allowRemove !== false && (
+          <div className="pricing-rail-card__footer">
+            <button
+              type="button"
+              className="pricing-chip-button danger"
+              onClick={() => {
+                handleRemoveListItem(list, index);
+                setSelectedListItem(null);
+              }}
+            >
+              Delete Item
+            </button>
+          </div>
+        )}
       </div>
     );
   };

@@ -16,6 +16,13 @@ import {
   type UserSession,
 } from './session';
 import { listAllVersions, ORIGINAL_VERSION_ID } from '../utils/proposalVersions';
+import pricingData from './pricingData';
+import { getAdditionalDeckingSelections, getDeckingTypeFullLabel } from '../utils/decking';
+import {
+  getCopingOptionLabel,
+  getTileOptionLabel,
+  getTileSelectionId,
+} from '../utils/tileCopingCatalogs';
 
 export type SubmissionRequest = {
   manualReviewRequested?: boolean;
@@ -582,24 +589,37 @@ function extractElectricalFields(proposal: Proposal): WorkflowFieldSnapshot[] {
 
 function extractTileCopingDeckingFields(proposal: Proposal): WorkflowFieldSnapshot[] {
   const tile = proposal.tileCopingDecking || ({} as Proposal['tileCopingDecking']);
-  const additionalDeckingSelections = Array.isArray(tile.additionalDeckingSelections)
-    ? tile.additionalDeckingSelections
-    : [];
+  const additionalDeckingSelections = getAdditionalDeckingSelections(tile);
+  const tileSelectionId = getTileSelectionId(tile);
   return compactSnapshots([
-    { key: 'tileLevel', label: 'Tile Level', value: formatNumber(tile.tileLevel) },
+    {
+      key: 'tileOption',
+      label: 'Tile Option',
+      value: tileSelectionId ? getTileOptionLabel(pricingData.tileCoping, tileSelectionId) : 'None',
+    },
     { key: 'additionalTileLength', label: 'Additional Tile Length', value: formatNumber(tile.additionalTileLength, ' LF') },
     { key: 'trimTile', label: 'Trim Tile On Steps', value: formatBoolean(tile.hasTrimTileOnSteps) },
-    { key: 'copingType', label: 'Coping Type', value: normalizeText(tile.copingType) || 'None' },
+    {
+      key: 'copingType',
+      label: 'Coping Type',
+      value: tile.copingType && tile.copingType !== 'none'
+        ? getCopingOptionLabel(pricingData.tileCoping, tile.copingType)
+        : 'None',
+    },
     { key: 'copingSize', label: 'Coping Size', value: normalizeText(tile.copingSize) },
     { key: 'copingLength', label: 'Coping Length', value: formatNumber(tile.copingLength, ' LF') },
-    { key: 'deckingType', label: 'Decking Type', value: normalizeText(tile.deckingType) || 'None' },
+    {
+      key: 'deckingType',
+      label: 'Decking Type',
+      value: tile.deckingType && tile.deckingType !== 'none' ? getDeckingTypeFullLabel(tile.deckingType) : 'None',
+    },
     { key: 'deckingArea', label: 'Decking Area', value: formatNumber(tile.deckingArea, ' SQFT') },
     {
       key: 'additionalDecking',
       label: 'Additional Decking',
       value: additionalDeckingSelections.length
         ? additionalDeckingSelections
-            .map((selection) => `${normalizeText(selection?.deckingType) || 'Decking'} ${formatNumber(selection?.area, ' SQFT')}`)
+            .map((selection) => `${getDeckingTypeFullLabel(selection?.deckingType) || 'Decking'} ${formatNumber(selection?.area, ' SQFT')}`)
             .join(', ')
         : 'None',
     },

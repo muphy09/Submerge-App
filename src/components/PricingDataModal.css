@@ -91,44 +91,50 @@
 
 .pricing-page-shell {
   min-height: 100vh;
+  height: 100dvh;
   padding: 16px;
   padding-top: calc(var(--header-offset) + 16px);
   background:
     radial-gradient(circle at top left, rgba(191, 219, 254, 0.46), transparent 28%),
     linear-gradient(180deg, #f3f6fb 0%, #e8eef7 100%);
+  overflow: hidden;
 }
 
 .pricing-page {
   max-width: 1680px;
+  height: 100%;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 18px;
-  align-items: start;
+  min-height: 0;
+  align-items: stretch;
 }
 
 .pricing-page__sidebar {
-  position: sticky;
-  top: calc(var(--header-offset) + 16px);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   gap: 16px;
-  min-height: calc(100vh - var(--header-offset) - 32px);
+  min-height: 0;
   padding: 16px;
   border-radius: 18px;
   border: 1px solid #d7e0ee;
   background: rgba(255, 255, 255, 0.84);
   box-shadow: 0 22px 54px rgba(15, 23, 42, 0.1);
   backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
 .pricing-page__sidebar-top {
-  display: grid;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: 18px;
+  min-height: 0;
 }
 
 .pricing-page__sidebar-bottom {
+  margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid #e2e8f0;
 }
@@ -137,6 +143,10 @@
   display: grid;
   gap: 16px;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .pricing-page__search {
@@ -169,8 +179,11 @@
 }
 
 .pricing-page__nav-block {
-  display: grid;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: 10px;
+  min-height: 0;
 }
 
 .pricing-page__nav-title {
@@ -187,6 +200,11 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .pricing-page__nav-item {
@@ -288,7 +306,7 @@
 
 .pricing-workspace__rail {
   position: sticky;
-  top: calc(var(--header-offset) + 16px);
+  top: 16px;
   display: grid;
   gap: 14px;
 }
@@ -1403,22 +1421,35 @@
 }
 
 @media (max-width: 960px) {
+  .pricing-page-shell {
+    height: auto;
+    overflow: visible;
+  }
+
   .pricing-page {
+    height: auto;
     grid-template-columns: 1fr;
   }
 
   .pricing-page__sidebar {
     position: static;
     min-height: 0;
+    overflow: visible;
   }
 
   .pricing-page__nav {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    overflow: visible;
+    padding-right: 0;
   }
 
   .pricing-hero__controls {
     grid-template-columns: 1fr;
+  }
+
+  .pricing-page__main {
+    overflow: visible;
   }
 }
 

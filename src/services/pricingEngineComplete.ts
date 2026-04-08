@@ -25,6 +25,14 @@ import {
   getDeckingTypeFullLabel,
 } from '../utils/decking';
 import {
+  getBullnoseSpillwayOptionById,
+  getCopingOptionById,
+  getDeckingOptionById,
+  getTileOptionById,
+  getTileSelectionId,
+  getTileStepTrimOptions,
+} from '../utils/tileCopingCatalogs';
+import {
   annotateOffContractLineItem,
   isOffContractEligibleLineItem,
   OFF_CONTRACT_GROUP_DECKING,
@@ -120,8 +128,15 @@ export class TileCopingDeckingCalculations {
     const laborItems: CostLineItem[] = [];
     const materialItems: CostLineItem[] = [];
     const prices = pricingData.tileCoping;
+    const tileSelectionId = getTileSelectionId(tileCopingDecking);
+    const tileOption = getTileOptionById(prices, tileSelectionId);
+    const tileStepTrimOption = getTileStepTrimOptions(prices)[0] || null;
+    const copingOption = getCopingOptionById(prices, tileCopingDecking.copingType);
+    const deckingOption = getDeckingOptionById(prices, tileCopingDecking.deckingType);
+    const bullnoseOption = getBullnoseSpillwayOptionById(prices, 'bullnose');
+    const spillwayOption = getBullnoseSpillwayOptionById(prices, 'spillway');
     const isFiberglass = PoolCalculations.isFiberglassPool(poolSpecs);
-    const primaryDeckingSelectionLabel = getDeckingTypeFullLabel(tileCopingDecking.deckingType);
+    const primaryDeckingSelectionLabel = deckingOption?.name || getDeckingTypeFullLabel(tileCopingDecking.deckingType);
     const isPrimaryDeckingOffContract = Boolean(tileCopingDecking.isDeckingOffContract);
     const additionalDeckingSelections = getAdditionalDeckingSelections(tileCopingDecking).map((selection, index) => {
       const additionalDeckingOption = getAdditionalDeckingOption(selection.deckingType);
@@ -184,8 +199,8 @@ export class TileCopingDeckingCalculations {
     const copingLnft =
       tileCopingDecking.copingLength ||
       Math.ceil(poolSpecs.perimeter * 1.1 + spaPerimeter * 2.15);
-    const isConcreteDeck = tileCopingDecking.deckingType === 'concrete';
-    const hasTile = !isFiberglass && tileCopingDecking.tileLevel > 0;
+    const isConcreteDeck = deckingOption?.id === 'concrete';
+    const hasTile = !isFiberglass && Boolean(tileOption);
     const standardDeckingWasteMultiplier = isConcreteDeck ? 1 : 1.05;
     const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 : 0;
     const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? ceilToStep(concreteBandAreaRaw, 10) : 0;
@@ -199,148 +214,111 @@ export class TileCopingDeckingCalculations {
       : tileCopingDecking.deckingArea * standardDeckingWasteMultiplier;
 
     // TILE LABOR
-    if (hasTile) {
-      const tileLevel = tileCopingDecking.tileLevel;
-
+    if (hasTile && tileOption) {
       laborItems.push({
         category: 'Tile Labor',
-        description: `Level ${tileLevel} Tile Labor`,
-        unitPrice: prices.tile.labor.level1,
+        description: `${tileOption.name} Tile Labor`,
+        unitPrice: tileOption.laborRate,
         quantity: perimeterWithExtras,
-        total: prices.tile.labor.level1 * perimeterWithExtras,
+        total: tileOption.laborRate * perimeterWithExtras,
       });
 
       // Spa tile labor
       if (spaPerimeter > 0) {
         laborItems.push({
           category: 'Tile Labor',
-          description: 'Spa Tile Labor',
-          unitPrice: prices.tile.labor.level1,
+          description: `${tileOption.name} Tile Labor - Spa`,
+          unitPrice: tileOption.laborRate,
           quantity: spaPerimeter,
-          total: prices.tile.labor.level1 * spaPerimeter,
+          total: tileOption.laborRate * spaPerimeter,
         });
       }
 
       // Step trim tile
-      if (tileCopingDecking.hasTrimTileOnSteps && poolSpecs.totalStepsAndBench > 0) {
+      if (tileCopingDecking.hasTrimTileOnSteps && poolSpecs.totalStepsAndBench > 0 && tileStepTrimOption) {
         const trimTileQty = spaPerimeter + poolSpecs.totalStepsAndBench;
         laborItems.push({
           category: 'Tile Labor',
           description: 'Step Trim Tile',
-          unitPrice: prices.tile.labor.stepTrim,
+          unitPrice: tileStepTrimOption.laborRate,
           quantity: trimTileQty,
-          total: prices.tile.labor.stepTrim * trimTileQty,
+          total: tileStepTrimOption.laborRate * trimTileQty,
         });
       }
     }
 
-    // Base tile material (Level 1)
-    if (hasTile) {
+    // TILE MATERIAL
+    if (hasTile && tileOption) {
       materialItems.push({
         category: 'Tile Material',
-        description: 'Level 1 Tile',
-        unitPrice: prices.tile.material.level1,
+        description: `${tileOption.name} Tile`,
+        unitPrice: tileOption.materialRate,
         quantity: perimeterWithExtras,
-        total: prices.tile.material.level1 * perimeterWithExtras,
+        total: tileOption.materialRate * perimeterWithExtras,
       });
       if (spaPerimeter > 0) {
         materialItems.push({
           category: 'Tile Material',
-          description: 'Level 1 Tile - Spa',
-          unitPrice: prices.tile.material.level1,
+          description: `${tileOption.name} Tile - Spa`,
+          unitPrice: tileOption.materialRate,
           quantity: spaPerimeter,
-          total: prices.tile.material.level1 * spaPerimeter,
+          total: tileOption.materialRate * spaPerimeter,
         });
       }
     }
 
-    if (hasTile && tileCopingDecking.hasTrimTileOnSteps && poolSpecs.totalStepsAndBench > 0) {
+    if (hasTile && tileCopingDecking.hasTrimTileOnSteps && poolSpecs.totalStepsAndBench > 0 && tileStepTrimOption) {
       const trimTileQty = spaPerimeter + poolSpecs.totalStepsAndBench;
       materialItems.push({
         category: 'Tile Material',
         description: 'Step Trim Tile Material',
-        unitPrice: prices.tile.material.stepTrim,
+        unitPrice: tileStepTrimOption.materialRate,
         quantity: trimTileQty,
-        total: prices.tile.material.stepTrim * trimTileQty,
-      });
-    }
-
-    // TILE MATERIAL
-    if (hasTile && tileCopingDecking.tileLevel > 1) {
-      const upgrade =
-        tileCopingDecking.tileLevel === 2
-          ? prices.tile.material.level2Upgrade
-          : prices.tile.material.level3Upgrade;
-
-      materialItems.push({
-        category: 'Tile Material',
-        description: `Level ${tileCopingDecking.tileLevel} Tile Upgrade`,
-        unitPrice: upgrade,
-        quantity: perimeterWithExtras,
-        total: upgrade * perimeterWithExtras,
+        total: tileStepTrimOption.materialRate * trimTileQty,
       });
     }
 
     // COPING LABOR & MATERIAL
-    const copingLabelMap: Record<string, string> = {
-      'travertine-level1': 'Level 1 Coping - Travertine',
-      'travertine-level2': 'Level 2 Coping - Travertine',
-    };
-    const deckingLabelMap: Record<string, string> = {
-      'travertine-level1': 'Level 1 Decking - Travertine',
-      'travertine-level2': 'Level 2 Decking - Travertine',
-      'travertine-level3': 'Level 3 Decking - Travertine',
-    };
-    const formatCopingLabel = (type: string, suffix: string) =>
-      copingLabelMap[type] ? copingLabelMap[type] : `${type} ${suffix}`;
-    const formatDeckingLabel = (type: string, suffix: string) =>
-      deckingLabelMap[type] ? deckingLabelMap[type] : `${type} ${suffix}`;
-    const isConcreteCoping = tileCopingDecking.copingType === 'concrete';
-    const copingRate = isConcreteCoping ? 0 : this.getCopingRate(tileCopingDecking.copingType, prices);
-    if (copingRate > 0) {
+    if (copingOption?.laborRate) {
       laborItems.push({
         category: 'Coping Labor',
-        description: formatCopingLabel(tileCopingDecking.copingType, 'Coping'),
-        unitPrice: copingRate,
+        description: `${copingOption.name} Coping`,
+        unitPrice: copingOption.laborRate,
         quantity: copingLnft,
-        total: copingRate * copingLnft,
+        total: copingOption.laborRate * copingLnft,
       });
-      const copingMaterialRate =
-        prices.decking.material.coping[
-          tileCopingDecking.copingType.replace('-', '') as keyof typeof prices.decking.material.coping
-        ] ?? copingRate;
+    }
 
-      // Apply flagstone quantity multiplier (1.1) for material calculations
-      const copingMaterialQty = tileCopingDecking.copingType === 'flagstone'
+    if (copingOption?.materialRate) {
+      const copingMaterialQty = copingOption.id === 'flagstone'
         ? copingLnft * prices.flagstoneQuantityMultiplier
         : copingLnft;
-
       materialItems.push({
         category: 'Coping Material',
-        description: formatCopingLabel(tileCopingDecking.copingType, 'Coping Material'),
-        unitPrice: copingMaterialRate,
+        description: `${copingOption.name} Coping Material`,
+        unitPrice: copingOption.materialRate,
         quantity: copingMaterialQty,
-        total: copingMaterialRate * copingMaterialQty,
+        total: copingOption.materialRate * copingMaterialQty,
       });
     }
 
     // DECKING LABOR
-    const deckingLaborRate = this.getDeckingLaborRate(tileCopingDecking.deckingType, prices);
-    if (isConcreteDeck) {
+    const deckingLaborRate = deckingOption?.laborRate ?? 0;
+    if (isConcreteDeck && deckingOption) {
       // Excel only charges concrete deck labor when concrete coping (cantilever) is selected, per perimeter
       if (tileCopingDecking.copingType === 'concrete' && deckingLaborRate > 0) {
         laborItems.push(tagPrimaryDeckingItem({
           category: 'Decking Labor',
-          description: 'Concrete Decking - Cantilever',
+          description: `${deckingOption.name} Decking - Cantilever`,
           unitPrice: deckingLaborRate,
           quantity: poolSpecs.perimeter,
           total: deckingLaborRate * poolSpecs.perimeter,
         }));
       }
-    } else if (deckingLaborRate > 0) {
+    } else if (deckingOption && deckingLaborRate > 0) {
       laborItems.push(tagPrimaryDeckingItem({
         category: 'Decking Labor',
-        description: formatDeckingLabel(tileCopingDecking.deckingType, 'Decking Labor'),
+        description: `${deckingOption.name} Decking Labor`,
         unitPrice: deckingLaborRate,
         quantity: deckingArea,
         total: deckingLaborRate * deckingArea,
@@ -360,12 +338,12 @@ export class TileCopingDeckingCalculations {
     }
 
     // DECKING MATERIAL
-    const deckingMaterialRate = this.getDeckingMaterialRate(tileCopingDecking.deckingType, prices);
-    if (isConcreteDeck && deckingMaterialRate > 0) {
+    const deckingMaterialRate = deckingOption?.materialRate ?? 0;
+    if (isConcreteDeck && deckingOption && deckingMaterialRate > 0) {
       if (concreteBaseQty > 0) {
         materialItems.push(tagPrimaryDeckingItem({
           category: 'Decking Material',
-          description: 'Concrete Decking - Base',
+          description: `${deckingOption.name} Decking - Base`,
           unitPrice: deckingMaterialRate,
           quantity: concreteBaseQty,
           total: deckingMaterialRate * concreteBaseQty,
@@ -374,16 +352,16 @@ export class TileCopingDeckingCalculations {
       if (concreteAddlQty !== 0) {
         materialItems.push(tagPrimaryDeckingItem({
           category: 'Decking Material',
-          description: 'Concrete Decking - Addl',
+          description: `${deckingOption.name} Decking - Addl`,
           unitPrice: deckingMaterialRate,
           quantity: concreteAddlQty,
           total: deckingMaterialRate * concreteAddlQty,
         }));
       }
-    } else if (deckingMaterialRate > 0) {
+    } else if (deckingOption && deckingMaterialRate > 0) {
       materialItems.push(tagPrimaryDeckingItem({
         category: 'Decking Material',
-        description: formatDeckingLabel(tileCopingDecking.deckingType, 'Decking Material'),
+        description: `${deckingOption.name} Decking Material`,
         unitPrice: deckingMaterialRate,
         quantity: deckingArea,
         total: deckingMaterialRate * deckingArea,
@@ -434,16 +412,16 @@ export class TileCopingDeckingCalculations {
       laborItems.push({
         category: 'Stone & Rockwork Labor',
         description: 'Bullnose',
-        unitPrice: prices.coping.bullnoseLabor ?? 8,
+        unitPrice: bullnoseOption?.laborRate ?? 0,
         quantity: bullnoseLnft,
-        total: (prices.coping.bullnoseLabor ?? 8) * bullnoseLnft,
+        total: (bullnoseOption?.laborRate ?? 0) * bullnoseLnft,
       });
       materialItems.push({
         category: 'Stone & Rockwork Material',
         description: 'Bullnose Material',
-        unitPrice: prices.decking.material.bullnose ?? 0,
+        unitPrice: bullnoseOption?.materialRate ?? 0,
         quantity: bullnoseLnft,
-        total: (prices.decking.material.bullnose ?? 0) * bullnoseLnft,
+        total: (bullnoseOption?.materialRate ?? 0) * bullnoseLnft,
       });
     }
 
@@ -452,16 +430,16 @@ export class TileCopingDeckingCalculations {
       laborItems.push({
         category: 'Coping Labor',
         description: 'Spillway Labor',
-        unitPrice: prices.decking.spillwayLabor ?? prices.coping.spillwayLabor ?? 0,
+        unitPrice: spillwayOption?.laborRate ?? 0,
         quantity: 1,
-        total: prices.decking.spillwayLabor ?? prices.coping.spillwayLabor ?? 0,
+        total: spillwayOption?.laborRate ?? 0,
       });
       materialItems.push({
         category: 'Coping Material',
         description: 'Spillway Material',
-        unitPrice: prices.decking.spillwayMaterial ?? prices.decking.material.spillway ?? 0,
+        unitPrice: spillwayOption?.materialRate ?? 0,
         quantity: 1,
-        total: prices.decking.spillwayMaterial ?? prices.decking.material.spillway ?? 0,
+        total: spillwayOption?.materialRate ?? 0,
       });
     }
 
@@ -566,9 +544,9 @@ export class TileCopingDeckingCalculations {
       materialItems.push(tagPrimaryDeckingItem({
         category: 'Decking Material',
         description: 'Concrete Band for Fiberglass',
-        unitPrice: prices.decking.material.concrete,
+        unitPrice: getDeckingOptionById(prices, 'concrete')?.materialRate ?? 0,
         quantity: poolSpecs.perimeter * 1.25,
-        total: prices.decking.material.concrete * poolSpecs.perimeter * 1.25,
+        total: (getDeckingOptionById(prices, 'concrete')?.materialRate ?? 0) * poolSpecs.perimeter * 1.25,
       }));
     }
 
@@ -715,40 +693,6 @@ export class TileCopingDeckingCalculations {
     }
 
     return { labor: laborItems, material: materialItems };
-  }
-
-  private static getCopingRate(copingType: string, prices: any): number {
-    const mapping: Record<string, number> = {
-      cantilever: prices.coping.cantilever,
-      flagstone: prices.coping.flagstone,
-      paver: prices.coping.pavers,
-      'travertine-level1': prices.coping.travertineLevel1,
-      'travertine-level2': prices.coping.travertineLevel2,
-      concrete: prices.coping.concrete,
-    };
-    return mapping[copingType] || 0;
-  }
-
-  private static getDeckingLaborRate(deckingType: string, prices: any): number {
-    const mapping: Record<string, number> = {
-      paver: prices.decking.labor.pavers,
-      'travertine-level1': prices.decking.labor.travertine,
-      'travertine-level2': prices.decking.labor.travertine,
-      'travertine-level3': prices.decking.labor.travertine,
-      concrete: prices.decking.labor.concrete,
-    };
-    return mapping[deckingType] || 0;
-  }
-
-  private static getDeckingMaterialRate(deckingType: string, prices: any): number {
-    const mapping: Record<string, number> = {
-      paver: prices.decking.material.pavers,
-      'travertine-level1': prices.decking.material.travertineLevel1,
-      'travertine-level2': prices.decking.material.travertineLevel2,
-      'travertine-level3': prices.decking.material.travertineLevel3,
-      concrete: prices.decking.material.concrete,
-    };
-    return mapping[deckingType] || 0;
   }
 }
 

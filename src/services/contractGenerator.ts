@@ -5,6 +5,7 @@ import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/maso
 import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
 import { getAdditionalDeckingSelections, getDeckingTypeFullLabel } from '../utils/decking';
+import { getCopingOptionLabel, hasTileSelection } from '../utils/tileCopingCatalogs';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
 import {
   getGroupedCustomFeatureSubcategory,
@@ -682,9 +683,9 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return 'None';
   }
   if (/line type/.test(label)) return 'None';
-  if (/waterline tile/.test(label)) return (proposal.tileCopingDecking?.tileLevel ?? 1) > 0 ? 'Included' : 'None';
+  if (/waterline tile/.test(label)) return hasTileSelection(proposal.tileCopingDecking) ? 'Included' : 'None';
   if (/accent tile/.test(label)) {
-    const hasTile = (proposal.tileCopingDecking?.tileLevel ?? 1) > 0;
+    const hasTile = hasTileSelection(proposal.tileCopingDecking);
     return hasTile && proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Trim Tile' : 'None';
   }
   if (field.id === 'p1_37_size') return proposal.tileCopingDecking?.copingSize || '';
@@ -711,16 +712,10 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return isOffContract ? `${baseLabel} - OFF CONTRACT` : baseLabel;
   };
   if (/coping/.test(label)) {
-    const lookup: Record<string, string> = {
-      none: 'None',
-      'travertine-level1': 'Travertine Lvl 1',
-      'travertine-level2': 'Travertine Lvl 2',
-      cantilever: 'Cantilever',
-      flagstone: 'Flagstone',
-      paver: 'Paver',
-      concrete: 'Concrete',
-    };
-    return lookup[proposal.tileCopingDecking?.copingType as string] || '';
+    const copingType = String(proposal.tileCopingDecking?.copingType || '').trim();
+    return copingType && copingType !== 'none'
+      ? getCopingOptionLabel(pricingData.tileCoping, copingType) || copingType
+      : 'None';
   }
   if (field.id === 'p1_38_qty') {
     const quantities = [

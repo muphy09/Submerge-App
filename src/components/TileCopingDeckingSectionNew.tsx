@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import pricingData from '../services/pricingData';
 import { AdditionalDeckingSelection, TileCopingDecking } from '../types/proposal-new';
 import {
   getAdditionalDeckingOption,
@@ -7,6 +8,18 @@ import {
   getDeckingTypeFullLabel,
   withAdditionalDeckingSelections,
 } from '../utils/decking';
+import {
+  getCopingOptionLabel,
+  getCopingOptions,
+  getDeckingOptionLabel,
+  getDeckingOptions,
+  getTileOptionLabel,
+  getTileOptions,
+  getTileSelectionId,
+  normalizeCopingOptionId,
+  normalizeDeckingOptionId,
+  normalizeTileOptionId,
+} from '../utils/tileCopingCatalogs';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
@@ -63,9 +76,49 @@ const createEmptyAdditionalDeckingSelection = (): AdditionalDeckingSelection => 
   isOffContract: false,
 });
 
+const ensureSelectedOption = (
+  options: Array<{ id: string; name: string; materialRate: number; laborRate: number }>,
+  selectedId: string,
+  fallbackLabel: string
+) => {
+  if (!selectedId || options.some((option) => option.id === selectedId)) {
+    return options;
+  }
+
+  return [
+    {
+      id: selectedId,
+      name: fallbackLabel || selectedId,
+      materialRate: 0,
+      laborRate: 0,
+    },
+    ...options,
+  ];
+};
+
 function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDeckingArea }: Props) {
   const showStoneRockwork = false;
   const isDeckingOffContract = Boolean(data.isDeckingOffContract);
+  const selectedTileOptionId = getTileSelectionId(data);
+  const selectedCopingType = normalizeCopingOptionId(data.copingType);
+  const selectedDeckingType = normalizeDeckingOptionId(data.deckingType);
+  const activeCopingType = selectedCopingType === 'none' ? '' : selectedCopingType;
+  const activeDeckingType = selectedDeckingType === 'none' ? '' : selectedDeckingType;
+  const tileOptions = ensureSelectedOption(
+    getTileOptions(pricingData.tileCoping),
+    selectedTileOptionId,
+    getTileOptionLabel(pricingData.tileCoping, selectedTileOptionId)
+  );
+  const copingOptions = ensureSelectedOption(
+    getCopingOptions(pricingData.tileCoping),
+    activeCopingType,
+    getCopingOptionLabel(pricingData.tileCoping, activeCopingType)
+  );
+  const deckingOptions = ensureSelectedOption(
+    getDeckingOptions(pricingData.tileCoping),
+    activeDeckingType,
+    getDeckingOptionLabel(pricingData.tileCoping, activeDeckingType)
+  );
   const additionalDeckingSelections = getAdditionalDeckingSelections(data);
   const displayedAdditionalDeckingSelections =
     additionalDeckingSelections.length > 0
@@ -100,6 +153,20 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
   })();
   const handleChange = (field: keyof TileCopingDecking, value: any) => {
     onChange({ ...data, [field]: value });
+  };
+  const handleTileOptionChange = (value: string) => {
+    const tileOptionId = normalizeTileOptionId(value);
+    const tileLevel =
+      tileOptionId === 'level1' ? 1 :
+      tileOptionId === 'level2' ? 2 :
+      tileOptionId === 'level3' ? 3 :
+      tileOptionId ? 1 : 0;
+
+    onChange({
+      ...data,
+      tileOptionId,
+      tileLevel,
+    });
   };
   const handleDeckingOffContractChange = (enabled: boolean) => {
     onChange({
@@ -176,16 +243,18 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
 
           <div className="spec-grid-3-fixed">
             <div className="spec-field">
-              <label className="spec-label required">Tile Level</label>
+              <label className="spec-label required">Tile Option</label>
               <select
                 className="compact-input"
-                value={data.tileLevel}
-                onChange={(e) => handleChange('tileLevel', parseInt(e.target.value, 10))}
+                value={selectedTileOptionId}
+                onChange={(e) => handleTileOptionChange(e.target.value)}
               >
-                <option value={0}>No Tile</option>
-                <option value={1}>Level 1</option>
-                <option value={2}>Level 2</option>
-                <option value={3}>Level 3</option>
+                <option value="">No Tile</option>
+                {tileOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="spec-field">
@@ -224,16 +293,15 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
             <label className="spec-label required">Coping Type</label>
             <select
               className="compact-input"
-              value={data.copingType}
-              onChange={(e) => handleChange('copingType', e.target.value)}
+              value={selectedCopingType || 'none'}
+              onChange={(e) => handleChange('copingType', e.target.value === 'none' ? 'none' : e.target.value)}
             >
               <option value="none">No Coping</option>
-              <option value="travertine-level1">Travertine - Level 1</option>
-              <option value="travertine-level2">Travertine - Level 2</option>
-              <option value="cantilever">Cantilever</option>
-              <option value="flagstone">Flagstone</option>
-              <option value="paver">Paver</option>
-              <option value="concrete">Concrete</option>
+              {copingOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="spec-field">
@@ -303,15 +371,15 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
             <label className="spec-label required">Decking Type</label>
             <select
               className="compact-input"
-              value={data.deckingType}
-              onChange={(e) => handleChange('deckingType', e.target.value)}
+              value={selectedDeckingType || 'none'}
+              onChange={(e) => handleChange('deckingType', e.target.value === 'none' ? 'none' : e.target.value)}
             >
               <option value="none">No Decking</option>
-              <option value="travertine-level1">Travertine - Level 1</option>
-              <option value="travertine-level2">Travertine - Level 2</option>
-              <option value="travertine-level3">Travertine - Level 3</option>
-              <option value="paver">Paver</option>
-              <option value="concrete">Concrete</option>
+              {deckingOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
             </select>
           </div>
           <div className="spec-field">
@@ -444,7 +512,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
           );
         })}
 
-        {data.deckingType === 'concrete' && (
+        {selectedDeckingType === 'concrete' && (
           <div className="spec-grid">
             <div className="spec-field">
               <label className="spec-label">Concrete Steps Length</label>

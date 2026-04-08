@@ -12,6 +12,7 @@ import { getEffectivePrimarySanitationSystemName } from './equipmentPackages';
 import { hasRealPumpSelection } from './pumpSelections';
 import { flattenWaterFeatures } from './waterFeatureCost';
 import { getAdditionalDeckingSelections, getDeckingTypeFullLabel, hasIncludedDecking } from './decking';
+import { getCopingOptionLabel } from './tileCopingCatalogs';
 
 type LegacyWarrantyItem = {
   id?: string;
@@ -405,24 +406,8 @@ const buildInteriorFinishWarrantyItem = (proposal?: Partial<Proposal>): LegacyWa
   };
 };
 
-const getCopingTypeWarrantyLabel = (copingType?: string) => {
-  switch (copingType) {
-    case 'travertine-level1':
-      return 'Travertine Level 1';
-    case 'travertine-level2':
-      return 'Travertine Level 2';
-    case 'cantilever':
-      return 'Cantilever';
-    case 'flagstone':
-      return 'Flagstone';
-    case 'paver':
-      return 'Paver';
-    case 'concrete':
-      return 'Concrete';
-    default:
-      return copingType || 'Coping';
-  }
-};
+const getCopingTypeWarrantyLabel = (copingType?: string) =>
+  getCopingOptionLabel(pricingData.tileCoping, copingType) || copingType || 'Coping';
 
 const getCopingSquareFootMultiplier = (copingSize?: string) => {
   switch (copingSize) {

@@ -407,7 +407,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
 
                   {isEditing && (
                     <>
-                      <div className="spec-grid-3">
+                      <div className="spec-grid-3-fixed">
                         <div className="spec-field">
                           <label className="spec-label">Height</label>
                           <select
@@ -718,7 +718,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
                     >
                       {retainingWallOptions.map((opt: any) => (
                         <option key={opt.name} value={opt.name}>
-                          {opt.name} {opt.costPerSqft > 0 ? `- $${opt.costPerSqft}/SQFT` : ''}
+                          {opt.name}
                         </option>
                       ))}
                     </select>
@@ -828,7 +828,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
 
                   {isEditing && (
                     <>
-                      <div className="spec-grid-3">
+                      <div className="spec-grid-3-fixed">
                         <div className="spec-field">
                           <label className="spec-label">Height</label>
                           <select

@@ -1,14 +1,6 @@
 import pricingData from '../services/pricingData';
 import type { AdditionalDeckingSelection, Proposal, TileCopingDecking } from '../types/proposal-new';
-
-const DECKING_TYPE_FULL_LABELS: Record<string, string> = {
-  none: 'No Decking',
-  'travertine-level1': 'Travertine Level 1',
-  'travertine-level2': 'Travertine Level 2',
-  'travertine-level3': 'Travertine Level 3',
-  paver: 'Paver',
-  concrete: 'Concrete',
-};
+import { getDeckingOptionLabel, normalizeDeckingOptionId } from './tileCopingCatalogs';
 
 export interface AdditionalDeckingOption {
   id: string;
@@ -39,9 +31,13 @@ const normalizeAdditionalDeckingSelection = (
 });
 
 export const getDeckingTypeFullLabel = (deckingType?: string | null): string => {
-  const normalized = String(deckingType || '').trim();
+  const normalized = normalizeDeckingOptionId(deckingType);
   if (!normalized) return 'Decking';
-  return DECKING_TYPE_FULL_LABELS[normalized] || getAdditionalDeckingOption(normalized)?.label || normalized;
+  return (
+    getDeckingOptionLabel(pricingData.tileCoping, normalized) ||
+    getAdditionalDeckingOption(normalized)?.label ||
+    normalized
+  );
 };
 
 export const getAdditionalDeckingOptions = (): AdditionalDeckingOption[] => {

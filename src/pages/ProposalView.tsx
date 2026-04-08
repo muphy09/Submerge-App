@@ -3678,7 +3678,6 @@ function ProposalView() {
         <div className="proposal-side-card-header">
           <div>
             <p className="proposal-side-card-kicker">Proposal Actions</p>
-            <h2>Workflow Controls</h2>
           </div>
         </div>
         <div className="proposal-side-card-body">
@@ -3745,7 +3744,6 @@ function ProposalView() {
       <div className="proposal-side-card-header">
         <div className="workflow-summary-heading">
           <p className="proposal-side-card-kicker">Submission Workflow</p>
-          <h2>Proposal Status</h2>
         </div>
         <TooltipAnchor as="div" tooltip={selectedWorkflowStatusTooltip}>
           <div className={`workflow-summary-pill is-${selectedVersionStatusTone}`}>

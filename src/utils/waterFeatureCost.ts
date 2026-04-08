@@ -46,6 +46,20 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '') || 'water-feature';
 
+const normalizePlaceholderLabel = (value?: string | null) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+export const isWaterFeaturePlaceholderLabel = (value?: string | null): boolean => {
+  const normalized = normalizePlaceholderLabel(value);
+  return normalized === 'none' || /^no\b/.test(normalized);
+};
+
+const isWaterFeaturePlaceholderItem = (item?: Partial<WaterFeatureItem> | null): boolean =>
+  isWaterFeaturePlaceholderLabel(item?.name) || isWaterFeaturePlaceholderLabel(item?.id);
+
 const normalizeCategory = (category?: string) => {
   const normalized = (category || '').toLowerCase();
   if (normalized.includes('sheer')) return 'Sheer Descent';
@@ -82,8 +96,12 @@ export function getWaterFeatureCogs(item?: WaterFeatureItem | null): number {
   );
 }
 
-export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
+export function flattenWaterFeatures(
+  config?: any,
+  options: { includePlaceholders?: boolean } = {}
+): WaterFeatureCatalogItem[] {
   if (!config) return [];
+  const includePlaceholders = Boolean(options.includePlaceholders);
 
   const woks = config.woks || {};
   const sections: { list: any[] | undefined; category: string }[] = [
@@ -114,6 +132,9 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
         note: item.note,
         needsPoolLight: Boolean(item.needsPoolLight),
       });
+      if (!includePlaceholders && isWaterFeaturePlaceholderItem(flattened[flattened.length - 1])) {
+        flattened.pop();
+      }
     });
   });
 
@@ -134,6 +155,9 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
         note: item.note,
         needsPoolLight: Boolean(item.needsPoolLight),
       };
+      if (!includePlaceholders && isWaterFeaturePlaceholderItem(mapped)) {
+        return;
+      }
       const existingIndex = flattened.findIndex((feature) => feature.id === id);
       // If we already have a structured entry for this id (new model), keep it and ignore legacy overrides.
       if (existingIndex >= 0) return;
@@ -142,6 +166,34 @@ export function flattenWaterFeatures(config?: any): WaterFeatureCatalogItem[] {
   }
 
   return flattened;
+}
+
+export function sanitizeWaterFeatureSelections(
+  selections: any,
+  config?: any
+): WaterFeatureSelection[] {
+  if (!Array.isArray(selections)) return [];
+
+  const catalog = flattenWaterFeatures(config ?? pricingData.waterFeatures, { includePlaceholders: true });
+  const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
+
+  return selections
+    .filter((selection) => typeof selection?.featureId === 'string' && selection.featureId.trim().length > 0)
+    .map((selection) => ({
+      featureId: selection.featureId,
+      quantity: Number.isFinite(Number(selection?.quantity)) ? Number(selection.quantity) : 0,
+      includeValveActuator: selection?.includeValveActuator !== false,
+    }))
+    .filter((selection) => {
+      if (isWaterFeaturePlaceholderLabel(selection.featureId)) {
+        return false;
+      }
+
+      const feature =
+        lookup.get(selection.featureId) || catalog.find((entry) => entry.name === selection.featureId);
+
+      return !isWaterFeaturePlaceholderItem(feature);
+    });
 }
 
 export function orderWaterFeatureSelectionsForRuns(

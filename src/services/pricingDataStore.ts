@@ -5,6 +5,7 @@ import {
   savePricingModel as savePricingModelRemote,
 } from './pricingModelsAdapter';
 import { ensureMasonryFacingCatalogs } from '../utils/masonryFacing';
+import { ensureTileCopingDeckingCatalogs } from '../utils/tileCopingCatalogs';
 
 type PricingData = typeof pricingData;
 type PricingLoadState = {
@@ -34,6 +35,7 @@ const listeners = new Set<(data: PricingData) => void>();
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
   const normalized = deepClone(snapshot);
   ensureMasonryFacingCatalogs(normalized, source, defaultSnapshot);
+  ensureTileCopingDeckingCatalogs(normalized, source, defaultSnapshot);
   syncLegacyFiberglassPricing(normalized, source);
   syncLegacyMiscPricing(normalized, source);
   return normalized;

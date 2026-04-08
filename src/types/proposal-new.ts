@@ -200,21 +200,8 @@ export interface Electrical {
 // ============================================================================
 
 export type TileLevel = 0 | 1 | 2 | 3;
-export type CopingType =
-  | 'none'
-  | 'cantilever'
-  | 'flagstone'
-  | 'paver'
-  | 'travertine-level1'
-  | 'travertine-level2'
-  | 'concrete';
-export type DeckingType =
-  | 'none'
-  | 'paver'
-  | 'travertine-level1'
-  | 'travertine-level2'
-  | 'travertine-level3'
-  | 'concrete';
+export type CopingType = string;
+export type DeckingType = string;
 export type CopingSize = '12x12' | '12x24' | '16x16';
 
 export interface AdditionalDeckingSelection {
@@ -226,6 +213,7 @@ export interface AdditionalDeckingSelection {
 export interface TileCopingDecking {
   // Tile
   tileLevel: TileLevel;
+  tileOptionId?: string;
   additionalTileLength: number; // LNFT for spillway or infinity edge
   hasTrimTileOnSteps: boolean; // Shotcrete pools only
 
