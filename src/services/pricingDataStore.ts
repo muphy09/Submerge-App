@@ -20,6 +20,7 @@ type PricingLoadState = {
 const STORAGE_VERSION = '2025-03-interior-finish-catalog';
 const LEGACY_STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
 const DEFAULT_FRANCHISE_ID = 'default';
+const EXCAVATION_RBB_HEIGHTS = [6, 12, 18, 24, 30, 36];
 
 let loadingPromise: Promise<void> | null = null;
 let latestLoadRequestId = 0;
@@ -38,6 +39,7 @@ function normalizePricingState(snapshot: PricingData, source?: any): PricingData
   ensureTileCopingDeckingCatalogs(normalized, source, defaultSnapshot);
   syncLegacyFiberglassPricing(normalized, source);
   syncLegacyMiscPricing(normalized, source);
+  syncExcavationAdminTables(normalized, source);
   return normalized;
 }
 
@@ -142,6 +144,189 @@ function syncLegacyMiscPricing(target: PricingData, source?: any) {
     target.misc.startup.fiveYearWarranty = resolvedWarranty;
     target.misc.startup.premium = resolvedWarranty;
   }
+}
+
+function toFiniteNumber(value: any, fallback: number = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatExcavationBreakpointRange(min: number, max: number) {
+  return `${min.toLocaleString('en-US')}-${max.toLocaleString('en-US')} SQFT`;
+}
+
+function parseExcavationRbbHeight(value: any, fallback?: number): number | null {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && EXCAVATION_RBB_HEIGHTS.includes(numeric)) {
+    return numeric;
+  }
+
+  const match = String(value ?? '').match(/(\d+)/);
+  if (match) {
+    const parsed = Number(match[1]);
+    if (Number.isFinite(parsed) && EXCAVATION_RBB_HEIGHTS.includes(parsed)) {
+      return parsed;
+    }
+  }
+
+  if (fallback !== undefined && EXCAVATION_RBB_HEIGHTS.includes(fallback)) {
+    return fallback;
+  }
+
+  return null;
+}
+
+function buildExcavationBaseTableRows(
+  rangeRows: Array<{ id?: string; max: number; price: number }>,
+  overagePrice: number
+) {
+  const normalizedRows: Array<{
+    id: string;
+    breakpointRange: string;
+    kind: string;
+    max?: number;
+    price: number;
+  }> = [];
+  let previousMax = 0;
+  [...rangeRows]
+    .filter((row) => Number.isFinite(Number(row?.max)))
+    .sort((left, right) => Number(left.max) - Number(right.max))
+    .forEach((row, index) => {
+      const max = toFiniteNumber(row.max);
+      const min = index === 0 ? 0 : previousMax + 1;
+      previousMax = max;
+      normalizedRows.push({
+        id: row.id || `base-range-${max}`,
+        breakpointRange: formatExcavationBreakpointRange(min, max),
+        kind: 'range',
+        max,
+        price: toFiniteNumber(row.price),
+      });
+    });
+
+  normalizedRows.push({
+    id: 'base-range-over-1000',
+    breakpointRange: 'Over 1,000 SQFT',
+    kind: 'overage',
+    price: toFiniteNumber(overagePrice),
+  });
+
+  return normalizedRows;
+}
+
+function buildExcavationBaseTableFromLegacy(excavation: any) {
+  const rangeRows = (((excavation?.baseRanges as any[]) || []) as any[])
+    .map((row, index) => ({
+      id: String(row?.id || `base-range-${index + 1}`),
+      max: toFiniteNumber(row?.max, Number.NaN),
+      price: toFiniteNumber(row?.price),
+    }))
+    .filter((row) => Number.isFinite(row.max));
+
+  return buildExcavationBaseTableRows(rangeRows, toFiniteNumber(excavation?.over1000Sqft));
+}
+
+function buildExcavationBaseTableFromTable(tableRows: any[], excavation: any) {
+  const rangeRows = (tableRows || [])
+    .map((row, index) => ({
+      id: String(row?.id || `base-range-${index + 1}`),
+      kind: String(row?.kind || '').trim().toLowerCase(),
+      max: toFiniteNumber(row?.max, Number.NaN),
+      price: toFiniteNumber(row?.price),
+      label: String(row?.breakpointRange || '').trim().toLowerCase(),
+    }))
+    .filter((row) => row.kind !== 'overage' && Number.isFinite(row.max));
+
+  const overageRow = (tableRows || []).find((row) => {
+    const kind = String(row?.kind || '').trim().toLowerCase();
+    const label = String(row?.breakpointRange || '').trim().toLowerCase();
+    return kind === 'overage' || label.includes('over 1,000') || label.includes('over 1000');
+  });
+
+  if (!rangeRows.length) {
+    return buildExcavationBaseTableFromLegacy(excavation);
+  }
+
+  return buildExcavationBaseTableRows(
+    rangeRows.map(({ id, max, price }) => ({ id, max, price })),
+    toFiniteNumber(overageRow?.price, toFiniteNumber(excavation?.over1000Sqft))
+  );
+}
+
+function buildRaisedBondBeamTableRows(pricesByHeight: Map<number, number>) {
+  return EXCAVATION_RBB_HEIGHTS.map((height) => ({
+    id: `rbb-${height}`,
+    rbbSize: `${height}" RBB`,
+    height,
+    price: toFiniteNumber(pricesByHeight.get(height)),
+  }));
+}
+
+function buildRaisedBondBeamTableFromLegacy(excavation: any) {
+  const pricesByHeight = new Map<number, number>();
+  EXCAVATION_RBB_HEIGHTS.forEach((height) => {
+    pricesByHeight.set(height, toFiniteNumber(excavation?.[`rbb${height}`]));
+  });
+  return buildRaisedBondBeamTableRows(pricesByHeight);
+}
+
+function buildRaisedBondBeamTableFromTable(tableRows: any[], excavation: any) {
+  const pricesByHeight = new Map<number, number>();
+  EXCAVATION_RBB_HEIGHTS.forEach((height) => {
+    pricesByHeight.set(height, toFiniteNumber(excavation?.[`rbb${height}`]));
+  });
+
+  (tableRows || []).forEach((row, index) => {
+    const height = parseExcavationRbbHeight(row?.height ?? row?.rbbSize, EXCAVATION_RBB_HEIGHTS[index]);
+    if (height === null) {
+      return;
+    }
+    pricesByHeight.set(height, toFiniteNumber(row?.price, pricesByHeight.get(height) ?? 0));
+  });
+
+  return buildRaisedBondBeamTableRows(pricesByHeight);
+}
+
+function syncExcavationAdminTables(target: PricingData, source?: any) {
+  const targetExcavation = (target as any).excavation;
+  if (!targetExcavation || typeof targetExcavation !== 'object') {
+    return;
+  }
+
+  const sourceExcavation = source?.excavation && typeof source.excavation === 'object' ? source.excavation : undefined;
+
+  const baseExcavationTable = Array.isArray(sourceExcavation?.baseExcavationTable)
+    ? buildExcavationBaseTableFromTable(sourceExcavation.baseExcavationTable, targetExcavation)
+    : buildExcavationBaseTableFromLegacy(targetExcavation);
+  targetExcavation.baseExcavationTable = baseExcavationTable;
+  targetExcavation.baseRanges = baseExcavationTable
+    .filter((row: any) => row?.kind === 'range' && Number.isFinite(Number(row?.max)))
+    .map((row: any) => ({
+      max: toFiniteNumber(row.max),
+      price: toFiniteNumber(row.price),
+    }));
+  targetExcavation.over1000Sqft = toFiniteNumber(
+    baseExcavationTable.find((row: any) => row?.kind === 'overage')?.price
+  );
+
+  const raisedBondBeamTable = Array.isArray(sourceExcavation?.raisedBondBeamTable)
+    ? buildRaisedBondBeamTableFromTable(sourceExcavation.raisedBondBeamTable, targetExcavation)
+    : buildRaisedBondBeamTableFromLegacy(targetExcavation);
+  targetExcavation.raisedBondBeamTable = raisedBondBeamTable;
+  raisedBondBeamTable.forEach((row: any) => {
+    const height = parseExcavationRbbHeight(row?.height);
+    if (height === null) {
+      return;
+    }
+    targetExcavation[`rbb${height}`] = toFiniteNumber(row?.price);
+  });
+}
+
+function isExcavationAdminTablePath(path: (string | number)[]) {
+  return (
+    path[0] === 'excavation' &&
+    (path[1] === 'baseExcavationTable' || path[1] === 'raisedBondBeamTable')
+  );
 }
 
 function getLocalStorageKey(franchiseId: string) {
@@ -466,6 +651,10 @@ export function updatePricingValue(path: (string | number)[], value: any) {
     setDeep(pricingState, legacyPath, value);
     setDeep(pricingData as any, legacyPath, deepClone(value));
   }
+  if (isExcavationAdminTablePath(path)) {
+    syncExcavationAdminTables(pricingState, pricingState);
+    syncExcavationAdminTables(pricingData as any, pricingData as any);
+  }
 
   notify();
 }
@@ -483,6 +672,10 @@ export function updatePricingListItem(
   nextList[index] = updated;
   setDeep(pricingState, path, nextList);
   setDeep(pricingData as any, path, deepClone(nextList));
+  if (isExcavationAdminTablePath(path)) {
+    syncExcavationAdminTables(pricingState, pricingState);
+    syncExcavationAdminTables(pricingData as any, pricingData as any);
+  }
   notify();
 }
 
@@ -491,6 +684,10 @@ export function addPricingListItem(path: (string | number)[], item: any) {
   const nextList = [...list, item];
   setDeep(pricingState, path, nextList);
   setDeep(pricingData as any, path, deepClone(nextList));
+  if (isExcavationAdminTablePath(path)) {
+    syncExcavationAdminTables(pricingState, pricingState);
+    syncExcavationAdminTables(pricingData as any, pricingData as any);
+  }
   notify();
 }
 
@@ -500,6 +697,10 @@ export function removePricingListItem(path: (string | number)[], index: number) 
   const nextList = list.filter((_: any, i: number) => i !== index);
   setDeep(pricingState, path, nextList);
   setDeep(pricingData as any, path, deepClone(nextList));
+  if (isExcavationAdminTablePath(path)) {
+    syncExcavationAdminTables(pricingState, pricingState);
+    syncExcavationAdminTables(pricingData as any, pricingData as any);
+  }
   notify();
 }
 

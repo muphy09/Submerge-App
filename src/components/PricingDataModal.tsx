@@ -800,6 +800,46 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     []
   );
+  const excavationBaseTableFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'breakpointRange',
+        label: 'Breakpoint Range',
+        type: 'text',
+        readOnly: true,
+        tooltip: 'Fixed excavation surface-area breakpoint label used by proposals.',
+      },
+      {
+        key: 'price',
+        label: 'Cost',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Excavation cost applied for this breakpoint row.',
+      },
+    ],
+    []
+  );
+  const excavationRaisedBondBeamFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'rbbSize',
+        label: 'RBB Size',
+        type: 'text',
+        readOnly: true,
+        tooltip: 'Fixed raised bond beam size billed per linear foot.',
+      },
+      {
+        key: 'price',
+        label: 'Cost',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Raised bond beam cost applied per linear foot for this size.',
+      },
+    ],
+    []
+  );
   const bubblerFields: ListField[] = useMemo(
     () => [
       ...waterFeatureFields,
@@ -1683,7 +1723,17 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           },
           {
             title: 'Base excavation (surface area breakpoints)',
-            render: renderBaseRanges,
+            lists: [
+              {
+                title: 'Base excavation rates',
+                path: ['excavation', 'baseExcavationTable'],
+                addLabel: 'Add breakpoint',
+                allowAdd: false,
+                allowRemove: false,
+                variant: 'table',
+                fields: excavationBaseTableFields,
+              },
+            ],
           },
           {
             title: 'Spa excavation',
@@ -1706,13 +1756,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           },
           {
             title: 'Raised bond beam (per lnft)',
-            scalars: [
-              { label: '6" RBB', path: ['excavation', 'rbb6'], type: 'number', tooltip: 'Applied per linear foot of 6" raised bond beam.', prefix: '$' },
-              { label: '12" RBB', path: ['excavation', 'rbb12'], type: 'number', tooltip: 'Applied per linear foot of 12" raised bond beam.', prefix: '$' },
-              { label: '18" RBB', path: ['excavation', 'rbb18'], type: 'number', tooltip: 'Applied per linear foot of 18" raised bond beam.', prefix: '$' },
-              { label: '24" RBB', path: ['excavation', 'rbb24'], type: 'number', tooltip: 'Applied per linear foot of 24" raised bond beam.', prefix: '$' },
-              { label: '30" RBB', path: ['excavation', 'rbb30'], type: 'number', tooltip: 'Applied per linear foot of 30" raised bond beam.', prefix: '$' },
-              { label: '36" RBB', path: ['excavation', 'rbb36'], type: 'number', tooltip: 'Applied per linear foot of 36" raised bond beam.', prefix: '$' },
+            lists: [
+              {
+                title: 'Raised bond beam rates',
+                path: ['excavation', 'raisedBondBeamTable'],
+                addLabel: 'Add RBB size',
+                allowAdd: false,
+                allowRemove: false,
+                variant: 'table',
+                fields: excavationRaisedBondBeamFields,
+              },
             ],
           },
         ],
@@ -3426,6 +3479,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     [
       data,
       additionalDeckingFields,
+      excavationBaseTableFields,
+      excavationRaisedBondBeamFields,
       fixedTileCopingRateFields,
       masonryFacingFields,
       tileCopingRateFields,
@@ -3567,7 +3622,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const getListEntryLabel = (list: ListConfig, entry: any, index: number) => {
-    const nameLikeField = list.fields.find((field) => field.key === 'name' || field.key === 'description');
+    const nameLikeField = list.fields.find((field) =>
+      ['name', 'description', 'breakpointRange', 'rbbSize'].includes(field.key)
+    );
     const nameLikeValue = nameLikeField ? getListFieldValue(list, entry, nameLikeField, index) : '';
     return String(nameLikeValue || entry?.name || entry?.id || `${list.title} ${index + 1}`);
   };
@@ -4011,89 +4068,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       )}
     </div>
   );
-
-  function renderBaseRanges() {
-    const baseRanges = ((getValue(data, ['excavation', 'baseRanges']) as any[]) || []).sort(
-      (a, b) => (a?.max ?? 0) - (b?.max ?? 0)
-    );
-    let previousMax = 0;
-
-    return (
-      <div className="pricing-list-card base-ranges-card">
-        <div className="pricing-list-card__body base-ranges-body">
-          <div className="pricing-fields-grid base-ranges-grid">
-            {baseRanges.map((range, index) => {
-              const max = range?.max ?? 0;
-              const min = index === 0 ? 0 : previousMax + 1;
-              const label = `${min}-${max} LNFT`;
-              previousMax = max;
-              const price = range?.price ?? 0;
-              return (
-                <label key={`base-range-${index}`} className="pricing-field inline">
-                  <div className="pricing-field__label">{renderLabelText(label)}</div>
-                  <div className="pricing-field__input-wrap has-prefix">
-                    <span className="pricing-field__prefix">$</span>
-                    <input
-                      type="number"
-                      className="pricing-field__input pricing-field__input--bare"
-                      value={price}
-                      onFocus={() =>
-                        setCenterFieldHelp(
-                          'Excavation',
-                          'Base excavation (surface area breakpoints)',
-                          label,
-                          'Sets the excavation base price for this surface-area breakpoint.'
-                        )
-                      }
-                      onChange={(e) =>
-                        handleListChange(
-                          {
-                            title: 'Surface area breakpoints',
-                            path: ['excavation', 'baseRanges'],
-                            fields: [],
-                            addLabel: '',
-                          },
-                          index,
-                          { key: 'price', label: 'Price', type: 'number' },
-                          e.target.value
-                        )
-                      }
-                    />
-                  </div>
-                </label>
-              );
-            })}
-            <label className="pricing-field inline">
-              <div className="pricing-field__label">{renderLabelText('1000+ LNFT')}</div>
-              <div className="pricing-field__input-wrap has-prefix">
-                <span className="pricing-field__prefix">$</span>
-                <input
-                  type="number"
-                  className="pricing-field__input pricing-field__input--bare"
-                  value={getValue(data, ['excavation', 'over1000Sqft']) ?? ''}
-                  onFocus={() =>
-                    setCenterFieldHelp(
-                      'Excavation',
-                      'Base excavation (surface area breakpoints)',
-                      '1000+ LNFT',
-                      'Applies once the excavation surface area exceeds the configured breakpoint range.'
-                    )
-                  }
-                  onChange={(e) =>
-                    handleScalarChange(
-                      { label: 'over1000', path: ['excavation', 'over1000Sqft'], type: 'number' },
-                      e.target.value
-                    )
-                  }
-                />
-              </div>
-            </label>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
 
   return (
     <div className="pricing-page-shell">

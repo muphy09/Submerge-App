@@ -16,6 +16,42 @@ const defaultRaisedSpaFacingOptions: MasonryFacingOption[] = [
   { id: 'stacked-stone', name: 'Stacked Stone', materialCost: 27, laborCost: 16 },
 ];
 
+const defaultExcavationBasePricingRows = [
+  { id: 'base-range-400', breakpointRange: '0-400 SQFT', max: 400, price: 2700, kind: 'range' },
+  { id: 'base-range-450', breakpointRange: '401-450 SQFT', max: 450, price: 2700, kind: 'range' },
+  { id: 'base-range-500', breakpointRange: '451-500 SQFT', max: 500, price: 2700, kind: 'range' },
+  { id: 'base-range-550', breakpointRange: '501-550 SQFT', max: 550, price: 2700, kind: 'range' },
+  { id: 'base-range-600', breakpointRange: '551-600 SQFT', max: 600, price: 2700, kind: 'range' },
+  { id: 'base-range-650', breakpointRange: '601-650 SQFT', max: 650, price: 2700, kind: 'range' },
+  { id: 'base-range-700', breakpointRange: '651-700 SQFT', max: 700, price: 2700, kind: 'range' },
+  { id: 'base-range-750', breakpointRange: '701-750 SQFT', max: 750, price: 2700, kind: 'range' },
+  { id: 'base-range-800', breakpointRange: '751-800 SQFT', max: 800, price: 2750, kind: 'range' },
+  { id: 'base-range-850', breakpointRange: '801-850 SQFT', max: 850, price: 3000, kind: 'range' },
+  { id: 'base-range-900', breakpointRange: '851-900 SQFT', max: 900, price: 3100, kind: 'range' },
+  { id: 'base-range-950', breakpointRange: '901-950 SQFT', max: 950, price: 3150, kind: 'range' },
+  { id: 'base-range-1000', breakpointRange: '951-1,000 SQFT', max: 1000, price: 3150, kind: 'range' },
+  { id: 'base-range-over-1000', breakpointRange: 'Over 1,000 SQFT', price: 4900, kind: 'overage' },
+];
+
+const defaultExcavationRaisedBondBeamRows = [
+  { id: 'rbb-6', rbbSize: '6" RBB', height: 6, price: 5 },
+  { id: 'rbb-12', rbbSize: '12" RBB', height: 12, price: 6.5 },
+  { id: 'rbb-18', rbbSize: '18" RBB', height: 18, price: 7.5 },
+  { id: 'rbb-24', rbbSize: '24" RBB', height: 24, price: 8.5 },
+  { id: 'rbb-30', rbbSize: '30" RBB', height: 30, price: 9 },
+  { id: 'rbb-36', rbbSize: '36" RBB', height: 36, price: 10 },
+];
+
+const defaultExcavationBaseRanges = defaultExcavationBasePricingRows
+  .filter((row) => row.kind === 'range')
+  .map(({ max, price }) => ({ max, price }));
+
+const defaultExcavationOver1000Sqft =
+  defaultExcavationBasePricingRows.find((row) => row.kind === 'overage')?.price ?? 0;
+
+const getDefaultExcavationRaisedBondBeamPrice = (height: number) =>
+  defaultExcavationRaisedBondBeamRows.find((row) => row.height === height)?.price ?? 0;
+
 const defaultFiberglassSmallModels = [
   { name: 'Caeser', shellPrice: 11325, freight: 950, crane: 550, install: 9000, gravel: 1900 },
   { name: 'Chateau & Gayla 12', shellPrice: 14825, freight: 950, crane: 550, install: 9000, gravel: 1900 },
@@ -104,29 +140,17 @@ const pricingData = {
   },
   excavation: {
     // Base pricing table from EXC sheet (surface area breakpoints)
-    baseRanges: [
-      { max: 400, price: 2700 },
-      { max: 450, price: 2700 },
-      { max: 500, price: 2700 },
-      { max: 550, price: 2700 },
-      { max: 600, price: 2700 },
-      { max: 650, price: 2700 },
-      { max: 700, price: 2700 },
-      { max: 750, price: 2700 },
-      { max: 800, price: 2750 },
-      { max: 850, price: 3000 },
-      { max: 900, price: 3100 },
-      { max: 950, price: 3150 },
-      { max: 1000, price: 3150 },
-    ],
-    over1000Sqft: 4900,
+    baseExcavationTable: defaultExcavationBasePricingRows.map((row) => ({ ...row })),
+    baseRanges: defaultExcavationBaseRanges.map((row) => ({ ...row })),
+    over1000Sqft: defaultExcavationOver1000Sqft,
     additional6InchDepth: 90,
-    rbb6: 5,
-    rbb12: 6.5,
-    rbb18: 7.5,
-    rbb24: 8.5,
-    rbb30: 9,
-    rbb36: 10,
+    raisedBondBeamTable: defaultExcavationRaisedBondBeamRows.map((row) => ({ ...row })),
+    rbb6: getDefaultExcavationRaisedBondBeamPrice(6),
+    rbb12: getDefaultExcavationRaisedBondBeamPrice(12),
+    rbb18: getDefaultExcavationRaisedBondBeamPrice(18),
+    rbb24: getDefaultExcavationRaisedBondBeamPrice(24),
+    rbb30: getDefaultExcavationRaisedBondBeamPrice(30),
+    rbb36: getDefaultExcavationRaisedBondBeamPrice(36),
     baseSpa: 200,
     raisedSpa: 350,
     sitePrep: 200,
