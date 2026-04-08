@@ -593,11 +593,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ? enabledPackageOptions[0]
         : null;
 
-    if (selectedPackage) {
+    if (selectedPackage && hasPool) {
       return createFreshEquipmentForPackage(selectedPackage, { hasPool, hasSpa });
     }
 
-    if (onlyAvailablePackage) {
+    if (onlyAvailablePackage && hasPool) {
       return createFreshEquipmentForPackage(onlyAvailablePackage, { hasPool, hasSpa });
     }
 
@@ -774,13 +774,31 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         let updated = false;
 
         if (shouldAddSpaLight) {
-          nextEquipment = normalizeEquipmentLighting(
-            {
-              ...nextEquipment,
-              includeSpaLights: true,
-            } as Proposal['equipment'],
-            { poolSpecs: { ...(prev.poolSpecs || {}), spaType: currentSpaType } as any, hasSpa: true }
-          );
+          const basePoolSpecs = { ...(prev.poolSpecs || {}), spaType: currentSpaType } as Proposal['poolSpecs'];
+          const selectedPackage = getSelectedEquipmentPackage(baseEquipment as any);
+          const shouldUsePackageSeed = !proposalNumber && selectedPackage && packageSupportsSpa(selectedPackage);
+          const packageSeed = shouldUsePackageSeed
+            ? createFreshEquipmentForPackage(selectedPackage, {
+                hasPool: hasPoolDefinition(basePoolSpecs),
+                hasSpa: true,
+              })
+            : null;
+
+          nextEquipment =
+            (packageSeed?.spaLights?.length ?? 0) > 0
+              ? {
+                  ...nextEquipment,
+                  includeSpaLights: packageSeed?.includeSpaLights,
+                  spaLights: packageSeed?.spaLights || [],
+                  hasSpaLight: true,
+                }
+              : normalizeEquipmentLighting(
+                  {
+                    ...nextEquipment,
+                    includeSpaLights: true,
+                  } as Proposal['equipment'],
+                  { poolSpecs: basePoolSpecs, hasSpa: true }
+                );
           updated = true;
         }
 
@@ -1340,15 +1358,32 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
     setProposal((prev) => {
       const basePoolSpecs = prev.poolSpecs || getDefaultPoolSpecs();
+      const hasPool = hasPoolDefinition(basePoolSpecs);
       const hasSpa = (basePoolSpecs.spaType ?? 'none') !== 'none';
+      if (!hasPool) {
+        return prev;
+      }
       if (hasSpa && !packageSupportsSpa(nextPackage)) {
         return prev;
       }
 
-      const nextEquipment = createFreshEquipmentForPackage(nextPackage, {
-        hasPool: hasPoolDefinition(basePoolSpecs),
+      let nextEquipment = createFreshEquipmentForPackage(nextPackage, {
+        hasPool,
         hasSpa,
       });
+      if (!proposalNumber && hasSpa && packageSupportsSpa(nextPackage) && (nextEquipment.spaLights?.length ?? 0) === 0) {
+        nextEquipment = normalizeEquipmentLighting(
+          {
+            ...nextEquipment,
+            includeSpaLights: true,
+          } as Proposal['equipment'],
+          {
+            poolSpecs: basePoolSpecs,
+            hasPool,
+            hasSpa: true,
+          }
+        );
+      }
       const existingPlumbing = prev.plumbing || getDefaultPlumbing();
       const existingElectrical = prev.electrical || getDefaultElectrical();
       const nextRuns = {

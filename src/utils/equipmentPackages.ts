@@ -334,10 +334,10 @@ export const getSelectedEquipmentPackage = (equipment?: Partial<Equipment> | nul
     : getEquipmentPackageById(equipment?.packageSelectionId);
 
 export const isCustomEquipmentPackage = (option?: EquipmentPackageOption | null) =>
-  (option?.mode || 'fixed') === 'custom';
+  Boolean(option) && (option?.mode || 'fixed') === 'custom';
 
 export const isFixedEquipmentPackage = (option?: EquipmentPackageOption | null) =>
-  (option?.mode || 'fixed') === 'fixed';
+  Boolean(option) && (option?.mode || 'fixed') === 'fixed';
 
 export const getEffectivePrimarySanitationSystemName = (equipment?: Partial<Equipment> | null): string | undefined => {
   const selectedPackage = getSelectedEquipmentPackage(equipment);

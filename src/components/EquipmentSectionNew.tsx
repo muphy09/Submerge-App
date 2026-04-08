@@ -334,6 +334,8 @@ function EquipmentSectionNew({
     !!safeData.sanitationAccessory?.name &&
     !safeData.sanitationAccessory.name.toLowerCase().includes('no sanitation');
   const packageButtonDisabledMessage = 'This equipment package is not possible with a Spa';
+  const packageDimensionsRequiredMessage = 'Define dimensions in Pool Specs first';
+  const packageSelectionRequiredMessage = 'An equipment package must be chosen first';
   const packageLockedCategoryMessage = `${selectedPackageName} includes this selection. Change the package to modify it.`;
   const addSpaLightDisabledReason =
     isFixedPackage && !packageAllowsSpaLightChanges
@@ -375,6 +377,16 @@ function EquipmentSectionNew({
   const [includeAutoFill, setIncludeAutoFill] = useState<boolean>(() =>
     hasRealSelection(safeData.autoFillSystem?.name, 'no auto')
   );
+  const [pumpEditing, setPumpEditing] = useState(false);
+  const [filterEditing, setFilterEditing] = useState(false);
+  const [cleanerEditing, setCleanerEditing] = useState(false);
+  const [heaterEditing, setHeaterEditing] = useState(false);
+  const [automationEditing, setAutomationEditing] = useState(false);
+  const [sanitationEditing, setSanitationEditing] = useState(false);
+  const [autoFillEditing, setAutoFillEditing] = useState(false);
+  const [activeAuxiliaryPumpIndex, setActiveAuxiliaryPumpIndex] = useState<number | null>(null);
+  const [activePoolLightIndex, setActivePoolLightIndex] = useState<number | null>(null);
+  const [activeSpaLightIndex, setActiveSpaLightIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setIncludePump(hasRealSelection(safeData.pump?.name, 'no pump') && (safeData.pumpQuantity ?? 0) > 0);
@@ -457,12 +469,6 @@ function EquipmentSectionNew({
   const additionalSanitationOptionSelectedName =
     safeData.additionalSaltSystem?.name ||
     (editableSanitationAccessorySelected ? safeData.sanitationAccessory?.name || '' : '');
-  const showAdditionalSanitationOptions =
-    includeSalt &&
-    (!isFixedPackage || packageAllowsSanitationAccessoryChanges || Boolean(additionalSanitationOptionSelectedName));
-  const additionalSanitationOptionMissingFromCatalog =
-    !!additionalSanitationOptionSelectedName &&
-    !additionalSanitationOptions.some((option: any) => option.name === additionalSanitationOptionSelectedName);
   const poolLights = safeData.poolLights || [];
   const spaLights = safeData.spaLights || [];
   const summarizeQuantity = (name: string, quantity: number) =>
@@ -722,6 +728,16 @@ function EquipmentSectionNew({
         )
       : [];
   const hasEffectivePoolLights = effectivePoolLights.length > 0;
+  const includedPoolLightCount = packageIncludesPoolLights
+    ? Math.max(selectedPackage?.includedPoolLightQuantity ?? 0, 0)
+    : 0;
+  const autoSeededPoolLightCount =
+    !packageIncludesPoolLights &&
+    selectedPackage &&
+    isCustomEquipmentPackage(selectedPackage) &&
+    safeData.applyCustomPackageDefaultPoolLights !== false
+      ? Math.max(selectedPackage.defaultPoolLightQuantity ?? 0, 0)
+      : 0;
   const isPoolLightMissingFromCatalog = (name?: string) =>
     Boolean(name) && !poolLightOptions.some((option) => option.name === name);
   const addPoolLightDisabledReason =
@@ -730,6 +746,67 @@ function EquipmentSectionNew({
       : isFixedPackage && !packageAllowsPoolLightChanges
         ? 'This equipment package does not allow additional pool lights.'
         : undefined;
+  const packageRequiredReason = selectedPackage ? undefined : packageSelectionRequiredMessage;
+  const getFirstDisabledReason = (...reasons: Array<string | undefined>) => reasons.find(Boolean);
+  const pumpAddDisabledReason = packageRequiredReason;
+  const auxiliaryPumpAddDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    !packageAllowsPumpChanges ? 'This equipment package does not allow auxiliary pump upgrades.' : undefined,
+    auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum auxiliary pumps reached.' : undefined
+  );
+  const filterAddDisabledReason = packageRequiredReason;
+  const cleanerAddDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    cleanerDisabledByPackage ? 'This equipment package does not allow cleaner upgrades.' : undefined
+  );
+  const heaterAddDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    heaterDisabledByPackage ? 'This equipment package does not allow heater upgrades.' : undefined
+  );
+  const poolLightTopLevelDisabledReason = getFirstDisabledReason(packageRequiredReason, addPoolLightDisabledReason);
+  const spaLightTopLevelDisabledReason = getFirstDisabledReason(packageRequiredReason, addSpaLightDisabledReason);
+  const automationAddDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    automationDisabledByPackage ? 'This equipment package does not allow automation changes.' : undefined
+  );
+  const sanitationAddDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    packageLocksSanitationSystem ? 'This equipment package does not allow sanitation system changes.' : undefined
+  );
+  const autoFillAddDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    autoFillDisabledByPackage ? 'This equipment package does not allow auto-fill upgrades.' : undefined
+  );
+
+  useEffect(() => {
+    if (auxiliaryPumps.length === 0) {
+      setActiveAuxiliaryPumpIndex(null);
+      return;
+    }
+    if (activeAuxiliaryPumpIndex !== null && activeAuxiliaryPumpIndex >= auxiliaryPumps.length) {
+      setActiveAuxiliaryPumpIndex(auxiliaryPumps.length - 1);
+    }
+  }, [activeAuxiliaryPumpIndex, auxiliaryPumps.length]);
+
+  useEffect(() => {
+    if (effectivePoolLights.length === 0) {
+      setActivePoolLightIndex(null);
+      return;
+    }
+    if (activePoolLightIndex !== null && activePoolLightIndex >= effectivePoolLights.length) {
+      setActivePoolLightIndex(effectivePoolLights.length - 1);
+    }
+  }, [activePoolLightIndex, effectivePoolLights.length]);
+
+  useEffect(() => {
+    if (spaLights.length === 0) {
+      setActiveSpaLightIndex(null);
+      return;
+    }
+    if (activeSpaLightIndex !== null && activeSpaLightIndex >= spaLights.length) {
+      setActiveSpaLightIndex(spaLights.length - 1);
+    }
+  }, [activeSpaLightIndex, spaLights.length]);
 
   const commitLighting = (
     nextPoolLights: LightSelection[],
@@ -1528,6 +1605,258 @@ function EquipmentSectionNew({
     });
   };
 
+  const hasPumpBlockSelection = showPrimaryPumpControls;
+  const hasAuxiliaryPumpSelection = auxiliaryPumps.length > 0;
+  const hasFilterSelection = packageIncludesFilter || includeFilter;
+  const hasCleanerSelection = packageIncludesCleaner || includeCleaner;
+  const hasHeaterSelectionState = packageIncludesHeater || includeHeater;
+  const hasPoolLightSelection = includePoolLights || packageIncludesPoolLights || effectivePoolLights.length > 0;
+  const hasSpaLightSelectionState = includeSpaLights || packageIncludesSpaLights || spaLights.length > 0;
+  const hasAutomationSelection = packageIncludesAutomation || includeAutomation;
+  const hasSanitationSelection = packageIncludesSalt || includeSalt;
+  const hasAutoFillSelection = packageIncludesAutoFill || includeAutoFill;
+  const hasAdditionalSanitationContext = hasSanitationSelection || packageIncludesSanitationAccessory;
+  const selectedAdditionalSanitationName = packageIncludesSanitationAccessory
+    ? safeData.sanitationAccessory?.name || selectedPackage?.includedSanitationAccessoryName || ''
+    : additionalSanitationOptionSelectedName;
+  const additionalSanitationSelectionMissingFromCatalog =
+    Boolean(selectedAdditionalSanitationName) &&
+    !additionalSanitationOptions.some((option: any) => option.name === selectedAdditionalSanitationName);
+  const additionalSanitationOptionDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    !hasAdditionalSanitationContext ? 'A sanitation system must be chosen first.' : undefined,
+    packageIncludesSanitationAccessory ? packageLockedCategoryMessage : undefined,
+    additionalSanitationDisabledByPackage ? 'This equipment package does not allow additional sanitation upgrades.' : undefined
+  );
+
+  const renderToggleButtons = ({
+    hasSelection,
+    noLabel,
+    addLabel,
+    onNo,
+    onAdd,
+    noDisabledReason,
+    addDisabledReason,
+  }: {
+    hasSelection: boolean;
+    noLabel: string;
+    addLabel: string;
+    onNo: () => void;
+    onAdd: () => void;
+    noDisabledReason?: string;
+    addDisabledReason?: string;
+  }) => {
+    const disableNo = hasSelection && Boolean(noDisabledReason);
+    const disableAdd = !hasSelection
+      ? Boolean(addDisabledReason)
+      : addDisabledReason === packageRequiredReason;
+
+    return (
+      <div className="pool-type-buttons stackable">
+        <TooltipAnchor as="div" className="pool-type-button-tooltip" tooltip={disableNo ? noDisabledReason : undefined}>
+          <button
+            type="button"
+            className={`pool-type-btn ${!hasSelection ? 'active' : ''} ${disableNo ? 'disabled' : ''}`}
+            onClick={() => {
+              if (disableNo) return;
+              onNo();
+            }}
+            aria-disabled={disableNo}
+          >
+            {noLabel}
+          </button>
+        </TooltipAnchor>
+        <TooltipAnchor as="div" className="pool-type-button-tooltip" tooltip={disableAdd ? addDisabledReason : undefined}>
+          <button
+            type="button"
+            className={`pool-type-btn ${hasSelection ? 'active' : ''} ${disableAdd ? 'disabled' : ''}`}
+            onClick={() => {
+              if (disableAdd) return;
+              onAdd();
+            }}
+            aria-disabled={disableAdd}
+          >
+            {addLabel}
+          </button>
+        </TooltipAnchor>
+      </div>
+    );
+  };
+
+  const buildCardTitle = (label: string, extras: Array<string | undefined> = []) =>
+    [label, ...extras.filter(Boolean)].join(' | ');
+
+  const primaryPumpCardTitle = buildCardTitle(
+    summarizeQuantity(
+      safeData.pump?.name || selectedPackage?.includedPumpName || 'Pump',
+      packageIncludesPump ? Math.max(selectedPackage?.includedPumpQuantity ?? pumpQuantity, 0) : pumpQuantity
+    ),
+    [additionalPumps.length > 0 ? `${additionalPumps.length} Additional Pump${additionalPumps.length === 1 ? '' : 's'}` : undefined]
+  );
+  const filterCardTitle = summarizeQuantity(
+    safeData.filter?.name || selectedPackage?.includedFilterName || 'Filter',
+    packageIncludesFilter ? Math.max(selectedPackage?.includedFilterQuantity ?? filterQuantity, 0) : filterQuantity
+  );
+  const cleanerCardTitle = summarizeQuantity(
+    safeData.cleaner?.name || selectedPackage?.includedCleanerName || 'Cleaner',
+    packageIncludesCleaner ? Math.max(selectedPackage?.includedCleanerQuantity ?? cleanerQuantity, 0) : cleanerQuantity
+  );
+  const heaterCardTitle = summarizeQuantity(
+    safeData.heater?.name || selectedPackage?.includedHeaterName || 'Heater',
+    packageIncludesHeater ? Math.max(selectedPackage?.includedHeaterQuantity ?? heaterQuantity, 0) : heaterQuantity
+  );
+  const automationCardTitle = summarizeQuantity(
+    safeData.automation?.name || selectedPackage?.includedAutomationName || 'Automation',
+    packageIncludesAutomation ? Math.max(selectedPackage?.includedAutomationQuantity ?? automationQuantity, 0) : automationQuantity
+  );
+  const sanitationCardTitle =
+    (packageIncludesSalt
+      ? getEffectivePrimarySanitationSystemName(safeData) || selectedPackage?.includedSaltSystemName
+      : safeData.saltSystem?.name) || 'Sanitation System';
+  const autoFillCardTitle = summarizeQuantity(
+    safeData.autoFillSystem?.name || selectedPackage?.includedAutoFillSystemName || 'Auto-Fill System',
+    packageIncludesAutoFill ? Math.max(selectedPackage?.includedAutoFillSystemQuantity ?? autoFillSystemQuantity, 0) : autoFillSystemQuantity
+  );
+
+  const openPumpFlow = () => {
+    if (!hasPumpBlockSelection) {
+      togglePump(true);
+    }
+    setPumpEditing(true);
+  };
+
+  const clearPumpFlow = () => {
+    if (packageIncludesPump) return;
+    togglePump(false);
+    setPumpEditing(false);
+  };
+
+  const openAuxiliaryPumpFlow = () => {
+    if (!hasAuxiliaryPumpSelection) {
+      addAuxiliaryPump();
+      setActiveAuxiliaryPumpIndex(auxiliaryPumps.length);
+      return;
+    }
+    setActiveAuxiliaryPumpIndex(auxiliaryPumps.length - 1);
+  };
+
+  const clearAuxiliaryPumpFlow = () => {
+    setAuxiliaryPumps([]);
+    setActiveAuxiliaryPumpIndex(null);
+  };
+
+  const openFilterFlow = () => {
+    if (!hasFilterSelection) {
+      toggleFilter(true);
+    }
+    setFilterEditing(true);
+  };
+
+  const clearFilterFlow = () => {
+    if (packageIncludesFilter) return;
+    toggleFilter(false);
+    setFilterEditing(false);
+  };
+
+  const openCleanerFlow = () => {
+    if (!hasCleanerSelection) {
+      toggleCleaner(true);
+    }
+    setCleanerEditing(true);
+  };
+
+  const clearCleanerFlow = () => {
+    if (packageIncludesCleaner) return;
+    toggleCleaner(false);
+    setCleanerEditing(false);
+  };
+
+  const openHeaterFlow = () => {
+    if (!hasHeaterSelectionState) {
+      toggleHeater(true);
+    }
+    setHeaterEditing(true);
+  };
+
+  const clearHeaterFlow = () => {
+    if (packageIncludesHeater) return;
+    toggleHeater(false);
+    setHeaterEditing(false);
+  };
+
+  const openPoolLightFlow = () => {
+    if (!hasPoolLightSelection) {
+      addPoolLight();
+      setActivePoolLightIndex(0);
+      return;
+    }
+    setActivePoolLightIndex(Math.max(effectivePoolLights.length - 1, 0));
+  };
+
+  const clearPoolLightFlow = () => {
+    if (packageIncludesPoolLights) return;
+    setIncludePoolLights(false);
+    commitLighting([], spaLights, false, includeSpaLights, {
+      applyCustomPackageDefaultPoolLights: false,
+    });
+    setActivePoolLightIndex(null);
+  };
+
+  const openSpaLightFlow = () => {
+    if (!hasSpaLightSelectionState) {
+      addSpaLight();
+      setActiveSpaLightIndex(0);
+      return;
+    }
+    setActiveSpaLightIndex(Math.max(spaLights.length - 1, 0));
+  };
+
+  const clearSpaLightFlow = () => {
+    if (packageIncludesSpaLights) return;
+    setIncludeSpaLights(false);
+    commitLighting(effectivePoolLights, [], includePoolLights || hasEffectivePoolLights, false);
+    setActiveSpaLightIndex(null);
+  };
+
+  const openAutomationFlow = () => {
+    if (!hasAutomationSelection) {
+      toggleAutomation(true);
+    }
+    setAutomationEditing(true);
+  };
+
+  const clearAutomationFlow = () => {
+    if (packageIncludesAutomation) return;
+    toggleAutomation(false);
+    setAutomationEditing(false);
+  };
+
+  const openSanitationFlow = () => {
+    if (!hasSanitationSelection) {
+      toggleSalt(true);
+    }
+    setSanitationEditing(true);
+  };
+
+  const clearSanitationFlow = () => {
+    if (packageLocksSanitationSystem) return;
+    toggleSalt(false);
+    setSanitationEditing(false);
+  };
+
+  const openAutoFillFlow = () => {
+    if (!hasAutoFillSelection) {
+      toggleAutoFill(true);
+    }
+    setAutoFillEditing(true);
+  };
+
+  const clearAutoFillFlow = () => {
+    if (packageIncludesAutoFill) return;
+    toggleAutoFill(false);
+    setAutoFillEditing(false);
+  };
+
   const renderReadOnlySelection = (label: string, value: string, note?: string, showRetired?: boolean) => (
     <div className="spec-field">
       {showRetired ? <LabelWithRetired text={label} showRetired={showRetired} /> : <label className="spec-label">{label}</label>}
@@ -1553,10 +1882,22 @@ function EquipmentSectionNew({
         <div className="equipment-package-options">
           {packageOptions.map((option) => {
             const isSelected = selectedPackage?.id === option.id;
-            const isDisabled = hasSpa && !packageSupportsSpa(option);
-            const buttonTitle = isDisabled ? packageButtonDisabledMessage : undefined;
+            const disabledForMissingDimensions = !hasPool;
+            const disabledForSpa = hasSpa && !packageSupportsSpa(option);
+            const isDisabled = disabledForMissingDimensions || disabledForSpa;
+            const buttonTitle = disabledForMissingDimensions
+              ? packageDimensionsRequiredMessage
+              : disabledForSpa
+                ? packageButtonDisabledMessage
+                : undefined;
             const isCustom = isCustomEquipmentPackage(option);
-            const packageStatusLabel = isSelected ? 'Selected' : isDisabled ? 'Spa blocked' : 'Available';
+            const packageStatusLabel = isSelected
+              ? 'Selected'
+              : disabledForMissingDimensions
+                ? 'Pool Specs required'
+                : disabledForSpa
+                  ? 'Spa blocked'
+                  : 'Available';
             const packageStatusClass = isSelected ? 'selected' : isDisabled ? 'disabled' : 'available';
             const packageDescription = getPackageButtonDescription(option);
             return (
@@ -1603,630 +1944,1171 @@ function EquipmentSectionNew({
         )}
       </div>
 
-        {/* Pump */}
+      {/* Pump */}
       <div className="spec-block">
-          <div className="spec-block-header">
-            <h2 className="spec-block-title">Pump</h2>
-          </div>
-          <div className="spec-grid spec-grid-2">
-            {packageIncludesPump
-              ? renderReadOnlySelection('Pump', safeData.pump?.name || selectedPackage?.includedPumpName || 'Included', packageLockedCategoryMessage)
-              : (
-                <div className="spec-field">
-                  <LabelWithRetired text="Pump" showRetired={retiredFlags.pump} />
-                  <select
-                    className="compact-input equipment-select"
-                    value={includePump ? safeData.pump.name : noneOptionValue}
-                    onChange={(e) => handlePumpSelect(e.target.value)}
-                  >
-                    <option value={noneOptionValue}>None</option>
-                    {retiredFlags.pump && renderRetiredOption(safeData.pump.name)}
-                    {pumpOptions.map(pump => (
-                      <option key={pump.name} value={pump.name}>
-                        {formatOptionLabel(pump.name, costOf(pump, true))}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            {packageIncludesPump
-              ? renderReadOnlyQuantity('Pump Quantity', Math.max(selectedPackage?.includedPumpQuantity ?? pumpQuantity, 0))
-              : includePump && (
-                renderReadOnlyQuantity('Pump Quantity', pumpQuantity)
-              )}
-            {showPrimaryPumpControls && additionalPumps.map((pump, idx) => (
-              <div key={`additional-pump-${idx}`} className="spec-field equipment-extra-field spec-full-width">
-                <LabelWithRetired text={`Additional Pump ${idx + 1}`} showRetired={retiredFlags.additionalPumps[idx]} />
-                <div className="equipment-inline-row">
-                  <select
-                    className="compact-input equipment-select"
-                    value={pump?.name || safeData.pump?.name || selectableDefaults.pump?.name || ''}
-                    onChange={(e) => handleAdditionalPumpChange(idx, e.target.value)}
-                  >
-                    {retiredFlags.additionalPumps[idx] && renderRetiredOption(pump?.name || safeData.pump?.name)}
-                    {pumpOptions.map((option) => (
-                      <option key={option.name} value={option.name}>
-                        {formatOptionLabel(option.name, costOf(option, true))}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="link-btn danger"
-                    onClick={() => removeAdditionalPump(idx)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-            {auxiliaryPumps.map((pump, idx) => (
-              <div key={idx} className="spec-field equipment-extra-field spec-full-width">
-                <LabelWithRetired text={`Auxiliary Pump ${idx + 1}`} showRetired={retiredFlags.auxiliaryPumps[idx]} />
-                <div className="equipment-inline-row">
-                  <select
-                    className="compact-input equipment-select"
-                    value={pump?.name || getDefaultAuxiliaryPump()?.name || ''}
-                    onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
-                  >
-                    {retiredFlags.auxiliaryPumps[idx] && renderRetiredOption(pump?.name || getDefaultAuxiliaryPump()?.name)}
-                    {auxiliaryPumpOptions.map((option: any) => (
-                      <option key={option.name} value={option.name}>
-                        {formatOptionLabel(option.name, costOf(option, true))}
-                      </option>
-                  ))}
-                </select>
-                <TooltipAnchor
-                  tooltip={
-                    pump?.autoAddedReason === 'waterFeature'
-                      ? 'This pump will be added again while the package still needs it for water features.'
-                      : undefined
-                  }
-                >
-                  <button
-                    type="button"
-                    className="link-btn danger"
-                    onClick={() => removeAuxiliaryPump(idx)}
-                  >
-                    Remove
-                  </button>
-                </TooltipAnchor>
-              </div>
-              {pump?.autoAddedForSpa && (
-                <small className="form-help">Auto-added for spa.</small>
-              )}
-              {pump?.autoAddedReason === 'waterFeature' && (
-                <small className="form-help">Additional pump added for Water Feature</small>
-              )}
-            </div>
-          ))}
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Pump</h2>
+          <p className="spec-block-subtitle">Add a primary pump and any additional pumps to the project.</p>
+        </div>
+        {renderToggleButtons({
+          hasSelection: hasPumpBlockSelection,
+          noLabel: 'No Pump',
+          addLabel: 'Add Pump',
+          onNo: clearPumpFlow,
+          onAdd: openPumpFlow,
+          noDisabledReason: packageIncludesPump ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: pumpAddDisabledReason,
+        })}
 
-          {packageAllowsPumpChanges && (
-            <div
-              className="action-row spec-full-width"
-              style={{ marginTop: additionalPumps.length || auxiliaryPumps.length ? '8px' : '12px' }}
-            >
-              {showPrimaryPumpControls && (
-                <button
-                  type="button"
-                  className="action-btn secondary"
-                  onClick={addAdditionalPump}
-                >
-                  Add Additional Pump
-                </button>
-              )}
-              <TooltipAnchor
-                tooltip={auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum auxiliary pumps reached.' : undefined}
-              >
-                <button
-                  type="button"
-                  className="action-btn secondary"
-                  onClick={addAuxiliaryPump}
-                  disabled={auxiliaryPumps.length >= maxAuxiliaryPumps}
-                >
-                  Add Auxiliary Pump
-                </button>
-              </TooltipAnchor>
+        {hasPumpBlockSelection ? (
+          <div className="spec-subcard">
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{primaryPumpCardTitle}</div>
+                {!pumpEditing && <div className="spec-subcard-subtitle">Primary Pump</div>}
+              </div>
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setPumpEditing((current) => !current)}
+                  >
+                    {pumpEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  {!packageIncludesPump && (
+                    <button type="button" className="link-btn danger" onClick={clearPumpFlow}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
+
+            {pumpEditing && (
+              <>
+                <div className="spec-grid spec-grid-2">
+                  {packageIncludesPump
+                    ? renderReadOnlySelection(
+                        'Pump',
+                        safeData.pump?.name || selectedPackage?.includedPumpName || 'Included',
+                        packageLockedCategoryMessage
+                      )
+                    : (
+                      <div className="spec-field">
+                        <LabelWithRetired text="Pump" showRetired={retiredFlags.pump} />
+                        <select
+                          className="compact-input equipment-select"
+                          value={includePump ? safeData.pump.name : noneOptionValue}
+                          onChange={(e) => handlePumpSelect(e.target.value)}
+                        >
+                          <option value={noneOptionValue}>None</option>
+                          {retiredFlags.pump && renderRetiredOption(safeData.pump.name)}
+                          {pumpOptions.map((pump) => (
+                            <option key={pump.name} value={pump.name}>
+                              {formatOptionLabel(pump.name, costOf(pump, true))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {packageIncludesPump
+                    ? renderReadOnlyQuantity(
+                        'Pump Quantity',
+                        Math.max(selectedPackage?.includedPumpQuantity ?? pumpQuantity, 0)
+                      )
+                    : includePump && renderReadOnlyQuantity('Pump Quantity', pumpQuantity)}
+
+                  {showPrimaryPumpControls &&
+                    additionalPumps.map((pump, idx) => (
+                      <div key={`additional-pump-${idx}`} className="spec-field equipment-extra-field spec-full-width">
+                        <LabelWithRetired
+                          text={`Additional Pump ${idx + 1}`}
+                          showRetired={retiredFlags.additionalPumps[idx]}
+                        />
+                        <div className="equipment-inline-row">
+                          <select
+                            className="compact-input equipment-select"
+                            value={pump?.name || safeData.pump?.name || selectableDefaults.pump?.name || ''}
+                            onChange={(e) => handleAdditionalPumpChange(idx, e.target.value)}
+                          >
+                            {retiredFlags.additionalPumps[idx] &&
+                              renderRetiredOption(pump?.name || safeData.pump?.name)}
+                            {pumpOptions.map((option) => (
+                              <option key={option.name} value={option.name}>
+                                {formatOptionLabel(option.name, costOf(option, true))}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="link-btn danger"
+                            onClick={() => removeAdditionalPump(idx)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                {packageAllowsPumpChanges && showPrimaryPumpControls && (
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="action-btn secondary"
+                      onClick={addAdditionalPump}
+                    >
+                      Add Additional Pump
+                    </button>
+                    <button type="button" className="action-btn" onClick={() => setPumpEditing(false)}>
+                      Done
+                    </button>
+                  </div>
+                )}
+
+                {!packageAllowsPumpChanges && (
+                  <div className="action-row">
+                    <button type="button" className="action-btn" onClick={() => setPumpEditing(false)}>
+                      Done
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Pump
+          </div>
+        )}
+      </div>
+
+      {/* Auxiliary Pump */}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Auxiliary Pump</h2>
+          <p className="spec-block-subtitle">Add auxiliary pumps to the project.</p>
+        </div>
+        {renderToggleButtons({
+          hasSelection: hasAuxiliaryPumpSelection,
+          noLabel: 'No Auxiliary Pump',
+          addLabel: 'Add Auxiliary Pump',
+          onNo: clearAuxiliaryPumpFlow,
+          onAdd: openAuxiliaryPumpFlow,
+          addDisabledReason: auxiliaryPumpAddDisabledReason,
+        })}
+
+        {hasAuxiliaryPumpSelection ? (
+          <>
+            {auxiliaryPumps.map((pump, idx) => {
+              const isEditing = activeAuxiliaryPumpIndex === idx;
+              const title = buildCardTitle(pump?.name || getDefaultAuxiliaryPump()?.name || 'Auxiliary Pump', [
+                pump?.autoAddedForSpa ? 'Auto-added for spa' : undefined,
+                pump?.autoAddedReason === 'waterFeature' ? 'Added for water features' : undefined,
+              ]);
+
+              return (
+                <div key={`auxiliary-pump-${idx}`} className="spec-subcard">
+                  <div className="spec-subcard-header">
+                    <div>
+                      <div className="spec-subcard-title">{title}</div>
+                      {!isEditing && <div className="spec-subcard-subtitle">Auxiliary Pump #{idx + 1}</div>}
+                    </div>
+                    <div className="spec-subcard-actions stacked-actions">
+                      <div className="stacked-primary-actions">
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setActiveAuxiliaryPumpIndex(isEditing ? null : idx)}
+                        >
+                          {isEditing ? 'Collapse' : 'Edit'}
+                        </button>
+                        <TooltipAnchor
+                          tooltip={
+                            pump?.autoAddedReason === 'waterFeature'
+                              ? 'This pump will be added again while the package still needs it for water features.'
+                              : undefined
+                          }
+                        >
+                          <button
+                            type="button"
+                            className="link-btn danger"
+                            onClick={() => removeAuxiliaryPump(idx)}
+                          >
+                            Remove
+                          </button>
+                        </TooltipAnchor>
+                      </div>
+                      {!isEditing && idx === auxiliaryPumps.length - 1 && !auxiliaryPumpAddDisabledReason && (
+                        <button
+                          type="button"
+                          className="link-btn small"
+                          onClick={() => {
+                            addAuxiliaryPump();
+                            setActiveAuxiliaryPumpIndex(auxiliaryPumps.length);
+                          }}
+                        >
+                          Add Another
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <>
+                      <div className="spec-grid spec-grid-2">
+                        <div className="spec-field">
+                          <LabelWithRetired
+                            text={`Auxiliary Pump ${idx + 1}`}
+                            showRetired={retiredFlags.auxiliaryPumps[idx]}
+                          />
+                          <select
+                            className="compact-input equipment-select"
+                            value={pump?.name || getDefaultAuxiliaryPump()?.name || ''}
+                            onChange={(e) => handleAuxiliaryPumpChange(idx, e.target.value)}
+                          >
+                            {retiredFlags.auxiliaryPumps[idx] &&
+                              renderRetiredOption(pump?.name || getDefaultAuxiliaryPump()?.name)}
+                            {auxiliaryPumpOptions.map((option: any) => (
+                              <option key={option.name} value={option.name}>
+                                {formatOptionLabel(option.name, costOf(option, true))}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {pump?.autoAddedForSpa && <small className="form-help">Auto-added for spa.</small>}
+                      {pump?.autoAddedReason === 'waterFeature' && (
+                        <small className="form-help">Additional pump added for Water Feature</small>
+                      )}
+
+                      <div className="action-row">
+                        <button
+                          type="button"
+                          className="action-btn"
+                          onClick={() => setActiveAuxiliaryPumpIndex(null)}
+                        >
+                          Done
+                        </button>
+                        {!auxiliaryPumpAddDisabledReason && (
+                          <button
+                            type="button"
+                            className="action-btn secondary"
+                            onClick={() => {
+                              addAuxiliaryPump();
+                              setActiveAuxiliaryPumpIndex(auxiliaryPumps.length);
+                            }}
+                          >
+                            Add Another
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Auxiliary Pump
+          </div>
+        )}
       </div>
 
       {/* Filter */}
-        <div className="spec-block">
-          <div className="spec-block-header">
-            <h2 className="spec-block-title">Filter</h2>
-          </div>
-          <div className="spec-grid spec-grid-2">
-            {packageIncludesFilter
-              ? renderReadOnlySelection(
-                  'Filter',
-                  safeData.filter?.name || selectedPackage?.includedFilterName || 'Included',
-                  packageLockedCategoryMessage
-                )
-              : (
-                <div className="spec-field">
-                  <LabelWithRetired text="Filter" showRetired={retiredFlags.filter} />
-                  <select
-                    className="compact-input equipment-select"
-                    value={includeFilter ? safeData.filter.name : noneOptionValue}
-                    onChange={(e) => handleFilterSelect(e.target.value)}
-                  >
-                    <option value={noneOptionValue}>None</option>
-                    {retiredFlags.filter && renderRetiredOption(safeData.filter.name)}
-                    {filterOptions.map(filter => (
-                      <option key={filter.name} value={filter.name}>
-                        {formatOptionLabel(`${filter.name} (${filter.sqft} sqft)`, costOf(filter))}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-          {packageIncludesFilter
-            ? renderReadOnlyQuantity('Filter Quantity', Math.max(selectedPackage?.includedFilterQuantity ?? filterQuantity, 0))
-            : includeFilter && (
-              <div className="spec-field" style={{ maxWidth: '220px' }}>
-                <label className="spec-label">Filter Quantity</label>
-                <CompactInput
-                  value={filterQuantity}
-                  onChange={(e) => updateData({ filterQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
-                  unit="ea"
-                  min="0"
-                  step="1"
-                  placeholder="1"
-                />
-              </div>
-            )}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Filter</h2>
+          <p className="spec-block-subtitle">Add a filter to the project.</p>
         </div>
+        {renderToggleButtons({
+          hasSelection: hasFilterSelection,
+          noLabel: 'No Filter',
+          addLabel: 'Add Filter',
+          onNo: clearFilterFlow,
+          onAdd: openFilterFlow,
+          noDisabledReason: packageIncludesFilter ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: filterAddDisabledReason,
+        })}
+
+        {hasFilterSelection ? (
+          <div className="spec-subcard">
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{filterCardTitle}</div>
+                {!filterEditing && <div className="spec-subcard-subtitle">Filter</div>}
+              </div>
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setFilterEditing((current) => !current)}
+                  >
+                    {filterEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  {!packageIncludesFilter && (
+                    <button type="button" className="link-btn danger" onClick={clearFilterFlow}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {filterEditing && (
+              <>
+                <div className="spec-grid spec-grid-2">
+                  {packageIncludesFilter
+                    ? renderReadOnlySelection(
+                        'Filter',
+                        safeData.filter?.name || selectedPackage?.includedFilterName || 'Included',
+                        packageLockedCategoryMessage
+                      )
+                    : (
+                      <div className="spec-field">
+                        <LabelWithRetired text="Filter" showRetired={retiredFlags.filter} />
+                        <select
+                          className="compact-input equipment-select"
+                          value={includeFilter ? safeData.filter.name : noneOptionValue}
+                          onChange={(e) => handleFilterSelect(e.target.value)}
+                        >
+                          <option value={noneOptionValue}>None</option>
+                          {retiredFlags.filter && renderRetiredOption(safeData.filter.name)}
+                          {filterOptions.map((filter) => (
+                            <option key={filter.name} value={filter.name}>
+                              {formatOptionLabel(`${filter.name} (${filter.sqft} sqft)`, costOf(filter))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {packageIncludesFilter
+                    ? renderReadOnlyQuantity(
+                        'Filter Quantity',
+                        Math.max(selectedPackage?.includedFilterQuantity ?? filterQuantity, 0)
+                      )
+                    : includeFilter && (
+                      <div className="spec-field" style={{ maxWidth: '220px' }}>
+                        <label className="spec-label">Filter Quantity</label>
+                        <CompactInput
+                          value={filterQuantity}
+                          onChange={(e) =>
+                            updateData({ filterQuantity: Math.max(0, parseInt(e.target.value) || 0) })
+                          }
+                          unit="ea"
+                          min="0"
+                          step="1"
+                          placeholder="1"
+                        />
+                      </div>
+                    )}
+                </div>
+
+                <div className="action-row">
+                  <button type="button" className="action-btn" onClick={() => setFilterEditing(false)}>
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Filter
+          </div>
+        )}
       </div>
 
       {/* Cleaner */}
-        <div className="spec-block">
-          <div className="spec-block-header">
-            <h2 className="spec-block-title">Cleaner</h2>
-          </div>
-          <div className="spec-grid-3-split">
-            {packageIncludesCleaner
-              ? renderReadOnlySelection(
-                  'Cleaner',
-                  safeData.cleaner?.name || selectedPackage?.includedCleanerName || 'Included',
-                  packageLockedCategoryMessage
-                )
-              : (
-                <div className="spec-field">
-                  <LabelWithRetired text="Cleaner" showRetired={retiredFlags.cleaner} />
-                  <TooltipAnchor
-                    as="div"
-                    tooltip={cleanerDisabledByPackage ? 'This equipment package does not allow cleaner upgrades.' : undefined}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Cleaner</h2>
+          <p className="spec-block-subtitle">Add a cleaner to the project.</p>
+        </div>
+        {renderToggleButtons({
+          hasSelection: hasCleanerSelection,
+          noLabel: 'No Cleaner',
+          addLabel: 'Add Cleaner',
+          onNo: clearCleanerFlow,
+          onAdd: openCleanerFlow,
+          noDisabledReason: packageIncludesCleaner ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: cleanerAddDisabledReason,
+        })}
+
+        {hasCleanerSelection ? (
+          <div className="spec-subcard">
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{cleanerCardTitle}</div>
+                {!cleanerEditing && <div className="spec-subcard-subtitle">Cleaner</div>}
+              </div>
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setCleanerEditing((current) => !current)}
                   >
-                    <select
-                      className="compact-input equipment-select"
-                      value={includeCleaner ? safeData.cleaner.name : noneOptionValue}
-                      onChange={(e) => handleCleanerSelect(e.target.value)}
-                      disabled={cleanerDisabledByPackage}
-                    >
-                      <option value={noneOptionValue}>None</option>
-                      {retiredFlags.cleaner && renderRetiredOption(safeData.cleaner.name)}
-                      {cleanerOptions.map(cleaner => (
-                        <option key={cleaner.name} value={cleaner.name}>
-                          {formatOptionLabel(cleaner.name, costOf(cleaner))}
-                        </option>
-                      ))}
-                    </select>
-                  </TooltipAnchor>
-                  {cleanerDisabledByPackage && (
-                    <small className="form-help">This equipment package does not allow cleaner upgrades.</small>
+                    {cleanerEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  {!packageIncludesCleaner && (
+                    <button type="button" className="link-btn danger" onClick={clearCleanerFlow}>
+                      Clear
+                    </button>
                   )}
                 </div>
-              )}
-          {(includeCleaner || packageIncludesCleaner) && (
-            <div className="spec-field">
-              <label className="spec-label">Cleaner Quantity</label>
-              <CompactInput
-                value={packageIncludesCleaner ? Math.max(selectedPackage?.includedCleanerQuantity ?? cleanerQuantity, 0) : cleanerQuantity}
-                onChange={(e) => updateData({ cleanerQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
-                unit="ea"
-                min="0"
-                step="1"
-                placeholder="1"
-                readOnly={packageIncludesCleaner}
-              />
+              </div>
             </div>
-          )}
-          {(includeCleaner || packageIncludesCleaner) && (
-            <div className="spec-field">
-              <label className="spec-label">Cleaner Run</label>
-              <CompactInput
-                value={plumbingRuns.cleanerRun ?? 0}
-                onChange={(e) => handleRunChange('cleanerRun', parseFloat(e.target.value) || 0)}
-                unit="LNFT"
-                min="0"
-                step="1"
-                placeholder="0"
-              />
-            </div>
-          )}
-        </div>
+
+            {cleanerEditing && (
+              <>
+                <div className="spec-grid-3-split">
+                  {packageIncludesCleaner
+                    ? renderReadOnlySelection(
+                        'Cleaner',
+                        safeData.cleaner?.name || selectedPackage?.includedCleanerName || 'Included',
+                        packageLockedCategoryMessage
+                      )
+                    : (
+                      <div className="spec-field">
+                        <LabelWithRetired text="Cleaner" showRetired={retiredFlags.cleaner} />
+                        <select
+                          className="compact-input equipment-select"
+                          value={includeCleaner ? safeData.cleaner.name : noneOptionValue}
+                          onChange={(e) => handleCleanerSelect(e.target.value)}
+                        >
+                          <option value={noneOptionValue}>None</option>
+                          {retiredFlags.cleaner && renderRetiredOption(safeData.cleaner.name)}
+                          {cleanerOptions.map((cleaner) => (
+                            <option key={cleaner.name} value={cleaner.name}>
+                              {formatOptionLabel(cleaner.name, costOf(cleaner))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {(includeCleaner || packageIncludesCleaner) && (
+                    <div className="spec-field">
+                      <label className="spec-label">Cleaner Quantity</label>
+                      <CompactInput
+                        value={
+                          packageIncludesCleaner
+                            ? Math.max(selectedPackage?.includedCleanerQuantity ?? cleanerQuantity, 0)
+                            : cleanerQuantity
+                        }
+                        onChange={(e) =>
+                          updateData({ cleanerQuantity: Math.max(0, parseInt(e.target.value) || 0) })
+                        }
+                        unit="ea"
+                        min="0"
+                        step="1"
+                        placeholder="1"
+                        readOnly={packageIncludesCleaner}
+                      />
+                    </div>
+                  )}
+
+                  {(includeCleaner || packageIncludesCleaner) && (
+                    <div className="spec-field">
+                      <label className="spec-label">Cleaner Run</label>
+                      <CompactInput
+                        value={plumbingRuns.cleanerRun ?? 0}
+                        onChange={(e) => handleRunChange('cleanerRun', parseFloat(e.target.value) || 0)}
+                        unit="LNFT"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="action-row">
+                  <button type="button" className="action-btn" onClick={() => setCleanerEditing(false)}>
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Cleaner
+          </div>
+        )}
       </div>
 
       {/* Heating */}
-        <div className="spec-block">
-          <div className="spec-block-header">
-            <h2 className="spec-block-title">Heater</h2>
-          </div>
-          <div className="spec-grid spec-grid-2">
-            {packageIncludesHeater
-              ? renderReadOnlySelection(
-                  'Heater Model',
-                  safeData.heater?.name || selectedPackage?.includedHeaterName || 'Included',
-                  packageLockedCategoryMessage
-                )
-              : (
-                <div className="spec-field">
-                  <LabelWithRetired text="Heater Model" showRetired={retiredFlags.heater} />
-                  <TooltipAnchor
-                    as="div"
-                    tooltip={heaterDisabledByPackage ? 'This equipment package does not allow heater upgrades.' : undefined}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Heater</h2>
+          <p className="spec-block-subtitle">Add a heater to the project.</p>
+        </div>
+        {renderToggleButtons({
+          hasSelection: hasHeaterSelectionState,
+          noLabel: 'No Heater',
+          addLabel: 'Add Heater',
+          onNo: clearHeaterFlow,
+          onAdd: openHeaterFlow,
+          noDisabledReason: packageIncludesHeater ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: heaterAddDisabledReason,
+        })}
+
+        {hasHeaterSelectionState ? (
+          <div className="spec-subcard">
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{heaterCardTitle}</div>
+                {!heaterEditing && <div className="spec-subcard-subtitle">Heater</div>}
+              </div>
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setHeaterEditing((current) => !current)}
                   >
-                    <select
-                      className="compact-input equipment-select"
-                      value={includeHeater ? safeData.heater.name : noneOptionValue}
-                      onChange={(e) => handleHeaterSelect(e.target.value)}
-                      disabled={heaterDisabledByPackage}
-                    >
-                      <option value={noneOptionValue}>None</option>
-                      {retiredFlags.heater && renderRetiredOption(safeData.heater.name)}
-                      {heaterOptions.map(heater => (
-                        <option key={heater.name} value={heater.name}>
-                          {formatOptionLabel(heater.name, costOf(heater))}
-                        </option>
-                      ))}
-                    </select>
-                  </TooltipAnchor>
-                  {heaterDisabledByPackage && (
-                    <small className="form-help">This equipment package does not allow heater upgrades.</small>
+                    {heaterEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  {!packageIncludesHeater && (
+                    <button type="button" className="link-btn danger" onClick={clearHeaterFlow}>
+                      Clear
+                    </button>
                   )}
                 </div>
-              )}
-          {packageIncludesHeater
-            ? renderReadOnlyQuantity('Heater Quantity', Math.max(selectedPackage?.includedHeaterQuantity ?? heaterQuantity, 0))
-            : includeHeater && (
-              <div className="spec-field" style={{ maxWidth: '220px' }}>
-                <label className="spec-label">Heater Quantity</label>
-                <CompactInput
-                  value={heaterQuantity}
-                  onChange={(e) => updateData({ heaterQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
-                  unit="ea"
-                  min="0"
-                  step="1"
-                  placeholder="1"
-                />
               </div>
-            )}
-        </div>
+            </div>
 
+            {heaterEditing && (
+              <>
+                <div className="spec-grid spec-grid-2">
+                  {packageIncludesHeater
+                    ? renderReadOnlySelection(
+                        'Heater Model',
+                        safeData.heater?.name || selectedPackage?.includedHeaterName || 'Included',
+                        packageLockedCategoryMessage
+                      )
+                    : (
+                      <div className="spec-field">
+                        <LabelWithRetired text="Heater Model" showRetired={retiredFlags.heater} />
+                        <select
+                          className="compact-input equipment-select"
+                          value={includeHeater ? safeData.heater.name : noneOptionValue}
+                          onChange={(e) => handleHeaterSelect(e.target.value)}
+                        >
+                          <option value={noneOptionValue}>None</option>
+                          {retiredFlags.heater && renderRetiredOption(safeData.heater.name)}
+                          {heaterOptions.map((heater) => (
+                            <option key={heater.name} value={heater.name}>
+                              {formatOptionLabel(heater.name, costOf(heater))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {packageIncludesHeater
+                    ? renderReadOnlyQuantity(
+                        'Heater Quantity',
+                        Math.max(selectedPackage?.includedHeaterQuantity ?? heaterQuantity, 0)
+                      )
+                    : includeHeater && (
+                      <div className="spec-field" style={{ maxWidth: '220px' }}>
+                        <label className="spec-label">Heater Quantity</label>
+                        <CompactInput
+                          value={heaterQuantity}
+                          onChange={(e) =>
+                            updateData({ heaterQuantity: Math.max(0, parseInt(e.target.value) || 0) })
+                          }
+                          unit="ea"
+                          min="0"
+                          step="1"
+                          placeholder="1"
+                        />
+                      </div>
+                    )}
+                </div>
+
+                <div className="action-row">
+                  <button type="button" className="action-btn" onClick={() => setHeaterEditing(false)}>
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Heater
+          </div>
+        )}
       </div>
 
       {/* Pool Lights */}
-        <div className="spec-block">
-          <div className="spec-block-header">
-            <h2 className="spec-block-title">Pool Lights</h2>
-          </div>
-          {packageIncludesPoolLights
-            ? renderReadOnlySelection(
-                'Pool Light 1 (Included in Package)',
-                poolLights[0]?.name || selectedPackage?.includedPoolLightName || 'Included',
-                packageLockedCategoryMessage
-              )
-            : (
-              <div className="spec-field">
-                <LabelWithRetired text="Pool Light 1 (Added Automatically)" showRetired={retiredFlags.poolLights[0]} />
-                <select
-                  className="compact-input equipment-select"
-                  value={effectivePoolLights.length > 0 ? effectivePoolLights[0]?.name || noneOptionValue : noneOptionValue}
-                  onChange={(e) => handlePoolLightSelect(e.target.value)}
-                >
-                  <option value={noneOptionValue}>None</option>
-                  {(retiredFlags.poolLights[0] || isPoolLightMissingFromCatalog(effectivePoolLights[0]?.name)) &&
-                    renderRetiredOption(effectivePoolLights[0]?.name)}
-                  {poolLightOptions.map(option => (
-                    <option key={option.name} value={option.name}>
-                      {formatOptionLabel(option.name, costOf(option))}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          {(includePoolLights || packageIncludesPoolLights || effectivePoolLights.length > 0) && (
-            <>
-              {effectivePoolLights.slice(1).map((light, idx) => (
-                <div key={`pool-light-${idx + 1}`} className="spec-field equipment-extra-field">
-                  <LabelWithRetired
-                    text={
-                      isFixedPackage
-                        ? idx === 0
-                          ? 'Pool Light 2 (Upgrade)'
-                          : `Additional Pool Light ${idx + 2}`
-                        : idx === 0
-                        ? 'Pool Light 2 (Added Automatically)'
-                        : `Additional Pool Light ${idx + 2}`
-                    }
-                    showRetired={retiredFlags.poolLights[idx + 1]}
-                  />
-                  <div className="equipment-inline-row">
-                      <select
-                      className="compact-input equipment-select"
-                      value={light?.name || getDefaultLightOption('pool')?.name || ''}
-                      onChange={(e) => handlePoolLightChange(idx + 1, e.target.value)}
-                    >
-                      {(retiredFlags.poolLights[idx + 1] || isPoolLightMissingFromCatalog(light?.name)) &&
-                        renderRetiredOption(light?.name)}
-                      {poolLightOptions.map(option => (
-                        <option key={option.name} value={option.name}>
-                          {formatOptionLabel(option.name, costOf(option))}
-                        </option>
-                      ))}
-                  </select>
-                  <button type="button" className="link-btn danger" onClick={() => removePoolLight(idx + 1)}>
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Pool Lights</h2>
+          <p className="spec-block-subtitle">Add pool lights to the project.</p>
+        </div>
+        {renderToggleButtons({
+          hasSelection: hasPoolLightSelection,
+          noLabel: 'No Pool Light',
+          addLabel: 'Add Pool Light',
+          onNo: clearPoolLightFlow,
+          onAdd: openPoolLightFlow,
+          noDisabledReason: packageIncludesPoolLights ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: poolLightTopLevelDisabledReason,
+        })}
 
-            <div className="action-row" style={{ marginTop: '12px' }}>
-              <TooltipAnchor tooltip={addPoolLightDisabledReason}>
-                <button
-                  type="button"
-                  className="action-btn secondary"
-                  onClick={addPoolLight}
-                  disabled={Boolean(addPoolLightDisabledReason)}
-                >
-                  Add another Pool Light
-                </button>
-              </TooltipAnchor>
-            </div>
+        {hasPoolLightSelection ? (
+          <>
+            {effectivePoolLights.map((light, index) => {
+              const isEditing = activePoolLightIndex === index;
+              const label =
+                index < includedPoolLightCount
+                  ? `Pool Light ${index + 1} (Included in Package)`
+                  : index < autoSeededPoolLightCount
+                  ? `Pool Light ${index + 1} (Added Automatically)`
+                  : isFixedPackage && packageIncludesPoolLights && index === includedPoolLightCount
+                  ? `Pool Light ${index + 1} (Upgrade)`
+                  : index === 0
+                  ? 'Pool Light 1'
+                  : `Additional Pool Light ${index + 1}`;
+
+              return (
+                <div key={`pool-light-card-${index}`} className="spec-subcard">
+                  <div className="spec-subcard-header">
+                    <div>
+                      <div className="spec-subcard-title">{light?.name || 'Pool Light'}</div>
+                      {!isEditing && <div className="spec-subcard-subtitle">{label}</div>}
+                    </div>
+                    <div className="spec-subcard-actions stacked-actions">
+                      <div className="stacked-primary-actions">
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setActivePoolLightIndex(isEditing ? null : index)}
+                        >
+                          {isEditing ? 'Collapse' : 'Edit'}
+                        </button>
+                        {!(packageIncludesPoolLights && index === 0) && (
+                          <button
+                            type="button"
+                            className="link-btn danger"
+                            onClick={() => removePoolLight(index)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      {!isEditing &&
+                        index === effectivePoolLights.length - 1 &&
+                        !poolLightTopLevelDisabledReason && (
+                          <button
+                            type="button"
+                            className="link-btn small"
+                            onClick={() => {
+                              addPoolLight();
+                              setActivePoolLightIndex(effectivePoolLights.length);
+                            }}
+                          >
+                            Add Another
+                          </button>
+                        )}
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <>
+                      <div className="spec-grid spec-grid-2">
+                        {packageIncludesPoolLights && index === 0
+                          ? renderReadOnlySelection(label, light?.name || selectedPackage?.includedPoolLightName || 'Included', packageLockedCategoryMessage)
+                          : (
+                            <div className="spec-field">
+                              <LabelWithRetired text={label} showRetired={retiredFlags.poolLights[index]} />
+                              <select
+                                className="compact-input equipment-select"
+                                value={light?.name || noneOptionValue}
+                                onChange={(e) =>
+                                  index === 0
+                                    ? handlePoolLightSelect(e.target.value)
+                                    : handlePoolLightChange(index, e.target.value)
+                                }
+                              >
+                                {index === 0 && <option value={noneOptionValue}>None</option>}
+                                {(retiredFlags.poolLights[index] || isPoolLightMissingFromCatalog(light?.name)) &&
+                                  renderRetiredOption(light?.name)}
+                                {poolLightOptions.map((option) => (
+                                  <option key={option.name} value={option.name}>
+                                    {formatOptionLabel(option.name, costOf(option))}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                      </div>
+
+                      <div className="action-row">
+                        <button
+                          type="button"
+                          className="action-btn"
+                          onClick={() => setActivePoolLightIndex(null)}
+                        >
+                          Done
+                        </button>
+                        {!poolLightTopLevelDisabledReason && (
+                          <button
+                            type="button"
+                            className="action-btn secondary"
+                            onClick={() => {
+                              addPoolLight();
+                              setActivePoolLightIndex(effectivePoolLights.length);
+                            }}
+                          >
+                            Add Another
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Pool Lights
+          </div>
         )}
       </div>
 
       {/* Spa Lights */}
-        {hasSpa && (
-          <div className="spec-block">
-            <div className="spec-block-header">
-              <h2 className="spec-block-title">Spa Lights</h2>
-            </div>
-            {packageIncludesSpaLights
-              ? renderReadOnlySelection(
-                  'Spa Light (Included in Package)',
-                  spaLights[0]?.name || selectedPackage?.includedSpaLightName || 'Included',
-                  packageLockedCategoryMessage
-                )
-              : (
-                <div className="spec-field">
-                  <LabelWithRetired text="Spa Light (Added Automatically)" showRetired={retiredFlags.spaLights[0]} />
-                  <TooltipAnchor as="div" tooltip={addSpaLightDisabledReason}>
-                    <select
-                      className="compact-input equipment-select"
-                      value={includeSpaLights && spaLights.length > 0 ? spaLights[0]?.name || noneOptionValue : noneOptionValue}
-                      onChange={(e) => handleSpaLightSelect(e.target.value)}
-                      disabled={Boolean(addSpaLightDisabledReason)}
-                    >
-                      <option value={noneOptionValue}>None</option>
-                      {retiredFlags.spaLights[0] && renderRetiredOption(spaLights[0]?.name)}
-                      {spaLightOptions.map(option => (
-                        <option key={option.name} value={option.name}>
-                          {formatOptionLabel(option.name, costOf(option))}
-                        </option>
-                      ))}
-                    </select>
-                  </TooltipAnchor>
-                  {addSpaLightDisabledReason && (
-                    <small className="form-help">This equipment package does not allow spa light upgrades.</small>
-                  )}
-                </div>
-              )}
-            {(includeSpaLights || packageIncludesSpaLights) && (
-              <>
-                {spaLights.slice(1).map((light, idx) => (
-                  <div key={`spa-light-${idx + 1}`} className="spec-field equipment-extra-field">
-                    <LabelWithRetired
-                      text={`Additional Spa Light ${idx + 1}`}
-                      showRetired={retiredFlags.spaLights[idx + 1]}
-                    />
-                    <div className="equipment-inline-row">
-                      <select
-                        className="compact-input equipment-select"
-                        value={light?.name || getDefaultLightOption('spa')?.name || ''}
-                        onChange={(e) => handleSpaLightChange(idx + 1, e.target.value)}
-                      >
-                        {retiredFlags.spaLights[idx + 1] && renderRetiredOption(light?.name)}
-                        {spaLightOptions.map(option => (
-                          <option key={option.name} value={option.name}>
-                            {formatOptionLabel(option.name, costOf(option))}
-                          </option>
-                      ))}
-                    </select>
-                    <button type="button" className="link-btn danger" onClick={() => removeSpaLight(idx + 1)}>
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
+      {hasSpa && (
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Spa Lights</h2>
+            <p className="spec-block-subtitle">Add spa lights to the project.</p>
+          </div>
+          {renderToggleButtons({
+            hasSelection: hasSpaLightSelectionState,
+            noLabel: 'No Spa Light',
+            addLabel: 'Add Spa Light',
+            onNo: clearSpaLightFlow,
+            onAdd: openSpaLightFlow,
+            noDisabledReason: packageIncludesSpaLights ? packageLockedCategoryMessage : undefined,
+            addDisabledReason: spaLightTopLevelDisabledReason,
+          })}
 
-              <div className="action-row" style={{ marginTop: '12px' }}>
-                <TooltipAnchor tooltip={addSpaLightDisabledReason}>
-                  <button
-                    type="button"
-                    className="action-btn secondary"
-                    onClick={addSpaLight}
-                    disabled={Boolean(addSpaLightDisabledReason)}
-                  >
-                    Add another Spa Light
-                  </button>
-                </TooltipAnchor>
-              </div>
+          {hasSpaLightSelectionState ? (
+            <>
+              {spaLights.map((light, index) => {
+                const isEditing = activeSpaLightIndex === index;
+                const label =
+                  index === 0
+                    ? packageIncludesSpaLights
+                      ? 'Spa Light (Included in Package)'
+                      : 'Spa Light (Added Automatically)'
+                    : `Additional Spa Light ${index}`;
+
+                return (
+                  <div key={`spa-light-card-${index}`} className="spec-subcard">
+                    <div className="spec-subcard-header">
+                      <div>
+                        <div className="spec-subcard-title">{light?.name || 'Spa Light'}</div>
+                        {!isEditing && <div className="spec-subcard-subtitle">{label}</div>}
+                      </div>
+                      <div className="spec-subcard-actions stacked-actions">
+                        <div className="stacked-primary-actions">
+                          <button
+                            type="button"
+                            className="link-btn"
+                            onClick={() => setActiveSpaLightIndex(isEditing ? null : index)}
+                          >
+                            {isEditing ? 'Collapse' : 'Edit'}
+                          </button>
+                          {!(packageIncludesSpaLights && index === 0) && (
+                            <button
+                              type="button"
+                              className="link-btn danger"
+                              onClick={() => removeSpaLight(index)}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {!isEditing &&
+                          index === spaLights.length - 1 &&
+                          !spaLightTopLevelDisabledReason && (
+                            <button
+                              type="button"
+                              className="link-btn small"
+                              onClick={() => {
+                                addSpaLight();
+                                setActiveSpaLightIndex(spaLights.length);
+                              }}
+                            >
+                              Add Another
+                            </button>
+                          )}
+                      </div>
+                    </div>
+
+                    {isEditing && (
+                      <>
+                        <div className="spec-grid spec-grid-2">
+                          {packageIncludesSpaLights && index === 0
+                            ? renderReadOnlySelection(
+                                label,
+                                light?.name || selectedPackage?.includedSpaLightName || 'Included',
+                                packageLockedCategoryMessage
+                              )
+                            : (
+                              <div className="spec-field">
+                                <LabelWithRetired text={label} showRetired={retiredFlags.spaLights[index]} />
+                                <select
+                                  className="compact-input equipment-select"
+                                  value={light?.name || noneOptionValue}
+                                  onChange={(e) =>
+                                    index === 0
+                                      ? handleSpaLightSelect(e.target.value)
+                                      : handleSpaLightChange(index, e.target.value)
+                                  }
+                                >
+                                  {index === 0 && <option value={noneOptionValue}>None</option>}
+                                  {retiredFlags.spaLights[index] && renderRetiredOption(light?.name)}
+                                  {spaLightOptions.map((option) => (
+                                    <option key={option.name} value={option.name}>
+                                      {formatOptionLabel(option.name, costOf(option))}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                        </div>
+
+                        <div className="action-row">
+                          <button
+                            type="button"
+                            className="action-btn"
+                            onClick={() => setActiveSpaLightIndex(null)}
+                          >
+                            Done
+                          </button>
+                          {!spaLightTopLevelDisabledReason && (
+                            <button
+                              type="button"
+                              className="action-btn secondary"
+                              onClick={() => {
+                                addSpaLight();
+                                setActiveSpaLightIndex(spaLights.length);
+                              }}
+                            >
+                              Add Another
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </>
+          ) : (
+            <div className="empty-message" style={{ marginTop: '10px' }}>
+              No Spa Lights
+            </div>
           )}
         </div>
       )}
 
       {/* Automation */}
-        <div className="spec-block">
-          <div className="spec-block-header">
-            <h2 className="spec-block-title">Automation</h2>
-          </div>
-          <div className="spec-grid spec-grid-2">
-            {packageIncludesAutomation
-              ? renderReadOnlySelection(
-                  'Automation System',
-                  safeData.automation?.name || selectedPackage?.includedAutomationName || 'Included',
-                  packageLockedCategoryMessage
-                )
-              : (
-                <div className="spec-field">
-                  <LabelWithRetired text="Automation System" showRetired={retiredFlags.automation} />
-                  <TooltipAnchor
-                    as="div"
-                    tooltip={automationDisabledByPackage ? 'This equipment package does not allow automation changes.' : undefined}
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Automation</h2>
+          <p className="spec-block-subtitle">Add automation to the project.</p>
+        </div>
+        {renderToggleButtons({
+          hasSelection: hasAutomationSelection,
+          noLabel: 'No Automation',
+          addLabel: 'Add Automation',
+          onNo: clearAutomationFlow,
+          onAdd: openAutomationFlow,
+          noDisabledReason: packageIncludesAutomation ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: automationAddDisabledReason,
+        })}
+
+        {hasAutomationSelection ? (
+          <div className="spec-subcard">
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{automationCardTitle}</div>
+                {!automationEditing && <div className="spec-subcard-subtitle">Automation</div>}
+              </div>
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setAutomationEditing((current) => !current)}
                   >
-                    <select
-                      className="compact-input equipment-select"
-                      value={includeAutomation ? safeData.automation.name : noneOptionValue}
-                      onChange={(e) => handleAutomationSelect(e.target.value)}
-                      disabled={automationDisabledByPackage}
-                    >
-                      <option value={noneOptionValue}>None</option>
-                      {retiredFlags.automation && renderRetiredOption(safeData.automation.name)}
-                      {automationOptions.map(option => (
-                        <option key={option.name} value={option.name}>
-                          {formatOptionLabel(option.name, costOf(option))}
-                        </option>
-                      ))}
-                    </select>
-                  </TooltipAnchor>
-                  {automationDisabledByPackage && (
-                    <small className="form-help">Automation is locked by the selected equipment package.</small>
+                    {automationEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  {!packageIncludesAutomation && (
+                    <button type="button" className="link-btn danger" onClick={clearAutomationFlow}>
+                      Clear
+                    </button>
                   )}
                 </div>
-              )}
-          {packageIncludesAutomation
-            ? renderReadOnlyQuantity(
-                'Automation System Quantity',
-                Math.max(selectedPackage?.includedAutomationQuantity ?? automationQuantity, 0)
-              )
-            : includeAutomation && (
-              <div className="spec-field" style={{ maxWidth: '220px' }}>
-                <label className="spec-label">Automation System Quantity</label>
-                <CompactInput
-                  value={automationQuantity}
-                  onChange={(e) =>
-                    updateData({ automationQuantity: Math.max(0, parseInt(e.target.value) || 0) })
-                  }
-                  unit="ea"
-                  min="0"
-                  step="1"
-                  placeholder="1"
-                />
               </div>
+            </div>
+
+            {automationEditing && (
+              <>
+                <div className="spec-grid spec-grid-2">
+                  {packageIncludesAutomation
+                    ? renderReadOnlySelection(
+                        'Automation System',
+                        safeData.automation?.name || selectedPackage?.includedAutomationName || 'Included',
+                        packageLockedCategoryMessage
+                      )
+                    : (
+                      <div className="spec-field">
+                        <LabelWithRetired text="Automation System" showRetired={retiredFlags.automation} />
+                        <select
+                          className="compact-input equipment-select"
+                          value={includeAutomation ? safeData.automation.name : noneOptionValue}
+                          onChange={(e) => handleAutomationSelect(e.target.value)}
+                        >
+                          <option value={noneOptionValue}>None</option>
+                          {retiredFlags.automation && renderRetiredOption(safeData.automation.name)}
+                          {automationOptions.map((option) => (
+                            <option key={option.name} value={option.name}>
+                              {formatOptionLabel(option.name, costOf(option))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {packageIncludesAutomation
+                    ? renderReadOnlyQuantity(
+                        'Automation System Quantity',
+                        Math.max(selectedPackage?.includedAutomationQuantity ?? automationQuantity, 0)
+                      )
+                    : includeAutomation && (
+                      <div className="spec-field" style={{ maxWidth: '220px' }}>
+                        <label className="spec-label">Automation System Quantity</label>
+                        <CompactInput
+                          value={automationQuantity}
+                          onChange={(e) =>
+                            updateData({ automationQuantity: Math.max(0, parseInt(e.target.value) || 0) })
+                          }
+                          unit="ea"
+                          min="0"
+                          step="1"
+                          placeholder="1"
+                        />
+                      </div>
+                    )}
+                </div>
+
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={() => setAutomationEditing(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
             )}
-        </div>
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Automation
+          </div>
+        )}
       </div>
 
       {/* Sanitation System (formerly Salt) */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Sanitation System</h2>
+          <p className="spec-block-subtitle">Add a sanitation system to the project.</p>
         </div>
-        <div className="spec-grid-3-split">
-          {packageLocksSanitationSystem
-            ? renderReadOnlySelection(
-                'Sanitation System',
-                packageIncludesSalt
-                  ? getEffectivePrimarySanitationSystemName(safeData) || 'Included'
-                  : 'None',
-                packageIncludesSalt ? packageLockedCategoryMessage : undefined
-              )
-            : (
-              <div className="spec-field">
-                <LabelWithRetired text="Sanitation System" showRetired={retiredFlags.saltSystem} />
-                <select
-                  className="compact-input equipment-select"
-                  value={includeSalt ? safeData.saltSystem?.name || noneOptionValue : noneOptionValue}
-                  onChange={(e) => handleSaltSelect(e.target.value)}
-                >
-                  {!includeAutomation && <option value={noneOptionValue}>None</option>}
-                  {retiredFlags.saltSystem && renderRetiredOption(safeData.saltSystem?.name)}
-                  {visibleSaltOptions.map(system => (
-                    <option key={system.name} value={system.name}>
-                      {formatOptionLabel(system.name, costOf(system))}
-                    </option>
-                  ))}
-                </select>
+        {renderToggleButtons({
+          hasSelection: hasSanitationSelection,
+          noLabel: 'No Sanitation System',
+          addLabel: 'Add Sanitation System',
+          onNo: clearSanitationFlow,
+          onAdd: openSanitationFlow,
+          noDisabledReason: packageIncludesSalt ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: sanitationAddDisabledReason,
+        })}
+
+        {hasSanitationSelection ? (
+          <div className="spec-subcard">
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{sanitationCardTitle}</div>
+                {!sanitationEditing && <div className="spec-subcard-subtitle">Sanitation System</div>}
               </div>
-            )}
-          {showAdditionalSanitationOptions && (
-            <div className="spec-field">
-              <label className="spec-label">Additional Options</label>
-              <TooltipAnchor
-                as="div"
-                tooltip={
-                  additionalSanitationDisabledByPackage
-                    ? 'This equipment package does not allow additional sanitation upgrades.'
-                    : undefined
-                }
-              >
-                <select
-                  className="compact-input equipment-select"
-                  value={additionalSanitationOptionSelectedName || noneOptionValue}
-                  onChange={(e) => handleAdditionalSanitationOptionChange(e.target.value)}
-                  disabled={additionalSanitationDisabledByPackage}
-                >
-                  <option value={noneOptionValue}>None</option>
-                  {additionalSanitationOptionMissingFromCatalog &&
-                    renderRetiredOption(additionalSanitationOptionSelectedName)}
-                  {additionalSanitationOptions.map(option => (
-                    <option key={option.name} value={option.name}>
-                      {formatOptionLabel(option.name, costOf(option))}
-                    </option>
-                  ))}
-                </select>
-              </TooltipAnchor>
-              {additionalSanitationDisabledByPackage && (
-                <small className="form-help">This equipment package does not allow additional sanitation upgrades.</small>
-              )}
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setSanitationEditing((current) => !current)}
+                  >
+                    {sanitationEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  {!packageLocksSanitationSystem && (
+                    <button type="button" className="link-btn danger" onClick={clearSanitationFlow}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
-          {packageIncludesSalt
-            ? renderReadOnlyQuantity(
-                'Sanitation System Quantity',
-                Math.max(selectedPackage?.includedSaltSystemQuantity ?? saltSystemQuantity, 0)
-              )
-            : showSaltQuantity && (
-              <div className="spec-field" style={{ maxWidth: '220px' }}>
-                <label className="spec-label">Sanitation System Quantity</label>
-                <CompactInput
-                  value={saltSystemQuantity}
-                  onChange={(e) =>
-                    updateData({ saltSystemQuantity: Math.max(1, parseInt(e.target.value) || 1) })
-                  }
-                  unit="ea"
-                  min="1"
-                  step="1"
-                  placeholder="1"
-                />
-              </div>
+
+            {sanitationEditing && (
+              <>
+                <div className="spec-grid spec-grid-2">
+                  {packageLocksSanitationSystem
+                    ? renderReadOnlySelection(
+                        'Sanitation System',
+                        packageIncludesSalt
+                          ? getEffectivePrimarySanitationSystemName(safeData) || 'Included'
+                          : 'None',
+                        packageIncludesSalt ? packageLockedCategoryMessage : undefined
+                      )
+                    : (
+                      <div className="spec-field">
+                        <LabelWithRetired text="Sanitation System" showRetired={retiredFlags.saltSystem} />
+                        <select
+                          className="compact-input equipment-select"
+                          value={includeSalt ? safeData.saltSystem?.name || noneOptionValue : noneOptionValue}
+                          onChange={(e) => handleSaltSelect(e.target.value)}
+                        >
+                          {!includeAutomation && <option value={noneOptionValue}>None</option>}
+                          {retiredFlags.saltSystem && renderRetiredOption(safeData.saltSystem?.name)}
+                          {visibleSaltOptions.map((system) => (
+                            <option key={system.name} value={system.name}>
+                              {formatOptionLabel(system.name, costOf(system))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {packageIncludesSalt
+                    ? renderReadOnlyQuantity(
+                        'Sanitation System Quantity',
+                        Math.max(selectedPackage?.includedSaltSystemQuantity ?? saltSystemQuantity, 0)
+                      )
+                    : showSaltQuantity && (
+                      <div className="spec-field" style={{ maxWidth: '220px' }}>
+                        <label className="spec-label">Sanitation System Quantity</label>
+                        <CompactInput
+                          value={saltSystemQuantity}
+                          onChange={(e) =>
+                            updateData({ saltSystemQuantity: Math.max(1, parseInt(e.target.value) || 1) })
+                          }
+                          unit="ea"
+                          min="1"
+                          step="1"
+                          placeholder="1"
+                        />
+                      </div>
+                    )}
+                </div>
+
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={() => setSanitationEditing(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
             )}
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Sanitation System
+          </div>
+        )}
+      </div>
+
+      <div className="spec-block">
+        <div className="spec-block-header">
+          <h2 className="spec-block-title">Additional Sanitation Options</h2>
+          <p className="spec-block-subtitle">Choose an additional sanitation option.</p>
         </div>
-        <div className="spec-grid spec-grid-2">
-          {packageIncludesSanitationAccessory &&
-            renderReadOnlySelection(
-              'Additional Options',
+
+        {additionalSanitationOptions.length > 0 ? (
+          <div className="pool-type-buttons stackable">
+            {additionalSanitationOptions.map((option: any) => {
+              const isSelected = selectedAdditionalSanitationName === option.name;
+              const isDisabled = Boolean(additionalSanitationOptionDisabledReason);
+              return (
+                <TooltipAnchor
+                  key={option.name}
+                  as="div"
+                  className="pool-type-button-tooltip"
+                  tooltip={isDisabled ? additionalSanitationOptionDisabledReason : undefined}
+                >
+                  <button
+                    type="button"
+                    className={`pool-type-btn ${isSelected ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+                    onClick={() => {
+                      if (isDisabled) return;
+                      handleAdditionalSanitationOptionChange(isSelected ? noneOptionValue : option.name);
+                    }}
+                    aria-disabled={isDisabled}
+                  >
+                    {option.name}
+                  </button>
+                </TooltipAnchor>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No additional sanitation options pricing configured.
+          </div>
+        )}
+
+        {!hasAdditionalSanitationContext && additionalSanitationOptions.length > 0 && (
+          <div className="info-box" style={{ marginTop: '8px' }}>
+            Select a Sanitation System first.
+          </div>
+        )}
+
+        {additionalSanitationSelectionMissingFromCatalog && (
+          <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>
+            The previously selected additional sanitation option is no longer in the active pricing model. Choose another option.
+          </div>
+        )}
+
+        {packageIncludesSanitationAccessory && (
+          <div className="spec-grid spec-grid-2" style={{ marginTop: '15px' }}>
+            {renderReadOnlySelection(
+              'Included Additional Option',
               safeData.sanitationAccessory?.name || selectedPackage?.includedSanitationAccessoryName || 'Included',
               packageLockedCategoryMessage,
               retiredFlags.sanitationAccessory
             )}
-          {packageIncludesSanitationAccessory && (
             <div className="spec-field" style={{ maxWidth: '220px' }}>
               <label className="spec-label">Additional Option Quantity</label>
               <CompactInput
@@ -2238,90 +3120,145 @@ function EquipmentSectionNew({
                 readOnly
               />
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Auto-fill */}
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Auto-fill</h2>
+          <p className="spec-block-subtitle">Add an auto-fill system to the project.</p>
         </div>
-        <div className={`spec-grid-3-split auto-fill-grid ${autoFillRequiresElectric ? 'auto-fill-grid-electric' : ''}`}>
-          {packageIncludesAutoFill
-            ? renderReadOnlySelection(
-                'Auto-Fill System',
-                safeData.autoFillSystem?.name || selectedPackage?.includedAutoFillSystemName || 'Included',
-                packageLockedCategoryMessage
-              )
-            : (
-              <div className="spec-field">
-                <LabelWithRetired text="Auto-Fill System" showRetired={retiredFlags.autoFillSystem} />
-                <TooltipAnchor
-                  as="div"
-                  tooltip={autoFillDisabledByPackage ? 'This equipment package does not allow auto-fill upgrades.' : undefined}
-                >
-                  <select
-                    className="compact-input equipment-select"
-                    value={includeAutoFill ? safeData.autoFillSystem?.name || noneOptionValue : noneOptionValue}
-                    onChange={(e) => handleAutoFillSelect(e.target.value)}
-                    disabled={autoFillDisabledByPackage}
-                  >
-                    <option value={noneOptionValue}>None</option>
-                    {retiredFlags.autoFillSystem && renderRetiredOption(safeData.autoFillSystem?.name)}
-                    {autoFillOptions.map(system => (
-                      <option key={system.name} value={system.name}>
-                        {formatOptionLabel(system.name, costOf(system))}
-                      </option>
-                    ))}
-                  </select>
-                </TooltipAnchor>
-                {autoFillDisabledByPackage && (
-                  <small className="form-help">This equipment package does not allow auto-fill upgrades.</small>
-                )}
+        {renderToggleButtons({
+          hasSelection: hasAutoFillSelection,
+          noLabel: 'No Auto-fill',
+          addLabel: 'Add Auto-fill',
+          onNo: clearAutoFillFlow,
+          onAdd: openAutoFillFlow,
+          noDisabledReason: packageIncludesAutoFill ? packageLockedCategoryMessage : undefined,
+          addDisabledReason: autoFillAddDisabledReason,
+        })}
+
+        {hasAutoFillSelection ? (
+          <div className="spec-subcard">
+            <div className="spec-subcard-header">
+              <div>
+                <div className="spec-subcard-title">{autoFillCardTitle}</div>
+                {!autoFillEditing && <div className="spec-subcard-subtitle">Auto-fill</div>}
               </div>
+              <div className="spec-subcard-actions stacked-actions">
+                <div className="stacked-primary-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setAutoFillEditing((current) => !current)}
+                  >
+                    {autoFillEditing ? 'Collapse' : 'Edit'}
+                  </button>
+                  {!packageIncludesAutoFill && (
+                    <button type="button" className="link-btn danger" onClick={clearAutoFillFlow}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {autoFillEditing && (
+              <>
+                <div
+                  className={`spec-grid-3-split auto-fill-grid ${autoFillRequiresElectric ? 'auto-fill-grid-electric' : ''}`}
+                >
+                  {packageIncludesAutoFill
+                    ? renderReadOnlySelection(
+                        'Auto-Fill System',
+                        safeData.autoFillSystem?.name || selectedPackage?.includedAutoFillSystemName || 'Included',
+                        packageLockedCategoryMessage
+                      )
+                    : (
+                      <div className="spec-field">
+                        <LabelWithRetired text="Auto-Fill System" showRetired={retiredFlags.autoFillSystem} />
+                        <select
+                          className="compact-input equipment-select"
+                          value={includeAutoFill ? safeData.autoFillSystem?.name || noneOptionValue : noneOptionValue}
+                          onChange={(e) => handleAutoFillSelect(e.target.value)}
+                        >
+                          <option value={noneOptionValue}>None</option>
+                          {retiredFlags.autoFillSystem &&
+                            renderRetiredOption(safeData.autoFillSystem?.name)}
+                          {autoFillOptions.map((system) => (
+                            <option key={system.name} value={system.name}>
+                              {formatOptionLabel(system.name, costOf(system))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                  {(includeAutoFill || packageIncludesAutoFill) && (
+                    <div className="spec-field">
+                      <label className="spec-label">Auto-Fill System Quantity</label>
+                      <CompactInput
+                        value={autoFillSystemQuantity}
+                        onChange={(e) =>
+                          updateData({ autoFillSystemQuantity: Math.max(0, parseInt(e.target.value) || 0) })
+                        }
+                        unit="ea"
+                        min="0"
+                        step="1"
+                        placeholder="1"
+                        readOnly={packageIncludesAutoFill}
+                      />
+                    </div>
+                  )}
+
+                  {(includeAutoFill || packageIncludesAutoFill) && (
+                    <div className="spec-field">
+                      <label className="spec-label">Auto-Fill Run</label>
+                      <CompactInput
+                        value={plumbingRuns.autoFillRun ?? 0}
+                        onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
+                        unit="LNFT"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                      />
+                    </div>
+                  )}
+
+                  {(includeAutoFill || packageIncludesAutoFill) && autoFillRequiresElectric && (
+                    <div className="spec-field">
+                      <label className="spec-label">Electric Run</label>
+                      <CompactInput
+                        value={plumbingRuns.autoFillRun ?? 0}
+                        onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
+                        unit="LNFT"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="action-btn"
+                    onClick={() => setAutoFillEditing(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
             )}
-          {(includeAutoFill || packageIncludesAutoFill) && (
-            <div className="spec-field">
-              <label className="spec-label">Auto-Fill System Quantity</label>
-              <CompactInput
-                value={autoFillSystemQuantity}
-                onChange={(e) => updateData({ autoFillSystemQuantity: Math.max(0, parseInt(e.target.value) || 0) })}
-                unit="ea"
-                min="0"
-                step="1"
-                placeholder="1"
-                readOnly={packageIncludesAutoFill}
-              />
-            </div>
-          )}
-          {(includeAutoFill || packageIncludesAutoFill) && (
-            <div className="spec-field">
-              <label className="spec-label">Auto-Fill Run</label>
-              <CompactInput
-                value={plumbingRuns.autoFillRun ?? 0}
-                onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
-                unit="LNFT"
-                min="0"
-                step="1"
-                placeholder="0"
-              />
-            </div>
-          )}
-          {(includeAutoFill || packageIncludesAutoFill) && autoFillRequiresElectric && (
-            <div className="spec-field">
-              <label className="spec-label">Electric Run</label>
-              <CompactInput
-                value={plumbingRuns.autoFillRun ?? 0}
-                onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
-                unit="LNFT"
-                min="0"
-                step="1"
-                placeholder="0"
-              />
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="empty-message" style={{ marginTop: '10px' }}>
+            No Auto-fill
+          </div>
+        )}
       </div>
 
       <CustomOptionsSection
