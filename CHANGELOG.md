@@ -2,10 +2,9 @@
 ### Tile/Coping/Decking Admin Pricing
 - Redesigned subcategory to a Table style to add/remove new options
 ### Proposal Builder UI/UX
-- Many sections felt distinctly different for the designer to select options. This unifies some of that
+- Many sections felt distinctly different for the designer to select options. This unifies most of that
     - Aligned the Water Features section to the new selection UI
     - Aligned the Equipment section to the new selection UI
-
 -----
 ## [2.2.10] - 4/8/26
 ### Fixed
