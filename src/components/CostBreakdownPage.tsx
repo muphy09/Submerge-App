@@ -382,7 +382,6 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                   onClick={() => setViewMode('cogs')}
                   type="button"
                   aria-pressed={viewMode === 'cogs'}
-                  title="Show cost of goods (COGS) amounts"
                 >
                   COGS Breakdown
                 </button>
@@ -391,7 +390,6 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                   onClick={() => setViewMode('retail')}
                   type="button"
                   aria-pressed={viewMode === 'retail'}
-                  title="Show retail pricing amounts"
                 >
                   Retail Cost Breakdown
                 </button>

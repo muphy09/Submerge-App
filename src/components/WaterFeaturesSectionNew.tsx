@@ -8,6 +8,7 @@ import {
   waterFeatureNeedsConduitRun,
   waterFeatureNeedsGasRun,
 } from '../utils/waterFeatureCost';
+import { TooltipAnchor } from './AppTooltip';
 import CustomOptionsSection from './CustomOptionsSection';
 import './SectionStyles.css';
 
@@ -423,7 +424,11 @@ function WaterFeaturesSectionNew({
         </div>
       )}
 
-      <div className={`package-disabled-shell${isDisabled ? ' is-disabled' : ''}`} title={disabledReason || undefined}>
+      <TooltipAnchor
+        as="div"
+        className={`package-disabled-shell${isDisabled ? ' is-disabled' : ''}`}
+        tooltip={disabledReason}
+      >
         {isDisabled && <div className="package-warning secondary">{disabledReason}</div>}
         <div className="package-disabled-content">
           <div className="spec-block">
@@ -470,7 +475,7 @@ function WaterFeaturesSectionNew({
           />
         </div>
         {isDisabled && <div className="package-disabled-overlay" aria-hidden="true" />}
-      </div>
+      </TooltipAnchor>
     </div>
   );
 }

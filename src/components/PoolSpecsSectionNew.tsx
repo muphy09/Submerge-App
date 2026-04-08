@@ -16,6 +16,7 @@ import {
   getFiberglassPoolModelsBySize,
   normalizeFiberglassSize,
 } from '../utils/fiberglass';
+import { TooltipAnchor } from './AppTooltip';
 import './SectionStyles.css';
 
 interface Props {
@@ -380,20 +381,21 @@ function PoolSpecsSectionNew({
               </div>
               <div className="spec-field">
                 <label className="spec-label required">Fiberglass Model</label>
-                <select
-                  className="compact-input"
-                  value={data.fiberglassModelName || ''}
-                  onChange={(e) => handleChange('fiberglassModelName', e.target.value || undefined)}
-                  disabled={!selectedFiberglassSize}
-                  title={!selectedFiberglassSize ? 'Select a fiberglass size first' : undefined}
-                >
-                  <option value="">Select model</option>
-                  {fiberglassPoolModels.map((model) => (
-                    <option key={model.name} value={model.name}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
+                <TooltipAnchor as="div" tooltip={!selectedFiberglassSize ? 'Select a fiberglass size first' : undefined}>
+                  <select
+                    className="compact-input"
+                    value={data.fiberglassModelName || ''}
+                    onChange={(e) => handleChange('fiberglassModelName', e.target.value || undefined)}
+                    disabled={!selectedFiberglassSize}
+                  >
+                    <option value="">Select model</option>
+                    {fiberglassPoolModels.map((model) => (
+                      <option key={model.name} value={model.name}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                </TooltipAnchor>
               </div>
             </div>
 
@@ -507,30 +509,32 @@ function PoolSpecsSectionNew({
           >
             No Spa
           </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${data.spaType === 'gunite' ? 'active' : ''} ${disableSpaSelections ? 'disabled' : ''}`}
-            onClick={() => {
-              if (disableSpaSelections) return;
-              handleChange('spaType', 'gunite');
-            }}
-            title={disableSpaSelections ? disabledSpaMessage : undefined}
-            aria-disabled={disableSpaSelections}
-          >
-            Shotcrete (Custom)
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${data.spaType === 'fiberglass' ? 'active' : ''} ${disableSpaSelections ? 'disabled' : ''}`}
-            onClick={() => {
-              if (disableSpaSelections) return;
-              handleChange('spaType', 'fiberglass');
-            }}
-            title={disableSpaSelections ? disabledSpaMessage : undefined}
-            aria-disabled={disableSpaSelections}
-          >
-            Fiberglass Spa
-          </button>
+          <TooltipAnchor className="pool-type-button-tooltip" tooltip={disableSpaSelections ? disabledSpaMessage : undefined}>
+            <button
+              type="button"
+              className={`pool-type-btn ${data.spaType === 'gunite' ? 'active' : ''} ${disableSpaSelections ? 'disabled' : ''}`}
+              onClick={() => {
+                if (disableSpaSelections) return;
+                handleChange('spaType', 'gunite');
+              }}
+              aria-disabled={disableSpaSelections}
+            >
+              Shotcrete (Custom)
+            </button>
+          </TooltipAnchor>
+          <TooltipAnchor className="pool-type-button-tooltip" tooltip={disableSpaSelections ? disabledSpaMessage : undefined}>
+            <button
+              type="button"
+              className={`pool-type-btn ${data.spaType === 'fiberglass' ? 'active' : ''} ${disableSpaSelections ? 'disabled' : ''}`}
+              onClick={() => {
+                if (disableSpaSelections) return;
+                handleChange('spaType', 'fiberglass');
+              }}
+              aria-disabled={disableSpaSelections}
+            >
+              Fiberglass Spa
+            </button>
+          </TooltipAnchor>
         </div>
 
         {/* Fiberglass Spa Details */}
@@ -564,16 +568,20 @@ function PoolSpecsSectionNew({
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
                 <label className="spec-label">Spillover</label>
-                <select
-                  className="compact-input"
-                  value={spilloverSelectValue}
-                  disabled={fiberglassSpaSpilloverDisabled}
-                  title={fiberglassSpaSpilloverDisabled ? fiberglassSpaSpilloverDisabledMessage : undefined}
-                  onChange={(e) => handleChange('hasSpillover', e.target.value === 'yes')}
+                <TooltipAnchor
+                  as="div"
+                  tooltip={fiberglassSpaSpilloverDisabled ? fiberglassSpaSpilloverDisabledMessage : undefined}
                 >
-                  <option value="none">None</option>
-                  <option value="yes">Yes</option>
-                </select>
+                  <select
+                    className="compact-input"
+                    value={spilloverSelectValue}
+                    disabled={fiberglassSpaSpilloverDisabled}
+                    onChange={(e) => handleChange('hasSpillover', e.target.value === 'yes')}
+                  >
+                    <option value="none">None</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </TooltipAnchor>
               </div>
               <div className="spec-field">
                 <label className="spec-label">Crane Required</label>

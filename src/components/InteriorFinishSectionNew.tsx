@@ -3,6 +3,7 @@ import { InteriorFinish, InteriorFinishType } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { subscribeToPricingData } from '../services/pricingDataStore';
 import CustomOptionsSection from './CustomOptionsSection';
+import { TooltipAnchor } from './AppTooltip';
 import './SectionStyles.css';
 
 interface Props {
@@ -104,54 +105,57 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass }: Prop
         <div className="spec-grid spec-grid-3">
           <div className="spec-field">
             <label className="spec-label required">Finish</label>
-            <select
-              className="compact-input"
-              value={data.finishType}
-              onChange={(e) => handleChange('finishType', e.target.value as InteriorFinishType)}
-              disabled={isFiberglass}
-              title={isFiberglass ? fiberglassDisabledMessage : undefined}
-            >
-              {finishTypes.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+            <TooltipAnchor as="div" tooltip={isFiberglass ? fiberglassDisabledMessage : undefined}>
+              <select
+                className="compact-input"
+                value={data.finishType}
+                onChange={(e) => handleChange('finishType', e.target.value as InteriorFinishType)}
+                disabled={isFiberglass}
+              >
+                {finishTypes.map(type => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </TooltipAnchor>
           </div>
 
           <div className="spec-field">
             <label className="spec-label">Color / Style</label>
-            <select
-              className="compact-input"
-              value={selectedColorValue || ''}
-              onChange={(e) => handleChange('color', e.target.value)}
-              disabled={isFiberglass}
-              title={isFiberglass ? fiberglassDisabledMessage : undefined}
-            >
-              <option value="" disabled>
-                Select color/style
-              </option>
-              {colorOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+            <TooltipAnchor as="div" tooltip={isFiberglass ? fiberglassDisabledMessage : undefined}>
+              <select
+                className="compact-input"
+                value={selectedColorValue || ''}
+                onChange={(e) => handleChange('color', e.target.value)}
+                disabled={isFiberglass}
+              >
+                <option value="" disabled>
+                  Select color/style
                 </option>
-              ))}
-              {colorOptions.length === 0 && <option value="">No colors configured</option>}
-            </select>
+                {colorOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+                {colorOptions.length === 0 && <option value="">No colors configured</option>}
+              </select>
+            </TooltipAnchor>
           </div>
 
           <div className="spec-field">
             <label className="spec-label">Microglass</label>
-            <button
-              type="button"
-              className={`pool-type-btn ${includeMicroglass ? 'active' : ''}`}
-              onClick={() => handleChange('hasWaterproofing', !includeMicroglass)}
-              disabled={isFiberglass}
-              title={isFiberglass ? fiberglassDisabledMessage : undefined}
-              style={{ width: '100%', padding: '10px 14px' }}
-            >
-              Include Waterproofing (Microglass)
-            </button>
+            <TooltipAnchor as="div" tooltip={isFiberglass ? fiberglassDisabledMessage : undefined}>
+              <button
+                type="button"
+                className={`pool-type-btn ${includeMicroglass ? 'active' : ''}`}
+                onClick={() => handleChange('hasWaterproofing', !includeMicroglass)}
+                disabled={isFiberglass}
+                style={{ width: '100%', padding: '10px 14px' }}
+              >
+                Include Waterproofing (Microglass)
+              </button>
+            </TooltipAnchor>
           </div>
         </div>
       </div>

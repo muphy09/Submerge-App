@@ -1,18 +1,14 @@
 import {
   useState,
   useEffect,
-  useLayoutEffect,
   useCallback,
   useRef,
-  type FocusEventHandler,
-  type MouseEventHandler,
-  type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CostLineItem, Proposal, ProposalWorkflowActor, ProposalWorkflowEvent, RetailAdjustment } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
 import type { ContractViewHandle } from '../components/ContractView';
+import { OverflowTooltipText, TooltipAnchor } from '../components/AppTooltip';
 import FranchiseLogo from '../components/FranchiseLogo';
 import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
@@ -240,6 +236,11 @@ type ProposalViewLocationState = {
 
 type ContractViewComponent = typeof import('../components/ContractView').default;
 type BreakdownExportPagesModule = typeof import('../components/BreakdownExportPages');
+type BreakdownPrintPreviewWindow = Window;
+type BreakdownPrintPreviewMeta = {
+  eyebrow: string;
+  title: string;
+};
 
 let contractViewModulePromise: Promise<typeof import('../components/ContractView')> | null = null;
 const loadContractView = () => {
@@ -256,6 +257,323 @@ const loadBreakdownExportPages = () => {
   }
   return breakdownExportPagesModulePromise;
 };
+
+function escapeBreakdownPreviewHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function writeBreakdownPrintPreviewWindowShell(
+  previewWindow: BreakdownPrintPreviewWindow,
+  options: {
+    title: string;
+    fileName: string;
+    previewMeta: BreakdownPrintPreviewMeta;
+    showPrintButton?: boolean;
+    content: string;
+  }
+) {
+  previewWindow.document.open();
+  previewWindow.document.write(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeBreakdownPreviewHtml(options.title)}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        --preview-bg: #d8dee8;
+        --preview-panel: #eef2f8;
+        --preview-border: rgba(57, 78, 115, 0.18);
+        --preview-text: #163055;
+        --preview-muted: #55709a;
+        --preview-accent: #1d4f91;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--preview-bg);
+        color: var(--preview-text);
+      }
+
+      body {
+        font-family: inherit;
+      }
+
+      .preview-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+        background: rgba(238, 242, 248, 0.96);
+        border-bottom: 1px solid var(--preview-border);
+        backdrop-filter: blur(12px);
+      }
+
+      .preview-title {
+        min-width: 0;
+      }
+
+      .preview-title p {
+        margin: 0 0 2px;
+        color: var(--preview-muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .preview-title h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .preview-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .preview-actions button {
+        border: 1px solid rgba(55, 83, 128, 0.22);
+        border-radius: 999px;
+        padding: 0 16px;
+        height: 40px;
+        background: #ffffff;
+        color: var(--preview-text);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+      }
+
+      .preview-actions button.primary {
+        background: var(--preview-accent);
+        border-color: var(--preview-accent);
+        color: #ffffff;
+      }
+
+      .preview-status {
+        width: min(560px, calc(100vw - 48px));
+        margin: 72px auto 0;
+        padding: 24px 28px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid var(--preview-border);
+        box-shadow: 0 20px 44px rgba(34, 55, 97, 0.12);
+        text-align: center;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .preview-status.error {
+        color: #8d1d1d;
+      }
+
+      .preview-pages {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+        padding: 24px 18px 40px;
+      }
+
+      .preview-sheet {
+        width: min(8.5in, calc(100vw - 36px));
+        min-height: calc(min(8.5in, calc(100vw - 36px)) * 11 / 8.5);
+        background: #ffffff;
+        border: 1px solid var(--preview-border);
+        box-shadow: 0 28px 60px rgba(34, 55, 97, 0.18);
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 0;
+      }
+
+      .preview-sheet img {
+        display: block;
+        width: min(7.7in, calc(100vw - 52px));
+        height: auto;
+      }
+
+      @media (max-width: 800px) {
+        .preview-toolbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .preview-actions {
+          justify-content: space-between;
+        }
+      }
+
+      @media print {
+        @page {
+          size: letter;
+          margin: 0;
+        }
+
+        html, body {
+          background: #ffffff !important;
+        }
+
+        .preview-toolbar {
+          display: none !important;
+        }
+
+        .preview-pages {
+          padding: 0 !important;
+          gap: 0 !important;
+        }
+
+        .preview-sheet {
+          width: 8.5in !important;
+          min-height: 11in !important;
+          border: none !important;
+          box-shadow: none !important;
+          break-after: page;
+          page-break-after: always;
+        }
+
+        .preview-sheet img {
+          width: 7.7in !important;
+          height: auto !important;
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-toolbar">
+      <div class="preview-title">
+        <p>${escapeBreakdownPreviewHtml(options.previewMeta.eyebrow)}</p>
+        <h1>${escapeBreakdownPreviewHtml(options.fileName)}</h1>
+      </div>
+      <div class="preview-actions">
+        ${
+          options.showPrintButton
+            ? '<button type="button" class="primary" id="preview-print">Print</button>'
+            : ''
+        }
+        <button type="button" id="preview-close">Close</button>
+      </div>
+    </div>
+    ${options.content}
+  </body>
+</html>`);
+  previewWindow.document.close();
+}
+
+function bindBreakdownPrintPreviewWindowControls(previewWindow: BreakdownPrintPreviewWindow) {
+  const closeButton = previewWindow.document.getElementById('preview-close');
+  closeButton?.addEventListener('click', () => {
+    previewWindow.close();
+  });
+
+  const printButton = previewWindow.document.getElementById('preview-print') as HTMLButtonElement | null;
+  if (printButton) {
+    printButton.addEventListener('click', () => {
+      printButton.disabled = true;
+      previewWindow.focus();
+      previewWindow.print();
+    });
+  }
+
+  previewWindow.onafterprint = () => {
+    const currentPrintButton = previewWindow.document.getElementById('preview-print') as HTMLButtonElement | null;
+    if (currentPrintButton) {
+      currentPrintButton.disabled = false;
+    }
+  };
+}
+
+function openBreakdownPrintPreviewWindow(
+  fileName: string,
+  previewMeta: BreakdownPrintPreviewMeta
+): BreakdownPrintPreviewWindow | null {
+  const previewWindow = window.open('', '_blank', 'width=1120,height=1400');
+  if (!previewWindow) {
+    return null;
+  }
+
+  writeBreakdownPrintPreviewWindowShell(previewWindow, {
+    title: `${previewMeta.title} Print Preview`,
+    fileName,
+    previewMeta,
+    content: '<div class="preview-status">Preparing breakdown print preview...</div>',
+  });
+  bindBreakdownPrintPreviewWindowControls(previewWindow);
+  previewWindow.focus();
+  return previewWindow;
+}
+
+function showBreakdownPrintPreviewError(
+  previewWindow: BreakdownPrintPreviewWindow,
+  fileName: string,
+  previewMeta: BreakdownPrintPreviewMeta,
+  message: string
+) {
+  writeBreakdownPrintPreviewWindowShell(previewWindow, {
+    title: `${previewMeta.title} Print Preview`,
+    fileName,
+    previewMeta,
+    content: `<div class="preview-status error">${escapeBreakdownPreviewHtml(message)}</div>`,
+  });
+  bindBreakdownPrintPreviewWindowControls(previewWindow);
+}
+
+function showBreakdownPrintPreviewPages(
+  previewWindow: BreakdownPrintPreviewWindow,
+  fileName: string,
+  previewMeta: BreakdownPrintPreviewMeta,
+  pageImages: string[]
+) {
+  writeBreakdownPrintPreviewWindowShell(previewWindow, {
+    title: `${previewMeta.title} Print Preview`,
+    fileName,
+    previewMeta,
+    showPrintButton: true,
+    content: '<div class="preview-pages" id="preview-pages"></div>',
+  });
+  bindBreakdownPrintPreviewWindowControls(previewWindow);
+
+  const pagesRoot = previewWindow.document.getElementById('preview-pages');
+  if (!pagesRoot) {
+    showBreakdownPrintPreviewError(previewWindow, fileName, previewMeta, 'Could not open the breakdown print preview.');
+    return;
+  }
+
+  pageImages.forEach((src, index) => {
+    const sheet = previewWindow.document.createElement('div');
+    sheet.className = 'preview-sheet';
+    const image = previewWindow.document.createElement('img');
+    image.src = src;
+    image.alt = `Breakdown page ${index + 1}`;
+    image.loading = 'eager';
+    sheet.appendChild(image);
+    pagesRoot.appendChild(sheet);
+  });
+  previewWindow.focus();
+}
 
 const summarizePoolLightSelection = (lights: Array<{ name?: string }> | undefined): string => {
   const names = (lights ?? [])
@@ -358,248 +676,6 @@ const buildEquipmentSummary = (
       ? REMOVED_EQUIPMENT_SUMMARY_LABEL
       : summarizePoolLightSelection(equipment.poolLights),
   };
-};
-
-const resolveOverflowTooltipText = (children: ReactNode, tooltipText?: string): string => {
-  if (typeof tooltipText === 'string') {
-    return tooltipText.trim();
-  }
-
-  if (typeof children === 'string' || typeof children === 'number') {
-    return String(children).trim();
-  }
-
-  return '';
-};
-
-const clampTooltipValue = (value: number, min: number, max: number): number => {
-  if (max <= min) return min;
-  return Math.min(max, Math.max(min, value));
-};
-
-type TooltipPlacement = 'top' | 'bottom';
-
-type TooltipPosition = {
-  left: number;
-  top: number;
-  maxWidth: number;
-  arrowLeft: number;
-  placement: TooltipPlacement;
-  ready: boolean;
-};
-
-const DEFAULT_TOOLTIP_POSITION: TooltipPosition = {
-  left: 0,
-  top: 0,
-  maxWidth: 320,
-  arrowLeft: 24,
-  placement: 'top',
-  ready: false,
-};
-
-const useFloatingTooltip = <T extends HTMLElement>(tooltip?: string | null) => {
-  const normalizedTooltip = String(tooltip || '').trim();
-  const anchorRef = useRef<T | null>(null);
-  const tooltipRef = useRef<HTMLDivElement | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [position, setPosition] = useState<TooltipPosition>(DEFAULT_TOOLTIP_POSITION);
-
-  const updatePosition = () => {
-    if (!anchorRef.current || !tooltipRef.current || typeof window === 'undefined') return;
-
-    const rect = anchorRef.current.getBoundingClientRect();
-    const viewportPadding = 18;
-    const verticalGap = 12;
-    const availableWidth = Math.max(160, window.innerWidth - viewportPadding * 2);
-    const maxWidth = Math.min(340, availableWidth);
-    const tooltipWidth = Math.min(tooltipRef.current.offsetWidth || maxWidth, maxWidth);
-    const tooltipHeight = tooltipRef.current.offsetHeight || 0;
-    const anchorCenter = rect.left + rect.width / 2;
-    const minCenter = viewportPadding + tooltipWidth / 2;
-    const maxCenter = window.innerWidth - viewportPadding - tooltipWidth / 2;
-    const left = clampTooltipValue(anchorCenter, minCenter, maxCenter);
-    const canFitAbove = rect.top - tooltipHeight - verticalGap >= viewportPadding;
-    const placement: TooltipPlacement = canFitAbove ? 'top' : 'bottom';
-    const unclampedTop = placement === 'top' ? rect.top - tooltipHeight - verticalGap : rect.bottom + verticalGap;
-    const top = clampTooltipValue(
-      unclampedTop,
-      viewportPadding,
-      Math.max(viewportPadding, window.innerHeight - tooltipHeight - viewportPadding)
-    );
-    const tooltipLeftEdge = left - tooltipWidth / 2;
-    const arrowLeft = clampTooltipValue(anchorCenter - tooltipLeftEdge, 18, Math.max(18, tooltipWidth - 18));
-
-    setPosition({
-      left,
-      top,
-      maxWidth,
-      arrowLeft,
-      placement,
-      ready: true,
-    });
-  };
-
-  useLayoutEffect(() => {
-    if (!isVisible || !normalizedTooltip || typeof window === 'undefined') return;
-
-    const frame = window.requestAnimationFrame(updatePosition);
-    const handleWindowChange = () => updatePosition();
-    window.addEventListener('resize', handleWindowChange);
-    window.addEventListener('scroll', handleWindowChange, true);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener('resize', handleWindowChange);
-      window.removeEventListener('scroll', handleWindowChange, true);
-    };
-  }, [isVisible, normalizedTooltip]);
-
-  useEffect(() => {
-    if (!normalizedTooltip && isVisible) {
-      setIsVisible(false);
-      setPosition(DEFAULT_TOOLTIP_POSITION);
-    }
-  }, [normalizedTooltip, isVisible]);
-
-  const showTooltip = () => {
-    if (!normalizedTooltip) return;
-    setPosition((current) => ({ ...current, ready: false }));
-    setIsVisible(true);
-  };
-
-  const hideTooltip = () => {
-    setIsVisible(false);
-  };
-
-  const tooltipPortal =
-    isVisible && normalizedTooltip && typeof document !== 'undefined'
-      ? createPortal(
-          <div
-            ref={tooltipRef}
-            className="proposal-tooltip-floating"
-            data-placement={position.placement}
-            role="tooltip"
-            style={{
-              left: `${position.left}px`,
-              top: `${position.top}px`,
-              maxWidth: `${position.maxWidth}px`,
-              opacity: position.ready ? 1 : 0,
-            }}
-          >
-            {normalizedTooltip}
-            <span
-              className="proposal-tooltip-floating-arrow"
-              aria-hidden="true"
-              style={{ left: `${position.arrowLeft}px` }}
-            />
-          </div>,
-          document.body
-        )
-      : null;
-
-  return {
-    anchorRef,
-    hideTooltip,
-    showTooltip,
-    tooltipPortal,
-  };
-};
-
-type OverflowTooltipTextProps = {
-  as?: 'span' | 'p';
-  className?: string;
-  children: ReactNode;
-  tooltipText?: string;
-};
-
-const OverflowTooltipText = ({
-  as = 'span',
-  className,
-  children,
-  tooltipText,
-}: OverflowTooltipTextProps) => {
-  const fullText = resolveOverflowTooltipText(children, tooltipText);
-  const { anchorRef, showTooltip, hideTooltip, tooltipPortal } = useFloatingTooltip<HTMLElement>(fullText);
-  const tooltipClassName = ['proposal-tooltip-target', className].filter(Boolean).join(' ');
-  const maybeShowTooltip = (target: HTMLElement) => {
-    const isOverflowing = target.scrollWidth > target.clientWidth || target.scrollHeight > target.clientHeight;
-    if (!isOverflowing || !fullText) {
-      hideTooltip();
-      return;
-    }
-
-    showTooltip();
-  };
-  const handleMouseEnter: MouseEventHandler<HTMLElement> = (event) => {
-    maybeShowTooltip(event.currentTarget);
-  };
-  const handleFocusCapture: FocusEventHandler<HTMLElement> = (event) => {
-    maybeShowTooltip(event.currentTarget);
-  };
-
-  if (as === 'p') {
-    return (
-      <>
-        <p
-          ref={anchorRef as any}
-          className={tooltipClassName}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={hideTooltip}
-          onFocusCapture={handleFocusCapture}
-          onBlurCapture={hideTooltip}
-        >
-          {children}
-        </p>
-        {tooltipPortal}
-      </>
-    );
-  }
-
-  return (
-    <>
-      <span
-        ref={anchorRef as any}
-        className={tooltipClassName}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={hideTooltip}
-        onFocusCapture={handleFocusCapture}
-        onBlurCapture={hideTooltip}
-      >
-        {children}
-      </span>
-      {tooltipPortal}
-    </>
-  );
-};
-
-type TooltipAnchorProps = {
-  tooltip?: string | null;
-  className?: string;
-  as?: 'span' | 'div';
-  children: ReactNode;
-};
-
-const TooltipAnchor = ({ tooltip, className, as = 'span', children }: TooltipAnchorProps) => {
-  const { anchorRef, showTooltip, hideTooltip, tooltipPortal } = useFloatingTooltip<
-    HTMLSpanElement | HTMLDivElement
-  >(tooltip);
-  const Component = as;
-
-  return (
-    <>
-      <Component
-        ref={anchorRef as any}
-        className={['proposal-tooltip-anchor', className].filter(Boolean).join(' ')}
-        onMouseEnter={showTooltip}
-        onMouseLeave={hideTooltip}
-        onFocusCapture={showTooltip}
-        onBlurCapture={hideTooltip}
-      >
-        {children}
-      </Component>
-      {tooltipPortal}
-    </>
-  );
 };
 
 function ProposalView() {
@@ -1034,12 +1110,12 @@ function ProposalView() {
   }, [breakdownExportOpen]);
 
   useEffect(() => {
-    if (!customerBreakdownVersionId) {
+    if (!customerBreakdownVersionId && !cogsBreakdownVersionId) {
       setBreakdownExportOpen(false);
       setBreakdownExporting(false);
       setBreakdownExportActive(false);
     }
-  }, [customerBreakdownVersionId]);
+  }, [customerBreakdownVersionId, cogsBreakdownVersionId]);
 
   useEffect(() => {
     if (!contractExportOpen) return;
@@ -1573,6 +1649,7 @@ function ProposalView() {
 
   const getBreakdownExportFilename = () => {
     const customerName =
+      cogsModalView?.proposal?.customerInfo?.customerName ||
       customerModalView?.proposal?.customerInfo?.customerName ||
       proposal?.customerInfo?.customerName ||
       'Proposal';
@@ -1580,7 +1657,51 @@ function ProposalView() {
     const formattedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
       today.getDate()
     ).padStart(2, '0')}`;
+    if (cogsModalView) {
+      return `${customerName}-cogs-cost-breakdown-${formattedDate}.pdf`;
+    }
     return `${customerName}-job-cost-summary-warranty-${formattedDate}.pdf`;
+  };
+
+  const getBreakdownPrintPreviewMeta = (): BreakdownPrintPreviewMeta => {
+    if (cogsModalView) {
+      return {
+        eyebrow: 'COGS Breakdown',
+        title: 'COGS Cost Breakdown',
+      };
+    }
+
+    return {
+      eyebrow: 'Customer Cost & Warranty Breakdown',
+      title: 'Job Cost Summary & Warranty',
+    };
+  };
+
+  const waitForBreakdownImages = async (root: HTMLElement | null) => {
+    if (!root) return;
+    const images = Array.from(root.querySelectorAll<HTMLImageElement>('img'));
+    if (!images.length) return;
+
+    await Promise.all(
+      images.map(
+        (image) =>
+          new Promise<void>((resolve) => {
+            if (image.complete) {
+              resolve();
+              return;
+            }
+
+            const finish = () => {
+              image.removeEventListener('load', finish);
+              image.removeEventListener('error', finish);
+              resolve();
+            };
+
+            image.addEventListener('load', finish);
+            image.addEventListener('error', finish);
+          })
+      )
+    );
   };
 
   const prepareBreakdownExport = async () => {
@@ -1591,36 +1712,97 @@ function ProposalView() {
     setBreakdownExportActive(true);
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (breakdownExportAreaRef.current?.querySelector('.export-breakdown-page')) {
+        break;
+      }
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    }
+    await document.fonts?.ready;
+    await waitForBreakdownImages(breakdownExportAreaRef.current);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+  };
+
+  const renderBreakdownPrintPreviewPages = async (): Promise<string[]> => {
+    const { default: html2canvas } = await import('html2canvas');
+    const exportArea = breakdownExportAreaRef.current;
+    const pages = exportArea
+      ? Array.from(exportArea.querySelectorAll<HTMLElement>('.export-breakdown-page'))
+      : [];
+    if (!pages.length) {
+      throw new Error('No breakdown pages available for print preview.');
+    }
+
+    const pageImages: string[] = [];
+    for (let i = 0; i < pages.length; i += 1) {
+      const canvas = await html2canvas(pages[i], {
+        scale: 2.5,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
+      pageImages.push(canvas.toDataURL('image/png'));
+    }
+
+    return pageImages;
   };
 
   const handleBreakdownPrint = async () => {
     if (breakdownExporting) return;
     setBreakdownExportOpen(false);
+    const filename = getBreakdownExportFilename();
+    const previewMeta = getBreakdownPrintPreviewMeta();
+    const previewWindow = openBreakdownPrintPreviewWindow(filename, previewMeta);
+    let deferCleanupToAfterPrint = false;
     setBreakdownExporting(true);
     try {
       await prepareBreakdownExport();
+
+      if (!previewWindow) {
+        deferCleanupToAfterPrint = true;
+        let didCleanup = false;
+        const cleanup = () => {
+          if (didCleanup) return;
+          didCleanup = true;
+          document.body.classList.remove('breakdown-print-mode');
+          setBreakdownExportActive(false);
+          setBreakdownExporting(false);
+          window.removeEventListener('afterprint', cleanup);
+        };
+
+        document.body.classList.add('breakdown-print-mode');
+        window.addEventListener('afterprint', cleanup);
+        window.print();
+        setTimeout(cleanup, 1200);
+        return;
+      }
+
+      if (previewWindow.closed) {
+        return;
+      }
+
+      const pageImages = await renderBreakdownPrintPreviewPages();
+      if (previewWindow.closed) {
+        return;
+      }
+      showBreakdownPrintPreviewPages(previewWindow, filename, previewMeta, pageImages);
     } catch (error) {
       console.error('Failed to prepare breakdown export', error);
+      if (previewWindow && !previewWindow.closed) {
+        showBreakdownPrintPreviewError(
+          previewWindow,
+          filename,
+          previewMeta,
+          'Could not open the breakdown print preview.'
+        );
+      }
       showToast({ type: 'error', message: 'Could not prepare breakdown export.' });
-      setBreakdownExporting(false);
+    } finally {
+      if (deferCleanupToAfterPrint) {
+        return;
+      }
       setBreakdownExportActive(false);
-      return;
+      setBreakdownExporting(false);
     }
-
-    let didCleanup = false;
-    const cleanup = () => {
-      if (didCleanup) return;
-      didCleanup = true;
-      document.body.classList.remove('breakdown-print-mode');
-      setBreakdownExportActive(false);
-      setBreakdownExporting(false);
-      window.removeEventListener('afterprint', cleanup);
-    };
-
-    document.body.classList.add('breakdown-print-mode');
-    window.addEventListener('afterprint', cleanup);
-    window.print();
-    setTimeout(cleanup, 1200);
   };
 
   const exportBreakdownPdfFallback = async (filename: string) => {
@@ -1641,7 +1823,6 @@ function ProposalView() {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        ignoreElements: (element) => element.tagName === 'IMG',
       });
       const imgData = canvas.toDataURL('image/png');
       if (i > 0) {
@@ -2737,6 +2918,7 @@ function ProposalView() {
   const shouldRenderBreakdownExport = breakdownExportActive || breakdownExporting;
   const ContractViewComponent = loadedContractView;
   const BreakdownCostExportPageComponent = loadedBreakdownExportPages?.BreakdownCostExportPage;
+  const BreakdownCogsExportPagesComponent = loadedBreakdownExportPages?.BreakdownCogsExportPages;
   const BreakdownWarrantyExportPagesComponent = loadedBreakdownExportPages?.BreakdownWarrantyExportPages;
 
   const categoryTotal = (items: CostLineItem[] = []): number =>
@@ -4211,6 +4393,46 @@ function ProposalView() {
             </button>
 
             <div className="cogs-header-info">
+              <div className="cogs-header-bar">
+                <div className="export-control" ref={breakdownExportControlRef}>
+                  <button
+                    className={`action-button export-button ${breakdownExportOpen ? 'open' : ''}`}
+                    type="button"
+                    onClick={handleBreakdownExportToggle}
+                    disabled={breakdownExporting}
+                    aria-expanded={breakdownExportOpen}
+                    aria-haspopup="listbox"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M3 3h10v10H3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                      <path d="M5 7h6M5 9h6M5 11h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    Export
+                  </button>
+                  {breakdownExportOpen && (
+                    <div className="export-dropdown" role="listbox">
+                      <button
+                        type="button"
+                        className="export-option"
+                        role="option"
+                        onClick={handleBreakdownPrint}
+                        disabled={breakdownExporting}
+                      >
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        className="export-option"
+                        role="option"
+                        onClick={handleBreakdownPdf}
+                        disabled={breakdownExporting}
+                      >
+                        PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="cogs-header-content">
                 <div>
                   <p className="cogs-header-eyebrow">COGS Cost Breakdown</p>
@@ -4361,6 +4583,20 @@ function ProposalView() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {canViewCogsBreakdown && cogsBreakdownVersionId && cogsModalView && shouldRenderBreakdownExport && BreakdownCogsExportPagesComponent && (
+        <div
+          className={`export-print-area ${breakdownExportActive ? 'print-mode' : ''}`}
+          ref={breakdownExportAreaRef}
+          aria-hidden="true"
+        >
+          <BreakdownCogsExportPagesComponent
+            categories={cogsModalView.costLineItems}
+            proposal={cogsModalView.proposal}
+            totalValue={cogsModalView.totalCOGS}
+            totalLabel="Total COGS"
+          />
         </div>
       )}
 

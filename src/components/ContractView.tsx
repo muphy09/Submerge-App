@@ -25,6 +25,7 @@ import {
 import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
 import { ContractTemplateId, getContractTemplateIdForProposal } from '../services/contractTemplates';
 import { useToast } from './Toast';
+import { TooltipAnchor } from './AppTooltip';
 import './ContractView.css';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -1313,26 +1314,28 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
           {pdfBytes && pageCount ? (
             <div className="contract-zoom-controls" aria-label="Contract zoom controls">
               <div className="contract-zoom-controls-inner">
-                <button
-                  type="button"
-                  className="contract-zoom-button"
-                  onClick={handleZoomOut}
-                  disabled={!canZoomOut}
-                  aria-label="Zoom out contract preview"
-                  title="Zoom out"
-                >
-                  <ZoomIcon direction="out" />
-                </button>
-                <button
-                  type="button"
-                  className="contract-zoom-button"
-                  onClick={handleZoomIn}
-                  disabled={!canZoomIn}
-                  aria-label="Zoom in contract preview"
-                  title="Zoom in"
-                >
-                  <ZoomIcon direction="in" />
-                </button>
+                <TooltipAnchor tooltip="Zoom out">
+                  <button
+                    type="button"
+                    className="contract-zoom-button"
+                    onClick={handleZoomOut}
+                    disabled={!canZoomOut}
+                    aria-label="Zoom out contract preview"
+                  >
+                    <ZoomIcon direction="out" />
+                  </button>
+                </TooltipAnchor>
+                <TooltipAnchor tooltip="Zoom in">
+                  <button
+                    type="button"
+                    className="contract-zoom-button"
+                    onClick={handleZoomIn}
+                    disabled={!canZoomIn}
+                    aria-label="Zoom in contract preview"
+                  >
+                    <ZoomIcon direction="in" />
+                  </button>
+                </TooltipAnchor>
               </div>
             </div>
           ) : null}

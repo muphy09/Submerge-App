@@ -1,0 +1,60 @@
+.app-tooltip-anchor,
+.app-tooltip-target {
+  position: relative;
+  max-width: 100%;
+}
+
+.app-tooltip-anchor {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.app-tooltip-anchor--block {
+  display: block;
+  width: 100%;
+}
+
+.app-tooltip-anchor > * {
+  max-width: 100%;
+}
+
+.app-tooltip-floating {
+  position: fixed;
+  transform: translateX(-50%);
+  width: max-content;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(132, 184, 220, 0.28);
+  background: linear-gradient(180deg, #183450 0%, #274c71 100%);
+  color: #f8fbff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.24);
+  z-index: 1200;
+}
+
+.app-tooltip-floating-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-style: solid;
+}
+
+.app-tooltip-floating[data-placement='top'] .app-tooltip-floating-arrow {
+  top: 100%;
+  border-width: 6px 6px 0;
+  border-color: #274c71 transparent transparent;
+}
+
+.app-tooltip-floating[data-placement='bottom'] .app-tooltip-floating-arrow {
+  bottom: 100%;
+  border-width: 0 6px 6px;
+  border-color: transparent transparent #183450 transparent;
+}

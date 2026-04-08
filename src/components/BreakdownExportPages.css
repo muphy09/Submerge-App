@@ -1,4 +1,5 @@
 .breakdown-export-cost-sheet,
+.breakdown-export-cogs-sheet,
 .breakdown-export-warranty-sheet {
   width: 100%;
   color: #16253f;
@@ -12,6 +13,17 @@
   padding: 0.28in 0.3in;
   box-sizing: border-box;
   min-height: 9.9in;
+  display: flex;
+  flex-direction: column;
+}
+
+.breakdown-export-cogs-sheet {
+  border: 1px solid #d7e0ee;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.3in 0.26in 0.24in;
+  box-sizing: border-box;
+  min-height: 9.95in;
   display: flex;
   flex-direction: column;
 }
@@ -35,6 +47,10 @@
   gap: 0.35in;
   border-bottom: 1px solid #dce5f2;
   padding-bottom: 0.14in;
+  margin-bottom: 0.18in;
+}
+
+.breakdown-export-cogs-header {
   margin-bottom: 0.18in;
 }
 
@@ -135,6 +151,151 @@
 
 .breakdown-export-total span:last-child {
   font-family: 'Courier New', monospace;
+}
+
+.breakdown-export-cogs-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.16in;
+  align-items: start;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.breakdown-export-cogs-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16in;
+  min-height: 0;
+}
+
+.breakdown-export-cogs-empty {
+  grid-column: 1 / -1;
+  padding: 0.28in 0.22in;
+  border: 1px dashed #d4deea;
+  border-radius: 12px;
+  background: #f8fafc;
+  text-align: center;
+  color: #56697f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-info {
+  padding: 20px 22px;
+  border-radius: 12px;
+  border: 1px solid #e5ebf1;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-content {
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 0.24in;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-eyebrow {
+  font-size: 11px;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-title {
+  font-size: 30px;
+  line-height: 1.08;
+  margin-bottom: 0.12in;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-details {
+  gap: 3px;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-detail-item {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-logo img {
+  height: 56px;
+  display: block;
+  margin: 0;
+}
+
+.breakdown-export-cogs-sheet .cogs-header-logo {
+  align-self: flex-start !important;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-card {
+  margin-bottom: 0;
+  box-shadow: none;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-card-header {
+  padding: 12px 14px;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-title {
+  font-size: 14px;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-total {
+  font-size: 14px;
+}
+
+.breakdown-export-cogs-sheet .cogs-subcategory:not(:first-child) {
+  margin-top: 16px;
+}
+
+.breakdown-export-cogs-sheet .cogs-subcategory-header {
+  padding: 8px 14px;
+  font-size: 11.5px;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table {
+  font-size: 11px;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table th {
+  padding: 8px 12px;
+  font-size: 10px;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table td {
+  padding: 7px 12px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table tbody tr:hover {
+  background: transparent;
+}
+
+.breakdown-export-cogs-footer {
+  margin-top: 0.18in;
+  padding: 14px 18px;
+}
+
+.breakdown-export-cogs-footer .cogs-footer-text {
+  font-size: 16px;
+}
+
+.breakdown-export-cogs-measure {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 7.7in;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.breakdown-export-cogs-measure .breakdown-export-cogs-sheet {
+  min-height: 0;
 }
 
 .breakdown-export-warranty-list {
@@ -259,8 +420,19 @@
   min-height: 0;
 }
 
+.export-breakdown-page--cogs {
+  padding-top: 0.5in;
+  box-sizing: border-box;
+}
+
 @media print {
+  .breakdown-export-cogs-measure,
+  .breakdown-export-warranty-measure {
+    display: none !important;
+  }
+
   .breakdown-export-cost-sheet,
+  .breakdown-export-cogs-sheet,
   .breakdown-export-warranty-sheet {
     box-shadow: none;
   }

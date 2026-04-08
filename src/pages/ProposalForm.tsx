@@ -32,6 +32,7 @@ import InteriorFinishSectionNew from '../components/InteriorFinishSectionNew';
 import CustomFeaturesSectionNew from '../components/CustomFeaturesSectionNew';
 import CostBreakdownView from '../components/CostBreakdownView';
 import CostBreakdownPage from '../components/CostBreakdownPage';
+import { TooltipAnchor } from '../components/AppTooltip';
 import FranchiseLogo from '../components/FranchiseLogo';
 import './ProposalForm.css';
 import customerProposalIcon from '../../CustomerProposalIcon.png';
@@ -2050,7 +2051,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                 setNavManuallyToggled(true);
                 setShowLeftNav(false);
               }}
-              title="Hide navigation"
             >
               <h3>Navigation</h3>
             </div>
@@ -2061,7 +2061,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                 setNavManuallyToggled(true);
                 setShowLeftNav(false);
               }}
-              title="Hide navigation"
               aria-label="Hide navigation"
             >
               {'<'}
@@ -2076,7 +2075,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                       e.stopPropagation();
                       setShowCostBreakdownPage(true);
                     }}
-                    title="View Cost Breakdown"
                   >
                     <img src={costBreakIconImg} alt="Cost Breakdown" className="button-icon cost-break-icon" />
                     <span className="cost-modal-label">Cost Breakdown</span>
@@ -2090,7 +2088,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                     setShowCostModal(true);
                   }}
                   aria-label="View Customer Cost and Warranty Breakdown"
-                  title="View Customer Proposal"
                 >
                   <img src={customerProposalIcon} alt="Customer Proposal" className="button-icon" />
                   <span className="cost-modal-label">Customer Proposal</span>
@@ -2125,8 +2122,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               setNavManuallyToggled(true);
               setShowLeftNav(true);
             }}
-            title="Show navigation"
-            data-tooltip="Click to reveal Navigation"
           >
             &gt;
           </button>
@@ -2138,14 +2133,15 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               <div className="section-title-pricing">{pricingModelControl}</div>
               <h2 className="section-title">{sections[currentSection]?.label}</h2>
               <div className="section-title-actions">
-                <button
-                  className="btn btn-success"
-                  onClick={handleProposalSummaryClick}
-                  disabled={isSaving || isOffline}
-                  title={proposalSummaryTooltip}
-                >
-                  Proposal Summary
-                </button>
+                <TooltipAnchor tooltip={proposalSummaryTooltip}>
+                  <button
+                    className="btn btn-success"
+                    onClick={handleProposalSummaryClick}
+                    disabled={isSaving || isOffline}
+                  >
+                    Proposal Summary
+                  </button>
+                </TooltipAnchor>
               </div>
             </div>
             {renderSection()}

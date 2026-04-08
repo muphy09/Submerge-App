@@ -749,6 +749,14 @@ select.compact-input {
   margin-bottom: 20px;
 }
 
+.pool-type-button-tooltip {
+  flex: 1 1 0;
+}
+
+.pool-type-button-tooltip > .pool-type-btn {
+  width: 100%;
+}
+
 .pool-type-buttons.auto-cover-toggle {
   margin-bottom: 8px;
 }

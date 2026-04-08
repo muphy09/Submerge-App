@@ -1,3 +1,10 @@
+## [2.2.10] - 4/8/26
+### Fixed
+- Tooltips should all render in the proper app style now
+### Improvements
+- COGS Breakdown can now be exported to PDF and Print
+- Customer Cost & Warranty Breakdown now has a Print Preview
+-----
 ## [2.2.9] - 4/6/26
 ### Fixed
 - Legacy equipment data no longer fills into blank proposals

@@ -32,6 +32,7 @@ import {
 } from '../utils/equipmentPackages';
 import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpSelections';
 import { getNoPumpSelection } from '../utils/pumpDefaults';
+import { TooltipAnchor } from './AppTooltip';
 import CustomOptionsSection from './CustomOptionsSection';
 import RetiredEquipmentIndicator from './RetiredEquipmentIndicator';
 import './SectionStyles.css';
@@ -1559,29 +1560,29 @@ function EquipmentSectionNew({
             const packageStatusClass = isSelected ? 'selected' : isDisabled ? 'disabled' : 'available';
             const packageDescription = getPackageButtonDescription(option);
             return (
-              <button
-                key={option.id}
-                type="button"
-                className={`equipment-package-button ${isSelected ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
-                title={buttonTitle}
-                aria-disabled={isDisabled}
-                aria-pressed={isSelected}
-                onClick={() => {
-                  if (isDisabled) return;
-                  if (option.id !== selectedPackage?.id) {
-                    onSelectPackage(option.id);
-                  }
-                }}
-              >
-                <span className="equipment-package-button__header">
-                  <span className="equipment-package-button__eyebrow">{isCustom ? 'Custom build' : 'Fixed bundle'}</span>
-                  <span className={`equipment-package-button__status ${packageStatusClass}`}>{packageStatusLabel}</span>
-                </span>
-                <span className="equipment-package-button__title">{option.name}</span>
-                {packageDescription && (
-                  <span className="equipment-package-button__description">{packageDescription}</span>
-                )}
-              </button>
+              <TooltipAnchor key={option.id} as="div" tooltip={buttonTitle}>
+                <button
+                  type="button"
+                  className={`equipment-package-button ${isSelected ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+                  aria-disabled={isDisabled}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    if (isDisabled) return;
+                    if (option.id !== selectedPackage?.id) {
+                      onSelectPackage(option.id);
+                    }
+                  }}
+                >
+                  <span className="equipment-package-button__header">
+                    <span className="equipment-package-button__eyebrow">{isCustom ? 'Custom build' : 'Fixed bundle'}</span>
+                    <span className={`equipment-package-button__status ${packageStatusClass}`}>{packageStatusLabel}</span>
+                  </span>
+                  <span className="equipment-package-button__title">{option.name}</span>
+                  {packageDescription && (
+                    <span className="equipment-package-button__description">{packageDescription}</span>
+                  )}
+                </button>
+              </TooltipAnchor>
             );
           })}
         </div>
@@ -1675,18 +1676,21 @@ function EquipmentSectionNew({
                       </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  className="link-btn danger"
-                  onClick={() => removeAuxiliaryPump(idx)}
-                  title={
+                <TooltipAnchor
+                  tooltip={
                     pump?.autoAddedReason === 'waterFeature'
                       ? 'This pump will be added again while the package still needs it for water features.'
                       : undefined
                   }
                 >
-                  Remove
-                </button>
+                  <button
+                    type="button"
+                    className="link-btn danger"
+                    onClick={() => removeAuxiliaryPump(idx)}
+                  >
+                    Remove
+                  </button>
+                </TooltipAnchor>
               </div>
               {pump?.autoAddedForSpa && (
                 <small className="form-help">Auto-added for spa.</small>
@@ -1711,15 +1715,18 @@ function EquipmentSectionNew({
                   Add Additional Pump
                 </button>
               )}
-              <button
-                type="button"
-                className="action-btn secondary"
-                onClick={addAuxiliaryPump}
-                disabled={auxiliaryPumps.length >= maxAuxiliaryPumps}
-                title={auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum auxiliary pumps reached.' : undefined}
+              <TooltipAnchor
+                tooltip={auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum auxiliary pumps reached.' : undefined}
               >
-                Add Auxiliary Pump
-              </button>
+                <button
+                  type="button"
+                  className="action-btn secondary"
+                  onClick={addAuxiliaryPump}
+                  disabled={auxiliaryPumps.length >= maxAuxiliaryPumps}
+                >
+                  Add Auxiliary Pump
+                </button>
+              </TooltipAnchor>
             </div>
           )}
           </div>
@@ -1788,21 +1795,25 @@ function EquipmentSectionNew({
               : (
                 <div className="spec-field">
                   <LabelWithRetired text="Cleaner" showRetired={retiredFlags.cleaner} />
-                  <select
-                    className="compact-input equipment-select"
-                    value={includeCleaner ? safeData.cleaner.name : noneOptionValue}
-                    onChange={(e) => handleCleanerSelect(e.target.value)}
-                    disabled={cleanerDisabledByPackage}
-                    title={cleanerDisabledByPackage ? 'This equipment package does not allow cleaner upgrades.' : undefined}
+                  <TooltipAnchor
+                    as="div"
+                    tooltip={cleanerDisabledByPackage ? 'This equipment package does not allow cleaner upgrades.' : undefined}
                   >
-                    <option value={noneOptionValue}>None</option>
-                    {retiredFlags.cleaner && renderRetiredOption(safeData.cleaner.name)}
-                    {cleanerOptions.map(cleaner => (
-                      <option key={cleaner.name} value={cleaner.name}>
-                        {formatOptionLabel(cleaner.name, costOf(cleaner))}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      className="compact-input equipment-select"
+                      value={includeCleaner ? safeData.cleaner.name : noneOptionValue}
+                      onChange={(e) => handleCleanerSelect(e.target.value)}
+                      disabled={cleanerDisabledByPackage}
+                    >
+                      <option value={noneOptionValue}>None</option>
+                      {retiredFlags.cleaner && renderRetiredOption(safeData.cleaner.name)}
+                      {cleanerOptions.map(cleaner => (
+                        <option key={cleaner.name} value={cleaner.name}>
+                          {formatOptionLabel(cleaner.name, costOf(cleaner))}
+                        </option>
+                      ))}
+                    </select>
+                  </TooltipAnchor>
                   {cleanerDisabledByPackage && (
                     <small className="form-help">This equipment package does not allow cleaner upgrades.</small>
                   )}
@@ -1853,21 +1864,25 @@ function EquipmentSectionNew({
               : (
                 <div className="spec-field">
                   <LabelWithRetired text="Heater Model" showRetired={retiredFlags.heater} />
-                  <select
-                    className="compact-input equipment-select"
-                    value={includeHeater ? safeData.heater.name : noneOptionValue}
-                    onChange={(e) => handleHeaterSelect(e.target.value)}
-                    disabled={heaterDisabledByPackage}
-                    title={heaterDisabledByPackage ? 'This equipment package does not allow heater upgrades.' : undefined}
+                  <TooltipAnchor
+                    as="div"
+                    tooltip={heaterDisabledByPackage ? 'This equipment package does not allow heater upgrades.' : undefined}
                   >
-                    <option value={noneOptionValue}>None</option>
-                    {retiredFlags.heater && renderRetiredOption(safeData.heater.name)}
-                    {heaterOptions.map(heater => (
-                      <option key={heater.name} value={heater.name}>
-                        {formatOptionLabel(heater.name, costOf(heater))}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      className="compact-input equipment-select"
+                      value={includeHeater ? safeData.heater.name : noneOptionValue}
+                      onChange={(e) => handleHeaterSelect(e.target.value)}
+                      disabled={heaterDisabledByPackage}
+                    >
+                      <option value={noneOptionValue}>None</option>
+                      {retiredFlags.heater && renderRetiredOption(safeData.heater.name)}
+                      {heaterOptions.map(heater => (
+                        <option key={heater.name} value={heater.name}>
+                          {formatOptionLabel(heater.name, costOf(heater))}
+                        </option>
+                      ))}
+                    </select>
+                  </TooltipAnchor>
                   {heaterDisabledByPackage && (
                     <small className="form-help">This equipment package does not allow heater upgrades.</small>
                   )}
@@ -1960,15 +1975,16 @@ function EquipmentSectionNew({
             ))}
 
             <div className="action-row" style={{ marginTop: '12px' }}>
-              <button
-                type="button"
-                className="action-btn secondary"
-                onClick={addPoolLight}
-                disabled={Boolean(addPoolLightDisabledReason)}
-                title={addPoolLightDisabledReason}
-              >
-                Add another Pool Light
-              </button>
+              <TooltipAnchor tooltip={addPoolLightDisabledReason}>
+                <button
+                  type="button"
+                  className="action-btn secondary"
+                  onClick={addPoolLight}
+                  disabled={Boolean(addPoolLightDisabledReason)}
+                >
+                  Add another Pool Light
+                </button>
+              </TooltipAnchor>
             </div>
           </>
         )}
@@ -1989,21 +2005,22 @@ function EquipmentSectionNew({
               : (
                 <div className="spec-field">
                   <LabelWithRetired text="Spa Light (Added Automatically)" showRetired={retiredFlags.spaLights[0]} />
-                  <select
-                    className="compact-input equipment-select"
-                    value={includeSpaLights && spaLights.length > 0 ? spaLights[0]?.name || noneOptionValue : noneOptionValue}
-                    onChange={(e) => handleSpaLightSelect(e.target.value)}
-                    disabled={Boolean(addSpaLightDisabledReason)}
-                    title={addSpaLightDisabledReason}
-                  >
-                    <option value={noneOptionValue}>None</option>
-                    {retiredFlags.spaLights[0] && renderRetiredOption(spaLights[0]?.name)}
-                    {spaLightOptions.map(option => (
-                      <option key={option.name} value={option.name}>
-                        {formatOptionLabel(option.name, costOf(option))}
-                      </option>
-                    ))}
-                  </select>
+                  <TooltipAnchor as="div" tooltip={addSpaLightDisabledReason}>
+                    <select
+                      className="compact-input equipment-select"
+                      value={includeSpaLights && spaLights.length > 0 ? spaLights[0]?.name || noneOptionValue : noneOptionValue}
+                      onChange={(e) => handleSpaLightSelect(e.target.value)}
+                      disabled={Boolean(addSpaLightDisabledReason)}
+                    >
+                      <option value={noneOptionValue}>None</option>
+                      {retiredFlags.spaLights[0] && renderRetiredOption(spaLights[0]?.name)}
+                      {spaLightOptions.map(option => (
+                        <option key={option.name} value={option.name}>
+                          {formatOptionLabel(option.name, costOf(option))}
+                        </option>
+                      ))}
+                    </select>
+                  </TooltipAnchor>
                   {addSpaLightDisabledReason && (
                     <small className="form-help">This equipment package does not allow spa light upgrades.</small>
                   )}
@@ -2038,15 +2055,16 @@ function EquipmentSectionNew({
               ))}
 
               <div className="action-row" style={{ marginTop: '12px' }}>
-                <button
-                  type="button"
-                  className="action-btn secondary"
-                  onClick={addSpaLight}
-                  disabled={Boolean(addSpaLightDisabledReason)}
-                  title={addSpaLightDisabledReason}
-                >
-                  Add another Spa Light
-                </button>
+                <TooltipAnchor tooltip={addSpaLightDisabledReason}>
+                  <button
+                    type="button"
+                    className="action-btn secondary"
+                    onClick={addSpaLight}
+                    disabled={Boolean(addSpaLightDisabledReason)}
+                  >
+                    Add another Spa Light
+                  </button>
+                </TooltipAnchor>
               </div>
             </>
           )}
@@ -2068,21 +2086,25 @@ function EquipmentSectionNew({
               : (
                 <div className="spec-field">
                   <LabelWithRetired text="Automation System" showRetired={retiredFlags.automation} />
-                  <select
-                    className="compact-input equipment-select"
-                    value={includeAutomation ? safeData.automation.name : noneOptionValue}
-                    onChange={(e) => handleAutomationSelect(e.target.value)}
-                    disabled={automationDisabledByPackage}
-                    title={automationDisabledByPackage ? 'This equipment package does not allow automation changes.' : undefined}
+                  <TooltipAnchor
+                    as="div"
+                    tooltip={automationDisabledByPackage ? 'This equipment package does not allow automation changes.' : undefined}
                   >
-                    <option value={noneOptionValue}>None</option>
-                    {retiredFlags.automation && renderRetiredOption(safeData.automation.name)}
-                    {automationOptions.map(option => (
-                      <option key={option.name} value={option.name}>
-                        {formatOptionLabel(option.name, costOf(option))}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      className="compact-input equipment-select"
+                      value={includeAutomation ? safeData.automation.name : noneOptionValue}
+                      onChange={(e) => handleAutomationSelect(e.target.value)}
+                      disabled={automationDisabledByPackage}
+                    >
+                      <option value={noneOptionValue}>None</option>
+                      {retiredFlags.automation && renderRetiredOption(safeData.automation.name)}
+                      {automationOptions.map(option => (
+                        <option key={option.name} value={option.name}>
+                          {formatOptionLabel(option.name, costOf(option))}
+                        </option>
+                      ))}
+                    </select>
+                  </TooltipAnchor>
                   {automationDisabledByPackage && (
                     <small className="form-help">Automation is locked by the selected equipment package.</small>
                   )}
@@ -2146,26 +2168,30 @@ function EquipmentSectionNew({
           {showAdditionalSanitationOptions && (
             <div className="spec-field">
               <label className="spec-label">Additional Options</label>
-              <select
-                className="compact-input equipment-select"
-                value={additionalSanitationOptionSelectedName || noneOptionValue}
-                onChange={(e) => handleAdditionalSanitationOptionChange(e.target.value)}
-                disabled={additionalSanitationDisabledByPackage}
-                title={
+              <TooltipAnchor
+                as="div"
+                tooltip={
                   additionalSanitationDisabledByPackage
                     ? 'This equipment package does not allow additional sanitation upgrades.'
                     : undefined
                 }
               >
-                <option value={noneOptionValue}>None</option>
-                {additionalSanitationOptionMissingFromCatalog &&
-                  renderRetiredOption(additionalSanitationOptionSelectedName)}
-                {additionalSanitationOptions.map(option => (
-                  <option key={option.name} value={option.name}>
-                    {formatOptionLabel(option.name, costOf(option))}
-                  </option>
-                ))}
-              </select>
+                <select
+                  className="compact-input equipment-select"
+                  value={additionalSanitationOptionSelectedName || noneOptionValue}
+                  onChange={(e) => handleAdditionalSanitationOptionChange(e.target.value)}
+                  disabled={additionalSanitationDisabledByPackage}
+                >
+                  <option value={noneOptionValue}>None</option>
+                  {additionalSanitationOptionMissingFromCatalog &&
+                    renderRetiredOption(additionalSanitationOptionSelectedName)}
+                  {additionalSanitationOptions.map(option => (
+                    <option key={option.name} value={option.name}>
+                      {formatOptionLabel(option.name, costOf(option))}
+                    </option>
+                  ))}
+                </select>
+              </TooltipAnchor>
               {additionalSanitationDisabledByPackage && (
                 <small className="form-help">This equipment package does not allow additional sanitation upgrades.</small>
               )}
@@ -2231,21 +2257,25 @@ function EquipmentSectionNew({
             : (
               <div className="spec-field">
                 <LabelWithRetired text="Auto-Fill System" showRetired={retiredFlags.autoFillSystem} />
-                <select
-                  className="compact-input equipment-select"
-                  value={includeAutoFill ? safeData.autoFillSystem?.name || noneOptionValue : noneOptionValue}
-                  onChange={(e) => handleAutoFillSelect(e.target.value)}
-                  disabled={autoFillDisabledByPackage}
-                  title={autoFillDisabledByPackage ? 'This equipment package does not allow auto-fill upgrades.' : undefined}
+                <TooltipAnchor
+                  as="div"
+                  tooltip={autoFillDisabledByPackage ? 'This equipment package does not allow auto-fill upgrades.' : undefined}
                 >
-                  <option value={noneOptionValue}>None</option>
-                  {retiredFlags.autoFillSystem && renderRetiredOption(safeData.autoFillSystem?.name)}
-                  {autoFillOptions.map(system => (
-                    <option key={system.name} value={system.name}>
-                      {formatOptionLabel(system.name, costOf(system))}
-                    </option>
-                  ))}
-                </select>
+                  <select
+                    className="compact-input equipment-select"
+                    value={includeAutoFill ? safeData.autoFillSystem?.name || noneOptionValue : noneOptionValue}
+                    onChange={(e) => handleAutoFillSelect(e.target.value)}
+                    disabled={autoFillDisabledByPackage}
+                  >
+                    <option value={noneOptionValue}>None</option>
+                    {retiredFlags.autoFillSystem && renderRetiredOption(safeData.autoFillSystem?.name)}
+                    {autoFillOptions.map(system => (
+                      <option key={system.name} value={system.name}>
+                        {formatOptionLabel(system.name, costOf(system))}
+                      </option>
+                    ))}
+                  </select>
+                </TooltipAnchor>
                 {autoFillDisabledByPackage && (
                   <small className="form-help">This equipment package does not allow auto-fill upgrades.</small>
                 )}
