@@ -1,3 +1,7 @@
+## [2.2.16] - 4/9/26
+### Hotfix
+- Proposal builder was not allowing the Sanitation and Autofill categories to be selected
+-----
 ## [2.2.15] - 4/9/26
 ### Hotfix
 - Price drifts while creating additional proposal versions solved

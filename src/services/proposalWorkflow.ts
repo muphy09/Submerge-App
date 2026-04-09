@@ -2041,15 +2041,63 @@ export function markWorkflowRead(proposal: Proposal, userId?: string | null): Pr
   };
 }
 
+function getWorkflowNotificationVersionIds(proposal: Proposal) {
+  const normalized = ensureProposalWorkflow(proposal);
+  const status = getWorkflowStatus(normalized);
+  if (status === 'draft' || status === 'changes_requested') return [];
+
+  const latestSignedBaselineVersionId = getLatestSignedBaselineVersionId(normalized);
+  const approvedVersionId = getApprovedVersionId(normalized);
+  const unsignedApprovedVersionId =
+    approvedVersionId && approvedVersionId !== latestSignedBaselineVersionId ? approvedVersionId : null;
+
+  return dedupeVersionIds(
+    [
+      getSignedVersionId(normalized),
+      ...getSignedAddendumVersionIds(normalized),
+      getPendingReviewVersionId(normalized),
+      unsignedApprovedVersionId,
+    ],
+    getReviewVersionId(normalized)
+  );
+}
+
+function isWorkflowEventUnreadForUser(entry: ProposalWorkflowEvent, userId: string) {
+  if ((entry.actor?.userId || '') === userId) return false;
+  return !(entry.readByUserIds || []).includes(userId);
+}
+
+// A proposal version should only contribute one unread notification, even if it
+// has moved through submitted, approved, signed, or completed while still unseen.
+function hasUnreadWorkflowNotificationForVersion(
+  history: ProposalWorkflowEvent[],
+  versionId: string,
+  userId: string
+) {
+  const matchingEvents = history.filter(
+    (entry) => (normalizeText(entry.versionId) || ORIGINAL_VERSION_ID) === versionId
+  );
+  if (matchingEvents.length === 0) return false;
+
+  const submittedEvents = matchingEvents.filter((entry) => entry.type === 'submitted');
+  if (submittedEvents.length > 0) {
+    return submittedEvents.some((entry) => isWorkflowEventUnreadForUser(entry, userId));
+  }
+
+  return matchingEvents.some((entry) => {
+    if (entry.type === 'note' || entry.type === 'changes_requested') return false;
+    return isWorkflowEventUnreadForUser(entry, userId);
+  });
+}
+
 export function countUnreadWorkflowEvents(proposal: Proposal, userId?: string | null) {
   const normalizedUserId = normalizeText(userId);
   if (!normalizedUserId) return 0;
   const normalized = ensureProposalWorkflow(proposal);
   const history = normalizeHistory(normalized.workflow?.history);
-  return history.filter((entry) => {
-    if ((entry.actor?.userId || '') === normalizedUserId) return false;
-    return !(entry.readByUserIds || []).includes(normalizedUserId);
-  }).length;
+  return getWorkflowNotificationVersionIds(normalized).filter((versionId) =>
+    hasUnreadWorkflowNotificationForVersion(history, versionId, normalizedUserId)
+  ).length;
 }
 
 export function hasUnreadWorkflowEvents(proposal: Proposal, userId?: string | null) {

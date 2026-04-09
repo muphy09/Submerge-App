@@ -1284,23 +1284,52 @@ function EquipmentSectionNew({
 
   const toggleSalt = (val: boolean) => {
     setIncludeSalt(val);
-    if (!val) {
+    if (val) {
+      if (automationHasIncludedSaltCell) {
+        updateData({ saltSystem: buildIncludedSaltCellOption(), saltSystemQuantity: 0 });
+        return;
+      }
+
+      const selectedSystem =
+        isRealSaltSystemSelection(safeData.saltSystem) && !isExcludedFromSaltCell(safeData.saltSystem)
+          ? safeData.saltSystem
+          : primarySaltOptions[0] || selectableDefaults.saltSystem;
+      if (!selectedSystem) return;
+
       updateData({
-        saltSystem: undefined,
-        saltSystemQuantity: 0,
-        additionalSaltSystem: undefined,
-        sanitationAccessory: undefined,
-        sanitationAccessoryQuantity: 0,
+        saltSystem: buildSaltSystemSelection(selectedSystem),
+        saltSystemQuantity: Math.max(safeData.saltSystemQuantity ?? 1, 1),
       });
+      return;
     }
+
+    updateData({
+      saltSystem: undefined,
+      saltSystemQuantity: 0,
+      additionalSaltSystem: undefined,
+      sanitationAccessory: undefined,
+      sanitationAccessoryQuantity: 0,
+    });
   };
 
   const toggleAutoFill = (val: boolean) => {
     setIncludeAutoFill(val);
-    if (!val) {
-      updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
-      handleRunChange('autoFillRun', 0);
+    if (val) {
+      const selectedSystem = hasRealSelection(safeData.autoFillSystem?.name, 'no auto')
+        ? safeData.autoFillSystem
+        : autoFillOptions[0] || selectableDefaults.autoFillSystem || defaults.autoFillSystem;
+      if (!selectedSystem) return;
+
+      updateData({
+        autoFillSystem: buildAutoFillSelection(selectedSystem),
+        autoFillSystemQuantity: Math.max(safeData.autoFillSystemQuantity ?? 1, 1),
+        hasAutoFill: false,
+      });
+      return;
     }
+
+    updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
+    handleRunChange('autoFillRun', 0);
   };
 
   const handlePumpSelect = (name: string) => {
@@ -3167,9 +3196,7 @@ function EquipmentSectionNew({
 
             {autoFillEditing && (
               <>
-                <div
-                  className={`spec-grid-3-split auto-fill-grid ${autoFillRequiresElectric ? 'auto-fill-grid-electric' : ''}`}
-                >
+                <div className="spec-grid-3-split auto-fill-grid">
                   {packageIncludesAutoFill
                     ? renderReadOnlySelection(
                         'Auto-Fill System',
@@ -3215,21 +3242,9 @@ function EquipmentSectionNew({
 
                   {(includeAutoFill || packageIncludesAutoFill) && (
                     <div className="spec-field">
-                      <label className="spec-label">Auto-Fill Run</label>
-                      <CompactInput
-                        value={plumbingRuns.autoFillRun ?? 0}
-                        onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
-                        unit="LNFT"
-                        min="0"
-                        step="1"
-                        placeholder="0"
-                      />
-                    </div>
-                  )}
-
-                  {(includeAutoFill || packageIncludesAutoFill) && autoFillRequiresElectric && (
-                    <div className="spec-field">
-                      <label className="spec-label">Electric Run</label>
+                      <label className="spec-label">
+                        {autoFillRequiresElectric ? 'Auto-Fill Run & Electric' : 'Auto-Fill Run'}
+                      </label>
                       <CompactInput
                         value={plumbingRuns.autoFillRun ?? 0}
                         onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
