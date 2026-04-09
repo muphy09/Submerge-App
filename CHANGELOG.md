@@ -1,3 +1,7 @@
+## [2.2.14] - 4/9/26
+### Hotfix
+- Price drifts while creating additional proposal versions solved
+-----
 ## [2.2.13] - 4/9/26
 ### Fixed
 - Contract autofill fields when making a new version now correctly fill their data

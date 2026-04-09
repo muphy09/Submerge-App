@@ -92,6 +92,7 @@ type PricingModelStatus = 'active' | 'inactive' | 'removed';
 type ProposalVersionSyncMeta = {
   priceModelStatus: PricingModelStatus;
   equipmentFlags: RetiredEquipmentFlags;
+  pricingSnapshot?: Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>['pricing'];
 };
 
 type PricingModelDirectory = {
@@ -898,6 +899,7 @@ function ProposalView() {
           {
             priceModelStatus,
             equipmentFlags,
+            pricingSnapshot: priceModelStatus === 'removed' ? undefined : pricingSnapshot.pricing,
           },
         ] as const;
       })
@@ -1050,6 +1052,9 @@ function ProposalView() {
         ((await mergeWithPricingSnapshot(activeApplied)) as Proposal);
       if (requestId !== loadRequestRef.current) return;
 
+      const initialVersionSyncMeta = await resolveVersionSyncMetaEntries(allVersions, sourceProposal);
+      if (requestId !== loadRequestRef.current) return;
+
       await initPricingDataStore(
         activeVersion.franchiseId,
         activeVersion.pricingModelId || undefined,
@@ -1060,6 +1065,7 @@ function ProposalView() {
       setVersions(allVersions);
       setActiveVersionId(activeId);
       setSelectedVersionId(initialSelectedVersionId);
+      setVersionSyncMeta(initialVersionSyncMeta);
       setProposal(ensureProposalWorkflow({ ...(activeVersion as Proposal), workflow: sourceProposal.workflow, status: sourceProposal.status }));
     } catch (error) {
       if (requestId !== loadRequestRef.current) return;
@@ -2392,12 +2398,25 @@ function ProposalView() {
   };
 
   const buildViewModel = (input: Proposal) => {
-    const mergedProposal = mergeProposalWithDefaults(input) as Proposal;
+    const syncMeta = getCachedVersionSyncMeta(input) ?? getFrozenVersionSyncMeta(input);
+    const livePricingSnapshot = syncMeta.pricingSnapshot;
+    const canUseLivePricingSnapshot =
+      Boolean(proposal) &&
+      Boolean(livePricingSnapshot) &&
+      syncMeta.priceModelStatus !== 'removed' &&
+      shouldUseLiveVersionSync(proposal as Proposal, input);
+    const mergedProposal = canUseLivePricingSnapshot
+      ? (withTemporaryPricingSnapshot(livePricingSnapshot!, () => mergeProposalWithDefaults(input)) as Proposal)
+      : (input as Proposal);
     let calculated: ReturnType<typeof MasterPricingEngine.calculateCompleteProposal> | null = null;
-    try {
-      calculated = MasterPricingEngine.calculateCompleteProposal(mergedProposal, mergedProposal.papDiscounts);
-    } catch (error) {
-      console.error('Failed to recalculate proposal for view:', error);
+    if (canUseLivePricingSnapshot) {
+      try {
+        calculated = withTemporaryPricingSnapshot(livePricingSnapshot!, () =>
+          MasterPricingEngine.calculateCompleteProposal(mergedProposal, mergedProposal.papDiscounts)
+        );
+      } catch (error) {
+        console.error('Failed to recalculate proposal for view:', error);
+      }
     }
 
     const costBreakdownForDisplay = normalizeCostBreakdownForDisplay(
@@ -2481,7 +2500,6 @@ function ProposalView() {
 
     // Get the pricing model used for this proposal
     const priceModel = mergedProposal.pricingModelName || 'No Pricing Model';
-    const syncMeta = getCachedVersionSyncMeta(input) ?? getFrozenVersionSyncMeta(mergedProposal);
     const priceModelStatus = syncMeta.priceModelStatus;
     const isPriceModelActive = priceModelStatus === 'active';
     const isPriceModelRemoved = priceModelStatus === 'removed';
