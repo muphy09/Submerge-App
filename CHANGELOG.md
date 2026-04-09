@@ -1,4 +1,4 @@
-## [2.2.12] - 4/9/26
+## [2.2.13] - 4/9/26
 ### Fixed
 - Contract autofill fields when making a new version now correctly fill their data
 - 'Bowls' in Contract mapped back to Wok Pots

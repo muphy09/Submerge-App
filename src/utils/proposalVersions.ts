@@ -5,6 +5,9 @@ export const ORIGINAL_VERSION_ID = 'original';
 
 const randomId = () => `version-${Math.random().toString(36).slice(2, 9)}`;
 
+const cloneProposalVersionData = (proposal: Proposal): Proposal =>
+  JSON.parse(JSON.stringify(proposal)) as Proposal;
+
 const cloneContractOverridesForNewVersion = (
   overrides?: Proposal['contractOverrides'] | null
 ): Proposal['contractOverrides'] => {
@@ -152,13 +155,14 @@ export const createVersionFromProposal = (
     allVersions.find((v) => v.versionId === sourceVersionId) ||
     allVersions.find((v) => v.versionId === normalized.activeVersionId) ||
     allVersions[0];
+  const sourceSnapshot = cloneProposalVersionData(source || normalized);
 
   const newVersion: Proposal = stripNestedVersions({
-    ...(source || normalized),
+    ...sourceSnapshot,
     versionId: randomId(),
     versionName: explicitName || nextVersionName(normalized),
     isOriginalVersion: false,
-    contractOverrides: cloneContractOverridesForNewVersion((source || normalized).contractOverrides),
+    contractOverrides: cloneContractOverridesForNewVersion(sourceSnapshot.contractOverrides),
     status: 'draft',
     versionLocked: false,
     versionLockedAt: null,
