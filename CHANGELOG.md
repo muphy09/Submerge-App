@@ -1,3 +1,8 @@
+## [2.2.17] - 4/9/26
+### App Improvements
+- Only 1 instance of the application can now be running at a time
+    - Prevents issues with duplicate logins, update errors, and proposal syncing
+-----
 ## [2.2.16] - 4/9/26
 ### Hotfix
 - Proposal builder was not allowing the Sanitation and Autofill categories to be selected

@@ -102,14 +102,15 @@
   cursor: not-allowed;
 }
 
-.update-message {
+.settings-update-message {
   margin-top: clamp(0.75rem, 1.5vh, 1rem);
   padding: clamp(0.75rem, 1.5vh, 1rem);
-  background: #fef3c7;
-  border-left: 4px solid #f59e0b;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-left: 4px solid #2563eb;
   border-radius: 6px;
-  color: #92400e;
+  color: #15346a;
   font-size: clamp(0.875rem, 1.5vh, 0.95rem);
+  font-weight: 600;
   animation: slideDown 0.3s ease-out;
 }
 
@@ -124,10 +125,16 @@
   }
 }
 
-.update-message.success {
+.settings-update-message--success {
   background: #d1fae5;
   border-left-color: #10b981;
   color: #065f46;
+}
+
+.settings-update-message--error {
+  background: #fee2e2;
+  border-left-color: #dc2626;
+  color: #991b1b;
 }
 
 .section-row {

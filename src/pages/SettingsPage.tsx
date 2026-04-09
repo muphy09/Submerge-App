@@ -4,9 +4,14 @@ import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
 import { getSessionFranchiseId, getSessionRole } from '../services/session';
 import './SettingsPage.css';
 
+type UpdateStatusMessage = {
+  text: string;
+  tone: 'info' | 'success' | 'error';
+};
+
 const SettingsPage: React.FC = () => {
   const [checking, setChecking] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<UpdateStatusMessage | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
 
   const franchiseId = getSessionFranchiseId();
@@ -17,24 +22,24 @@ const SettingsPage: React.FC = () => {
 
   const handleCheckForUpdates = async () => {
     setChecking(true);
-    setMessage('Checking for updates...');
+    setMessage({ text: 'Checking for updates...', tone: 'info' });
 
     try {
       const result = await window.electron.checkForUpdates();
 
       if (result.message) {
-        setMessage(result.message);
+        setMessage({ text: result.message, tone: 'error' });
       } else if (result.available) {
-        setMessage('Update found! Download will start automatically.');
+        setMessage({ text: 'Update found. Download will start automatically.', tone: 'info' });
       } else {
-        setMessage('Up to date!');
+        setMessage({ text: 'Up to date!', tone: 'success' });
       }
     } catch (error) {
-      setMessage('Error checking for updates');
+      setMessage({ text: 'Error checking for updates', tone: 'error' });
       console.error('Update check error:', error);
     } finally {
       setChecking(false);
-      setTimeout(() => setMessage(''), 3000);
+      window.setTimeout(() => setMessage(null), 3000);
     }
   };
 
@@ -63,8 +68,8 @@ const SettingsPage: React.FC = () => {
             {checking ? 'Checking...' : 'Check for Updates'}
           </button>
           {message && (
-            <div className={`update-message ${message.includes('Up to date') ? 'success' : ''}`}>
-              {message}
+            <div className={`settings-update-message settings-update-message--${message.tone}`}>
+              {message.text}
             </div>
           )}
           <div className="section-row">

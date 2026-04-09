@@ -17,32 +17,33 @@
   }
 }
 
-.update-message {
+.update-notification-message {
   background: linear-gradient(135deg, #0c2243 0%, #1d4ed8 100%);
   border: 1px solid rgba(191, 219, 254, 0.32);
   color: white;
   padding: 16px 24px;
-  border-radius: 8px;
-  box-shadow: 0 10px 26px rgba(12, 34, 67, 0.28);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(12, 34, 67, 0.28);
   display: flex;
   align-items: center;
   gap: 12px;
   font-size: 14px;
-  font-weight: 500;
-  min-width: 280px;
+  font-weight: 600;
+  line-height: 1.4;
+  min-width: 320px;
 }
 
-.update-message.update-ready {
-  background: linear-gradient(135deg, #123873 0%, #2563eb 100%);
-  border-color: rgba(191, 219, 254, 0.4);
+.update-notification-message--ready {
+  background: linear-gradient(135deg, #0f274d 0%, #1d4ed8 55%, #2563eb 100%);
+  border-color: rgba(191, 219, 254, 0.42);
 }
 
-.update-message.update-error {
+.update-notification-message--error {
   background: linear-gradient(135deg, #082556 0%, #1e40af 100%);
   border-color: rgba(148, 163, 184, 0.45);
 }
 
-.update-spinner {
+.update-notification-spinner {
   width: 16px;
   height: 16px;
   border: 2px solid rgba(255, 255, 255, 0.3);
@@ -55,25 +56,27 @@
   to { transform: rotate(360deg); }
 }
 
-.install-button {
-  background: rgba(255, 255, 255, 0.16);
-  color: white;
-  border: 1px solid rgba(191, 219, 254, 0.45);
-  padding: 6px 12px;
-  border-radius: 4px;
+.update-notification-install-button {
+  background: rgba(255, 255, 255, 0.96);
+  color: #15346a;
+  border: 1px solid rgba(219, 234, 254, 0.78);
+  padding: 7px 13px;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
   margin-left: auto;
+  box-shadow: 0 6px 16px rgba(8, 37, 86, 0.18);
 }
 
-.install-button:hover {
-  background: rgba(255, 255, 255, 0.24);
-  border-color: rgba(219, 234, 254, 0.72);
+.update-notification-install-button:hover {
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.96);
   transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(8, 37, 86, 0.24);
 }
 
-.install-button:active {
+.update-notification-install-button:active {
   transform: translateY(0);
 }

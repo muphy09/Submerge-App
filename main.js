@@ -476,6 +476,10 @@ function setupAutoUpdater() {
     }
   });
 
+  autoUpdater.on('before-quit-for-update', () => {
+    cleanupAppResources();
+  });
+
   // Check for updates when app starts (after a delay to let the window load)
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch(err => {
@@ -539,98 +543,194 @@ function createWindow() {
     console.error('Page failed to load:', errorCode, errorDescription);
   });
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    openPendingProposalFile();
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
-// Handle file opening on Windows
 let fileToOpen = null;
 
-// Function to open a proposal file
 function openProposalFile(filePath) {
   try {
     const data = fs.readFileSync(filePath, 'utf-8');
     const proposal = JSON.parse(data);
 
-    if (mainWindow && mainWindow.webContents) {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
       mainWindow.webContents.send('open-proposal', proposal);
+    } else {
+      fileToOpen = filePath;
     }
   } catch (error) {
     console.error('Failed to open proposal file:', error);
   }
 }
 
-// Get file path from command line args on Windows (only when running in Electron context)
-function checkForFileArgument() {
-  if (process.platform === 'win32' && process.argv.length >= 2) {
-    const filePath = process.argv.find(arg => arg.endsWith(PROPOSAL_FILE_EXTENSION));
-    if (filePath) {
-      fileToOpen = filePath;
+function extractProposalFilePath(argv = []) {
+  if (!Array.isArray(argv)) {
+    return null;
+  }
+
+  for (const arg of argv) {
+    if (typeof arg !== 'string') {
+      continue;
     }
+
+    const candidate = arg.replace(/^"+|"+$/g, '');
+    if (candidate.toLowerCase().endsWith(PROPOSAL_FILE_EXTENSION)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function queueProposalFileOpen(filePath) {
+  const candidate = typeof filePath === 'string' ? filePath.replace(/^"+|"+$/g, '') : '';
+  if (!candidate || !candidate.toLowerCase().endsWith(PROPOSAL_FILE_EXTENSION)) {
+    return false;
+  }
+
+  fileToOpen = candidate;
+  return true;
+}
+
+function openPendingProposalFile() {
+  if (!fileToOpen) {
+    return;
+  }
+
+  const pendingFilePath = fileToOpen;
+  fileToOpen = null;
+  openProposalFile(pendingFilePath);
+}
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  mainWindow.focus();
+  return true;
+}
+
+function handleProposalOpenRequest(filePath) {
+  if (!queueProposalFileOpen(filePath)) {
+    return;
+  }
+
+  if (!focusMainWindow()) {
+    if (app.isReady()) {
+      createWindow();
+    }
+    return;
+  }
+
+  if (!mainWindow.webContents.isLoadingMainFrame()) {
+    openPendingProposalFile();
   }
 }
 
-app.whenReady().then(() => {
-  // Set app path correctly after app is ready
-  if (!isDev) {
-    appPath = app.getAppPath();
-    iconPath = path.join(appPath, 'icon.ico');
-  }
-
-  // Check for file argument
-  checkForFileArgument();
-
-  try {
-    initializeDatabase();
-  } catch (error) {
-    console.error('Failed to initialize database:', error);
-    dialog.showErrorBox('Database error', `Failed to initialize database:\n\n${error.message}`);
-    app.quit();
+function checkForFileArgument(argv = process.argv) {
+  if (process.platform !== 'win32' || argv.length < 2) {
     return;
   }
-  initializeProposalsDirectory();
-  createWindow();
-  setupAutoUpdater();
 
-  // If a file was specified on launch, open it
-  if (fileToOpen) {
-    openProposalFile(fileToOpen);
+  const filePath = extractProposalFilePath(argv);
+  if (filePath) {
+    queueProposalFileOpen(filePath);
   }
+}
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
-// Handle opening files on Windows
-app.on('open-file', (event, filePath) => {
-  event.preventDefault();
-  if (filePath.endsWith(PROPOSAL_FILE_EXTENSION)) {
-    if (mainWindow) {
-      openProposalFile(filePath);
-    } else {
-      fileToOpen = filePath;
-    }
-  }
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    if (db) db.close();
-    app.quit();
-  }
-});
-
-app.on('before-quit', () => {
+function cleanupAppResources() {
   contractPreviewTempDirs.forEach((targetPath) => {
     cleanupTempPath(targetPath);
   });
   contractPreviewTempDirs.clear();
-  if (db) db.close();
-});
+
+  if (db) {
+    try {
+      db.close();
+    } catch (error) {
+      console.warn('Failed to close database during shutdown:', error);
+    }
+    db = null;
+  }
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    const filePath = extractProposalFilePath(commandLine);
+    if (filePath) {
+      handleProposalOpenRequest(filePath);
+      return;
+    }
+
+    if (!focusMainWindow() && app.isReady()) {
+      createWindow();
+    }
+  });
+
+  app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    handleProposalOpenRequest(filePath);
+  });
+
+  app.whenReady().then(() => {
+    // Set app path correctly after app is ready
+    if (!isDev) {
+      appPath = app.getAppPath();
+      iconPath = path.join(appPath, 'icon.ico');
+    }
+
+    // Check for file argument
+    checkForFileArgument();
+
+    try {
+      initializeDatabase();
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      dialog.showErrorBox('Database error', `Failed to initialize database:\n\n${error.message}`);
+      app.quit();
+      return;
+    }
+    initializeProposalsDirectory();
+    createWindow();
+    setupAutoUpdater();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      } else {
+        focusMainWindow();
+      }
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      cleanupAppResources();
+      app.quit();
+    }
+  });
+
+  app.on('before-quit', () => {
+    cleanupAppResources();
+  });
+}
 
 // IPC Handlers - Proposals
 ipcMain.handle('save-proposal', async (_, proposal) => {

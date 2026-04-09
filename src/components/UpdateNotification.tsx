@@ -15,21 +15,21 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ status, onInsta
   return (
     <div className="update-notification">
       {status === 'downloading' && (
-        <div className="update-message">
-          <div className="update-spinner"></div>
+        <div className="update-notification-message">
+          <div className="update-notification-spinner"></div>
           <span>Update Downloading...</span>
         </div>
       )}
       {status === 'ready' && (
-        <div className="update-message update-ready">
-          <span>Update Completed, restart the App to apply</span>
-          <button onClick={onInstall} className="install-button">
+        <div className="update-notification-message update-notification-message--ready">
+          <span>Update ready. Restart the app to apply it.</span>
+          <button onClick={onInstall} className="update-notification-install-button">
             Restart Now
           </button>
         </div>
       )}
       {status === 'error' && (
-        <div className="update-message update-error">
+        <div className="update-notification-message update-notification-message--error">
           <span>Update Error: {displayError}</span>
         </div>
       )}
