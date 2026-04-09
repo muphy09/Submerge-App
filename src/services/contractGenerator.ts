@@ -318,6 +318,30 @@ function getWaterFeatureCategory(featureId?: string): string {
   return byName?.category || '';
 }
 
+function isLaminarWaterFeature(featureId?: string): boolean {
+  const normalizedId = String(featureId || '').toLowerCase();
+  if (normalizedId.includes('laminar')) return true;
+
+  const normalizedName = getWaterFeatureName(featureId).toLowerCase();
+  if (normalizedName.includes('laminar')) return true;
+
+  return getWaterFeatureCategory(featureId).toLowerCase().includes('laminar');
+}
+
+function isDeckJetWaterFeature(featureId?: string): boolean {
+  if (isLaminarWaterFeature(featureId)) return false;
+
+  const normalizedId = String(featureId || '').toLowerCase();
+  const normalizedName = getWaterFeatureName(featureId).toLowerCase();
+  const normalizedCategory = getWaterFeatureCategory(featureId).toLowerCase();
+
+  return (
+    normalizedCategory === 'jets' ||
+    normalizedId.includes('deck-jet') ||
+    normalizedName.includes('deck jet')
+  );
+}
+
 function getInteriorFinishLabel(finishType?: string): string {
   if (!finishType) return '';
   const finish = pricingData.interiorFinish?.finishes?.find((item) => item.id === finishType);
@@ -381,10 +405,10 @@ function pickWaterFeatures(selections: WaterFeatureSelection[] | undefined) {
     const category = getWaterFeatureCategory(id).toLowerCase();
     if (category.includes('sheer') || id.includes('sheer')) {
       byType.sheer.push(sel);
-    } else if (category === 'jets' || id.includes('deck-jet')) {
-      byType.deckJet.push(sel);
-    } else if (category.includes('laminar') || id.includes('laminar')) {
+    } else if (isLaminarWaterFeature(id)) {
       byType.laminar.push(sel);
+    } else if (isDeckJetWaterFeature(id)) {
+      byType.deckJet.push(sel);
     } else if (category.includes('bubbler') || id.includes('bubbler')) {
       byType.bubbler.push(sel);
     } else if (category.includes('wok') || category.includes('bowl') || id.includes('wok') || id.includes('bowl')) {
@@ -422,22 +446,25 @@ function getRetailPrice(proposal: ProposalWithPricing): number {
   );
 }
 
-function getContractBubblerSummary(selections: WaterFeatureSelection[]): { name: string; quantity: string } {
-  const bubblerSelections = selections.filter((selection) => Number(selection.quantity || 0) > 0);
-  if (!bubblerSelections.length) {
-    return { name: 'None', quantity: '0' };
+function getContractWaterFeatureSummary(
+  selections: WaterFeatureSelection[],
+  emptyName = 'None'
+): { name: string; quantity: string } {
+  const selectedFeatures = selections.filter((selection) => Number(selection.quantity || 0) > 0);
+  if (!selectedFeatures.length) {
+    return { name: emptyName, quantity: '0' };
   }
 
   const uniqueNames = Array.from(
     new Set(
-      bubblerSelections
+      selectedFeatures
         .map((selection) => getWaterFeatureName(selection.featureId))
         .map((name) => name.trim())
         .filter(Boolean)
     )
   );
-  const totalQuantity = bubblerSelections.reduce((sum, selection) => sum + (Number(selection.quantity) || 0), 0);
-  const primaryName = uniqueNames[0] || 'None';
+  const totalQuantity = selectedFeatures.reduce((sum, selection) => sum + (Number(selection.quantity) || 0), 0);
+  const primaryName = uniqueNames[0] || emptyName;
   const name = uniqueNames.length <= 1 ? primaryName : `${primaryName} +${uniqueNames.length - 1} more`;
 
   return {
@@ -466,7 +493,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   const pricing = getRetailPrice(proposal);
   const waterFeatures = pickWaterFeatures(proposal.waterFeatures?.selections);
   const additionalSpecificationLines = buildAdditionalSpecificationLines(proposal);
-  const bubblerSummary = getContractBubblerSummary(waterFeatures.bubbler);
+  const bubblerSummary = getContractWaterFeatureSummary(waterFeatures.bubbler);
+  const bowlSummary = getContractWaterFeatureSummary(waterFeatures.bowl, 'NONE');
 
   if (ADDITIONAL_SPEC_FIELD_ID_SET.has(field.id)) {
     const fieldIndex = ADDITIONAL_SPEC_FIELD_IDS.indexOf(field.id as (typeof ADDITIONAL_SPEC_FIELD_IDS)[number]);
@@ -531,13 +559,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     const sheerSelections = waterFeatures.sheer;
     const deckJetSelections = waterFeatures.deckJet;
     const laminarSelections = waterFeatures.laminar;
-    const bowlSelections = waterFeatures.bowl;
     const sconceSelections = waterFeatures.sconce;
     const sheerOne = sheerSelections[0];
     const sheerTwo = sheerSelections[1];
     const deckJetQty = deckJetSelections.reduce((sum, sel) => sum + (Number(sel.quantity) || 0), 0);
     const laminarQty = laminarSelections.reduce((sum, sel) => sum + (Number(sel.quantity) || 0), 0);
-    const bowlQty = bowlSelections.reduce((sum, sel) => sum + (Number(sel.quantity) || 0), 0);
     const sconceQty = sconceSelections.reduce((sum, sel) => sum + (Number(sel.quantity) || 0), 0);
 
     switch (field.id) {
@@ -550,9 +576,9 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
       case 'p2_73':
         return formatCount(sheerTwo?.quantity);
       case 'p2_74':
-        return bowlQty > 0 ? 'CONCRETE' : 'NONE';
+        return bowlSummary.name;
       case 'p2_75':
-        return formatCount(bowlQty);
+        return bowlSummary.quantity;
       case 'p2_76':
         return deckJetQty > 0 ? 'STANDARD' : 'NONE';
       case 'p2_77':
@@ -776,10 +802,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/laminar|sheer|jets|water features/.test(label)) {
     const typeMap: Record<string, WaterFeatureSelection[]> = {
       sheer: waterFeatures.sheer,
-      jets: waterFeatures.deckJet,
       laminar: waterFeatures.laminar,
+      'deck jets': waterFeatures.deckJet,
+      jets: waterFeatures.deckJet,
       bowl: waterFeatures.bowl,
       sconce: waterFeatures.sconce,
+      bubbler: waterFeatures.bubbler,
       other: waterFeatures.other,
     };
     const entry = Object.entries(typeMap).find(([key]) => label.includes(key));

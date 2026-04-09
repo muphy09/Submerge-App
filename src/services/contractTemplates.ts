@@ -556,6 +556,12 @@ const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {
   ),
 };
 
+export const VERSION_RESETTABLE_CONTRACT_OVERRIDE_FIELD_IDS = new Set<string>(
+  Object.values(CONTRACT_TEMPLATES).flatMap((template) =>
+    template.fields.filter((field) => field.color === 'blue').map((field) => field.id)
+  )
+);
+
 export function getContractTemplate(id?: ContractTemplateId): ContractTemplate {
   return CONTRACT_TEMPLATES[id || DEFAULT_CONTRACT_TEMPLATE_ID];
 }

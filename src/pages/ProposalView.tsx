@@ -24,6 +24,7 @@ import { listPricingModels as listPricingModelsRemote } from '../services/pricin
 import {
   initPricingDataStore,
   loadPricingSnapshotForFranchise,
+  subscribeToPricingData,
   withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
 import { getSessionRole, isMasterActingAsOwnerSession, readSession } from '../services/session';
@@ -687,6 +688,7 @@ function ProposalView() {
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
   const [selectedVersionId, setSelectedVersionId] = useState<string>('original');
   const [loading, setLoading] = useState(true);
+  const [, setPricingStoreVersion] = useState(0);
   const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
   const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
@@ -725,6 +727,7 @@ function ProposalView() {
   const contractViewRef = useRef<ContractViewHandle | null>(null);
   const retailAdjustmentsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warrantySectionsSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadRequestRef = useRef(0);
   const { showToast } = useToast();
   const handleContractViewRef = useCallback((instance: ContractViewHandle | null) => {
     contractViewRef.current = instance;
@@ -916,6 +919,13 @@ function ProposalView() {
   }, [proposalNumber]);
 
   useEffect(() => {
+    const unsubscribe = subscribeToPricingData(() => {
+      setPricingStoreVersion((current) => current + 1);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     if (!proposal) {
       setVersionSyncMeta({});
       return;
@@ -949,8 +959,10 @@ function ProposalView() {
   }, [canViewCogsBreakdown, cogsBreakdownVersionId, preCogsBreakdownVersionId]);
 
   const loadProposal = async (num: string) => {
+    const requestId = ++loadRequestRef.current;
     try {
       const data = await getProposalRemote(num);
+      if (requestId !== loadRequestRef.current) return;
       if (!data) {
         showToast({
           type: 'error',
@@ -1036,27 +1048,35 @@ function ProposalView() {
       const activeVersion =
         allVersions.find((v) => v.versionId === activeId) ||
         ((await mergeWithPricingSnapshot(activeApplied)) as Proposal);
+      if (requestId !== loadRequestRef.current) return;
 
       await initPricingDataStore(
         activeVersion.franchiseId,
         activeVersion.pricingModelId || undefined,
         activeVersion.pricingModelFranchiseId || undefined
       );
+      if (requestId !== loadRequestRef.current) return;
 
       setVersions(allVersions);
       setActiveVersionId(activeId);
       setSelectedVersionId(initialSelectedVersionId);
       setProposal(ensureProposalWorkflow({ ...(activeVersion as Proposal), workflow: sourceProposal.workflow, status: sourceProposal.status }));
     } catch (error) {
+      if (requestId !== loadRequestRef.current) return;
       console.error('Failed to load proposal:', error);
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     if (proposalNumber) {
-      loadProposal(proposalNumber);
+      setLoading(true);
+      setProposal(null);
+      setVersions([]);
+      void loadProposal(proposalNumber);
     }
   }, [location.state, navigate, proposalNumber, showToast]);
 

@@ -1,3 +1,9 @@
+## [2.2.12] - 4/9/26
+### Fixed
+- Contract autofill fields when making a new version now correctly fill their data
+- 'Bowls' in Contract mapped back to Wok Pots
+- Rare situation where an incorrect price would flash before the correct total price
+-----
 ## [2.2.11] - 4/8/26
 ### Tile/Coping/Decking Admin Pricing
 - Redesigned subcategory to a Table style to add/remove new options

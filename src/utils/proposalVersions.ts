@@ -1,8 +1,19 @@
 import { Proposal } from '../types/proposal-new';
+import { VERSION_RESETTABLE_CONTRACT_OVERRIDE_FIELD_IDS } from '../services/contractTemplates';
 
 export const ORIGINAL_VERSION_ID = 'original';
 
 const randomId = () => `version-${Math.random().toString(36).slice(2, 9)}`;
+
+const cloneContractOverridesForNewVersion = (
+  overrides?: Proposal['contractOverrides'] | null
+): Proposal['contractOverrides'] => {
+  if (!overrides) return {};
+
+  return Object.fromEntries(
+    Object.entries(overrides).filter(([fieldId]) => !VERSION_RESETTABLE_CONTRACT_OVERRIDE_FIELD_IDS.has(fieldId))
+  );
+};
 
 const stripNestedVersions = (proposal: Proposal): Proposal => {
   const clone: Proposal = { ...proposal };
@@ -147,6 +158,7 @@ export const createVersionFromProposal = (
     versionId: randomId(),
     versionName: explicitName || nextVersionName(normalized),
     isOriginalVersion: false,
+    contractOverrides: cloneContractOverridesForNewVersion((source || normalized).contractOverrides),
     status: 'draft',
     versionLocked: false,
     versionLockedAt: null,
