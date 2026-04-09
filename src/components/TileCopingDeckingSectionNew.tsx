@@ -224,9 +224,9 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
     );
   };
 
-  // Prefill decking area from Pool Specifications when available and not set here yet
+  // Primary decking area is sourced from Pool Specifications, so keep the stored value in sync.
   useEffect(() => {
-    if ((data.deckingArea ?? 0) <= 0 && poolDeckingArea > 0) {
+    if ((data.deckingArea ?? 0) !== poolDeckingArea) {
       onChange({ ...data, deckingArea: poolDeckingArea });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

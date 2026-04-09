@@ -23,6 +23,7 @@ import {
   getAdditionalDeckingOption,
   getAdditionalDeckingSelections,
   getDeckingTypeFullLabel,
+  getResolvedPrimaryDeckingArea,
 } from '../utils/decking';
 import {
   getBullnoseSpillwayOptionById,
@@ -204,14 +205,15 @@ export class TileCopingDeckingCalculations {
     const standardDeckingWasteMultiplier = isConcreteDeck ? 1 : 1.05;
     const concreteBandAreaRaw = isConcreteDeck ? poolSpecs.perimeter * 4 : 0;
     const concreteBaseQty = isConcreteDeck && concreteBandAreaRaw > 0 ? ceilToStep(concreteBandAreaRaw, 10) : 0;
+    const primaryDeckingArea = getResolvedPrimaryDeckingArea(tileCopingDecking, poolSpecs.deckingArea);
     // Excel (TILE COPING!J35/J42) lets the addl qty go negative when the 4' band exceeds the entered deck area.
     // Mirror that CEILING behavior instead of clamping to zero so we remove overcounted sqft.
-    const concreteAddlQtyRaw = isConcreteDeck ? tileCopingDecking.deckingArea - concreteBandAreaRaw : 0;
+    const concreteAddlQtyRaw = isConcreteDeck ? primaryDeckingArea - concreteBandAreaRaw : 0;
     const concreteAddlQty =
       isConcreteDeck ? ceilToStep(concreteAddlQtyRaw, 10) : 0;
     const deckingArea = isConcreteDeck
       ? concreteBaseQty + concreteAddlQty
-      : tileCopingDecking.deckingArea * standardDeckingWasteMultiplier;
+      : primaryDeckingArea * standardDeckingWasteMultiplier;
 
     // TILE LABOR
     if (hasTile && tileOption) {

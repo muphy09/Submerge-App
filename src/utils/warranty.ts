@@ -11,7 +11,12 @@ import { getLightCounts } from './lighting';
 import { getEffectivePrimarySanitationSystemName } from './equipmentPackages';
 import { hasRealPumpSelection } from './pumpSelections';
 import { flattenWaterFeatures } from './waterFeatureCost';
-import { getAdditionalDeckingSelections, getDeckingTypeFullLabel, hasIncludedDecking } from './decking';
+import {
+  getAdditionalDeckingSelections,
+  getDeckingTypeFullLabel,
+  getResolvedProposalPrimaryDeckingArea,
+  hasIncludedDecking,
+} from './decking';
 import { getCopingOptionLabel } from './tileCopingCatalogs';
 
 type LegacyWarrantyItem = {
@@ -458,7 +463,7 @@ const buildCopingDeckingItems = (proposal?: Partial<Proposal>): LegacyWarrantyIt
   }
 
   const primaryDeckingType = String(tileCopingDecking.deckingType || '').trim();
-  const primaryDeckingArea = Number(tileCopingDecking.deckingArea || proposal?.poolSpecs?.deckingArea || 0);
+  const primaryDeckingArea = getResolvedProposalPrimaryDeckingArea(proposal);
   if (
     primaryDeckingType &&
     primaryDeckingType !== 'none' &&

@@ -1,10 +1,10 @@
-## [2.2.14] - 4/9/26
+## [2.2.15] - 4/9/26
 ### Hotfix
 - Price drifts while creating additional proposal versions solved
+- Additional Decking no longer prevents autofilling the Decking SF in new versions of contracts
 -----
 ## [2.2.13] - 4/9/26
 ### Fixed
-- Contract autofill fields when making a new version now correctly fill their data
 - 'Bowls' in Contract mapped back to Wok Pots
 - Rare situation where an incorrect price would flash before the correct total price
 -----

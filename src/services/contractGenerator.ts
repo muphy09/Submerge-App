@@ -4,7 +4,11 @@ import pricingData from './pricingData';
 import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/masonryFacing';
 import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
-import { getAdditionalDeckingSelections, getDeckingTypeFullLabel } from '../utils/decking';
+import {
+  getAdditionalDeckingSelections,
+  getDeckingTypeFullLabel,
+  getResolvedProposalPrimaryDeckingArea,
+} from '../utils/decking';
 import { getCopingOptionLabel, hasTileSelection } from '../utils/tileCopingCatalogs';
 import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
 import {
@@ -716,7 +720,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   }
   if (field.id === 'p1_37_size') return proposal.tileCopingDecking?.copingSize || '';
   const primaryDeckingType = proposal.tileCopingDecking?.deckingType || 'none';
-  const primaryDeckingArea = Number(proposal.tileCopingDecking?.deckingArea || proposal.poolSpecs?.deckingArea || 0);
+  const primaryDeckingArea = getResolvedProposalPrimaryDeckingArea(proposal);
   const additionalDeckingSelections = getAdditionalDeckingSelections(proposal.tileCopingDecking)
     .map((selection) => ({
       deckingType: String(selection.deckingType || '').trim(),

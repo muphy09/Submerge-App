@@ -17,7 +17,11 @@ import {
 } from './session';
 import { listAllVersions, ORIGINAL_VERSION_ID } from '../utils/proposalVersions';
 import pricingData from './pricingData';
-import { getAdditionalDeckingSelections, getDeckingTypeFullLabel } from '../utils/decking';
+import {
+  getAdditionalDeckingSelections,
+  getDeckingTypeFullLabel,
+  getResolvedProposalPrimaryDeckingArea,
+} from '../utils/decking';
 import {
   getCopingOptionLabel,
   getTileOptionLabel,
@@ -590,6 +594,7 @@ function extractElectricalFields(proposal: Proposal): WorkflowFieldSnapshot[] {
 function extractTileCopingDeckingFields(proposal: Proposal): WorkflowFieldSnapshot[] {
   const tile = proposal.tileCopingDecking || ({} as Proposal['tileCopingDecking']);
   const additionalDeckingSelections = getAdditionalDeckingSelections(tile);
+  const primaryDeckingArea = getResolvedProposalPrimaryDeckingArea(proposal);
   const tileSelectionId = getTileSelectionId(tile);
   return compactSnapshots([
     {
@@ -613,7 +618,7 @@ function extractTileCopingDeckingFields(proposal: Proposal): WorkflowFieldSnapsh
       label: 'Decking Type',
       value: tile.deckingType && tile.deckingType !== 'none' ? getDeckingTypeFullLabel(tile.deckingType) : 'None',
     },
-    { key: 'deckingArea', label: 'Decking Area', value: formatNumber(tile.deckingArea, ' SQFT') },
+    { key: 'deckingArea', label: 'Decking Area', value: formatNumber(primaryDeckingArea, ' SQFT') },
     {
       key: 'additionalDecking',
       label: 'Additional Decking',

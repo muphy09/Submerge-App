@@ -30,6 +30,22 @@ const normalizeAdditionalDeckingSelection = (
   isOffContract: Boolean(selection?.isOffContract),
 });
 
+export const getResolvedPrimaryDeckingArea = (
+  decking?: Partial<TileCopingDecking> | null,
+  poolDeckingArea?: unknown
+): number => {
+  const normalizedPoolDeckingArea = toNumber(poolDeckingArea);
+  if (normalizedPoolDeckingArea > 0) {
+    return normalizedPoolDeckingArea;
+  }
+
+  return toNumber(decking?.deckingArea);
+};
+
+export const getResolvedProposalPrimaryDeckingArea = (
+  proposal?: Partial<Proposal> | null
+): number => getResolvedPrimaryDeckingArea(proposal?.tileCopingDecking, proposal?.poolSpecs?.deckingArea);
+
 export const getDeckingTypeFullLabel = (deckingType?: string | null): string => {
   const normalized = normalizeDeckingOptionId(deckingType);
   if (!normalized) return 'Decking';
@@ -114,7 +130,7 @@ export const hasIncludedDecking = (proposal?: Partial<Proposal> | null): boolean
   }
 
   const primaryDeckingType = String(tileCopingDecking.deckingType || '').trim();
-  const primaryDeckingArea = toNumber(tileCopingDecking.deckingArea || proposal?.poolSpecs?.deckingArea || 0);
+  const primaryDeckingArea = getResolvedProposalPrimaryDeckingArea(proposal);
   const hasIncludedPrimaryDecking =
     Boolean(primaryDeckingType) &&
     primaryDeckingType !== 'none' &&
