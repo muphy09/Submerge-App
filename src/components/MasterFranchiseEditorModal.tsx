@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Proposal } from '../types/proposal-new';
 import TempPasswordModal from './TempPasswordModal';
 import './MasterFranchiseEditorModal.css';
+import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
 import {
   saveMasterFranchiseSettings,
   type MasterFranchise,
   type MasterPricingModel,
   type MasterUser,
 } from '../services/masterAdminAdapter';
+import { saveFranchiseSignedWorkflowDisabled } from '../services/franchiseBranding';
 import {
   createFranchiseUser,
   deleteFranchiseUser,
@@ -77,8 +79,15 @@ function MasterFranchiseEditorModal({
   onRefresh,
   onFranchiseUpdated,
 }: MasterFranchiseEditorModalProps) {
+  const {
+    disableSignedWorkflow,
+    isLoading: signedWorkflowSettingLoading,
+  } = useFranchiseSignedWorkflowDisabled(franchise.id);
   const [pendingName, setPendingName] = useState(franchise.name || '');
   const [pendingCode, setPendingCode] = useState(franchise.franchiseCode || '');
+  const [pendingDisableSignedWorkflow, setPendingDisableSignedWorkflow] = useState<boolean>(
+    disableSignedWorkflow === true
+  );
   const [newDesignerName, setNewDesignerName] = useState('');
   const [newDesignerEmail, setNewDesignerEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState<'designer' | 'bookkeeper'>('designer');
@@ -98,12 +107,13 @@ function MasterFranchiseEditorModal({
   useEffect(() => {
     setPendingName(franchise.name || '');
     setPendingCode(franchise.franchiseCode || '');
+    setPendingDisableSignedWorkflow(disableSignedWorkflow === true);
     setStatus(null);
     setNewDesignerName('');
     setNewDesignerEmail('');
     setNewUserRole('designer');
     setTransferTargetsByUserId({});
-  }, [franchise.franchiseCode, franchise.id, franchise.name]);
+  }, [disableSignedWorkflow, franchise.franchiseCode, franchise.id, franchise.name]);
 
   useEffect(() => {
     setTransferTargetsByUserId((current) => {
@@ -159,8 +169,10 @@ function MasterFranchiseEditorModal({
   const normalizedPendingCode = pendingCode.trim().toUpperCase();
   const normalizedCurrentName = String(franchise.name || '').trim();
   const normalizedCurrentCode = String(franchise.franchiseCode || '').trim().toUpperCase();
-  const hasSettingsChange =
+  const hasCoreSettingsChange =
     normalizedPendingName !== normalizedCurrentName || normalizedPendingCode !== normalizedCurrentCode;
+  const hasSettingsChange =
+    hasCoreSettingsChange || pendingDisableSignedWorkflow !== (disableSignedWorkflow === true);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,15 +227,24 @@ function MasterFranchiseEditorModal({
     setSavingSettings(true);
     setStatus(null);
     try {
-      const updatedFranchise = await saveMasterFranchiseSettings({
-        franchiseId: franchise.id,
-        franchiseName: normalizedPendingName,
-        franchiseCode: normalizedPendingCode,
-        previousName: franchise.name,
-        previousCode: franchise.franchiseCode,
-        updatedBy: updatedBy ?? null,
-      });
-      onFranchiseUpdated?.(updatedFranchise);
+      if (hasCoreSettingsChange) {
+        const updatedFranchise = await saveMasterFranchiseSettings({
+          franchiseId: franchise.id,
+          franchiseName: normalizedPendingName,
+          franchiseCode: normalizedPendingCode,
+          previousName: franchise.name,
+          previousCode: franchise.franchiseCode,
+          updatedBy: updatedBy ?? null,
+        });
+        onFranchiseUpdated?.(updatedFranchise);
+      }
+      if (pendingDisableSignedWorkflow !== (disableSignedWorkflow === true)) {
+        await saveFranchiseSignedWorkflowDisabled({
+          franchiseId: franchise.id,
+          disableSignedWorkflow: pendingDisableSignedWorkflow,
+          updatedBy: updatedBy ?? null,
+        });
+      }
       await onRefresh();
       setStatus({ type: 'success', message: 'Franchise settings updated.' });
     } catch (error: any) {
@@ -658,7 +679,7 @@ function MasterFranchiseEditorModal({
                 className="master-primary-btn master-small-btn"
                 type="button"
                 onClick={handleSaveSettings}
-                disabled={!hasSettingsChange || savingSettings}
+                disabled={!hasSettingsChange || savingSettings || signedWorkflowSettingLoading}
               >
                 {savingSettings ? 'Saving...' : 'Save Settings'}
               </button>
@@ -685,6 +706,24 @@ function MasterFranchiseEditorModal({
                 />
               </label>
             </div>
+            <label className="master-editor-toggle">
+              <input
+                type="checkbox"
+                checked={pendingDisableSignedWorkflow}
+                onChange={(event) => setPendingDisableSignedWorkflow(event.target.checked)}
+                disabled={savingSettings || signedWorkflowSettingLoading}
+              />
+              <div className="master-editor-toggle-copy">
+                <span>Disable Signed Workflow</span>
+                <p>
+                  Keeps approved proposals in the submitted/approved workflow by disabling
+                  <strong> Mark as Signed</strong> for this franchise.
+                </p>
+              </div>
+            </label>
+            {signedWorkflowSettingLoading && (
+              <div className="master-editor-inline-note">Loading workflow settings...</div>
+            )}
           </div>
 
           <div className="master-editor-section">

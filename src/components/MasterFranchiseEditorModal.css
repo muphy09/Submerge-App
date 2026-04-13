@@ -126,6 +126,48 @@
   box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.14);
 }
 
+.master-editor-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #d9e4ee;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.master-editor-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #1e88e5;
+}
+
+.master-editor-toggle-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.master-editor-toggle-copy span {
+  color: #0f2a4f;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.master-editor-toggle-copy p {
+  margin: 0;
+  color: #60738a;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.master-editor-inline-note {
+  color: #60738a;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
 .master-editor-add-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 180px) auto;

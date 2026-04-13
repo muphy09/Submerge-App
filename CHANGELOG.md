@@ -1,3 +1,18 @@
+## [2.2.18] - 4/13/26
+### IMPORTANT
+- 'Mark as Signed' temporarily disabled while the Addendum Comparison UI is finalized for the Book Keeper
+    - ETA: 8:00pm, 4/13/26
+### Warranty Breakdown
+- Old Warranty data (Jandy) no longer accidentally injects into the breakdown
+    - Fields that were accidentally injected could not be edited, this has been resolved
+    - Updated 5-Year and 3-Year Warranty logic
+### Fiberglass Pool Models
+- Added a manual % discount column to the Fiberglass Pool Model table
+### Book Keeper Tab
+- Continuing to update the look of the Proposal View (still testing)
+    - New tabs for COGS, Proposal Selections, Overview, and Notes
+- *Comparing Proposal Addendums is temporarily disabled while under maintenance*
+-----
 ## [2.2.17] - 4/9/26
 ### App Improvements
 - Only 1 instance of the application can now be running at a time

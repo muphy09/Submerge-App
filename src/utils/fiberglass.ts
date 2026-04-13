@@ -10,6 +10,7 @@ export interface FiberglassPoolModel {
   crane: number;
   install: number;
   gravel: number;
+  discountPercent?: number;
 }
 
 export interface FiberglassNamedPriceOption {

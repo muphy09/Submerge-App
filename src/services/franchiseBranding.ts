@@ -10,6 +10,7 @@ type FranchiseBrandingRecord = {
   logoUrl: string | null;
   appName: string | null;
   adminPanelPin: string | null;
+  disableSignedWorkflow: boolean;
   updatedAt?: string | null;
   fetchedAt: number;
 };
@@ -19,6 +20,7 @@ type FranchiseBrandingUpdate = {
   logoUrl?: string | null;
   appName?: string | null;
   adminPanelPin?: string | null;
+  disableSignedWorkflow?: boolean;
   updatedBy?: string | null;
 };
 
@@ -32,8 +34,10 @@ const BRANDING_STORAGE_PREFIX = 'submerge.franchiseLogo';
 const LOGO_UPDATED_EVENT = 'submerge-franchise-logo-updated';
 const APP_NAME_UPDATED_EVENT = 'submerge-franchise-app-name-updated';
 const ADMIN_PANEL_PIN_UPDATED_EVENT = 'submerge-admin-panel-pin-updated';
+const SIGNED_WORKFLOW_UPDATED_EVENT = 'submerge-signed-workflow-updated';
 const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000;
 export const DEFAULT_APP_NAME = 'Submerge';
+export const DISABLED_SIGNED_WORKFLOW_MESSAGE = 'Admin has temporarily disabled the Signed workflow';
 
 const memoryCache = new Map<string, FranchiseBrandingRecord | null>();
 const pendingLoads = new Map<string, Promise<FranchiseBrandingRecord | null>>();
@@ -66,6 +70,10 @@ function normalizeAdminPanelPin(value: unknown): string | null {
   return normalized.length === ADMIN_PANEL_PIN_LENGTH ? normalized : null;
 }
 
+function normalizeDisableSignedWorkflow(value: unknown): boolean {
+  return value === true;
+}
+
 function emitLogoUpdate(franchiseId: string, logoUrl: string | null) {
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
   window.dispatchEvent(
@@ -84,6 +92,13 @@ function emitAdminPanelPinUpdate(franchiseId: string, adminPanelPin: string | nu
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
   window.dispatchEvent(
     new CustomEvent(ADMIN_PANEL_PIN_UPDATED_EVENT, { detail: { franchiseId, adminPanelPin } })
+  );
+}
+
+function emitSignedWorkflowUpdate(franchiseId: string, disableSignedWorkflow: boolean) {
+  if (typeof window === 'undefined' || !window.dispatchEvent) return;
+  window.dispatchEvent(
+    new CustomEvent(SIGNED_WORKFLOW_UPDATED_EVENT, { detail: { franchiseId, disableSignedWorkflow } })
   );
 }
 
@@ -131,6 +146,24 @@ export function subscribeToFranchiseAdminPanelPinUpdates(
   return () => window.removeEventListener(ADMIN_PANEL_PIN_UPDATED_EVENT, handler as EventListener);
 }
 
+export function subscribeToFranchiseSignedWorkflowUpdates(
+  franchiseId: string,
+  callback: (disableSignedWorkflow: boolean) => void
+) {
+  if (typeof window === 'undefined' || !window.addEventListener) return () => {};
+  const handler = (
+    event: Event
+  ) => {
+    const detail = (
+      event as CustomEvent<{ franchiseId: string; disableSignedWorkflow: boolean }>
+    ).detail;
+    if (!detail || detail.franchiseId !== franchiseId) return;
+    callback(detail.disableSignedWorkflow === true);
+  };
+  window.addEventListener(SIGNED_WORKFLOW_UPDATED_EVENT, handler as EventListener);
+  return () => window.removeEventListener(SIGNED_WORKFLOW_UPDATED_EVENT, handler as EventListener);
+}
+
 function persistFranchiseBrandingCache(franchiseId: string, record: FranchiseBrandingRecord | null) {
   memoryCache.set(franchiseId, record);
   if (typeof localStorage === 'undefined') return;
@@ -151,6 +184,7 @@ function buildBrandingRecord(raw?: Partial<FranchiseBrandingRecord> | null): Fra
     logoUrl: normalizeLogoUrl(raw?.logoUrl),
     appName: normalizeAppName(raw?.appName),
     adminPanelPin: normalizeAdminPanelPin(raw?.adminPanelPin),
+    disableSignedWorkflow: normalizeDisableSignedWorkflow(raw?.disableSignedWorkflow),
     updatedAt: typeof raw?.updatedAt === 'string' ? raw?.updatedAt : null,
     fetchedAt: typeof raw?.fetchedAt === 'number' ? raw?.fetchedAt : 0,
   };
@@ -201,6 +235,14 @@ export function getCachedFranchiseAdminPanelPin(
   return cached?.adminPanelPin ?? null;
 }
 
+export function getCachedFranchiseSignedWorkflowDisabled(
+  franchiseId: string
+): boolean | undefined {
+  const cached = getCachedFranchiseBranding(franchiseId);
+  if (cached === undefined) return undefined;
+  return cached?.disableSignedWorkflow === true;
+}
+
 function isCacheFresh(record: FranchiseBrandingRecord | null | undefined) {
   if (!record) return false;
   return Date.now() - record.fetchedAt < BRANDING_CACHE_TTL_MS;
@@ -228,7 +270,7 @@ export async function loadFranchiseBranding(
 
     const { data, error } = await supabase
       .from(BRANDING_TABLE)
-      .select('franchise_id, logo_url, app_name, admin_panel_pin, updated_at, updated_by')
+      .select('franchise_id, logo_url, app_name, admin_panel_pin, disable_signed_workflow, updated_at, updated_by')
       .eq('franchise_id', franchiseId)
       .maybeSingle();
 
@@ -240,6 +282,7 @@ export async function loadFranchiseBranding(
       logoUrl: normalizeLogoUrl(data?.logo_url),
       appName: normalizeAppName(data?.app_name),
       adminPanelPin: normalizeAdminPanelPin(data?.admin_panel_pin),
+      disableSignedWorkflow: normalizeDisableSignedWorkflow(data?.disable_signed_workflow),
       updatedAt: data?.updated_at ?? null,
       fetchedAt: Date.now(),
     };
@@ -248,6 +291,7 @@ export async function loadFranchiseBranding(
     emitLogoUpdate(franchiseId, record.logoUrl ?? null);
     emitAppNameUpdate(franchiseId, record.appName ?? null);
     emitAdminPanelPinUpdate(franchiseId, record.adminPanelPin ?? null);
+    emitSignedWorkflowUpdate(franchiseId, record.disableSignedWorkflow);
     return record;
   })();
 
@@ -282,6 +326,14 @@ export async function loadFranchiseAdminPanelPin(
   return record?.adminPanelPin ?? null;
 }
 
+export async function loadFranchiseSignedWorkflowDisabled(
+  franchiseId: string,
+  options: { force?: boolean } = {}
+): Promise<boolean> {
+  const record = await loadFranchiseBranding(franchiseId, options);
+  return record?.disableSignedWorkflow === true;
+}
+
 function hasOwnProp<T extends object>(payload: T, key: keyof T): boolean {
   return Object.prototype.hasOwnProperty.call(payload, key);
 }
@@ -299,9 +351,13 @@ export async function saveFranchiseBranding(
   const hasLogo = hasOwnProp(payload, 'logoUrl');
   const hasAppName = hasOwnProp(payload, 'appName');
   const hasAdminPanelPin = hasOwnProp(payload, 'adminPanelPin');
+  const hasDisableSignedWorkflow = hasOwnProp(payload, 'disableSignedWorkflow');
   const logoUrl = hasLogo ? normalizeLogoUrl(payload.logoUrl) : undefined;
   const appName = hasAppName ? normalizeAppName(payload.appName) : undefined;
   const adminPanelPin = hasAdminPanelPin ? normalizeAdminPanelPin(payload.adminPanelPin) : undefined;
+  const disableSignedWorkflow = hasDisableSignedWorkflow
+    ? normalizeDisableSignedWorkflow(payload.disableSignedWorkflow)
+    : undefined;
 
   if (!supabase) {
     requireSupabase();
@@ -314,6 +370,7 @@ export async function saveFranchiseBranding(
     if (hasLogo) update.logo_url = logoUrl;
     if (hasAppName) update.app_name = appName;
     if (hasAdminPanelPin) update.admin_panel_pin = adminPanelPin;
+    if (hasDisableSignedWorkflow) update.disable_signed_workflow = disableSignedWorkflow;
     const { error } = await supabase
       .from(BRANDING_TABLE)
       .upsert(update, { onConflict: 'franchise_id', ignoreDuplicates: false });
@@ -325,6 +382,9 @@ export async function saveFranchiseBranding(
     logoUrl: hasLogo ? (logoUrl ?? null) : existing?.logoUrl ?? null,
     appName: hasAppName ? (appName ?? null) : existing?.appName ?? null,
     adminPanelPin: hasAdminPanelPin ? (adminPanelPin ?? null) : existing?.adminPanelPin ?? null,
+    disableSignedWorkflow: hasDisableSignedWorkflow
+      ? Boolean(disableSignedWorkflow)
+      : existing?.disableSignedWorkflow === true,
     updatedAt: nowIso,
     fetchedAt: Date.now(),
   };
@@ -338,6 +398,9 @@ export async function saveFranchiseBranding(
   }
   if (hasAdminPanelPin) {
     emitAdminPanelPinUpdate(payload.franchiseId, record.adminPanelPin ?? null);
+  }
+  if (hasDisableSignedWorkflow) {
+    emitSignedWorkflowUpdate(payload.franchiseId, record.disableSignedWorkflow);
   }
 
   if (!options.skipLedger && hasLogo) {
@@ -381,6 +444,19 @@ export async function saveFranchiseBranding(
       },
     });
   }
+  if (!options.skipLedger && hasDisableSignedWorkflow) {
+    await logLedgerEventSafe({
+      franchiseId: payload.franchiseId,
+      action: disableSignedWorkflow ? 'Signed workflow disabled' : 'Signed workflow enabled',
+      targetType: 'franchise_workflow_settings',
+      targetId: payload.franchiseId,
+      details: {
+        franchiseId: payload.franchiseId,
+        previousDisableSignedWorkflow: existing?.disableSignedWorkflow === true,
+        nextDisableSignedWorkflow: Boolean(disableSignedWorkflow),
+      },
+    });
+  }
   return record;
 }
 
@@ -398,6 +474,13 @@ export async function saveFranchiseAppName(
 
 export async function saveFranchiseAdminPanelPin(
   payload: { franchiseId: string; adminPanelPin: string | null; updatedBy?: string | null },
+  options: SaveFranchiseBrandingOptions = {}
+): Promise<FranchiseBrandingRecord> {
+  return saveFranchiseBranding(payload, options);
+}
+
+export async function saveFranchiseSignedWorkflowDisabled(
+  payload: { franchiseId: string; disableSignedWorkflow: boolean; updatedBy?: string | null },
   options: SaveFranchiseBrandingOptions = {}
 ): Promise<FranchiseBrandingRecord> {
   return saveFranchiseBranding(payload, options);

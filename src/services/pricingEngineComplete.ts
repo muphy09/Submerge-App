@@ -67,6 +67,23 @@ const ceilToStep = (value: number, step: number): number => {
 
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
+const getFiberglassModelDiscountRate = (discountPercent?: number): number => {
+  const parsed = Number(discountPercent);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.min(parsed, 100) / 100;
+};
+
+const getDiscountedFiberglassShellPrice = (shellPrice?: number, discountPercent?: number): number => {
+  const baseShellPrice = Number(shellPrice);
+  if (!Number.isFinite(baseShellPrice) || baseShellPrice <= 0) {
+    return 0;
+  }
+  const discountRate = getFiberglassModelDiscountRate(discountPercent);
+  return roundCurrency(baseShellPrice * (1 - discountRate));
+};
+
 type DeckingSource = 'primary' | 'additional';
 
 const getDeckingSource = (item?: CostLineItem | null): DeckingSource =>
@@ -1578,14 +1595,18 @@ export class FiberglassCalculations {
     const finishUpgrade = poolIsFiberglass
       ? findFiberglassNamedOption('finishUpgrades', poolSpecs.fiberglassFinishUpgradeName)
       : undefined;
+    const discountedShellPrice = getDiscountedFiberglassShellPrice(
+      poolModel?.shellPrice,
+      poolModel?.discountPercent
+    );
 
-    if (poolModel && poolModel.shellPrice > 0) {
+    if (poolModel && discountedShellPrice > 0) {
       items.push({
         category: 'Fiberglass Shell',
         description: poolModel.name,
-        unitPrice: poolModel.shellPrice,
+        unitPrice: discountedShellPrice,
         quantity: 1,
-        total: poolModel.shellPrice,
+        total: discountedShellPrice,
         details: { fiberglassLineType: 'pool-shell' },
       });
     }
@@ -1655,8 +1676,8 @@ export class FiberglassCalculations {
     }
 
     const shellPapDiscountRate = Math.max(0, Number(papDiscountRate) || 0);
-    if (poolModel && poolModel.shellPrice > 0 && shellPapDiscountRate > 0) {
-      const discountAmount = roundCurrency(poolModel.shellPrice * shellPapDiscountRate);
+    if (poolModel && discountedShellPrice > 0 && shellPapDiscountRate > 0) {
+      const discountAmount = roundCurrency(discountedShellPrice * shellPapDiscountRate);
       items.push({
         category: 'Fiberglass Shell',
         description: 'PAP Discount',

@@ -15,10 +15,15 @@ import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SubmitProposalModal from '../components/SubmitProposalModal';
 import './ProposalView.css';
+import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
+import {
+  DISABLED_SIGNED_WORKFLOW_MESSAGE,
+  loadFranchiseSignedWorkflowDisabled,
+} from '../services/franchiseBranding';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import {
@@ -751,6 +756,7 @@ function ProposalView() {
     ? 'Marking as Signed will lock the current active version, make it the signed baseline, and remove all non-active versions. All non-active versions will be removed when you do this. If changes are needed afterwards, they must be made through a Proposal Addendum.'
     : 'Marking as Signed will lock the current active version and make it the signed baseline. If changes are needed afterwards, they must be made through a Proposal Addendum.';
   const isProposalCompleted = proposalWorkflowStatus === 'completed';
+  const canOpenReadOnlyBuilder = isProposalEditingRestricted;
   const canManageVersionDrafts =
     !isProposalEditingRestricted &&
     !isReadOnlyReviewerView &&
@@ -774,6 +780,7 @@ function ProposalView() {
       : activeVersionRecordStatus === 'completed'
       ? 'Completed proposal versions are locked.'
       : undefined;
+  const { disableSignedWorkflow } = useFranchiseSignedWorkflowDisabled(proposal?.franchiseId);
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const reviewerReturnTo = locationState?.reviewerReturnTo === 'admin-panel' ? 'admin-panel' : 'workflow';
@@ -1225,8 +1232,9 @@ function ProposalView() {
   };
 
   const handleEdit = (version?: Proposal) => {
-    if (!canManageVersionDrafts) return;
-    if (!version || isVersionPermanentlyLocked(version) || isProposalCompleted) return;
+    if (!canManageVersionDrafts && !canOpenReadOnlyBuilder) return;
+    if (!version) return;
+    if (!canOpenReadOnlyBuilder && (isVersionPermanentlyLocked(version) || isProposalCompleted)) return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, {
       state: {
@@ -1522,7 +1530,7 @@ function ProposalView() {
     }
     warrantySectionsSaveRef.current = setTimeout(() => {
       void persistWarrantySections(updatedVersions);
-    }, 600);
+    }, 200);
   };
 
   const persistRetailAdjustments = async (updatedVersions: Proposal[]) => {
@@ -1939,6 +1947,23 @@ function ProposalView() {
 
   const ensureVersionCanBeMarkedAsSigned = async (container?: Proposal | null) => {
     if (!container) return false;
+    const targetFranchiseId = container.franchiseId || proposal?.franchiseId || null;
+
+    try {
+      const isSignedWorkflowDisabled = targetFranchiseId
+        ? await loadFranchiseSignedWorkflowDisabled(targetFranchiseId, { force: true })
+        : disableSignedWorkflow;
+      if (isSignedWorkflowDisabled) {
+        showToast({ type: 'error', message: DISABLED_SIGNED_WORKFLOW_MESSAGE });
+        return false;
+      }
+    } catch (error) {
+      console.warn('Unable to verify signed workflow setting before marking proposal as signed:', error);
+      if (disableSignedWorkflow) {
+        showToast({ type: 'error', message: DISABLED_SIGNED_WORKFLOW_MESSAGE });
+        return false;
+      }
+    }
 
     const targetVersionId = getApprovedVersionId(container) || getReviewVersionId(container);
     const targetVersion =
@@ -3560,28 +3585,36 @@ function ProposalView() {
       versionRecordStatus === 'submitted' ||
       versionRecordStatus === 'needs_approval' ||
       versionRecordStatus === 'approved';
-    const canEditVersion =
-      canManageVersionDrafts &&
-      !isVersionPermanentlyLocked(vm.proposal) &&
-      !isProposalCompleted;
+    const canOpenVersionInBuilder =
+      canOpenReadOnlyBuilder ||
+      (canManageVersionDrafts &&
+        !isVersionPermanentlyLocked(vm.proposal) &&
+        !isProposalCompleted);
     const showMarkAsSignedButton =
       !isProposalEditingRestricted &&
       versionRecordStatus === 'approved' &&
       isLivePublishedVersion &&
       isActive;
-    const canMarkAsSignedVersion = showMarkAsSignedButton && !vm.hasEquipmentChangeRequired;
-    const markAsSignedDisabledReason = vm.hasEquipmentChangeRequired
+    const canMarkAsSignedVersion =
+      showMarkAsSignedButton &&
+      !disableSignedWorkflow &&
+      !vm.hasEquipmentChangeRequired;
+    const markAsSignedDisabledReason = disableSignedWorkflow
+      ? DISABLED_SIGNED_WORKFLOW_MESSAGE
+      : vm.hasEquipmentChangeRequired
       ? MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
       : undefined;
     const editVersionDisabledReason =
-      !canManageVersionDrafts
-        ? editDisabledReason
-        : isProposalCompleted
+      isProposalCompleted
         ? 'Completed proposals are locked.'
         : versionRecordStatus === 'signed'
         ? 'Signed proposal versions are locked. Create a proposal addendum to make changes.'
         : versionRecordStatus === 'completed'
         ? 'Completed proposal versions are locked.'
+        : !canManageVersionDrafts && !canOpenReadOnlyBuilder
+        ? editDisabledReason
+        : canOpenReadOnlyBuilder
+        ? 'Open proposal in the builder with read-only access.'
         : undefined;
     const deleteVersionDisabledReason =
       !canManageVersionDrafts
@@ -3677,7 +3710,7 @@ function ProposalView() {
               <button
                 className="action-button side-action-button"
                 onClick={() => handleEdit(vm.proposal)}
-                disabled={!canEditVersion}
+                disabled={!canOpenVersionInBuilder}
               >
                 Edit Proposal
               </button>
@@ -3754,13 +3787,15 @@ function ProposalView() {
               </button>
             )}
             {isReadOnlyReviewerView && proposalWorkflowStatus === 'approved' && (
-              <button
-                className="action-button primary side-action-button"
-                onClick={() => setShowMarkSignedConfirm(true)}
-                disabled={reviewerActionSaving}
-              >
-                Mark as Signed
-              </button>
+              <TooltipAnchor tooltip={disableSignedWorkflow ? DISABLED_SIGNED_WORKFLOW_MESSAGE : undefined}>
+                <button
+                  className="action-button primary side-action-button"
+                  onClick={() => setShowMarkSignedConfirm(true)}
+                  disabled={reviewerActionSaving || disableSignedWorkflow}
+                >
+                  Mark as Signed
+                </button>
+              </TooltipAnchor>
             )}
             {isReadOnlyReviewerView && proposalWorkflowStatus === 'signed' && (
               <button

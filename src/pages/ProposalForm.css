@@ -1085,6 +1085,24 @@
   margin-top: 0;
 }
 
+.proposal-builder-readonly-note {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #f3c98b;
+  background: linear-gradient(180deg, #fff8e8 0%, #fff2d1 100%);
+  color: #8a4b08;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.proposal-builder-readonly-shell {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
 .section-title-actions .btn-success {
   text-shadow:
     -0.5px 0 rgba(0, 0, 0, 0.95),

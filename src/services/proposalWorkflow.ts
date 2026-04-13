@@ -87,6 +87,22 @@ export type WorkflowSubmissionPreview = {
   approvalRequiredByUserSetting: boolean;
 };
 
+export type ProposalSelectionField = {
+  key: string;
+  label: string;
+  value: string | null;
+};
+
+export type ProposalSelectionCategory = {
+  key: string;
+  label: string;
+  fields: ProposalSelectionField[];
+};
+
+type WorkflowFieldExtractOptions = {
+  includeEmpty?: boolean;
+};
+
 type WorkflowFieldSnapshot = {
   key: string;
   label: string;
@@ -97,7 +113,7 @@ type WorkflowDiffGroupDefinition = {
   key: string;
   label: string;
   costKeys: Array<keyof Proposal['costBreakdown']>;
-  extractFields: (proposal: Proposal) => WorkflowFieldSnapshot[];
+  extractFields: (proposal: Proposal, options?: WorkflowFieldExtractOptions) => WorkflowFieldSnapshot[];
 };
 
 const REVIEW_PENDING_STATUSES: ProposalWorkflowStatus[] = ['needs_approval', 'changes_requested'];
@@ -236,7 +252,16 @@ function formatBoolean(value: unknown) {
   return '';
 }
 
-function compactSnapshots(entries: WorkflowFieldSnapshot[]) {
+function compactSnapshots(
+  entries: WorkflowFieldSnapshot[],
+  options?: WorkflowFieldExtractOptions
+) {
+  if (options?.includeEmpty) {
+    return entries.map((entry) => ({
+      ...entry,
+      value: normalizeText(entry.value),
+    }));
+  }
   return entries.filter((entry) => normalizeText(entry.value).length > 0);
 }
 
@@ -508,7 +533,10 @@ function summarizePumpArray(
     .join(', ');
 }
 
-function extractPoolSpecsFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractPoolSpecsFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const specs = proposal.poolSpecs || ({} as Proposal['poolSpecs']);
   return compactSnapshots([
     { key: 'poolType', label: 'Pool Type', value: normalizeText(specs.poolType) },
@@ -537,10 +565,13 @@ function extractPoolSpecsFields(proposal: Proposal): WorkflowFieldSnapshot[] {
     { key: 'streetDistance', label: 'Pool To Street Distance', value: formatNumber(specs.poolToStreetDistance) },
     { key: 'automaticCover', label: 'Automatic Cover', value: formatBoolean(specs.hasAutomaticCover) },
     { key: 'waterfallCount', label: 'Waterfall Count', value: formatNumber(specs.waterfallCount) },
-  ]);
+  ], options);
 }
 
-function extractExcavationFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractExcavationFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const excavation = proposal.excavation || ({} as Proposal['excavation']);
   return compactSnapshots([
     { key: 'rbbSqft', label: 'Raised Bond Beam Area', value: formatNumber(excavation.totalRBBSqft, ' SQFT') },
@@ -555,10 +586,13 @@ function extractExcavationFields(proposal: Proposal): WorkflowFieldSnapshot[] {
     { key: 'soilEngineer', label: 'Soil Sample / Engineer', value: formatBoolean(excavation.needsSoilSampleEngineer) },
     { key: 'retainingWalls', label: 'Retaining Walls', value: summarizeRetainingWalls(excavation.retainingWalls) },
     { key: 'customOptions', label: 'Excavation Options', value: summarizeCustomOptions(excavation.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractPlumbingFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractPlumbingFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const plumbing = proposal.plumbing || ({} as Proposal['plumbing']);
   const runs = plumbing.runs || ({} as Proposal['plumbing']['runs']);
   return compactSnapshots([
@@ -575,10 +609,13 @@ function extractPlumbingFields(proposal: Proposal): WorkflowFieldSnapshot[] {
     { key: 'infloorValveToPool', label: 'Infloor Valve To Pool', value: formatNumber(runs.infloorValveToPool, ' LF') },
     { key: 'spaRun', label: 'Spa Run', value: formatNumber(runs.spaRun, ' LF') },
     { key: 'customOptions', label: 'Plumbing Options', value: summarizeCustomOptions(plumbing.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractElectricalFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractElectricalFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const electrical = proposal.electrical || ({} as Proposal['electrical']);
   const runs = electrical.runs || ({} as Proposal['electrical']['runs']);
   const plumbingRuns = proposal.plumbing?.runs || ({} as Proposal['plumbing']['runs']);
@@ -588,10 +625,13 @@ function extractElectricalFields(proposal: Proposal): WorkflowFieldSnapshot[] {
     { key: 'lightRun', label: 'Light Run', value: formatNumber(runs.lightRun, ' LF') },
     { key: 'heatPumpElectricalRun', label: 'Heat Pump Electrical Run', value: formatNumber(runs.heatPumpElectricalRun, ' LF') },
     { key: 'customOptions', label: 'Electrical Options', value: summarizeCustomOptions(electrical.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractTileCopingDeckingFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractTileCopingDeckingFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const tile = proposal.tileCopingDecking || ({} as Proposal['tileCopingDecking']);
   const additionalDeckingSelections = getAdditionalDeckingSelections(tile);
   const primaryDeckingArea = getResolvedProposalPrimaryDeckingArea(proposal);
@@ -637,10 +677,13 @@ function extractTileCopingDeckingFields(proposal: Proposal): WorkflowFieldSnapsh
     { key: 'tileRockwork', label: 'Tile Rockwork', value: formatNumber(tile.rockworkTileSqft, ' SQFT') },
     { key: 'roughGrading', label: 'Rough Grading', value: formatBoolean(tile.hasRoughGrading) },
     { key: 'customOptions', label: 'Tile / Decking Options', value: summarizeCustomOptions(tile.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractDrainageFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractDrainageFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const drainage = proposal.drainage || ({} as Proposal['drainage']);
   return compactSnapshots([
     { key: 'downspouts', label: 'Downspouts', value: formatNumber(drainage.downspoutTotalLF, ' LF') },
@@ -648,10 +691,13 @@ function extractDrainageFields(proposal: Proposal): WorkflowFieldSnapshot[] {
     { key: 'frenchDrain', label: 'French Drain', value: formatNumber(drainage.frenchDrainTotalLF, ' LF') },
     { key: 'boxDrain', label: 'Box Drain', value: formatNumber(drainage.boxDrainTotalLF, ' LF') },
     { key: 'customOptions', label: 'Drainage Options', value: summarizeCustomOptions(drainage.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractEquipmentFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractEquipmentFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const equipment = proposal.equipment || ({} as Proposal['equipment']);
   const poolLights = Array.isArray(equipment.poolLights) ? equipment.poolLights : [];
   const spaLights = Array.isArray(equipment.spaLights) ? equipment.spaLights : [];
@@ -683,26 +729,35 @@ function extractEquipmentFields(proposal: Proposal): WorkflowFieldSnapshot[] {
     { key: 'handrail', label: 'Handrail', value: formatBoolean(equipment.hasHandrail) },
     { key: 'startupChemicals', label: 'Startup Chemicals', value: formatBoolean(equipment.hasStartupChemicals) },
     { key: 'customOptions', label: 'Equipment Options', value: summarizeCustomOptions(equipment.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractWaterFeatureFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractWaterFeatureFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const waterFeatures = proposal.waterFeatures || ({} as Proposal['waterFeatures']);
   return compactSnapshots([
     { key: 'selections', label: 'Selections', value: summarizeWaterFeatureSelections(waterFeatures) },
     { key: 'customOptions', label: 'Water Feature Options', value: summarizeCustomOptions(waterFeatures.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractCustomFeatureFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractCustomFeatureFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const customFeatures = proposal.customFeatures || ({} as Proposal['customFeatures']);
   return compactSnapshots([
     { key: 'features', label: 'Custom Features', value: summarizeCustomFeatures(customFeatures.features) },
     { key: 'totalCost', label: 'Custom Feature Total', value: formatCurrencyValue(customFeatures.totalCost) },
-  ]);
+  ], options);
 }
 
-function extractInteriorFinishFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractInteriorFinishFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const finish = proposal.interiorFinish || ({} as Proposal['interiorFinish']);
   return compactSnapshots([
     { key: 'finishType', label: 'Finish Type', value: normalizeText(finish.finishType) },
@@ -711,10 +766,13 @@ function extractInteriorFinishFields(proposal: Proposal): WorkflowFieldSnapshot[
     { key: 'hasSpa', label: 'Interior Finish Includes Spa', value: formatBoolean(finish.hasSpa) },
     { key: 'waterproofing', label: 'Waterproofing', value: formatBoolean(finish.hasWaterproofing) },
     { key: 'customOptions', label: 'Interior Finish Options', value: summarizeCustomOptions(finish.customOptions) },
-  ]);
+  ], options);
 }
 
-function extractPricingAdjustmentFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractPricingAdjustmentFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   const manual = proposal.manualAdjustments;
   return compactSnapshots([
     { key: 'manualPositive1', label: 'Manual Positive 1', value: formatCurrencyValue(manual?.positive1) },
@@ -723,13 +781,16 @@ function extractPricingAdjustmentFields(proposal: Proposal): WorkflowFieldSnapsh
     { key: 'manualNegative2', label: 'Manual Negative 2', value: formatCurrencyValue(manual?.negative2) },
     { key: 'retailAdjustments', label: 'Retail Adjustments', value: summarizeRetailAdjustments(proposal.retailAdjustments) },
     { key: 'contractOverrides', label: 'Contract Overrides', value: summarizeContractOverrides(proposal.contractOverrides) },
-  ]);
+  ], options);
 }
 
-function extractWarrantyFields(proposal: Proposal): WorkflowFieldSnapshot[] {
+function extractWarrantyFields(
+  proposal: Proposal,
+  options?: WorkflowFieldExtractOptions
+): WorkflowFieldSnapshot[] {
   return compactSnapshots([
     { key: 'warrantySections', label: 'Warranty Sections', value: summarizeWarrantySections(proposal.warrantySections) },
-  ]);
+  ], options);
 }
 
 COST_DIFF_GROUPS.push(
@@ -806,6 +867,32 @@ COST_DIFF_GROUPS.push(
     extractFields: extractWarrantyFields,
   }
 );
+
+const PROPOSAL_SELECTION_GROUP_KEYS = new Set([
+  'poolSpecs',
+  'excavation',
+  'plumbing',
+  'electrical',
+  'tileCopingDecking',
+  'drainage',
+  'equipment',
+  'waterFeatures',
+  'interiorFinish',
+  'customFeatures',
+]);
+
+export function buildProposalSelectionCategories(proposal: Proposal): ProposalSelectionCategory[] {
+  const normalized = ensureProposalWorkflow(proposal);
+  return COST_DIFF_GROUPS.filter((group) => PROPOSAL_SELECTION_GROUP_KEYS.has(group.key)).map((group) => ({
+    key: group.key,
+    label: group.label,
+    fields: group.extractFields(normalized, { includeEmpty: true }).map((field) => ({
+      key: field.key,
+      label: field.label,
+      value: normalizeText(field.value) || null,
+    })),
+  }));
+}
 
 export function buildWorkflowActor(session?: UserSession | null): ProposalWorkflowActor {
   const current = getCurrentSession(session);

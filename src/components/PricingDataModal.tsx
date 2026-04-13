@@ -1029,6 +1029,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         prefix: '$',
         tooltip: 'Fiberglass gravel cost for this model.',
       },
+      {
+        key: 'discountPercent',
+        label: '% Discount',
+        type: 'number',
+        allowBlank: true,
+        tooltip: 'Optional shell-only discount. Enter 20 for 20% off the shell price.',
+      },
     ],
     []
   );

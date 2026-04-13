@@ -310,6 +310,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const sessionRole = getSessionRole();
   const isMasterUser = isMasterSession();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const isReadOnlyBuilderView = isProposalEditingRestricted && Boolean(proposalNumber);
+  const isCreationRestricted = isProposalEditingRestricted && !proposalNumber;
   const canViewCostBreakdown =
     sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
   const canOpenCogsBreakdown = canViewCostBreakdown;
@@ -689,21 +691,22 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const previousHasPoolRef = useRef<boolean>(hasPoolDefinition(proposal.poolSpecs));
 
   useEffect(() => {
-    if (!isProposalEditingRestricted || restrictedRedirectHandledRef.current) return;
+    if (restrictedRedirectHandledRef.current) return;
+    if (!isProposalEditingRestricted) return;
     restrictedRedirectHandledRef.current = true;
+    if (isCreationRestricted) {
+      showToast({
+        type: 'warning',
+        message: 'Master accounts acting as owner cannot create proposals.',
+      });
+      navigate('/', { replace: true });
+      return;
+    }
     showToast({
       type: 'warning',
-      message: proposalNumber
-        ? 'Master accounts acting as owner can view proposals but cannot edit them.'
-        : 'Master accounts acting as owner cannot create proposals.',
+      message: 'Master accounts acting as owner can view proposals here, but this builder is read-only.',
     });
-    navigate(
-      proposalNumber ? `/proposal/view/${proposalNumber}` : '/',
-      proposalNumber && versionIdFromState
-        ? { replace: true, state: { versionId: versionIdFromState } }
-        : { replace: true }
-    );
-  }, [isProposalEditingRestricted, navigate, proposalNumber, showToast, versionIdFromState]);
+  }, [isCreationRestricted, isProposalEditingRestricted, navigate, showToast]);
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
@@ -1127,7 +1130,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   useEffect(() => {
     const requestId = ++loadRequestRef.current;
-    if (isProposalEditingRestricted) {
+    if (isCreationRestricted) {
       setIsLoading(false);
       return;
     }
@@ -1162,10 +1165,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       void initializeNewProposal();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isProposalEditingRestricted, proposalNumber]);
+  }, [isCreationRestricted, proposalNumber]);
 
   useEffect(() => {
-    if (isProposalEditingRestricted) return;
+    if (isCreationRestricted) return;
     if (proposalNumber && isLoading) return;
     const franchiseId = proposal.franchiseId || getSessionFranchiseId();
     const desiredModelId = proposal.pricingModelId || null;
@@ -1180,6 +1183,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     proposalNumber,
     isLoading,
   ]);
+
+  useEffect(() => {
+    if (!isReadOnlyBuilderView || !hasEdits) return;
+    setHasEdits(false);
+  }, [hasEdits, isReadOnlyBuilderView]);
 
   const loadProposal = async (num: string, requestId: number) => {
     try {
@@ -1287,7 +1295,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
 
       const targetVersionStatus = getVersionRecordStatus(sanitizedTarget);
-      if (isVersionPermanentlyLocked(sanitizedTarget) || getWorkflowStatus(versioned) === 'completed') {
+      if (!isReadOnlyBuilderView && (isVersionPermanentlyLocked(sanitizedTarget) || getWorkflowStatus(versioned) === 'completed')) {
         showToast({
           type: 'warning',
           message:
@@ -1349,7 +1357,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       [section]: data,
       lastModified: new Date().toISOString(),
     }));
-    setHasEdits(true);
+    if (!isReadOnlyBuilderView) {
+      setHasEdits(true);
+    }
   };
 
   const handleSelectEquipmentPackage = (packageId: string) => {
@@ -1701,6 +1711,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleHome = () => {
+    if (isReadOnlyBuilderView) {
+      navigate('/');
+      return;
+    }
     if (hasEdits) {
       setShowCancelConfirm(true);
       return;
@@ -1709,6 +1723,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleSelectPricingModel = async (id: string) => {
+    if (isReadOnlyBuilderView) return;
     const model = pricingModels.find((entry) => entry.id === id);
     await applyPricingModelSelection(
       id,
@@ -1904,15 +1919,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     );
   }
 
-  if (isProposalEditingRestricted) {
-    return null;
-  }
-
   const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(
     mergeWithDefaults(applySessionCommissionRates(proposal)),
     papDiscounts
   );
-  const proposalSummaryTooltip = isOffline
+  const proposalSummaryTooltip = !isReadOnlyBuilderView && isOffline
     ? 'No internet connection. Connect to save.'
     : undefined;
   const isCompactLayout = viewportWidth < 1300;
@@ -2007,14 +2018,22 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const pricingModelControl = (
     <label
       className={`form-header-pricing ${pricingModelHeaderStateClass}`}
-      data-tooltip="Click to change from the Active Price Model"
-      aria-label={`Current pricing model: ${pricingModelDisplayName}. Click to change from the Active Price Model`}
+      data-tooltip={
+        isReadOnlyBuilderView
+          ? 'Read-only mode while acting as owner.'
+          : 'Click to change from the Active Price Model'
+      }
+      aria-label={
+        isReadOnlyBuilderView
+          ? `Current pricing model: ${pricingModelDisplayName}. Read-only mode while acting as owner.`
+          : `Current pricing model: ${pricingModelDisplayName}. Click to change from the Active Price Model`
+      }
     >
       <select
         value={selectedPricingModelId || ''}
         onChange={(e) => void handleSelectPricingModel(e.target.value)}
         className="form-header-pricing-select"
-        disabled={pricingModels.length === 0 || isSaving}
+        disabled={pricingModels.length === 0 || isSaving || isReadOnlyBuilderView}
         aria-label={`Pricing Model. Current selection: ${pricingModelDisplayName}`}
       >
         <option value="" disabled>
@@ -2046,7 +2065,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   );
 
   const handleProposalSummaryClick = () => {
-    if (isSaving || isOffline) return;
+    if (isSaving || (!isReadOnlyBuilderView && isOffline)) return;
+    if (isReadOnlyBuilderView && proposalNumber) {
+      navigate(`/proposal/view/${proposalNumber}`, {
+        state: { versionId: proposal.versionId || editingVersionId || versionIdFromState || 'original' },
+      });
+      return;
+    }
     void handleSave('draft', { navigateToSummary: true });
   };
 
@@ -2155,7 +2180,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           </button>
         )}
 
-        <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showCostSidebar ? 'no-right-cost' : ''}`}>
+          <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showCostSidebar ? 'no-right-cost' : ''}`}>
           <div className="section-content" ref={sectionContentRef}>
             <div className="section-title-row">
               <div className="section-title-pricing">{pricingModelControl}</div>
@@ -2172,7 +2197,18 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                 </TooltipAnchor>
               </div>
             </div>
-            {renderSection()}
+            {isReadOnlyBuilderView && (
+              <div className="proposal-builder-readonly-note" role="status">
+                Read-only mode while acting as franchise owner. Review the proposal builder, but changes are disabled.
+              </div>
+            )}
+            {isReadOnlyBuilderView ? (
+              <fieldset className="proposal-builder-readonly-shell" disabled aria-label="Read-only proposal builder">
+                {renderSection()}
+              </fieldset>
+            ) : (
+              renderSection()
+            )}
           </div>
 
           <div className="form-actions">
@@ -2220,10 +2256,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               showWarranty
               showZoomControl={false}
               initialZoomScale={0.9}
-              allowRetailAdjustments
-              editableWarranty
-              onRetailAdjustmentsChange={(adjustments) => updateProposal('retailAdjustments', adjustments)}
-              onWarrantySectionsChange={(sections) => updateProposal('warrantySections', sections)}
+              allowRetailAdjustments={!isReadOnlyBuilderView}
+              editableWarranty={!isReadOnlyBuilderView}
+              onRetailAdjustmentsChange={
+                isReadOnlyBuilderView ? undefined : (adjustments) => updateProposal('retailAdjustments', adjustments)
+              }
+              onWarrantySectionsChange={
+                isReadOnlyBuilderView ? undefined : (sections) => updateProposal('warrantySections', sections)
+              }
             />
           </div>
         </div>
@@ -2237,11 +2277,15 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             manualAdjustments: proposal.manualAdjustments,
           }) as Proposal}
           onClose={() => setShowCostBreakdownPage(false)}
-          onAdjustmentsChange={(adjustments) => {
-            manualAdjustmentsSourceRef.current = 'proposal';
-            setManualAdjustments(adjustments);
-            updateProposal('manualAdjustments', adjustments);
-          }}
+          onAdjustmentsChange={
+            isReadOnlyBuilderView
+              ? undefined
+              : (adjustments) => {
+                  manualAdjustmentsSourceRef.current = 'proposal';
+                  setManualAdjustments(adjustments);
+                  updateProposal('manualAdjustments', adjustments);
+                }
+          }
         />
       )}
 

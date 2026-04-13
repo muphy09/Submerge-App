@@ -45,6 +45,8 @@ const GENERATED_COPING_DECKING_WARRANTY_ID_PREFIX = 'generated-coping-decking';
 const GENERATED_COPING_DECKING_WARRANTY_SECTION_ID = 'generated-coping-decking-section';
 const PLUMBING_WARRANTY_ADVANTAGE_TEXT = 'Designed to Create a more efficient and higher performing system';
 const LEGACY_INTERIOR_FINISH_ADVANTAGE = 'Combines durability and functionality';
+const EQUIPMENT_WARRANTY_ADVANTAGE_TEXT = '5-Year NO-FAULT Warranty on all Hayward Equipment';
+const DEPRECATED_WARRANTY_BRAND_PATTERN = /\bjandy\b/i;
 
 const createWarrantyId = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
@@ -572,7 +574,7 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[]
     ? equipment.pump?.name?.trim()
     : undefined;
   pushEquipmentItem('pump', 'Pump', primaryPumpName, {
-    advantage: LEGACY_EQUIPMENT_WARRANTY_ADVANTAGE,
+    advantage: EQUIPMENT_WARRANTY_ADVANTAGE_TEXT,
   });
 
   const auxiliaryPumps =
@@ -654,7 +656,6 @@ const buildElectricalItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[
   { label: 'Breakers at pad included', advantage: 'Protected outlet for homeowner convenience' },
   { label: '110 volt GFI protected light circuit with outlet' },
   { label: '220 volt pump circuit' },
-  { label: 'Jandy IQ20 pump controller', advantage: 'Control your pump from your phone' },
   { label: 'Bonding as per N.E.C. Code' },
   ...buildElectricalLightItems(proposal),
 ];
@@ -684,7 +685,6 @@ const buildPlumbingItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] 
   { label: 'When possible 45-degree elbows are used rather than 90-degree to improve efficiency and performance' },
   { label: 'Separate skimmer and main drain suction - allows for maximum performance' },
   { label: 'Heavy duty surface skimmer' },
-  { label: 'Jandy Ball Valves' },
   { label: 'Hose bib at pad for draining pool' },
   { label: 'All circulation lines are pressure tested throughout construction' },
   ...buildSelectedWaterFeatureWarrantyItems(proposal),
@@ -727,6 +727,44 @@ const isGeneratedCopingDeckingWarrantyItem = (item: WarrantyFeatureItem) =>
 
 const isGeneratedPlumbingWarrantyAdvantageItem = (item: WarrantyAdvantageItem) =>
   typeof item.id === 'string' && item.id.startsWith(`${GENERATED_PLUMBING_WARRANTY_ID_PREFIX}-`);
+
+const containsDeprecatedWarrantyBrand = (value: string | undefined) =>
+  typeof value === 'string' && DEPRECATED_WARRANTY_BRAND_PATTERN.test(value);
+
+const isLegacyEquipmentWarrantyAdvantage = (value: string | undefined) => {
+  const normalized = normalizeWarrantyText(value);
+  return (
+    normalized === normalizeWarrantyText(LEGACY_EQUIPMENT_WARRANTY_ADVANTAGE) ||
+    (normalized.includes('no-fault warranty') &&
+      normalized.includes('equipment') &&
+      containsDeprecatedWarrantyBrand(value))
+  );
+};
+
+const sanitizeWarrantySections = (sections: WarrantySection[]): WarrantySection[] =>
+  sections.map((section) => ({
+    ...section,
+    featureItems: section.featureItems.filter(
+      (item) =>
+        !containsDeprecatedWarrantyBrand(item.label) &&
+        !containsDeprecatedWarrantyBrand(item.detail)
+    ),
+    advantageItems: section.advantageItems.reduce<WarrantyAdvantageItem[]>((items, item) => {
+      const text = isLegacyEquipmentWarrantyAdvantage(item.text)
+        ? EQUIPMENT_WARRANTY_ADVANTAGE_TEXT
+        : item.text;
+
+      if (containsDeprecatedWarrantyBrand(text)) {
+        return items;
+      }
+
+      items.push({
+        ...item,
+        text,
+      });
+      return items;
+    }, []),
+  }));
 
 const ensurePlumbingWarrantyAdvantage = (sections: WarrantySection[]): WarrantySection[] => {
   const canonicalText = normalizeWarrantyText(PLUMBING_WARRANTY_ADVANTAGE_TEXT);
@@ -1007,6 +1045,26 @@ const mergeCopingDeckingSection = (
   return [...mergedSections, generatedSection];
 };
 
+const hydrateGeneratedWarrantySections = (
+  sections: WarrantySection[],
+  proposal?: Partial<Proposal>
+): WarrantySection[] =>
+  ensurePlumbingWarrantyAdvantage(
+    mergeInteriorFinishWarrantyIntoCleanupSection(
+      mergeCopingDeckingSection(
+        mergeElectricalLightItemsIntoElectricSection(
+          mergeEquipmentItemsIntoEquipmentSection(
+            mergeSelectedWaterFeaturesIntoPlumbingSection(sections, proposal),
+            proposal
+          ),
+          proposal
+        ),
+        proposal
+      ),
+      proposal
+    )
+  );
+
 export const buildGeneratedWarrantySections = (
   proposal?: Partial<Proposal>,
   brandName: string = 'Submerge'
@@ -1111,9 +1169,9 @@ export const buildGeneratedWarrantySections = (
     ]),
   ];
 
-  return ensurePlumbingWarrantyAdvantage(normalizeWarrantySections(sections)).map((section) =>
-    applyBrandToSection(section, brandName)
-  );
+  return sanitizeWarrantySections(
+    hydrateGeneratedWarrantySections(normalizeWarrantySections(sections), proposal)
+  ).map((section) => applyBrandToSection(section, brandName));
 };
 
 export const resolveWarrantySections = (
@@ -1121,24 +1179,9 @@ export const resolveWarrantySections = (
   brandName: string = 'Submerge'
 ): WarrantySection[] => {
   if (Array.isArray(proposal?.warrantySections)) {
-    return ensurePlumbingWarrantyAdvantage(
-      mergeInteriorFinishWarrantyIntoCleanupSection(
-        mergeCopingDeckingSection(
-          mergeElectricalLightItemsIntoElectricSection(
-            mergeEquipmentItemsIntoEquipmentSection(
-              mergeSelectedWaterFeaturesIntoPlumbingSection(
-                normalizeWarrantySections(proposal.warrantySections),
-                proposal
-              ),
-              proposal
-            ),
-            proposal
-          ),
-          proposal
-        ),
-        proposal
-      )
-    ).map((section) => applyBrandToSection(section, brandName));
+    return sanitizeWarrantySections(normalizeWarrantySections(proposal.warrantySections)).map(
+      (section) => applyBrandToSection(section, brandName)
+    );
   }
   return buildGeneratedWarrantySections(proposal, brandName);
 };
