@@ -1,4 +1,4 @@
-## [2.2.18] - 4/13/26
+## [2.2.19] - 4/13/26
 ### IMPORTANT
 - 'Mark as Signed' temporarily disabled while the Addendum Comparison UI is finalized for the Book Keeper
     - ETA: 8:00pm, 4/13/26
@@ -6,6 +6,7 @@
 - Old Warranty data (Jandy) no longer accidentally injects into the breakdown
     - Fields that were accidentally injected could not be edited, this has been resolved
     - Updated 5-Year and 3-Year Warranty logic
+    - Plumbing Advantages cleaned up
 ### Fiberglass Pool Models
 - Added a manual % discount column to the Fiberglass Pool Model table
 ### Book Keeper Tab

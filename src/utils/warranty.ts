@@ -47,6 +47,11 @@ const PLUMBING_WARRANTY_ADVANTAGE_TEXT = 'Designed to Create a more efficient an
 const LEGACY_INTERIOR_FINISH_ADVANTAGE = 'Combines durability and functionality';
 const EQUIPMENT_WARRANTY_ADVANTAGE_TEXT = '5-Year NO-FAULT Warranty on all Hayward Equipment';
 const DEPRECATED_WARRANTY_BRAND_PATTERN = /\bjandy\b/i;
+const LEGACY_PLUMBING_PUMP_ADVANTAGE_PATTERNS = [
+  /stealth\s+series\s+pump/i,
+  /high[-\s]*performance\s+circulation\s+pump/i,
+  /booster\s+pump/i,
+];
 
 const createWarrantyId = (prefix: string) =>
   `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
@@ -676,12 +681,9 @@ const buildCleanupItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] =
 };
 
 const buildPlumbingItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => [
-  { label: '2 1/2 inch suction line', advantage: 'Submerge Stealth Series pump' },
-  {
-    label: '2 1/2 inch suction line for all pump motors larger than 1.0 HP',
-    advantage: 'Submerge High-Performance circulation pump',
-  },
-  { label: '2 inch return line (to 1st tee)', advantage: 'Submerge booster pump' },
+  { label: '2 1/2 inch suction line' },
+  { label: '2 1/2 inch suction line for all pump motors larger than 1.0 HP' },
+  { label: '2 inch return line (to 1st tee)' },
   { label: 'When possible 45-degree elbows are used rather than 90-degree to improve efficiency and performance' },
   { label: 'Separate skimmer and main drain suction - allows for maximum performance' },
   { label: 'Heavy duty surface skimmer' },
@@ -741,30 +743,42 @@ const isLegacyEquipmentWarrantyAdvantage = (value: string | undefined) => {
   );
 };
 
+const isLegacyPlumbingPumpAdvantage = (value: string | undefined) =>
+  typeof value === 'string' &&
+  LEGACY_PLUMBING_PUMP_ADVANTAGE_PATTERNS.some((pattern) => pattern.test(value));
+
 const sanitizeWarrantySections = (sections: WarrantySection[]): WarrantySection[] =>
-  sections.map((section) => ({
-    ...section,
-    featureItems: section.featureItems.filter(
-      (item) =>
-        !containsDeprecatedWarrantyBrand(item.label) &&
-        !containsDeprecatedWarrantyBrand(item.detail)
-    ),
-    advantageItems: section.advantageItems.reduce<WarrantyAdvantageItem[]>((items, item) => {
-      const text = isLegacyEquipmentWarrantyAdvantage(item.text)
-        ? EQUIPMENT_WARRANTY_ADVANTAGE_TEXT
-        : item.text;
+  sections.map((section) => {
+    const isPlumbingSection = section.title.trim().toLowerCase() === 'plumbing';
 
-      if (containsDeprecatedWarrantyBrand(text)) {
+    return {
+      ...section,
+      featureItems: section.featureItems.filter(
+        (item) =>
+          !containsDeprecatedWarrantyBrand(item.label) &&
+          !containsDeprecatedWarrantyBrand(item.detail)
+      ),
+      advantageItems: section.advantageItems.reduce<WarrantyAdvantageItem[]>((items, item) => {
+        const text = isLegacyEquipmentWarrantyAdvantage(item.text)
+          ? EQUIPMENT_WARRANTY_ADVANTAGE_TEXT
+          : item.text;
+
+        if (containsDeprecatedWarrantyBrand(text)) {
+          return items;
+        }
+
+        if (isPlumbingSection && isLegacyPlumbingPumpAdvantage(text)) {
+          return items;
+        }
+
+        items.push({
+          ...item,
+          text,
+        });
         return items;
-      }
-
-      items.push({
-        ...item,
-        text,
-      });
-      return items;
-    }, []),
-  }));
+      }, []),
+    };
+  });
 
 const ensurePlumbingWarrantyAdvantage = (sections: WarrantySection[]): WarrantySection[] => {
   const canonicalText = normalizeWarrantyText(PLUMBING_WARRANTY_ADVANTAGE_TEXT);
