@@ -4,6 +4,7 @@ import pricingData from './pricingData';
 import { formatMasonryFacingLabel, getMasonryFacingOptions } from '../utils/masonryFacing';
 import { countSelectedWaterFeatureZones, flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { getEffectivePrimarySanitationSystemName } from '../utils/equipmentPackages';
+import { getAdditionalPumpSelections } from '../utils/pumpSelections';
 import {
   getAdditionalDeckingSelections,
   getDeckingTypeFullLabel,
@@ -302,10 +303,17 @@ function getContractBlowerValue(proposal: Proposal): string {
   return spaAutoPump?.name || 'NO';
 }
 
-function getAuxiliaryPumpContractNames(proposal: Proposal): string[] {
-  return getAuxiliaryPumpSelections(proposal)
-    .filter((pump) => !isSpaAutoAddedAuxiliaryPump(pump))
+function getAdditionalPrimaryPumpContractNames(proposal: Proposal): string[] {
+  return getAdditionalPumpSelections(proposal.equipment)
+    .filter((pump) => pump && !isPlaceholderPumpName(pump.name))
     .map((pump) => pump.name || '');
+}
+
+function getAuxiliaryPumpContractNames(proposal: Proposal): string[] {
+  const auxiliarySelections = getAuxiliaryPumpSelections(proposal);
+  const manualSelections = auxiliarySelections.filter((pump) => !isSpaAutoAddedAuxiliaryPump(pump));
+  const spaSelections = auxiliarySelections.filter((pump) => isSpaAutoAddedAuxiliaryPump(pump));
+  return [...manualSelections, ...spaSelections].map((pump) => pump.name || '');
 }
 
 function getWaterFeatureName(featureId?: string): string {
@@ -686,11 +694,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/hoa approval/.test(label)) return 'YES';
   if (/financing required/.test(label)) return 'NO';
 
+  if (field.id === 'p1_21' || /\bauxiliary pump i\b/.test(label)) {
+    return getAdditionalPrimaryPumpContractNames(proposal)[0] || 'None';
+  }
   if (field.id === 'p1_22' || /\bauxiliary pump ii\b/.test(label)) {
     return getAuxiliaryPumpContractNames(proposal)[0] || 'None';
-  }
-  if (field.id === 'p1_21' || /\bauxiliary pump i\b/.test(label)) {
-    return getPrimaryPumpContractName(proposal, 'None');
   }
   if (/sanitation i/.test(label)) {
     const sanitationSelections = [
@@ -713,7 +721,13 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return 'None';
   }
   if (/line type/.test(label)) return 'None';
-  if (/waterline tile/.test(label)) return hasTileSelection(proposal.tileCopingDecking) ? 'Included' : 'None';
+  if (/waterline tile/.test(label)) {
+    return specs.poolType === 'fiberglass'
+      ? 'None'
+      : hasTileSelection(proposal.tileCopingDecking)
+      ? 'Included'
+      : 'None';
+  }
   if (/accent tile/.test(label)) {
     const hasTile = hasTileSelection(proposal.tileCopingDecking);
     return hasTile && proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Trim Tile' : 'None';

@@ -673,6 +673,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       designerName,
       designerRole,
       designerCode,
+      interiorFinish: {
+        ...(base.interiorFinish || {}),
+        hasWaterproofing: false,
+      } as Proposal['interiorFinish'],
       pricing: {
         ...(base.pricing || {}),
         digCommissionRate: sessionCommissionRates.digCommissionRate,

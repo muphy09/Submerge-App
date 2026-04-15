@@ -1,3 +1,10 @@
+## [2.2.20] - 4/14/26
+### Contract
+- Auxillary Pump I now mapped to the 2nd Pump selection
+- Waterline defaults to 'None' in fiberglass contracts
+### Proposal Builder
+- Microglass defaults to 'Off' instead of 'On'
+-----
 ## [2.2.19] - 4/13/26
 ### IMPORTANT
 - 'Mark as Signed' temporarily disabled while the Addendum Comparison UI is finalized for the Book Keeper
