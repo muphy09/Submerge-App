@@ -84,6 +84,22 @@ const DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES: Record<string, number> = {
   p1_pay_decking: 0.3,
   p1_pay_interior_finish: 0.1,
 };
+const MIRRORED_CONTRACT_FIELD_GROUPS = [
+  ['p1_1', 'p1_body_buyer_name', 'p2_45', 'p3_customer_name', 'p4_customer_name', 'p5_customer_name', 'p6_customer_name'],
+  ['p1_1b', 'p1_body_job_site_address', 'p2_45b'],
+  ['p1_2', 'p2_46'],
+  ['p1_3', 'p2_47'],
+  ['p1_4', 'p2_48'],
+  ['p1_5', 'p1_6', 'p2_49', 'p2_50'],
+] as const;
+const MIRRORED_CONTRACT_FIELD_ID_MAP = new Map<string, readonly string[]>(
+  MIRRORED_CONTRACT_FIELD_GROUPS.flatMap((group) => group.map((fieldId) => [fieldId, group] as const))
+);
+
+type MirroredContractOverride = {
+  hasOverride: boolean;
+  value: string | number | null | undefined;
+};
 
 export function getContractDepositSchedulePercentages(
   proposal?: Partial<Proposal>
@@ -134,6 +150,29 @@ export function getContractDepositSchedulePercentages(
       DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES.p1_pay_interior_finish
     ),
   };
+}
+
+export function getMirroredContractFieldIds(fieldId: string): readonly string[] {
+  return MIRRORED_CONTRACT_FIELD_ID_MAP.get(fieldId) || [fieldId];
+}
+
+function resolveMirroredContractOverride(
+  fieldId: string,
+  overrides?: ContractOverrides
+): MirroredContractOverride {
+  if (!overrides) {
+    return { hasOverride: false, value: undefined };
+  }
+
+  for (const mirroredFieldId of getMirroredContractFieldIds(fieldId)) {
+    if (!Object.prototype.hasOwnProperty.call(overrides, mirroredFieldId)) continue;
+    return {
+      hasOverride: true,
+      value: overrides[mirroredFieldId],
+    };
+  }
+
+  return { hasOverride: false, value: undefined };
 }
 
 function normalizeProposal(pr: Proposal): ProposalWithPricing {
@@ -880,8 +919,7 @@ export async function getEditableContractFields(
         autoValue = getContractDepositFieldAutoValue(field.id, depositSourceValue, totalCashPrice, schedulePercentages);
       }
       if (field.id === 'p1_30') autoValue = '1';
-      const hasOverride = overrides ? Object.prototype.hasOwnProperty.call(overrides, field.id) : false;
-      const overrideVal = hasOverride ? overrides?.[field.id] : undefined;
+      const { hasOverride, value: overrideVal } = resolveMirroredContractOverride(field.id, overrides);
       const value = hasOverride && overrideVal !== null && overrideVal !== undefined ? String(overrideVal) : autoValue;
       const shouldAutoFill = field.id === 'p1_30' ? false : !hasOverride && isMeaningfulAutoValue(autoValue);
       return {

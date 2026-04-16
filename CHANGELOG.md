@@ -1,3 +1,11 @@
+## [2.2.21] - 4/16/26
+### Coping Adjustments
+- 12x24 Coping no longer adds 100% of the 12x12 cost
+    - Same cost as 12x12 coping
+- 16x16 Coping still adds 33% to cost of material (compared to 12x12)
+### Contract
+- Name, Address, Phone Number, and other fields now populate between all pages if entered
+-----
 ## [2.2.20] - 4/14/26
 ### Contract
 - Auxillary Pump I now mapped to the 2nd Pump selection

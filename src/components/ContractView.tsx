@@ -16,6 +16,7 @@ import {
   CONTRACT_DEPOSIT_SOURCE_FIELD_IDS,
   ContractOverrides,
   ContractFieldRender,
+  getMirroredContractFieldIds,
   getContractDepositFieldAutoValue,
   getContractDepositSchedulePercentages,
   getContractTotalCashPrice,
@@ -844,21 +845,27 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       const autoValue = fieldTemplate?.autoValue ?? '';
       const normalizedValue = value;
       const next = { ...overrides };
+      const mirroredFieldIds = getMirroredContractFieldIds(cellAddress);
+      const shouldClearOverrides = normalizedValue === autoValue || (!normalizedValue && !autoValue);
 
-      if (normalizedValue === autoValue || (!normalizedValue && !autoValue)) {
-        delete next[cellAddress];
+      if (shouldClearOverrides) {
+        mirroredFieldIds.forEach((fieldId) => {
+          delete next[fieldId];
+        });
       } else {
-        next[cellAddress] = normalizedValue;
+        mirroredFieldIds.forEach((fieldId) => {
+          next[fieldId] = normalizedValue;
+        });
       }
 
       setOverrides(next);
       setFields((prev) =>
         prev.map((field) => {
-          if (field.id !== cellAddress) return field;
-          const hasOverride = Object.prototype.hasOwnProperty.call(next, cellAddress);
+          if (!mirroredFieldIds.includes(field.id)) return field;
+          const hasOverride = Object.prototype.hasOwnProperty.call(next, field.id);
           return {
             ...field,
-            value: normalizedValue,
+            value: hasOverride ? normalizedValue : field.autoValue || '',
             isAutoFilled: !hasOverride && Boolean(field.autoValue),
             isOverridden: hasOverride,
           };

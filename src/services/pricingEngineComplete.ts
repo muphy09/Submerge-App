@@ -463,9 +463,18 @@ export class TileCopingDeckingCalculations {
     }
 
     const copingSize = tileCopingDecking.copingSize ?? '12x12';
-    const copingSizeAdjustments: Record<string, { label: string; rate: number }> = {
-      '16x16': { label: '16x16 coping', rate: 0.33 },
-      '12x24': { label: '12x24', rate: 1 },
+    const copingSizeAdjustments: Record<
+      string,
+      {
+        label: string;
+        laborRate?: number;
+        materialRate?: number;
+        showLaborLine?: boolean;
+        showMaterialLine?: boolean;
+      }
+    > = {
+      '16x16': { label: '16x16 coping', materialRate: 0.33, showMaterialLine: true },
+      '12x24': { label: '12x24', laborRate: 0, materialRate: 0, showLaborLine: true, showMaterialLine: true },
     };
     const copingSizeAdjustment = copingSizeAdjustments[copingSize];
     if (copingSizeAdjustment) {
@@ -475,9 +484,9 @@ export class TileCopingDeckingCalculations {
       const materialSubtotal = materialItems
         .filter(item => item.category === 'Coping Material')
         .reduce((sum, item) => sum + item.total, 0);
-      const laborIncrease = roundCurrency(laborSubtotal * copingSizeAdjustment.rate);
-      const materialIncrease = roundCurrency(materialSubtotal * copingSizeAdjustment.rate);
-      if (laborIncrease > 0) {
+      const laborIncrease = roundCurrency(laborSubtotal * (copingSizeAdjustment.laborRate ?? 0));
+      const materialIncrease = roundCurrency(materialSubtotal * (copingSizeAdjustment.materialRate ?? 0));
+      if (copingSizeAdjustment.showLaborLine && (laborIncrease > 0 || copingSizeAdjustment.laborRate === 0)) {
         laborItems.push({
           category: 'Coping Labor',
           description: copingSizeAdjustment.label,
@@ -486,7 +495,7 @@ export class TileCopingDeckingCalculations {
           total: laborIncrease,
         });
       }
-      if (materialIncrease > 0) {
+      if (copingSizeAdjustment.showMaterialLine && (materialIncrease > 0 || copingSizeAdjustment.materialRate === 0)) {
         materialItems.push({
           category: 'Coping Material',
           description: copingSizeAdjustment.label,

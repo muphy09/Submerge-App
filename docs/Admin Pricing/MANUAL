@@ -160,7 +160,8 @@ J) Tile / Coping / Decking / Rockwork
 - Labor = copingRate(copingType) * copingLength
 - Material = copingMaterialRate(copingType) * materialQty
 - Flagstone uses quantity multiplier
-- 16x16 coping adds 33% labor and 33% material surcharges as separate lines
+- 12x24 coping adds no labor/material surcharge and is shown as informational $0 line items
+- 16x16 coping adds a 33% material surcharge as a separate line
 
 3. Decking
 - Non-concrete decking uses area with waste factor
@@ -291,8 +292,10 @@ Example 2 — Coping = Travertine Level 1
   - `labor = copingRate(travertine-level1) * copingLength`
 - Coping material:
   - `material = copingMaterialRate(travertine-level1) * copingMaterialQty`
+- If coping size = 12x24:
+  - Show `12x24` as a separate $0 labor line and $0 material line.
 - If coping size = 16x16:
-  - Add `+33%` coping labor surcharge and `+33%` coping material surcharge as separate line items.
+  - Add `+33%` coping material surcharge as a separate line item.
 - If spillway/bullnose/rockwork are selected, they add separate lines.
 - Material taxes are added after subtotals by material bucket.
 
