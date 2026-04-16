@@ -530,6 +530,9 @@ function DashboardProposalsPanel({
                               <span className="dashboard-customer-name">
                                 {proposal.customerInfo?.customerName || 'Untitled Proposal'}
                               </span>
+                              {proposal.syncStatus === 'pending' && (
+                                <span className="dashboard-sync-note">Local changes pending sync</span>
+                              )}
                             </div>
                           </td>
                           <td className="dashboard-date-cell">

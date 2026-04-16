@@ -1,3 +1,4 @@
+import { TooltipAnchor } from './AppTooltip';
 import './SubmitProposalModal.css';
 
 type SubmitProposalModalProps = {
@@ -8,6 +9,8 @@ type SubmitProposalModalProps = {
   manualReviewRequested?: boolean;
   note: string;
   isSubmitting?: boolean;
+  confirmDisabled?: boolean;
+  confirmDisabledReason?: string;
   onNoteChange: (value: string) => void;
   onManualReviewToggle: () => void;
   onCancel: () => void;
@@ -22,6 +25,8 @@ function SubmitProposalModal({
   manualReviewRequested = false,
   note,
   isSubmitting = false,
+  confirmDisabled = false,
+  confirmDisabledReason,
   onNoteChange,
   onManualReviewToggle,
   onCancel,
@@ -89,9 +94,16 @@ function SubmitProposalModal({
           >
             Mark for Manual Review
           </button>
-          <button type="button" className="submit-proposal-button submit-proposal-button--primary" onClick={onConfirm} disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : isAddendum ? 'Submit Addendum' : 'Submit Proposal'}
-          </button>
+          <TooltipAnchor tooltip={confirmDisabledReason}>
+            <button
+              type="button"
+              className="submit-proposal-button submit-proposal-button--primary"
+              onClick={onConfirm}
+              disabled={isSubmitting || confirmDisabled}
+            >
+              {isSubmitting ? 'Submitting...' : isAddendum ? 'Submit Addendum' : 'Submit Proposal'}
+            </button>
+          </TooltipAnchor>
         </div>
       </div>
     </div>

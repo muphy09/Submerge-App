@@ -1,3 +1,16 @@
+## [2.3.0] - 4/16/26
+### Offline Functionality
+- App can now be used while offline in most situations without interruption
+- If the internet connection is interrupted while in the App:
+    - Changes are saved locally and will sync to cloud when connection is restored
+    - User cannot Submit or Sign proposals until connection is restored
+- Online Required:
+    - When first logging in
+    - When Submitting/Signing a Proposal
+    - Reviewer Actions (Approve/Ask for Changes)
+    - Password/Profile changes
+    - Admin Pricing Panel
+-----
 ## [2.2.21] - 4/16/26
 ### Coping Adjustments
 - 12x24 Coping no longer adds 100% of the 12x12 cost
@@ -16,7 +29,6 @@
 ## [2.2.19] - 4/13/26
 ### IMPORTANT
 - 'Mark as Signed' temporarily disabled while the Addendum Comparison UI is finalized for the Book Keeper
-    - ETA: 8:00pm, 4/13/26
 ### Warranty Breakdown
 - Old Warranty data (Jandy) no longer accidentally injects into the breakdown
     - Fields that were accidentally injected could not be edited, this has been resolved

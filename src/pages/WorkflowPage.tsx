@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { TooltipAnchor } from '../components/AppTooltip';
+import type { CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../components/Toast';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
@@ -45,6 +46,7 @@ import './WorkflowPage.css';
 
 type WorkflowPageProps = {
   session?: UserSession | null;
+  cloudIssue?: CloudConnectionIssue;
 };
 
 type QueueFilter = 'needs_approval' | 'approved' | 'signed' | 'archive';
@@ -265,10 +267,12 @@ const getNonPapDiscountTotal = (proposal?: Partial<Proposal> | null) => {
   return retailDiscountTotal + manualDiscountTotal;
 };
 
-function WorkflowPage({ session }: WorkflowPageProps) {
+function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
+  const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
+  const offlineActionDisabledReason = isOffline ? 'Internet connection must be restored' : undefined;
   const { showToast } = useToast();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [franchiseUsers, setFranchiseUsers] = useState<FranchiseUser[]>([]);
@@ -595,7 +599,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
     setSavingAction(successMessage);
     try {
-      const saved = ensureProposalWorkflow((await saveProposal(nextProposal)) as Proposal);
+      const saved = ensureProposalWorkflow((await saveProposal(nextProposal, { requireOnline: true })) as Proposal);
       const nextRows = proposals.map((entry) =>
         entry.proposalNumber === saved.proposalNumber ? saved : entry
       );
@@ -622,14 +626,17 @@ function WorkflowPage({ session }: WorkflowPageProps) {
       showToast({ type: 'success', message: successMessage });
     } catch (error) {
       console.error('Failed to save workflow action', error);
-      showToast({ type: 'error', message: 'Unable to save the workflow action.' });
+      showToast({
+        type: 'error',
+        message: (error as any)?.message || 'Unable to save the workflow action.',
+      });
     } finally {
       setSavingAction(null);
     }
   };
 
   const handleApprove = async () => {
-    if (!selectedProposal) return;
+    if (!selectedProposal || isOffline) return;
     await persistSelectedProposal(
       approveWorkflowProposal(selectedProposal, undefined, session),
       getSignedVersion(selectedProposal) ? 'Proposal addendum approved.' : 'Proposal approved.'
@@ -637,6 +644,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   };
 
   const handleRequestChanges = async () => {
+    if (isOffline) return;
     if (!selectedProposal || !noteDraft.trim()) {
       setActiveDetailTab('notes');
       setNoteComposerMode('request_changes');
@@ -650,6 +658,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   };
 
   const handleSendNote = async () => {
+    if (isOffline) return;
     if (!selectedProposal || !noteDraft.trim()) {
       setActiveDetailTab('notes');
       setNoteComposerMode('note');
@@ -663,7 +672,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   };
 
   const handleMarkAsSigned = async () => {
-    if (!selectedProposal) return;
+    if (!selectedProposal || isOffline) return;
     const targetFranchiseId = selectedProposal.franchiseId || session?.franchiseId || null;
 
     try {
@@ -689,7 +698,7 @@ function WorkflowPage({ session }: WorkflowPageProps) {
   };
 
   const handleComplete = async () => {
-    if (!selectedProposal || getWorkflowStatus(selectedProposal) !== 'signed') return;
+    if (!selectedProposal || getWorkflowStatus(selectedProposal) !== 'signed' || isOffline) return;
     await persistSelectedProposal(
       completeWorkflowProposal(selectedProposal, undefined, session),
       'Proposal marked as completed.'
@@ -950,16 +959,19 @@ function WorkflowPage({ session }: WorkflowPageProps) {
             <p>Messages stay here so the activity history stays clean.</p>
           </div>
           {selectedCanSendNotes && !showNoteComposer && (
-            <button
-              type="button"
-              className="workflow-secondary-btn"
-              onClick={() => {
-                setNoteComposerMode('note');
-                setShowNoteComposer(true);
-              }}
-            >
-              Add Note
-            </button>
+            <TooltipAnchor tooltip={offlineActionDisabledReason}>
+              <button
+                type="button"
+                className="workflow-secondary-btn"
+                onClick={() => {
+                  setNoteComposerMode('note');
+                  setShowNoteComposer(true);
+                }}
+                disabled={isOffline}
+              >
+                Add Note
+              </button>
+            </TooltipAnchor>
           )}
         </div>
         {selectedNoteEntries.length === 0 ? (
@@ -1007,29 +1019,33 @@ function WorkflowPage({ session }: WorkflowPageProps) {
             }
           />
           <div className="workflow-note-actions">
-            <button
-              type="button"
-              className="workflow-secondary-btn"
-              disabled={!noteDraft.trim() || Boolean(savingAction)}
-              onClick={() => {
-                setNoteComposerMode('note');
-                void handleSendNote();
-              }}
-            >
-              Send Note
-            </button>
-            {selectedCanRequestChanges && (
+            <TooltipAnchor tooltip={offlineActionDisabledReason}>
               <button
                 type="button"
-                className="workflow-danger-btn"
-                disabled={!noteDraft.trim() || Boolean(savingAction)}
+                className="workflow-secondary-btn"
+                disabled={!noteDraft.trim() || Boolean(savingAction) || isOffline}
                 onClick={() => {
-                  setNoteComposerMode('request_changes');
-                  void handleRequestChanges();
+                  setNoteComposerMode('note');
+                  void handleSendNote();
                 }}
               >
-                Request Changes
+                Send Note
               </button>
+            </TooltipAnchor>
+            {selectedCanRequestChanges && (
+              <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                <button
+                  type="button"
+                  className="workflow-danger-btn"
+                  disabled={!noteDraft.trim() || Boolean(savingAction) || isOffline}
+                  onClick={() => {
+                    setNoteComposerMode('request_changes');
+                    void handleRequestChanges();
+                  }}
+                >
+                  Request Changes
+                </button>
+              </TooltipAnchor>
             )}
             <button
               type="button"
@@ -1484,34 +1500,38 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                 </button>
                 <div className="workflow-action-buttons">
                   {selectedCurrentStatus === 'needs_approval' && (
-                    <button type="button" className="workflow-success-btn" disabled={Boolean(savingAction)} onClick={() => { void handleApprove(); }}>
-                      Approve
-                    </button>
+                    <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                      <button type="button" className="workflow-success-btn" disabled={Boolean(savingAction) || isOffline} onClick={() => { void handleApprove(); }}>
+                        Approve
+                      </button>
+                    </TooltipAnchor>
                   )}
                   {selectedCanRequestChanges && (
-                    <button
-                      type="button"
-                      className="workflow-danger-btn"
-                      disabled={Boolean(savingAction)}
-                      onClick={() => {
-                        if (noteDraft.trim()) {
-                          void handleRequestChanges();
-                          return;
-                        }
-                        setActiveDetailTab('notes');
-                        setNoteComposerMode('request_changes');
-                        setShowNoteComposer(true);
-                      }}
-                    >
-                      Request Changes
-                    </button>
+                    <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                      <button
+                        type="button"
+                        className="workflow-danger-btn"
+                        disabled={Boolean(savingAction) || isOffline}
+                        onClick={() => {
+                          if (noteDraft.trim()) {
+                            void handleRequestChanges();
+                            return;
+                          }
+                          setActiveDetailTab('notes');
+                          setNoteComposerMode('request_changes');
+                          setShowNoteComposer(true);
+                        }}
+                      >
+                        Request Changes
+                      </button>
+                    </TooltipAnchor>
                   )}
                   {selectedCurrentStatus === 'approved' && (
-                    <TooltipAnchor tooltip={disableSignedWorkflow ? DISABLED_SIGNED_WORKFLOW_MESSAGE : undefined}>
+                    <TooltipAnchor tooltip={isOffline ? offlineActionDisabledReason : disableSignedWorkflow ? DISABLED_SIGNED_WORKFLOW_MESSAGE : undefined}>
                       <button
                         type="button"
                         className="workflow-primary-btn"
-                        disabled={Boolean(savingAction) || disableSignedWorkflow}
+                        disabled={Boolean(savingAction) || disableSignedWorkflow || isOffline}
                         onClick={() => setShowMarkSignedConfirm(true)}
                       >
                         Mark as Signed
@@ -1519,9 +1539,11 @@ function WorkflowPage({ session }: WorkflowPageProps) {
                     </TooltipAnchor>
                   )}
                   {selectedCurrentStatus === 'signed' && (
-                    <button type="button" className="workflow-primary-btn" disabled={Boolean(savingAction)} onClick={() => setShowCompleteConfirm(true)}>
-                      Mark Complete
-                    </button>
+                    <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                      <button type="button" className="workflow-primary-btn" disabled={Boolean(savingAction) || isOffline} onClick={() => setShowCompleteConfirm(true)}>
+                        Mark Complete
+                      </button>
+                    </TooltipAnchor>
                   )}
                 </div>
               </div>
@@ -1536,6 +1558,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
         confirmLabel="Yes I'm sure. Mark as Signed"
         cancelLabel="No, take me back"
         isLoading={Boolean(savingAction)}
+        confirmDisabled={isOffline}
+        confirmDisabledReason={offlineActionDisabledReason}
         onConfirm={() => {
           setShowMarkSignedConfirm(false);
           void handleMarkAsSigned();
@@ -1549,6 +1573,8 @@ function WorkflowPage({ session }: WorkflowPageProps) {
         confirmLabel="Yes, I'm sure"
         cancelLabel="No, take me back"
         isLoading={Boolean(savingAction)}
+        confirmDisabled={isOffline}
+        confirmDisabledReason={offlineActionDisabledReason}
         onConfirm={() => {
           setShowCompleteConfirm(false);
           void handleComplete();

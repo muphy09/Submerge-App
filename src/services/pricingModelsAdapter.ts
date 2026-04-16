@@ -28,6 +28,8 @@ type LoadedPricingModel = {
 const DEFAULT_VERSION = 'v1';
 const DEFAULT_FRANCHISE_ID = 'default';
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
+const PRICING_MODEL_LIST_CACHE_PREFIX = 'submerge.pricingModelList';
+const PRICING_MODEL_SNAPSHOT_CACHE_PREFIX = 'submerge.pricingModelSnapshot';
 
 function getUpdatedByValue(explicit?: string | null) {
   const normalizedExplicit = String(explicit || '').trim();
@@ -47,26 +49,91 @@ function withFallback<T>(supabaseFn: () => Promise<T>, fallbackFn: () => Promise
   return fallbackFn();
 }
 
+function getPricingModelListCacheKey(franchiseId: string) {
+  return `${PRICING_MODEL_LIST_CACHE_PREFIX}.${franchiseId || DEFAULT_FRANCHISE_ID}`;
+}
+
+function getPricingModelSnapshotCacheKey(franchiseId: string, pricingModelId?: string | null) {
+  return `${PRICING_MODEL_SNAPSHOT_CACHE_PREFIX}.${franchiseId || DEFAULT_FRANCHISE_ID}.${pricingModelId || 'default'}`;
+}
+
+function readCachedJson<T>(key: string): T | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch (error) {
+    console.warn('Unable to read cached pricing model data:', error);
+    return null;
+  }
+}
+
+function persistCachedJson<T>(key: string, value: T) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.warn('Unable to persist cached pricing model data:', error);
+  }
+}
+
+function persistPricingModelListCache(franchiseId: string, rows: PricingModelSummary[]) {
+  persistCachedJson(getPricingModelListCacheKey(franchiseId), rows);
+}
+
+function readPricingModelListCache(franchiseId: string): PricingModelSummary[] {
+  const cached = readCachedJson<PricingModelSummary[]>(getPricingModelListCacheKey(franchiseId));
+  return Array.isArray(cached) ? cached : [];
+}
+
+function persistPricingModelSnapshotCache(model: LoadedPricingModel | null) {
+  if (!model?.franchiseId) return;
+  persistCachedJson(
+    getPricingModelSnapshotCacheKey(model.franchiseId, model.pricingModelId),
+    model
+  );
+  if (model.isDefault) {
+    persistCachedJson(getPricingModelSnapshotCacheKey(model.franchiseId), model);
+  }
+}
+
+function readPricingModelSnapshotCache(
+  franchiseId: string,
+  pricingModelId?: string | null
+): LoadedPricingModel | null {
+  return readCachedJson<LoadedPricingModel>(
+    getPricingModelSnapshotCacheKey(franchiseId, pricingModelId)
+  );
+}
+
 export async function listPricingModels(franchiseId: string): Promise<PricingModelSummary[]> {
   return withFallback<PricingModelSummary[]>(async () => {
-    const supabase = getSupabaseClient();
-    if (!supabase) return [];
-    const { data, error } = await supabase
-      .from('franchise_pricing_models')
-      .select('id,name,version,is_default,is_hidden_from_view,created_at,updated_at')
-      .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
-      .order('is_default', { ascending: false })
-      .order('updated_at', { ascending: false });
-    if (error) throw error;
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      version: row.version,
-      isDefault: row.is_default,
-      isHiddenFromView: row.is_hidden_from_view,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    try {
+      const supabase = getSupabaseClient();
+      if (!supabase) return [];
+      const { data, error } = await supabase
+        .from('franchise_pricing_models')
+        .select('id,name,version,is_default,is_hidden_from_view,created_at,updated_at')
+        .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
+        .order('is_default', { ascending: false })
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      const rows = (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        version: row.version,
+        isDefault: row.is_default,
+        isHiddenFromView: row.is_hidden_from_view,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+      persistPricingModelListCache(franchiseId, rows);
+      return rows;
+    } catch (error) {
+      const cached = readPricingModelListCache(franchiseId);
+      if (cached.length) return cached;
+      return await window.electron.listPricingModels(franchiseId);
+    }
   }, async () => {
     const rows = await window.electron.listPricingModels(franchiseId);
     return rows;
@@ -78,37 +145,48 @@ export async function loadPricingModel(
   pricingModelId?: string | null
 ): Promise<LoadedPricingModel | null> {
   return withFallback<LoadedPricingModel | null>(async () => {
-    const supabase = getSupabaseClient();
-    if (!supabase) return null;
-    let query = supabase
-      .from('franchise_pricing_models')
-      .select('*')
-      .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
-      .order('is_default', { ascending: false })
-      .order('updated_at', { ascending: false })
-      .limit(1);
-    if (pricingModelId) {
-      query = supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (!supabase) return null;
+      let query = supabase
         .from('franchise_pricing_models')
         .select('*')
         .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
-        .eq('id', pricingModelId)
+        .order('is_default', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(1);
+      if (pricingModelId) {
+        query = supabase
+          .from('franchise_pricing_models')
+          .select('*')
+          .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
+          .eq('id', pricingModelId)
+          .limit(1);
+      }
+      const { data, error } = await query.maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const loaded = {
+        franchiseId: data.franchise_id,
+        pricingModelId: data.id,
+        pricingModelName: data.name,
+        isDefault: data.is_default,
+        isHiddenFromView: data.is_hidden_from_view,
+        version: data.version,
+        pricing: data.pricing_json,
+        updatedAt: data.updated_at,
+        updatedBy: data.updated_by,
+      };
+      persistPricingModelSnapshotCache(loaded);
+      return loaded;
+    } catch (error) {
+      const cached = readPricingModelSnapshotCache(franchiseId, pricingModelId);
+      if (cached?.pricing) return cached;
+      return await window.electron.loadPricingModel({
+        franchiseId,
+        pricingModelId: pricingModelId || undefined,
+      });
     }
-    const { data, error } = await query.maybeSingle();
-    if (error) throw error;
-    if (!data) return null;
-    return {
-      franchiseId: data.franchise_id,
-      pricingModelId: data.id,
-      pricingModelName: data.name,
-      isDefault: data.is_default,
-      isHiddenFromView: data.is_hidden_from_view,
-      version: data.version,
-      pricing: data.pricing_json,
-      updatedAt: data.updated_at,
-      updatedBy: data.updated_by,
-    };
   }, async () => {
     return window.electron.loadPricingModel({
       franchiseId,

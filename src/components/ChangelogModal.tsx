@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import './ChangelogModal.css';
 
 interface ChangelogModalProps {
@@ -11,92 +11,189 @@ type ChangelogListItem = {
   level: number;
 };
 
-function renderChangelog(content: string) {
-  const lines = content.split(/\r?\n/);
-  const elements: ReactNode[] = [];
-  let listItems: ChangelogListItem[] = [];
-  let hasContent = false;
-  let lastWasDivider = false;
-
-  const flushList = (index: number) => {
-    if (!listItems.length) return;
-
-    const renderNestedList = (items: ChangelogListItem[], startIndex = 0): ReactNode => {
-      const result: ReactNode[] = [];
-      let i = startIndex;
-
-      while (i < items.length) {
-        const currentItem = items[i];
-        const currentLevel = currentItem.level;
-        const children: ChangelogListItem[] = [];
-        let j = i + 1;
-
-        while (j < items.length && items[j].level > currentLevel) {
-          children.push(items[j]);
-          j++;
-        }
-
-        result.push(
-          <li key={`item-${i}`}>
-            {currentItem.text}
-            {children.length > 0 && <ul className="patch-notes-list patch-notes-list--nested">{renderNestedList(children, 0)}</ul>}
-          </li>
-        );
-
-        i = j;
-      }
-
-      return result;
+type ChangelogBlock =
+  | {
+      type: 'divider';
+    }
+  | {
+      type: 'list';
+      items: ChangelogListItem[];
+    }
+  | {
+      type: 'paragraph' | 'subheading';
+      text: string;
     };
 
-    elements.push(
-      <ul key={`list-${index}`} className="patch-notes-list">
-        {renderNestedList(listItems)}
-      </ul>
+type ChangelogSection = {
+  key: string;
+  title: string;
+  blocks: ChangelogBlock[];
+};
+
+function renderInlineMarkdown(text: string, keyPrefix: string) {
+  const segments = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).filter(Boolean);
+
+  return segments.map((segment, index) => {
+    const key = `${keyPrefix}-${index}`;
+
+    if (segment.startsWith('**') && segment.endsWith('**') && segment.length > 4) {
+      return <strong key={key}>{segment.slice(2, -2)}</strong>;
+    }
+
+    if (segment.startsWith('*') && segment.endsWith('*') && segment.length > 2) {
+      return <em key={key}>{segment.slice(1, -1)}</em>;
+    }
+
+    return <Fragment key={key}>{segment}</Fragment>;
+  });
+}
+
+function renderNestedList(items: ChangelogListItem[], keyPrefix: string, startIndex = 0): ReactNode {
+  const result: ReactNode[] = [];
+  let i = startIndex;
+
+  while (i < items.length) {
+    const currentItem = items[i];
+    const currentLevel = currentItem.level;
+    const children: ChangelogListItem[] = [];
+    let j = i + 1;
+
+    while (j < items.length && items[j].level > currentLevel) {
+      children.push(items[j]);
+      j++;
+    }
+
+    result.push(
+      <li key={`${keyPrefix}-item-${i}`}>
+        {renderInlineMarkdown(currentItem.text, `${keyPrefix}-text-${i}`)}
+        {children.length > 0 && (
+          <ul className="patch-notes-list patch-notes-list--nested">
+            {renderNestedList(children, `${keyPrefix}-nested-${i}`)}
+          </ul>
+        )}
+      </li>
     );
-    hasContent = true;
+
+    i = j;
+  }
+
+  return result;
+}
+
+function renderBlocks(blocks: ChangelogBlock[], keyPrefix: string) {
+  return blocks.map((block, index) => {
+    const key = `${keyPrefix}-${index}`;
+
+    if (block.type === 'divider') {
+      return <div key={key} className="patch-notes-divider" />;
+    }
+
+    if (block.type === 'list') {
+      return (
+        <ul key={key} className="patch-notes-list">
+          {renderNestedList(block.items, `${key}-list`)}
+        </ul>
+      );
+    }
+
+    if (block.type === 'subheading') {
+      return (
+        <h4 key={key} className="patch-notes-subheading">
+          {renderInlineMarkdown(block.text, `${key}-subheading`)}
+        </h4>
+      );
+    }
+
+    return (
+      <p key={key} className="patch-notes-paragraph">
+        {renderInlineMarkdown(block.text, `${key}-paragraph`)}
+      </p>
+    );
+  });
+}
+
+function parseChangelog(content: string) {
+  const lines = content.split(/\r?\n/);
+  const introBlocks: ChangelogBlock[] = [];
+  const sections: ChangelogSection[] = [];
+  let currentBlocks = introBlocks;
+  let listItems: ChangelogListItem[] = [];
+  let lastWasDivider = false;
+
+  const trimTrailingDividers = (blocks: ChangelogBlock[]) => {
+    while (blocks[blocks.length - 1]?.type === 'divider') {
+      blocks.pop();
+    }
+  };
+
+  const flushList = () => {
+    if (!listItems.length) return;
+
+    currentBlocks.push({
+      type: 'list',
+      items: listItems,
+    });
     lastWasDivider = false;
     listItems = [];
+  };
+
+  const pushBlock = (block: ChangelogBlock) => {
+    if (block.type === 'divider') {
+      if (!currentBlocks.length || lastWasDivider) {
+        return;
+      }
+    }
+
+    currentBlocks.push(block);
+    lastWasDivider = block.type === 'divider';
   };
 
   lines.forEach((line, index) => {
     const trimmed = line.trim();
 
     if (!trimmed) {
-      flushList(index);
+      flushList();
+      return;
+    }
+
+    const versionHeadingMatch = trimmed.match(/^##\s+(\[[^\]]+\].*)$/);
+    if (versionHeadingMatch) {
+      flushList();
+      trimTrailingDividers(currentBlocks);
+
+      const nextSection: ChangelogSection = {
+        key: `section-${sections.length}-${index}`,
+        title: versionHeadingMatch[1],
+        blocks: [],
+      };
+
+      sections.push(nextSection);
+      currentBlocks = nextSection.blocks;
+      lastWasDivider = false;
       return;
     }
 
     if (/^-{3,}$/.test(trimmed)) {
-      flushList(index);
-      if (hasContent) {
-        elements.push(<div key={`divider-${index}`} className="patch-notes-divider" />);
-        lastWasDivider = true;
-      }
-      return;
-    }
-
-    if (trimmed.startsWith('## ')) {
-      flushList(index);
-      elements.push(
-        <h3 key={`heading-${index}`} className="patch-notes-heading">
-          {trimmed.replace(/^##\s*/, '')}
-        </h3>
-      );
-      hasContent = true;
-      lastWasDivider = false;
+      flushList();
+      pushBlock({ type: 'divider' });
       return;
     }
 
     if (trimmed.startsWith('### ')) {
-      flushList(index);
-      elements.push(
-        <h4 key={`subheading-${index}`} className="patch-notes-subheading">
-          {trimmed.replace(/^###\s*/, '')}
-        </h4>
-      );
-      hasContent = true;
-      lastWasDivider = false;
+      flushList();
+      pushBlock({
+        type: 'subheading',
+        text: trimmed.replace(/^###\s*/, ''),
+      });
+      return;
+    }
+
+    if (trimmed.startsWith('## ')) {
+      flushList();
+      pushBlock({
+        type: 'subheading',
+        text: trimmed.replace(/^##\s*/, ''),
+      });
       return;
     }
 
@@ -106,34 +203,32 @@ function renderChangelog(content: string) {
         text: trimmed.replace(/^-\s*/, ''),
         level: Math.floor(leadingSpaces / 4),
       });
-      hasContent = true;
       lastWasDivider = false;
       return;
     }
 
-    flushList(index);
-    elements.push(
-      <p key={`paragraph-${index}`} className="patch-notes-paragraph">
-        {trimmed}
-      </p>
-    );
-    hasContent = true;
-    lastWasDivider = false;
+    flushList();
+    pushBlock({
+      type: 'paragraph',
+      text: trimmed,
+    });
   });
 
-  flushList(lines.length);
+  flushList();
+  trimTrailingDividers(introBlocks);
+  sections.forEach((section) => trimTrailingDividers(section.blocks));
 
-  if (lastWasDivider) {
-    elements.pop();
-  }
-
-  return elements;
+  return {
+    introBlocks,
+    sections,
+  };
 }
 
 function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [expandedSectionIndex, setExpandedSectionIndex] = useState<number | null>(0);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -190,7 +285,15 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
     };
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setExpandedSectionIndex(0);
+  }, [content, isOpen]);
+
   if (!isOpen) return null;
+
+  const { introBlocks, sections } = parseChangelog(content);
 
   const handleBackdropClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
@@ -223,7 +326,57 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
         <div className="patch-notes-body">
           {loading && <p className="patch-notes-status">Loading changelog...</p>}
           {!loading && error && <p className="patch-notes-error">{error}</p>}
-          {!loading && !error && <div className="patch-notes-content">{renderChangelog(content)}</div>}
+          {!loading && !error && (
+            <div className="patch-notes-content">
+              {sections.length > 0 ? (
+                <>
+                  {introBlocks.length > 0 && (
+                    <div className="patch-notes-standalone">{renderBlocks(introBlocks, 'patch-notes-intro')}</div>
+                  )}
+                  <div className="patch-notes-sections">
+                    {sections.map((section, index) => {
+                      const isExpanded = expandedSectionIndex === index;
+                      const buttonId = `patch-notes-section-button-${index}`;
+                      const panelId = `patch-notes-section-panel-${index}`;
+
+                      return (
+                        <section
+                          key={section.key}
+                          className={`patch-notes-section${isExpanded ? ' patch-notes-section--expanded' : ''}`}
+                        >
+                          <button
+                            type="button"
+                            id={buttonId}
+                            className="patch-notes-section-toggle"
+                            onClick={() => setExpandedSectionIndex((currentIndex) => (currentIndex === index ? null : index))}
+                            aria-expanded={isExpanded}
+                            aria-controls={panelId}
+                          >
+                            <span className="patch-notes-section-title">
+                              {renderInlineMarkdown(section.title, `${section.key}-title`)}
+                            </span>
+                            <span className="patch-notes-section-icon" aria-hidden="true" />
+                          </button>
+                          {isExpanded && (
+                            <div
+                              id={panelId}
+                              className="patch-notes-section-panel"
+                              role="region"
+                              aria-labelledby={buttonId}
+                            >
+                              {renderBlocks(section.blocks, section.key)}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                renderBlocks(introBlocks, 'patch-notes-content')
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

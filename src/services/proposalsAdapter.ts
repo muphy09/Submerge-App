@@ -17,12 +17,12 @@ import { ensureProposalWorkflow, getWorkflowStatus } from './proposalWorkflow';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
-const OFFLINE_SAVE_MESSAGE = 'No internet connection. Connect to save this proposal.';
 
 type SaveResult = Proposal & { lastModified: string };
 type SyncStatus = 'synced' | 'pending' | 'error';
 type SaveProposalOptions = {
   ledgerAction?: 'proposal_submitted';
+  requireOnline?: boolean;
 };
 type Tombstone = { proposalNumber: string; removedAt: string };
 type StoredProposalRow = {
@@ -38,8 +38,16 @@ const PENDING_MESSAGE = 'Awaiting cloud sync';
 const ONLINE_SYNC_MESSAGE = 'Synced with cloud';
 const PENDING_DELETE_STORAGE_KEY = 'submerge.pendingProposalDeletes';
 const DELETED_TOMBSTONES_STORAGE_KEY = 'submerge.deletedProposalTombstones';
+const LOCAL_PROPOSAL_OWNERS_STORAGE_KEY = 'submerge.localProposalOwners.v1';
 
 type PendingDelete = { proposalNumber: string; franchiseId?: string | null };
+type LocalProposalOwner = {
+  proposalNumber: string;
+  userId?: string | null;
+  userEmail?: string | null;
+  franchiseId?: string | null;
+  updatedAt: string;
+};
 
 function nowIso() {
   return new Date().toISOString();
@@ -52,6 +60,10 @@ function coerceTimestamp(value?: string | null): number {
 
 function normalizeIdentity(value?: string | null) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeUserKey(session?: UserSession | null) {
+  return normalizeIdentity(session?.userId || session?.userEmail);
 }
 
 function getCurrentUserIdentity(session?: UserSession | null) {
@@ -121,6 +133,81 @@ function canReadProposal(proposal: Proposal, session?: UserSession | null) {
     );
   }
   return false;
+}
+
+let localProposalOwnerCache: Record<string, LocalProposalOwner> | null = null;
+
+function loadLocalProposalOwners(): Record<string, LocalProposalOwner> {
+  if (localProposalOwnerCache) return localProposalOwnerCache;
+  if (typeof localStorage === 'undefined') {
+    localProposalOwnerCache = {};
+    return localProposalOwnerCache;
+  }
+  try {
+    const raw = localStorage.getItem(LOCAL_PROPOSAL_OWNERS_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, LocalProposalOwner>) : {};
+    localProposalOwnerCache = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    console.warn('Unable to read local proposal owners from localStorage:', error);
+    localProposalOwnerCache = {};
+  }
+  return localProposalOwnerCache;
+}
+
+function persistLocalProposalOwners(records: Record<string, LocalProposalOwner>) {
+  localProposalOwnerCache = records;
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_PROPOSAL_OWNERS_STORAGE_KEY, JSON.stringify(records));
+  } catch (error) {
+    console.warn('Unable to persist local proposal owners to localStorage:', error);
+  }
+}
+
+function getLocalProposalOwner(proposalNumber?: string | null) {
+  if (!proposalNumber) return null;
+  return loadLocalProposalOwners()[proposalNumber] || null;
+}
+
+function setLocalProposalOwner(proposalNumber: string, session?: UserSession | null, franchiseId?: string | null) {
+  if (!proposalNumber) return;
+  const currentSession = session ?? readSession();
+  const userId = normalizeIdentity(currentSession?.userId);
+  const userEmail = normalizeIdentity(currentSession?.userEmail);
+  if (!userId && !userEmail) return;
+
+  const records = { ...loadLocalProposalOwners() };
+  records[proposalNumber] = {
+    proposalNumber,
+    userId: userId || undefined,
+    userEmail: userEmail || undefined,
+    franchiseId: franchiseId || currentSession?.franchiseId || undefined,
+    updatedAt: nowIso(),
+  };
+  persistLocalProposalOwners(records);
+}
+
+function clearLocalProposalOwner(proposalNumber: string) {
+  const records = loadLocalProposalOwners();
+  if (!records[proposalNumber]) return;
+  const next = { ...records };
+  delete next[proposalNumber];
+  persistLocalProposalOwners(next);
+}
+
+function isLocalProposalVisibleToSession(proposal: Proposal, session?: UserSession | null) {
+  const currentSession = session ?? readSession();
+  if (!currentSession) return false;
+
+  const owner = getLocalProposalOwner(proposal.proposalNumber);
+  const sessionUserKey = normalizeUserKey(currentSession);
+  const ownerUserKey = normalizeIdentity(owner?.userId || owner?.userEmail);
+  if (sessionUserKey && ownerUserKey) {
+    return sessionUserKey === ownerUserKey;
+  }
+
+  // Backward compatibility for proposals cached before owner tracking existed.
+  return isOwnProposal(proposal, currentSession);
 }
 
 let pendingDeleteCache: PendingDelete[] | null = null;
@@ -285,6 +372,7 @@ function withSyncStatus(proposal: Proposal, status: SyncStatus, message?: string
 async function persistLocalProposal(proposal: Proposal) {
   if (!window.electron?.saveProposal) return;
   try {
+    setLocalProposalOwner(proposal.proposalNumber, readSession(), proposal.franchiseId);
     await window.electron.saveProposal(proposal);
   } catch (error) {
     console.warn('Failed to persist proposal locally:', error);
@@ -300,12 +388,13 @@ async function loadLocalProposals(
     if (!window.electron?.getAllProposals) return [] as Proposal[];
     const rows = await window.electron.getAllProposals();
     return (rows || [])
+      .map((proposal: Proposal) => normalizeForConsumption(proposal, session))
+      .filter((proposal: Proposal) => isLocalProposalVisibleToSession(proposal, session))
       .filter((proposal: Proposal) =>
         includeAllFranchises
           ? true
           : (proposal.franchiseId || DEFAULT_FRANCHISE_ID) === (franchiseId || DEFAULT_FRANCHISE_ID)
-      )
-      .map((proposal: Proposal) => normalizeForConsumption(proposal, session));
+      );
   } catch (error) {
     console.warn('Failed to list proposals from local store.', error);
     return [] as Proposal[];
@@ -316,7 +405,9 @@ async function loadLocalProposal(proposalNumber: string, session?: UserSession |
   try {
     if (!window.electron?.getProposal) return null;
     const proposal = await window.electron.getProposal(proposalNumber);
-    return proposal ? normalizeForConsumption(proposal as Proposal, session) : null;
+    if (!proposal) return null;
+    const normalized = normalizeForConsumption(proposal as Proposal, session);
+    return isLocalProposalVisibleToSession(normalized, session) ? normalized : null;
   } catch (error) {
     console.warn('Failed to load proposal from local store.', error);
     return null;
@@ -561,9 +652,6 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   const session = readSession();
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
   const supabaseOnline = await hasSupabaseConnection(true);
-  if (!supabaseOnline) {
-    throw new Error(OFFLINE_ERROR_MESSAGE);
-  }
   if (supabaseOnline) {
     await syncPendingDeletes();
   }
@@ -644,9 +732,6 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
 
   const session = readSession();
   const supabaseOnline = await hasSupabaseConnection(true);
-  if (!supabaseOnline) {
-    throw new Error(OFFLINE_ERROR_MESSAGE);
-  }
   if (supabaseOnline) {
     await syncPendingDeletes();
     if (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber)) return null;
@@ -720,26 +805,48 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
 
   const supabaseOnline = await hasSupabaseConnection(true);
   if (!supabaseOnline) {
-    throw new Error(OFFLINE_SAVE_MESSAGE);
+    if (options.requireOnline) {
+      throw new Error(OFFLINE_ERROR_MESSAGE);
+    }
+    const pending = withSyncStatus(
+      { ...normalizedWithVersions, franchiseId, lastModified: normalizedWithVersions.lastModified || now },
+      'pending',
+      PENDING_MESSAGE
+    );
+    await persistLocalProposal(pending);
+    return { ...pending, lastModified: pending.lastModified || now };
   }
 
-  const synced = await upsertToSupabase(normalizedWithVersions);
-  await persistLocalProposal({ ...synced, franchiseId });
-  if (options.ledgerAction === 'proposal_submitted') {
-    await logLedgerEventSafe({
-      franchiseId,
-      action: 'Proposal submitted',
-      targetType: 'proposal',
-      targetId: synced.proposalNumber,
-      details: {
-        proposalNumber: synced.proposalNumber,
-        customerName: synced.customerInfo?.customerName || null,
-        designerName: synced.designerName || null,
-        status: synced.status || 'submitted',
-      },
-    });
+  try {
+    const synced = await upsertToSupabase(normalizedWithVersions);
+    await persistLocalProposal({ ...synced, franchiseId });
+    if (options.ledgerAction === 'proposal_submitted') {
+      await logLedgerEventSafe({
+        franchiseId,
+        action: 'Proposal submitted',
+        targetType: 'proposal',
+        targetId: synced.proposalNumber,
+        details: {
+          proposalNumber: synced.proposalNumber,
+          customerName: synced.customerInfo?.customerName || null,
+          designerName: synced.designerName || null,
+          status: synced.status || 'submitted',
+        },
+      });
+    }
+    return { ...synced, lastModified: synced.lastModified || now };
+  } catch (error) {
+    if (options.requireOnline) {
+      throw error;
+    }
+    const pending = withSyncStatus(
+      { ...normalizedWithVersions, franchiseId, lastModified: normalizedWithVersions.lastModified || now },
+      'pending',
+      PENDING_MESSAGE
+    );
+    await persistLocalProposal(pending);
+    return { ...pending, lastModified: pending.lastModified || now };
   }
-  return { ...synced, lastModified: synced.lastModified || now };
 }
 
 export async function deleteProposal(proposalNumber: string, franchiseId?: string) {
@@ -788,6 +895,7 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
 
   clearPendingDelete(proposalNumber);
   addDeletedTombstone(proposalNumber);
+  clearLocalProposalOwner(proposalNumber);
 
   if (window.electron?.deleteProposal) {
     try {

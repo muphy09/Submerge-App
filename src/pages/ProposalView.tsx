@@ -9,6 +9,7 @@ import { CostLineItem, Proposal, ProposalWorkflowActor, ProposalWorkflowEvent, R
 import CostBreakdownView from '../components/CostBreakdownView';
 import type { ContractViewHandle } from '../components/ContractView';
 import { OverflowTooltipText, TooltipAnchor } from '../components/AppTooltip';
+import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import FranchiseLogo from '../components/FranchiseLogo';
 import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
@@ -685,10 +686,16 @@ const buildEquipmentSummary = (
   };
 };
 
-function ProposalView() {
+type ProposalViewProps = {
+  cloudIssue?: CloudConnectionIssue;
+};
+
+function ProposalView({ cloudIssue }: ProposalViewProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { proposalNumber } = useParams();
+  const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
+  const offlineActionDisabledReason = isOffline ? 'Internet connection must be restored' : undefined;
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [versions, setVersions] = useState<Proposal[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
@@ -1264,6 +1271,7 @@ function ProposalView() {
         container.pricingModelFranchiseId || undefined
       );
       const saved = await saveProposalRemote(container);
+      const isPending = (saved as any).syncStatus === 'pending';
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
         versionId: v.versionId || 'original',
@@ -1276,7 +1284,10 @@ function ProposalView() {
       setActiveVersionId(versionId);
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
-      showToast({ type: 'success', message: 'Active version updated.' });
+      showToast({
+        type: isPending ? 'warning' : 'success',
+        message: isPending ? 'Active version updated locally. Will sync when back online.' : 'Active version updated.',
+      });
     } catch (error) {
       console.error('Failed to set active version', error);
       showToast({ type: 'error', message: 'Could not set active version.' });
@@ -1320,6 +1331,7 @@ function ProposalView() {
         container.pricingModelFranchiseId || undefined
       );
       const saved = await saveProposalRemote(container);
+      const isPending = (saved as any).syncStatus === 'pending';
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
         versionId: v.versionId || 'original',
@@ -1333,7 +1345,10 @@ function ProposalView() {
       setSelectedVersionId(nextSelected?.versionId || 'original');
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
-      showToast({ type: 'success', message: 'Version deleted.' });
+      showToast({
+        type: isPending ? 'warning' : 'success',
+        message: isPending ? 'Version deleted locally. Will sync when back online.' : 'Version deleted.',
+      });
     } catch (error) {
       console.error('Failed to delete version', error);
       showToast({ type: 'error', message: 'Could not delete version.' });
@@ -1425,6 +1440,7 @@ function ProposalView() {
         nextContainer.pricingModelFranchiseId || undefined
       );
       const saved = await saveProposalRemote(nextContainer);
+      const isPending = (saved as any).syncStatus === 'pending';
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
         versionId: v.versionId || 'original',
@@ -1439,8 +1455,14 @@ function ProposalView() {
       setActiveVersionId(activeApplied.activeVersionId || preservedActiveVersionId);
       setSelectedVersionId(newVersion.versionId || activeApplied.activeVersionId || preservedActiveVersionId);
       showToast({
-        type: 'success',
-        message: isAddendumDraft ? 'Proposal addendum draft created.' : 'New version created.',
+        type: isPending ? 'warning' : 'success',
+        message: isPending
+          ? isAddendumDraft
+            ? 'Proposal addendum draft created locally. Will sync when back online.'
+            : 'New version created locally. Will sync when back online.'
+          : isAddendumDraft
+          ? 'Proposal addendum draft created.'
+          : 'New version created.',
       });
     } catch (error) {
       console.error('Failed to build version', error);
@@ -1496,6 +1518,7 @@ function ProposalView() {
         container.pricingModelFranchiseId || undefined
       );
       const saved = await saveProposalRemote(container);
+      const isPending = (saved as any).syncStatus === 'pending';
       const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
         ...(mergeProposalWithDefaults(v) as Proposal),
         versionId: v.versionId || 'original',
@@ -1508,7 +1531,12 @@ function ProposalView() {
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
       setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
-      showToast({ type: 'success', message: 'Contract overrides saved.' });
+      showToast({
+        type: isPending ? 'warning' : 'success',
+        message: isPending
+          ? 'Contract overrides saved locally. Will sync when back online.'
+          : 'Contract overrides saved.',
+      });
     } catch (error) {
       console.error('Failed to save contract overrides', error);
       showToast({ type: 'error', message: 'Could not save contract overrides.' });
@@ -2032,7 +2060,10 @@ function ProposalView() {
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined
       );
-      const saved = await saveProposalRemote(payload);
+      const saved = await saveProposalRemote(
+        payload,
+        nextStatus === 'submitted' ? { requireOnline: true } : undefined
+      );
       const persistedActiveVersionId =
         nextStatus === 'submitted'
           ? isSignedAddendumSubmission
@@ -2101,7 +2132,7 @@ function ProposalView() {
   };
 
   const handleSubmitProposal = async (versionId?: string) => {
-    if (!proposal) return;
+    if (!proposal || isOffline) return;
     const targetId =
       versionId ||
       activeVersionId ||
@@ -2140,6 +2171,7 @@ function ProposalView() {
   };
 
   const handleConfirmSubmit = async () => {
+    if (isOffline) return;
     setShowSubmitModal(false);
     await persistStatusChange('submitted', {
       manualReviewRequested: submitManualReviewRequested,
@@ -2152,7 +2184,7 @@ function ProposalView() {
 
   const handleSendWorkflowMessage = async () => {
     const trimmedMessage = workflowMessageDraft.trim();
-    if (!proposal || !canSendWorkflowMessages || !trimmedMessage || workflowMessageSaving) return;
+    if (!proposal || !canSendWorkflowMessages || !trimmedMessage || workflowMessageSaving || isOffline) return;
 
     setWorkflowMessageSaving(true);
     try {
@@ -2175,7 +2207,7 @@ function ProposalView() {
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined
       );
-      const saved = await saveProposalRemote(payload);
+      const saved = await saveProposalRemote(payload, { requireOnline: true });
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
         ...(mergeProposalWithDefaults(version) as Proposal),
         versionId: version.versionId || 'original',
@@ -2185,8 +2217,6 @@ function ProposalView() {
         versions: [],
       }));
       const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
-      const isPending = (saved as any).syncStatus === 'pending';
-
       setVersions(updatedVersions);
       setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
       setProposal(activeApplied as Proposal);
@@ -2194,11 +2224,11 @@ function ProposalView() {
       setShowWorkflowMessageComposer(false);
       showToast({
         type: 'success',
-        message: isPending ? 'Message saved locally. Will sync when back online.' : 'Message sent.',
+        message: 'Message sent.',
       });
     } catch (error) {
       console.error('Failed to send workflow message', error);
-      showToast({ type: 'error', message: 'Could not send message.' });
+      showToast({ type: 'error', message: (error as any)?.message || 'Could not send message.' });
     } finally {
       setWorkflowMessageSaving(false);
     }
@@ -2237,7 +2267,7 @@ function ProposalView() {
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined
       );
-      const saved = await saveProposalRemote(payload);
+      const saved = await saveProposalRemote(payload, { requireOnline: true });
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
         ...(mergeProposalWithDefaults(version) as Proposal),
         versionId: version.versionId || 'original',
@@ -2257,7 +2287,7 @@ function ProposalView() {
       return true;
     } catch (error) {
       console.error('Failed to save reviewer workflow action', error);
-      showToast({ type: 'error', message: 'Could not save the workflow action.' });
+      showToast({ type: 'error', message: (error as any)?.message || 'Could not save the workflow action.' });
       return false;
     } finally {
       setReviewerActionSaving(false);
@@ -2265,6 +2295,7 @@ function ProposalView() {
   };
 
   const handleReviewerApprove = async () => {
+    if (isOffline) return;
     const didApprove = await persistReviewerWorkflowAction(
       (container) => approveWorkflowProposal(container, undefined),
       getSignedVersionId(proposal as Proposal) ? 'Proposal addendum approved.' : 'Proposal approved.'
@@ -2275,6 +2306,7 @@ function ProposalView() {
   };
 
   const handleReviewerRequestChanges = async () => {
+    if (isOffline) return;
     await persistReviewerWorkflowAction(
       (container, note) => requestWorkflowChanges(container, note),
       'Proposal returned with requested changes.',
@@ -2283,7 +2315,7 @@ function ProposalView() {
   };
 
   const handleReviewerComplete = async () => {
-    if (proposalWorkflowStatus !== 'signed') return;
+    if (proposalWorkflowStatus !== 'signed' || isOffline) return;
     await persistReviewerWorkflowAction(
       (container, note) => completeWorkflowProposal(container, note || undefined),
       'Proposal marked as completed.'
@@ -2291,7 +2323,7 @@ function ProposalView() {
   };
 
   const handleConfirmMarkProposalAsSigned = async () => {
-    if (!proposal) return;
+    if (!proposal || isOffline) return;
     setReviewerActionSaving(true);
     try {
       const all = versions.length ? versions : listAllVersions(proposal as Proposal);
@@ -2318,7 +2350,7 @@ function ProposalView() {
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined
       );
-      const saved = await saveProposalRemote(markProposalAsSigned(container));
+      const saved = await saveProposalRemote(markProposalAsSigned(container), { requireOnline: true });
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
         ...(mergeProposalWithDefaults(version) as Proposal),
         versionId: version.versionId || 'original',
@@ -2336,7 +2368,7 @@ function ProposalView() {
       showToast({ type: 'success', message: 'Proposal marked as signed.' });
     } catch (error) {
       console.error('Failed to mark proposal as signed', error);
-      showToast({ type: 'error', message: 'Could not mark the proposal as signed.' });
+      showToast({ type: 'error', message: (error as any)?.message || 'Could not mark the proposal as signed.' });
     } finally {
       setReviewerActionSaving(false);
     }
@@ -2847,7 +2879,9 @@ function ProposalView() {
       ? 'Approved'
       : formatSubmittedVersionLabel(submissionCount);
   const activeVersionCanComplete = proposalWorkflowStatus === 'signed';
-  const completeActionDisabledReason = activeVersionCanComplete
+  const completeActionDisabledReason = isOffline
+    ? offlineActionDisabledReason
+    : activeVersionCanComplete
     ? undefined
     : 'A proposal version must be signed before the proposal can be completed.';
   const versionActionLabel =
@@ -3595,15 +3629,14 @@ function ProposalView() {
       versionRecordStatus === 'approved' &&
       isLivePublishedVersion &&
       isActive;
-    const canMarkAsSignedVersion =
-      showMarkAsSignedButton &&
-      !disableSignedWorkflow &&
-      !vm.hasEquipmentChangeRequired;
-    const markAsSignedDisabledReason = disableSignedWorkflow
+    const markAsSignedDisabledReason = isOffline
+      ? offlineActionDisabledReason
+      : disableSignedWorkflow
       ? DISABLED_SIGNED_WORKFLOW_MESSAGE
       : vm.hasEquipmentChangeRequired
       ? MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
       : undefined;
+    const canMarkAsSignedVersion = showMarkAsSignedButton && !markAsSignedDisabledReason;
     const editVersionDisabledReason =
       isProposalCompleted
         ? 'Completed proposals are locked.'
@@ -3655,7 +3688,9 @@ function ProposalView() {
       : versionHasSubmissionHistory
       ? 'Resubmit Proposal'
       : 'Submit Proposal';
-    const submitActionDisabledReason = shouldRenderModifySignedAction
+    const submitActionDisabledReason = !shouldRenderModifySignedAction && isOffline
+      ? offlineActionDisabledReason
+      : shouldRenderModifySignedAction
       ? modifySignedDisabledReason
       : !canManageVersionDrafts
       ? editDisabledReason
@@ -3765,46 +3800,54 @@ function ProposalView() {
               </TooltipAnchor>
             )}
             {isReadOnlyReviewerView && proposalWorkflowStatus === 'needs_approval' && (
-              <button
-                className="action-button primary side-action-button"
-                onClick={() => {
-                  void handleReviewerApprove();
-                }}
-                disabled={reviewerActionSaving}
-              >
-                Approve
-              </button>
+              <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                <button
+                  className="action-button primary side-action-button"
+                  onClick={() => {
+                    void handleReviewerApprove();
+                  }}
+                  disabled={reviewerActionSaving || isOffline}
+                >
+                  Approve
+                </button>
+              </TooltipAnchor>
             )}
             {isReadOnlyReviewerView && proposalWorkflowStatus !== 'completed' && proposalWorkflowStatus !== 'signed' && (
-              <button
-                className="action-button danger side-action-button"
-                onClick={() => {
-                  void handleReviewerRequestChanges();
-                }}
-                disabled={reviewerActionSaving}
-              >
-                Request Changes
-              </button>
+              <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                <button
+                  className="action-button danger side-action-button"
+                  onClick={() => {
+                    void handleReviewerRequestChanges();
+                  }}
+                  disabled={reviewerActionSaving || isOffline}
+                >
+                  Request Changes
+                </button>
+              </TooltipAnchor>
             )}
             {isReadOnlyReviewerView && proposalWorkflowStatus === 'approved' && (
-              <TooltipAnchor tooltip={disableSignedWorkflow ? DISABLED_SIGNED_WORKFLOW_MESSAGE : undefined}>
+              <TooltipAnchor
+                tooltip={isOffline ? offlineActionDisabledReason : disableSignedWorkflow ? DISABLED_SIGNED_WORKFLOW_MESSAGE : undefined}
+              >
                 <button
                   className="action-button primary side-action-button"
                   onClick={() => setShowMarkSignedConfirm(true)}
-                  disabled={reviewerActionSaving || disableSignedWorkflow}
+                  disabled={reviewerActionSaving || disableSignedWorkflow || isOffline}
                 >
                   Mark as Signed
                 </button>
               </TooltipAnchor>
             )}
             {isReadOnlyReviewerView && proposalWorkflowStatus === 'signed' && (
-              <button
-                className="action-button primary side-action-button"
-                onClick={() => setShowCompleteConfirm(true)}
-                disabled={reviewerActionSaving}
-              >
-                Mark Complete
-              </button>
+              <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                <button
+                  className="action-button primary side-action-button"
+                  onClick={() => setShowCompleteConfirm(true)}
+                  disabled={reviewerActionSaving || isOffline}
+                >
+                  Mark Complete
+                </button>
+              </TooltipAnchor>
             )}
           </div>
         </div>
@@ -3930,14 +3973,16 @@ function ProposalView() {
 
           {isWorkflowHistoryExpanded && canSendWorkflowMessages && !showWorkflowMessageComposer && (
             <div className="workflow-summary-message-actions">
-              <button
-                type="button"
-                className="action-button workflow-summary-message-trigger"
-                onClick={() => setShowWorkflowMessageComposer(true)}
-                disabled={workflowMessageSaving || loading}
-              >
-                {isReadOnlyReviewerView ? 'Add Note' : 'Send Another Note'}
-              </button>
+              <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                <button
+                  type="button"
+                  className="action-button workflow-summary-message-trigger"
+                  onClick={() => setShowWorkflowMessageComposer(true)}
+                  disabled={workflowMessageSaving || loading || isOffline}
+                >
+                  {isReadOnlyReviewerView ? 'Add Note' : 'Send Another Note'}
+                </button>
+              </TooltipAnchor>
             </div>
           )}
 
@@ -3963,16 +4008,18 @@ function ProposalView() {
                 >
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  className="action-button primary workflow-summary-message-button"
-                  onClick={() => {
-                    void handleSendWorkflowMessage();
-                  }}
-                  disabled={!workflowMessageDraft.trim() || workflowMessageSaving || loading}
-                >
-                  {workflowMessageSaving ? 'Sending...' : 'Send Message'}
-                </button>
+                <TooltipAnchor tooltip={offlineActionDisabledReason}>
+                  <button
+                    type="button"
+                    className="action-button primary workflow-summary-message-button"
+                    onClick={() => {
+                      void handleSendWorkflowMessage();
+                    }}
+                    disabled={!workflowMessageDraft.trim() || workflowMessageSaving || loading || isOffline}
+                  >
+                    {workflowMessageSaving ? 'Sending...' : 'Send Message'}
+                  </button>
+                </TooltipAnchor>
               </div>
             </div>
           )}
@@ -4006,7 +4053,9 @@ function ProposalView() {
               {isReadOnlyReviewerView ? reviewerBackLabel : 'Back to Home'}
             </button>
           </div>
-          <div className="action-bar-center" />
+          <div className="action-bar-center">
+            {isOffline && <CloudConnectionNotice reason={cloudIssue} placement="inline" />}
+          </div>
           <div className="action-bar-right">
             {!isReadOnlyReviewerView && (
               <TooltipAnchor tooltip={completeActionDisabledReason}>
@@ -4015,7 +4064,7 @@ function ProposalView() {
                   onClick={() => {
                     setShowCompleteConfirm(true);
                   }}
-                  disabled={!activeVersionCanComplete || reviewerActionSaving || loading}
+                  disabled={!activeVersionCanComplete || reviewerActionSaving || loading || isOffline}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -4192,6 +4241,8 @@ function ProposalView() {
         manualReviewRequested={submitManualReviewRequested}
         note={submitNote}
         isSubmitting={loading}
+        confirmDisabled={isOffline}
+        confirmDisabledReason={offlineActionDisabledReason}
         onNoteChange={setSubmitNote}
         onManualReviewToggle={() => setSubmitManualReviewRequested((current) => !current)}
         onCancel={() => {
@@ -4222,6 +4273,8 @@ function ProposalView() {
         confirmLabel="Yes I'm sure. Mark as Signed"
         cancelLabel="No, take me back"
         isLoading={reviewerActionSaving}
+        confirmDisabled={isOffline}
+        confirmDisabledReason={offlineActionDisabledReason}
         onConfirm={() => {
           void handleConfirmMarkProposalAsSigned();
         }}
@@ -4234,6 +4287,8 @@ function ProposalView() {
         confirmLabel="Yes, I'm sure"
         cancelLabel="No, take me back"
         isLoading={reviewerActionSaving}
+        confirmDisabled={isOffline}
+        confirmDisabledReason={offlineActionDisabledReason}
         onConfirm={() => {
           setShowCompleteConfirm(false);
           void handleReviewerComplete();

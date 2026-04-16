@@ -411,6 +411,7 @@ function AppContent() {
   const isContractPrintPreviewRoute = location.pathname === '/contract-print-preview';
   const isProposalBuilderRoute =
     location.pathname === '/proposal/new' || location.pathname.startsWith('/proposal/edit/');
+  const isProposalSummaryRoute = location.pathname.startsWith('/proposal/view/');
   const adminPanelRequiresPin =
     isAdmin &&
     Boolean(effectiveSession?.franchiseId) &&
@@ -712,10 +713,7 @@ function AppContent() {
   }, []);
 
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
-  const allowOfflineEditing =
-    Boolean(session) &&
-    (location.pathname.startsWith('/proposal/new') || location.pathname.startsWith('/proposal/edit/'));
-  const showOfflineGate = isOffline && !allowOfflineEditing;
+  const showOfflineGate = isOffline && !session;
 
   // Show navigation bar on main pages, hide it on proposal form/view pages
   const showNavigation = !location.pathname.startsWith('/proposal/') && !isContractPrintPreviewRoute;
@@ -1028,8 +1026,8 @@ function AppContent() {
             path="/admin/pricing"
             element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
           />
-          <Route path="/workflow" element={<WorkflowPage session={effectiveSession} />} />
-          <Route path="/workflow/:proposalNumber" element={<WorkflowPage session={effectiveSession} />} />
+          <Route path="/workflow" element={<WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} />} />
+          <Route path="/workflow/:proposalNumber" element={<WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/master"
@@ -1064,7 +1062,7 @@ function AppContent() {
               />
             }
           />
-          <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
+          <Route path="/proposal/view/:proposalNumber" element={<ProposalView cloudIssue={cloudIssue} />} />
           <Route path="/contract-print-preview" element={<ContractPrintPreviewPage />} />
         </Routes>
       </Suspense>
@@ -1104,7 +1102,12 @@ function AppContent() {
           errorMessage={updateError}
         />
       )}
-      {!isContractPrintPreviewRoute && <CloudConnectionNotice reason={cloudIssue} />}
+      {!isContractPrintPreviewRoute && !isProposalBuilderRoute && !isProposalSummaryRoute && (
+        <CloudConnectionNotice
+          reason={cloudIssue}
+          placement="bottom"
+        />
+      )}
       {!isContractPrintPreviewRoute && showOfflineGate && (
         <div className="offline-gate" role="alert" aria-live="assertive">
           <div className="offline-gate-card">

@@ -1,3 +1,4 @@
+import { TooltipAnchor } from './AppTooltip';
 import './ConfirmDialog.css';
 
 interface ConfirmDialogProps {
@@ -8,6 +9,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   errorMessage?: string | null;
   isLoading?: boolean;
+  confirmDisabled?: boolean;
+  confirmDisabledReason?: string;
   hideCancel?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -21,6 +24,8 @@ function ConfirmDialog({
   cancelLabel = 'Cancel',
   errorMessage = null,
   isLoading = false,
+  confirmDisabled = false,
+  confirmDisabledReason,
   hideCancel = false,
   onConfirm,
   onCancel,
@@ -43,9 +48,11 @@ function ConfirmDialog({
               {cancelLabel}
             </button>
           )}
-          <button className="btn btn-primary" onClick={onConfirm} disabled={isLoading}>
-            {isLoading ? 'Working...' : confirmLabel}
-          </button>
+          <TooltipAnchor tooltip={confirmDisabledReason}>
+            <button className="btn btn-primary" onClick={onConfirm} disabled={isLoading || confirmDisabled}>
+              {isLoading ? 'Working...' : confirmLabel}
+            </button>
+          </TooltipAnchor>
         </div>
       </div>
     </div>

@@ -75,8 +75,7 @@ import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpS
 import { listAllFranchises, listAllPricingModels } from '../services/masterAdminAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
-import { hasSupabaseConnection } from '../services/supabaseClient';
-import type { CloudConnectionIssue } from '../components/CloudConnectionNotice';
+import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
   getSessionCommissionRates,
   getSessionFranchiseCode,
@@ -334,6 +333,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const autosaveTimeoutRef = useRef<number | null>(null);
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const readPapDiscountsFromModel = (): PAPDiscounts => {
     const snapshot = getPricingDataSnapshot();
@@ -1513,22 +1513,16 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       navigateToSummary?: boolean;
       forceDraftStatus?: boolean;
       submissionRequest?: { manualReviewRequested: boolean; note: string };
+      stayOnPage?: boolean;
+      silent?: boolean;
     }
-  ): Promise<boolean> => {
-    if (isProposalEditingRestricted) return false;
-    if (isSaving) return false;
+  ): Promise<Proposal | null> => {
+    if (isProposalEditingRestricted) return null;
+    if (isSaving) return null;
 
     const currentVersionId = proposal.versionId || editingVersionId || 'original';
     const isVersionEdit = !(proposal.isOriginalVersion ?? currentVersionId === 'original');
     const effectiveMode = mode;
-    const supabaseConnected = await hasSupabaseConnection(true);
-    if (!supabaseConnected) {
-      showToast({
-        type: 'error',
-        message: 'No internet connection. Connect to save this proposal.',
-      });
-      return false;
-    }
 
     setIsSaving(true);
     try {
@@ -1568,7 +1562,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             type: 'error',
             message: `Validation errors: ${errors.map(e => e.message).join(', ')}`,
           });
-          return false;
+          return null;
         }
       }
 
@@ -1646,10 +1640,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
       const saved = await saveProposalRemote(
         workflowReady,
-        effectiveMode === 'submit' ? { ledgerAction: 'proposal_submitted' } : undefined
+        effectiveMode === 'submit'
+          ? { ledgerAction: 'proposal_submitted', requireOnline: true }
+          : undefined
       );
 
       const savedActive = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+      const isPending = (saved as any).syncStatus === 'pending';
       setProposal({ ...(savedActive as Proposal) });
       setVersionList(listAllVersions(saved as Proposal));
       setActiveVersionId(savedActive.activeVersionId || currentVersionId);
@@ -1658,7 +1655,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
       const isSignedAddendumSubmission = Boolean(getSignedVersionId(containerToSave as Proposal));
       const nonSubmitSuccessMessage =
-        options?.forceDraftStatus || savedWorkflowStatus === 'draft'
+        isPending
+          ? 'Saved locally. Will sync when back online.'
+          : options?.forceDraftStatus || savedWorkflowStatus === 'draft'
           ? versionRequiresResubmission
             ? 'Proposal changes saved. Resubmit when ready.'
             : 'Proposal saved as draft.'
@@ -1671,32 +1670,34 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           : savedWorkflowStatus === 'signed'
           ? 'Proposal addendum changes saved.'
           : 'Proposal saved successfully!';
-      showToast({
-        type: 'success',
-        message:
-          effectiveMode === 'submit'
-            ? savedWorkflowStatus === 'needs_approval'
-              ? isSignedAddendumSubmission
-                ? 'Proposal addendum submitted for approval.'
-                : 'Proposal submitted for approval.'
-              : savedWorkflowStatus === 'approved'
-              ? isSignedAddendumSubmission
-                ? 'Proposal addendum submitted. Mark it as signed when ready.'
-                : 'Proposal submitted. Mark it as signed when ready.'
-              : 'Proposal submitted successfully.'
-            : nonSubmitSuccessMessage,
-      });
+      if (!options?.silent) {
+        showToast({
+          type: isPending ? 'warning' : 'success',
+          message:
+            effectiveMode === 'submit'
+              ? savedWorkflowStatus === 'needs_approval'
+                ? isSignedAddendumSubmission
+                  ? 'Proposal addendum submitted for approval.'
+                  : 'Proposal submitted for approval.'
+                : savedWorkflowStatus === 'approved'
+                ? isSignedAddendumSubmission
+                  ? 'Proposal addendum submitted. Mark it as signed when ready.'
+                  : 'Proposal submitted. Mark it as signed when ready.'
+                : 'Proposal submitted successfully.'
+              : nonSubmitSuccessMessage,
+        });
+      }
 
       const shouldNavigateToSummary =
-        options?.navigateToSummary || effectiveMode === 'submit' || isVersionEdit;
+        !options?.stayOnPage && (options?.navigateToSummary || effectiveMode === 'submit' || isVersionEdit);
       if (shouldNavigateToSummary) {
         navigate(`/proposal/view/${saved.proposalNumber}`, {
           state: { versionId: finalProposal.versionId || currentVersionId },
         });
-      } else {
+      } else if (!options?.stayOnPage) {
         navigate('/');
       }
-      return true;
+      return saved as Proposal;
     } catch (error) {
       console.error('Failed to save proposal:', error);
       const errMsg =
@@ -1704,15 +1705,43 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         (error as any)?.error_description ||
         (error as any)?.hint ||
         'Failed to save proposal. Please try again.';
-      showToast({
-        type: 'error',
-        message: `Failed to save proposal: ${errMsg}`,
-      });
-      return false;
+      if (!options?.silent) {
+        showToast({
+          type: 'error',
+          message: `Failed to save proposal: ${errMsg}`,
+        });
+      }
+      return null;
     } finally {
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (autosaveTimeoutRef.current) {
+      window.clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+    }
+    if (isCreationRestricted || isReadOnlyBuilderView || isLoading || isSaving || !hasEdits) {
+      return;
+    }
+
+    autosaveTimeoutRef.current = window.setTimeout(() => {
+      autosaveTimeoutRef.current = null;
+      void handleSave('draft', {
+        forceDraftStatus: true,
+        stayOnPage: true,
+        silent: true,
+      });
+    }, 1200);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+    };
+  }, [hasEdits, isCreationRestricted, isLoading, isReadOnlyBuilderView, isSaving, proposal]);
 
   const handleHome = () => {
     if (isReadOnlyBuilderView) {
@@ -1928,7 +1957,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     papDiscounts
   );
   const proposalSummaryTooltip = !isReadOnlyBuilderView && isOffline
-    ? 'No internet connection. Connect to save.'
+    ? 'Offline: opening the summary will save locally and sync later.'
     : undefined;
   const isCompactLayout = viewportWidth < 1300;
   const isMobileLayout = viewportWidth < 1024;
@@ -2069,7 +2098,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   );
 
   const handleProposalSummaryClick = () => {
-    if (isSaving || (!isReadOnlyBuilderView && isOffline)) return;
+    if (isSaving) return;
     if (isReadOnlyBuilderView && proposalNumber) {
       navigate(`/proposal/view/${proposalNumber}`, {
         state: { versionId: proposal.versionId || editingVersionId || versionIdFromState || 'original' },
@@ -2081,14 +2110,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   return (
     <div className="proposal-form" style={proposalFormStyle}>
-      {isOffline && (
-        <div className="offline-save-banner" role="alert">
-          {cloudIssue === 'server-issue'
-            ? 'CLOUD UNAVAILABLE - CONNECT TO SAVE PROPOSAL'
-            : 'NO INTERNET - CONNECT TO SAVE PROPOSAL'}
-        </div>
-      )}
       <header className="form-header" ref={formHeaderRef}>
+        {isOffline && <CloudConnectionNotice reason={cloudIssue} placement="header" />}
         <div className="form-header-row">
           <div className="form-header-title">
             <FranchiseLogo className="form-logo" alt="Franchise Logo" franchiseId={franchiseLogoId} />
@@ -2194,7 +2217,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                   <button
                     className="btn btn-success"
                     onClick={handleProposalSummaryClick}
-                    disabled={isSaving || isOffline}
+                    disabled={isSaving}
                   >
                     Proposal Summary
                   </button>

@@ -296,6 +296,14 @@
   line-height: 1.35;
 }
 
+.dashboard-sync-note {
+  color: #996b00;
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .dashboard-date-cell,
 .dashboard-contract-cell {
   color: #4f6780;
