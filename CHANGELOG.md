@@ -1,3 +1,7 @@
+## [2.3.1] - 4/17/26
+### Hotfix
+- Fix custom characters in PDF Export
+-----
 ## [2.3.0] - 4/16/26
 ### Offline Functionality
 - App can now be used while offline in most situations without interruption

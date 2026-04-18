@@ -35,6 +35,34 @@ const BLUE_FILL = rgb(232 / 255, 240 / 255, 255 / 255);
 const YELLOW_FILL = rgb(255 / 255, 247 / 255, 209 / 255);
 const WHITE_FILL = rgb(1, 1, 1);
 const HEADER_GRAY_FILL = rgb(174 / 255, 170 / 255, 170 / 255);
+const PDF_SAFE_CHARACTER_FALLBACK = '?';
+
+const PDF_TEXT_SUBSTITUTIONS: Record<string, string> = {
+  '\u00a0': ' ',
+  '\u200b': '',
+  '\u200c': '',
+  '\u200d': '',
+  '\ufeff': '',
+  '\u2018': "'",
+  '\u2019': "'",
+  '\u201a': "'",
+  '\u201b': "'",
+  '\u201c': '"',
+  '\u201d': '"',
+  '\u201e': '"',
+  '\u201f': '"',
+  '\u2022': '*',
+  '\u2026': '...',
+  '\u00a9': '(C)',
+  '\u00ae': '(R)',
+  '\u2122': 'TM',
+  '\u2010': '-',
+  '\u2011': '-',
+  '\u2012': '-',
+  '\u2013': '-',
+  '\u2014': '-',
+  '\u2015': '-',
+};
 
 function resolvePatchFillColor(fill: ContractStaticPatch['fill']) {
   if (fill === 'headerGray') return HEADER_GRAY_FILL;
@@ -55,8 +83,36 @@ async function loadTemplateBytes(templateId?: ContractTemplateId): Promise<Uint8
   return fs.readFileSync(template.pdfPath);
 }
 
-function fitFontSizeForField(field: ContractFieldRender, font: PDFFont): number {
-  const text = field.value || '';
+function canEncodePdfText(font: PDFFont, value: string): boolean {
+  try {
+    font.widthOfTextAtSize(value, 1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function sanitizePdfText(value: string, font: PDFFont): string {
+  if (!value) return '';
+
+  const normalizedWhitespace = value
+    .replace(/\r\n?/g, ' ')
+    .replace(/[\n\t\f\v]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  let sanitized = '';
+  for (const char of Array.from(normalizedWhitespace)) {
+    const replacement = PDF_TEXT_SUBSTITUTIONS[char] ?? char;
+    for (const candidate of Array.from(replacement)) {
+      sanitized += canEncodePdfText(font, candidate) ? candidate : PDF_SAFE_CHARACTER_FALLBACK;
+    }
+  }
+
+  return sanitized;
+}
+
+function fitFontSizeForField(field: ContractFieldRender, text: string, font: PDFFont): number {
   const maxTextHeight = Math.max(4, field.height - HEIGHT_MARGIN);
   let fontSize = Math.min(DEFAULT_FONT_SIZE, font.sizeAtHeight(maxTextHeight) * HEIGHT_SCALE);
 
@@ -142,76 +198,82 @@ export async function buildContractPdf(
 
   fields.forEach((field) => {
     if (!(field.label || '').trim()) return;
-    const pageIndex = Math.max(0, Math.min(pdf.getPageCount() - 1, field.page - 1));
-    const page = pdf.getPage(pageIndex);
-    const pageHeight = page.getHeight();
-    const width = field.width;
-    const height = field.height;
-    const x = field.x;
-    const y = pageHeight - (field.y + height);
-    const fontSize = fitFontSizeForField(field, font);
 
-    pdfFields.push({
-      name: field.id,
-      label: field.label,
-      pageIndex,
-      x: field.x,
-      y: field.y,
-      width: field.width,
-      height: field.height,
-      fontSize,
-      color: field.color,
-    });
+    try {
+      const value = sanitizePdfText(field.value || '', font);
+      const pageIndex = Math.max(0, Math.min(pdf.getPageCount() - 1, field.page - 1));
+      const page = pdf.getPage(pageIndex);
+      const pageHeight = page.getHeight();
+      const width = field.width;
+      const height = field.height;
+      const x = field.x;
+      const y = pageHeight - (field.y + height);
+      const fontSize = fitFontSizeForField(field, value, font);
 
-    if (flatten) {
-      const fillColor = field.color === 'yellow' ? YELLOW_FILL : BLUE_FILL;
-      const inset = 0.6; // leave the template grid lines intact while covering printed defaults
-      const rectX = x + inset;
-      const rectY = y + inset;
-      const rectWidth = Math.max(0, width - inset * 2);
-      const rectHeight = Math.max(0, height - inset * 2);
-      if (rectWidth > 0 && rectHeight > 0) {
-        page.drawRectangle({
-          x: rectX,
-          y: rectY,
-          width: rectWidth,
-          height: rectHeight,
-          color: fillColor,
-          borderWidth: 0,
+      pdfFields.push({
+        name: field.id,
+        label: field.label,
+        pageIndex,
+        x: field.x,
+        y: field.y,
+        width: field.width,
+        height: field.height,
+        fontSize,
+        color: field.color,
+      });
+
+      if (flatten) {
+        const fillColor = field.color === 'yellow' ? YELLOW_FILL : BLUE_FILL;
+        const inset = 0.6; // leave the template grid lines intact while covering printed defaults
+        const rectX = x + inset;
+        const rectY = y + inset;
+        const rectWidth = Math.max(0, width - inset * 2);
+        const rectHeight = Math.max(0, height - inset * 2);
+        if (rectWidth > 0 && rectHeight > 0) {
+          page.drawRectangle({
+            x: rectX,
+            y: rectY,
+            width: rectWidth,
+            height: rectHeight,
+            color: fillColor,
+            borderWidth: 0,
+          });
+        }
+      }
+
+      if (shouldDrawText && value) {
+        const availableWidth = Math.max(4, width - WIDTH_PADDING);
+        let drawFontSize = fontSize;
+        const measuredWidth = font.widthOfTextAtSize(value, drawFontSize);
+        if (measuredWidth > availableWidth) {
+          drawFontSize = Math.max(MIN_FONT_SIZE, (availableWidth / measuredWidth) * drawFontSize);
+        }
+        const textWidth = font.widthOfTextAtSize(value, drawFontSize);
+        const textHeight = font.heightAtSize(drawFontSize);
+        const textX = x + Math.max(1, (width - textWidth) / 2);
+        const textY = y + Math.max(0.5, (height - textHeight) / 2);
+        page.drawText(value, {
+          x: textX,
+          y: textY,
+          size: drawFontSize,
+          font,
+          color: rgb(0, 0, 0),
+          maxWidth: availableWidth,
         });
       }
+
+      if (!useFormFields) return;
+
+      const textField = form.createTextField(field.id);
+      textField.addToPage(page, { x, y, width, height });
+      textField.setFontSize(fontSize);
+      textField.enableMultiline();
+      textField.setText(value);
+      textField.setAlignment(TextAlignment.Center);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to render contract field "${field.id}" on page ${field.page}: ${message}`);
     }
-
-    if (shouldDrawText && (field.value || '').trim()) {
-      const value = field.value || '';
-      const availableWidth = Math.max(4, width - WIDTH_PADDING);
-      let drawFontSize = fontSize;
-      const measuredWidth = font.widthOfTextAtSize(value, drawFontSize);
-      if (measuredWidth > availableWidth) {
-        drawFontSize = Math.max(MIN_FONT_SIZE, (availableWidth / measuredWidth) * drawFontSize);
-      }
-      const textWidth = font.widthOfTextAtSize(value, drawFontSize);
-      const textHeight = font.heightAtSize(drawFontSize);
-      const textX = x + Math.max(1, (width - textWidth) / 2);
-      const textY = y + Math.max(0.5, (height - textHeight) / 2);
-      page.drawText(value, {
-        x: textX,
-        y: textY,
-        size: drawFontSize,
-        font,
-        color: rgb(0, 0, 0),
-        maxWidth: availableWidth,
-      });
-    }
-
-    if (!useFormFields) return;
-
-    const textField = form.createTextField(field.id);
-    textField.addToPage(page, { x, y, width, height });
-    textField.setFontSize(fontSize);
-    textField.enableMultiline();
-    textField.setText(field.value || '');
-    textField.setAlignment(TextAlignment.Center);
   });
 
   if (useFormFields) {
