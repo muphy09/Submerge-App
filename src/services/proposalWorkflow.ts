@@ -635,15 +635,24 @@ function extractTileCopingDeckingFields(
   const tile = proposal.tileCopingDecking || ({} as Proposal['tileCopingDecking']);
   const additionalDeckingSelections = getAdditionalDeckingSelections(tile);
   const primaryDeckingArea = getResolvedProposalPrimaryDeckingArea(proposal);
-  const tileSelectionId = getTileSelectionId(tile);
+  const isFiberglass = proposal.poolSpecs?.poolType === 'fiberglass';
+  const tileSelectionId = isFiberglass ? '' : getTileSelectionId(tile);
   return compactSnapshots([
     {
       key: 'tileOption',
       label: 'Tile Option',
       value: tileSelectionId ? getTileOptionLabel(pricingData.tileCoping, tileSelectionId) : 'None',
     },
-    { key: 'additionalTileLength', label: 'Additional Tile Length', value: formatNumber(tile.additionalTileLength, ' LF') },
-    { key: 'trimTile', label: 'Trim Tile On Steps', value: formatBoolean(tile.hasTrimTileOnSteps) },
+    {
+      key: 'additionalTileLength',
+      label: 'Additional Tile Length',
+      value: formatNumber(isFiberglass ? 0 : tile.additionalTileLength, ' LF'),
+    },
+    {
+      key: 'trimTile',
+      label: 'Trim Tile On Steps',
+      value: formatBoolean(isFiberglass ? false : tile.hasTrimTileOnSteps),
+    },
     {
       key: 'copingType',
       label: 'Coping Type',

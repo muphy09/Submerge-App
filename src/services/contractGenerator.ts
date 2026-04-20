@@ -768,6 +768,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
       : 'None';
   }
   if (/accent tile/.test(label)) {
+    if (specs.poolType === 'fiberglass') return 'None';
     const hasTile = hasTileSelection(proposal.tileCopingDecking);
     return hasTile && proposal.tileCopingDecking?.hasTrimTileOnSteps ? 'Trim Tile' : 'None';
   }

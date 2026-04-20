@@ -50,6 +50,7 @@ import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { normalizeEquipmentLighting } from '../utils/lighting';
+import { getTileSelectionId } from '../utils/tileCopingCatalogs';
 import {
   getActivePricingModelMeta,
   initPricingDataStore,
@@ -1460,6 +1461,37 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     proposal.poolSpecs?.spaWidth,
     proposal.poolSpecs?.spaShape,
     proposal.tileCopingDecking?.doubleBullnoseLnft,
+  ]);
+
+  useEffect(() => {
+    if (proposal.poolSpecs?.poolType !== 'fiberglass' || !proposal.tileCopingDecking) {
+      return;
+    }
+
+    const currentTile = proposal.tileCopingDecking;
+    const hasTileSelection = Boolean(getTileSelectionId(currentTile));
+    const hasTileSpecificValues =
+      hasTileSelection ||
+      (currentTile.additionalTileLength ?? 0) > 0 ||
+      Boolean(currentTile.hasTrimTileOnSteps);
+
+    if (!hasTileSpecificValues) {
+      return;
+    }
+
+    updateProposal('tileCopingDecking', {
+      ...currentTile,
+      tileLevel: 0,
+      tileOptionId: undefined,
+      additionalTileLength: 0,
+      hasTrimTileOnSteps: false,
+    });
+  }, [
+    proposal.poolSpecs?.poolType,
+    proposal.tileCopingDecking?.tileLevel,
+    proposal.tileCopingDecking?.tileOptionId,
+    proposal.tileCopingDecking?.additionalTileLength,
+    proposal.tileCopingDecking?.hasTrimTileOnSteps,
   ]);
 
   const calculateTotals = (input: Partial<Proposal> = proposal): Proposal => {
