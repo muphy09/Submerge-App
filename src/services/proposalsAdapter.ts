@@ -372,8 +372,9 @@ function withSyncStatus(proposal: Proposal, status: SyncStatus, message?: string
 async function persistLocalProposal(proposal: Proposal) {
   if (!window.electron?.saveProposal) return;
   try {
-    setLocalProposalOwner(proposal.proposalNumber, readSession(), proposal.franchiseId);
-    await window.electron.saveProposal(proposal);
+    const upgradedProposal = upgradeProposalContractTemplateRevision(proposal);
+    setLocalProposalOwner(upgradedProposal.proposalNumber, readSession(), upgradedProposal.franchiseId);
+    await window.electron.saveProposal(upgradedProposal);
   } catch (error) {
     console.warn('Failed to persist proposal locally:', error);
   }
@@ -797,7 +798,8 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
     ...normalized,
     versions: (normalized.versions || []).map((v) => ensureProposalWriteMetadata(v, session)),
   };
-  const franchiseId = normalizedWithVersions.franchiseId || DEFAULT_FRANCHISE_ID;
+  const persistenceReady = upgradeProposalContractTemplateRevision(normalizedWithVersions);
+  const franchiseId = persistenceReady.franchiseId || DEFAULT_FRANCHISE_ID;
 
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
@@ -809,7 +811,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
       throw new Error(OFFLINE_ERROR_MESSAGE);
     }
     const pending = withSyncStatus(
-      { ...normalizedWithVersions, franchiseId, lastModified: normalizedWithVersions.lastModified || now },
+      { ...persistenceReady, franchiseId, lastModified: persistenceReady.lastModified || now },
       'pending',
       PENDING_MESSAGE
     );
@@ -818,7 +820,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
   }
 
   try {
-    const synced = await upsertToSupabase(normalizedWithVersions);
+    const synced = await upsertToSupabase(persistenceReady);
     await persistLocalProposal({ ...synced, franchiseId });
     if (options.ledgerAction === 'proposal_submitted') {
       await logLedgerEventSafe({
@@ -840,7 +842,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
       throw error;
     }
     const pending = withSyncStatus(
-      { ...normalizedWithVersions, franchiseId, lastModified: normalizedWithVersions.lastModified || now },
+      { ...persistenceReady, franchiseId, lastModified: persistenceReady.lastModified || now },
       'pending',
       PENDING_MESSAGE
     );

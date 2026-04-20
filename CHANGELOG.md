@@ -1,3 +1,8 @@
+## [2.3.2] - 4/20/26
+### Hotfix
+- Contract modifications made before the timestamp update should no longer overwrite stamped changes
+- Losing internet before a contract sync has completed now pauses the sync until internet is restored
+-----
 ## [2.3.1] - 4/17/26
 ### Hotfix
 - Fix custom characters in PDF Export
