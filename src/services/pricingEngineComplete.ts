@@ -1014,7 +1014,7 @@ export class EquipmentCalculations {
 
       auxiliaryPumps.forEach((pump, idx) => {
         const auxCost = getEquipmentItemCost(pump as any, pumpOverhead);
-        pushUpgrade(pump?.name || `Auxiliary Pump ${idx + 1}`, auxCost, 1);
+        pushUpgrade(pump?.name || `Blower ${idx + 1}`, auxCost, 1);
       });
 
       const extraFilterQty = Math.max(filterQty - includedFilterQty, 0);
@@ -1100,7 +1100,7 @@ export class EquipmentCalculations {
 
       auxiliaryPumps.forEach((pump, idx) => {
         const auxCost = getEquipmentItemCost(pump as any, pumpOverhead);
-        pushItem(pump.name || `Auxiliary Pump ${idx + 1}`, auxCost, 1);
+        pushItem(pump.name || `Blower ${idx + 1}`, auxCost, 1);
       });
 
       if (filterQty > 0) {
@@ -1231,13 +1231,7 @@ export class EquipmentCalculations {
       });
     }
 
-    const auxiliaryPumpCount =
-      normalizedEquipment?.auxiliaryPumps && normalizedEquipment.auxiliaryPumps.length > 0
-        ? normalizedEquipment.auxiliaryPumps.length
-        : normalizedEquipment?.auxiliaryPump
-          ? 1
-          : 0;
-    const additionalPumpCount = getAdditionalPumpSelections(normalizedEquipment).length + auxiliaryPumpCount;
+    const additionalPumpCount = getAdditionalPumpSelections(normalizedEquipment).length;
 
     if (additionalPumpCount > 0) {
       items.push({
@@ -1430,14 +1424,7 @@ export class InteriorFinishCalculations {
         (pump) => pump && getEquipmentItemCost(pump as any, pumpOverhead) > 0
       ).length;
       const mainPumpCount = (pumpCost > 0 ? pumpQty : 0) + additionalPrimaryPumpCount;
-      const auxPumpCount = (
-        equipment?.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
-          ? equipment.auxiliaryPumps
-          : equipment?.auxiliaryPump
-            ? [equipment.auxiliaryPump]
-            : []
-      ).filter((pump) => pump && getEquipmentItemCost(pump as any, pumpOverhead) > 0).length;
-      const drains = (mainPumpCount + auxPumpCount) * 2 * 15;
+      const drains = mainPumpCount * 2 * 15;
       const vac = 0;
       const returns = 20;
       const hydro = 60;

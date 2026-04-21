@@ -714,7 +714,7 @@ function extractEquipmentFields(
     { key: 'pump', label: 'Pump', value: formatNamedSelection(equipment.pump, 'no pump') },
     { key: 'pumpQty', label: 'Pump Quantity', value: formatNumber(equipment.pumpQuantity) },
     { key: 'additionalPumps', label: 'Additional Pumps', value: summarizePumpArray(equipment.additionalPumps) },
-    { key: 'auxiliaryPumps', label: 'Auxiliary Pumps', value: summarizePumpArray(equipment.auxiliaryPumps) },
+    { key: 'auxiliaryPumps', label: 'Blowers', value: summarizePumpArray(equipment.auxiliaryPumps) },
     { key: 'filter', label: 'Filter', value: formatNamedSelection(equipment.filter, 'no filter') },
     { key: 'filterQty', label: 'Filter Quantity', value: formatNumber(equipment.filterQuantity) },
     { key: 'cleaner', label: 'Cleaner', value: formatNamedSelection(equipment.cleaner, 'no cleaner') },

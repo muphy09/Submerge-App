@@ -35,7 +35,13 @@ const MISC_PLUMBING_SUBCATEGORY = 'Misc. Plumbing';
 
 const isPlaceholderPumpName = (name?: string): boolean => {
   const normalized = name?.toLowerCase() || '';
-  return !normalized || normalized.includes('no pump') || normalized.includes('no aux') || normalized.includes('no auxiliary');
+  return (
+    !normalized ||
+    normalized.includes('no pump') ||
+    normalized.includes('no aux') ||
+    normalized.includes('no auxiliary') ||
+    normalized.includes('no blower')
+  );
 };
 
 const hasPoolDefinition = (poolSpecs: PoolSpecs): boolean => {
@@ -484,17 +490,10 @@ export class PlumbingCalculations {
       });
     }
 
-    const auxiliarySelections = equipment?.auxiliaryPumps?.length
-      ? equipment.auxiliaryPumps
-      : equipment?.auxiliaryPump
-      ? [equipment.auxiliaryPump]
-      : [];
     const additionalPrimaryPumpCount = getAdditionalPumpSelections(equipment).filter(
       (pump) => !isPlaceholderPumpName(pump?.name)
     ).length;
-    const auxiliaryPumpCount = auxiliarySelections.filter((pump) => !isPlaceholderPumpName(pump?.name)).length;
-    const additionalPumpCount = additionalPrimaryPumpCount + auxiliaryPumpCount;
-    const mainDrainRunMultiplier = 1 + additionalPumpCount;
+    const mainDrainRunMultiplier = 1 + additionalPrimaryPumpCount;
 
     // Main drain + spa loop - 2.5" (PLUM!K15)
     // Each added pump gets the same main-drain run; spa loop remains a single run.
@@ -681,11 +680,8 @@ export class PlumbingCalculations {
       });
     }
 
-    const hasAuxPump = auxiliarySelections.some((pump) => {
-      return !isPlaceholderPumpName(pump?.name);
-    });
     const addlMainDrainCost = prices.addlMainDrainWhenAuxPump ?? 0;
-    if (hasAuxPump && addlMainDrainCost > 0) {
+    if (additionalPrimaryPumpCount > 0 && addlMainDrainCost > 0) {
       items.push({
         category: 'Plumbing',
         description: "Add'l Main Drain",

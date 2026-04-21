@@ -1,4 +1,7 @@
 .contract-view {
+  --contract-fill-blue: #ddebf7;
+  --contract-fill-yellow: #fff7d1;
+  --contract-border-color: #1a1a1a;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -42,7 +45,6 @@
   position: relative;
   z-index: 1;
   image-rendering: optimizeQuality;
-  filter: contrast(1.03);
 }
 
 .contract-field-layer {
@@ -67,7 +69,7 @@
 .contract-input-wrapper textarea {
   width: 100%;
   height: 100%;
-  border: 0.9px solid #1a1a1a;
+  border: 0.9px solid var(--contract-border-color);
   border-radius: 0;
   padding: 1px 3px;
   font-family: 'Calibri', 'Arial', sans-serif;
@@ -107,8 +109,8 @@
 .contract-input-blue,
 .contract-readonly-value.contract-input-blue,
 .contract-input-wrapper textarea.contract-input-blue {
-  background: #e8f0ff;
-  border-color: #1a1a1a;
+  background: var(--contract-fill-blue);
+  border-color: var(--contract-border-color);
 }
 
 .contract-input-green,
@@ -121,8 +123,8 @@
 .contract-input-yellow,
 .contract-readonly-value.contract-input-yellow,
 .contract-input-wrapper textarea.contract-input-yellow {
-  background: #fff7d1;
-  border-color: #1a1a1a;
+  background: var(--contract-fill-yellow);
+  border-color: var(--contract-border-color);
 }
 
 .contract-input-wrapper textarea {
@@ -163,14 +165,14 @@
 .contract-input:focus,
 .contract-input-wrapper textarea:focus {
   outline: none;
-  border: 1.2px solid #1a1a1a;
+  border: 1.2px solid var(--contract-border-color);
   box-shadow: 0 0 0 0.8px rgba(0, 0, 0, 0.2);
 }
 
 .contract-choice {
   width: 100%;
   height: 100%;
-  border: 0.9px solid #1a1a1a;
+  border: 0.9px solid var(--contract-border-color);
   border-radius: 0;
   padding: 0;
   margin: 0;
@@ -196,7 +198,7 @@
 }
 
 .contract-choice.contract-input-blue {
-  background: #e8f0ff;
+  background: var(--contract-fill-blue);
 }
 
 .contract-choice.contract-input-green {
@@ -204,7 +206,7 @@
 }
 
 .contract-choice.contract-input-yellow {
-  background: #fff7d1;
+  background: var(--contract-fill-yellow);
 }
 
 .contract-input-wrapper.responsibility-wrapper {
@@ -310,8 +312,8 @@
   .contract-input-green,
   .contract-readonly-value.contract-input-green,
   .contract-input-wrapper textarea.contract-input-green {
-    background: #e8f0ff !important;
-    border-color: #1a1a1a !important;
+    background: var(--contract-fill-blue) !important;
+    border-color: var(--contract-border-color) !important;
   }
 
   .contract-input,

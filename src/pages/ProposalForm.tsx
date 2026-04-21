@@ -751,7 +751,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         : pricingData.equipment.pumps;
     const isAuxPumpPlaceholder = (name: string) => {
       const lowered = name.toLowerCase();
-      return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary');
+      return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary') || lowered.includes('no blower');
     };
     const defaultAuxiliaryPump =
       auxiliaryPumpCatalog.find((pump: any) => pump.defaultAuxiliaryPump) ||
@@ -1017,18 +1017,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   useEffect(() => {
     const selectedPackage = getSelectedEquipmentPackage(proposal.equipment as any);
-    const auxiliaryPumpCatalog =
-      (pricingData as any).equipment?.auxiliaryPumps?.length
-        ? (pricingData as any).equipment.auxiliaryPumps
-        : pricingData.equipment.pumps;
     const isAuxPumpPlaceholder = (name: string) => {
       const lowered = name.toLowerCase();
-      return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary');
+      return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary') || lowered.includes('no blower');
     };
-    const defaultAuxiliaryPump =
-      auxiliaryPumpCatalog.find((pump: any) => pump.defaultAuxiliaryPump) ||
-      auxiliaryPumpCatalog.find((pump: any) => !isAuxPumpPlaceholder(pump.name)) ||
-      auxiliaryPumpCatalog[0];
     const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
     const buildWaterFeaturePump = (pump: any) =>
       pump
@@ -1047,31 +1039,23 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     ).length;
 
     const equipment = proposal.equipment || getDefaultEquipment();
-    const auxSelections = equipment.auxiliaryPumps?.length
-      ? equipment.auxiliaryPumps
-      : equipment.auxiliaryPump
-      ? [equipment.auxiliaryPump]
-      : [];
     const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
-    const manualAuxSelections = auxSelections.filter((pump) => pump?.autoAddedReason !== 'waterFeature');
-    const waterFeatureAutoPumps = auxSelections.filter((pump) => pump?.autoAddedReason === 'waterFeature');
+    const hasManualAdditionalPump = additionalPrimaryPumps.some((pump) => pump?.autoAddedReason !== 'waterFeature');
+    const explicitAdditionalPumps = Array.isArray(equipment.additionalPumps) ? equipment.additionalPumps.filter(Boolean) : [];
+    const waterFeatureAutoPumps = explicitAdditionalPumps.filter((pump) => pump?.autoAddedReason === 'waterFeature');
 
     if (!selectedPackage || !isFixedEquipmentPackage(selectedPackage) || !packageAllowsWaterFeatures(selectedPackage)) {
       if (waterFeatureAutoPumps.length > 0) {
         setProposal((prev) => {
           const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
-          const nextAuxSelections = (baseEquipment.auxiliaryPumps?.length
-            ? baseEquipment.auxiliaryPumps
-            : baseEquipment.auxiliaryPump
-            ? [baseEquipment.auxiliaryPump]
-            : []
-          ).filter((pump) => pump?.autoAddedReason !== 'waterFeature');
+          const nextAdditionalSelections = getAdditionalPumpSelections(baseEquipment).filter(
+            (pump) => pump?.autoAddedReason !== 'waterFeature'
+          );
           return {
             ...prev,
             equipment: {
               ...baseEquipment,
-              auxiliaryPumps: nextAuxSelections,
-              auxiliaryPump: nextAuxSelections[0],
+              additionalPumps: nextAdditionalSelections,
             } as Proposal['equipment'],
           };
         });
@@ -1080,27 +1064,23 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       return;
     }
 
-    const hasManualAdditionalPump = additionalPrimaryPumps.length > 0 || manualAuxSelections.length > 0;
     const allowance = getPackageWaterFeaturesWithoutExtraPump(selectedPackage);
     const needsAdditionalPump = selectedWaterFeatureCount > allowance;
 
     if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0) {
-      const selection = buildWaterFeaturePump(defaultAuxiliaryPump);
+      const selection = buildWaterFeaturePump(
+        !isAuxPumpPlaceholder(String(equipment.pump?.name || '')) ? equipment.pump : undefined
+      );
       if (!selection) return;
       setProposal((prev) => {
         const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
-        const currentAuxSelections = baseEquipment.auxiliaryPumps?.length
-          ? baseEquipment.auxiliaryPumps
-          : baseEquipment.auxiliaryPump
-          ? [baseEquipment.auxiliaryPump]
-          : [];
-        const nextAuxSelections = [...currentAuxSelections, selection];
+        const currentAdditionalSelections = getAdditionalPumpSelections(baseEquipment);
+        const nextAdditionalSelections = [...currentAdditionalSelections, selection];
         return {
           ...prev,
           equipment: {
             ...baseEquipment,
-            auxiliaryPumps: nextAuxSelections,
-            auxiliaryPump: nextAuxSelections[0],
+            additionalPumps: nextAdditionalSelections,
           } as Proposal['equipment'],
         };
       });
@@ -1111,18 +1091,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     if (!needsAdditionalPump && waterFeatureAutoPumps.length > 0) {
       setProposal((prev) => {
         const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
-        const currentAuxSelections = baseEquipment.auxiliaryPumps?.length
-          ? baseEquipment.auxiliaryPumps
-          : baseEquipment.auxiliaryPump
-          ? [baseEquipment.auxiliaryPump]
-          : [];
-        const nextAuxSelections = currentAuxSelections.filter((pump) => pump?.autoAddedReason !== 'waterFeature');
+        const currentAdditionalSelections = getAdditionalPumpSelections(baseEquipment);
+        const nextAdditionalSelections = currentAdditionalSelections.filter((pump) => pump?.autoAddedReason !== 'waterFeature');
         return {
           ...prev,
           equipment: {
             ...baseEquipment,
-            auxiliaryPumps: nextAuxSelections,
-            auxiliaryPump: nextAuxSelections[0],
+            additionalPumps: nextAdditionalSelections,
           } as Proposal['equipment'],
         };
       });
@@ -1825,12 +1800,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       selectedPackage && !packageAllowsWaterFeatures(selectedPackage)
         ? 'This equipment package cannot support water features.'
         : undefined;
-    const auxiliarySelections = proposal.equipment?.auxiliaryPumps?.length
-      ? proposal.equipment.auxiliaryPumps
-      : proposal.equipment?.auxiliaryPump
-      ? [proposal.equipment.auxiliaryPump]
-      : [];
-    const packageWaterFeatureWarningMessage = auxiliarySelections.some(
+    const additionalPumpSelections = getAdditionalPumpSelections(proposal.equipment);
+    const packageWaterFeatureWarningMessage = additionalPumpSelections.some(
       (pump) => pump?.autoAddedReason === 'waterFeature'
     )
       ? waterFeatureAllowance > 0

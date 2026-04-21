@@ -407,7 +407,7 @@ const pricingData = {
       { name: 'No Pump (Select pump)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
     ],
     auxiliaryPumps: [
-      { name: 'No Auxiliary Pump (Select aux pump)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
+      { name: 'No Blower (Select blower)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
     ],
     filters: [
       { name: 'No Filter (Select filter)', sqft: 0, basePrice: 0, addCost1: 0, addCost2: 0 },

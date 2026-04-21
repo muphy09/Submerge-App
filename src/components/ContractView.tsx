@@ -21,6 +21,7 @@ import {
   getContractDepositSchedulePercentages,
   getContractTotalCashPrice,
   getEditableContractFields,
+  normalizeContractDepositInput,
   validateContractInputs,
 } from '../services/contractGenerator';
 import { buildContractPdf, ContractPdfFieldLayout } from '../services/contractPdf';
@@ -784,7 +785,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
     (cellAddress: string, value: string) => {
       const isDepositSourceField = CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(cellAddress);
       if (isDepositSourceField) {
-        const normalizedValue = value;
+        const normalizedValue = normalizeContractDepositInput(value);
         const next = { ...overrides };
         const hasDepositValue = normalizedValue.trim().length > 0;
 

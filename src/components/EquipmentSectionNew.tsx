@@ -149,7 +149,7 @@ function EquipmentSectionNew({
   const formatOptionLabel = (label: string, _amount?: number) => label;
   const isAuxPumpPlaceholder = (name: string) => {
     const lowered = name.toLowerCase();
-    return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary');
+    return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary') || lowered.includes('no blower');
   };
   const getDefaultAuxiliaryPump = () =>
     auxiliaryPumpCatalog.find((pump: any) => pump.defaultAuxiliaryPump) ||
@@ -211,7 +211,7 @@ function EquipmentSectionNew({
   const normalizedBasePumpQuantity = Math.max(getBasePumpQuantity(data), 0);
   const normalizedAuxiliaryPumps =
     Array.isArray(data?.auxiliaryPumps) && data.auxiliaryPumps.length > 0
-      ? data.auxiliaryPumps.filter(Boolean)
+      ? data.auxiliaryPumps.filter(Boolean).slice(0, 1)
       : data?.auxiliaryPump
       ? [data.auxiliaryPump]
       : [];
@@ -429,7 +429,7 @@ function EquipmentSectionNew({
   ]);
   const additionalPumps = safeData.additionalPumps || [];
   const auxiliaryPumps = safeData.auxiliaryPumps || [];
-  const maxAuxiliaryPumps = 2;
+  const maxAuxiliaryPumps = 1;
   const pumpQuantity = Math.max(safeData.pumpQuantity ?? (includePump ? 1 : 0), 0);
   const includedPumpQuantity = packageIncludesPump ? Math.max(selectedPackage?.includedPumpQuantity ?? 0, 0) : 0;
   const primaryPumpSummaryQuantity = hasRealSelection(safeData.pump?.name, 'no pump') && pumpQuantity > 0 ? pumpQuantity : 0;
@@ -514,9 +514,9 @@ function EquipmentSectionNew({
 
     const auxiliaryPumpNames = auxiliaryPumps
       .map((pump) => pump?.name)
-      .filter((name) => hasRealSelection(name, 'no pump'));
+      .filter((name) => Boolean(name) && !isAuxPumpPlaceholder(name));
     const auxiliaryPumpSummary = summarizeSelectionNames(auxiliaryPumpNames);
-    pushRow(auxiliaryPumpNames.length === 1 ? 'Auxiliary Pump' : 'Auxiliary Pumps', auxiliaryPumpSummary);
+    pushRow('Blower', auxiliaryPumpSummary);
 
     if ((packageIncludesFilter || includeFilter) && hasRealSelection(safeData.filter?.name, 'no filter') && filterQuantity > 0) {
       pushRow('Filter', summarizeQuantity(safeData.filter?.name || 'Filter', filterQuantity));
@@ -751,8 +751,8 @@ function EquipmentSectionNew({
   const pumpAddDisabledReason = packageRequiredReason;
   const auxiliaryPumpAddDisabledReason = getFirstDisabledReason(
     packageRequiredReason,
-    !packageAllowsPumpChanges ? 'This equipment package does not allow auxiliary pump upgrades.' : undefined,
-    auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum auxiliary pumps reached.' : undefined
+    !packageAllowsPumpChanges ? 'This equipment package does not allow blower upgrades.' : undefined,
+    auxiliaryPumps.length >= maxAuxiliaryPumps ? 'Maximum blowers reached.' : undefined
   );
   const filterAddDisabledReason = packageRequiredReason;
   const cleanerAddDisabledReason = getFirstDisabledReason(
@@ -2114,16 +2114,16 @@ function EquipmentSectionNew({
         )}
       </div>
 
-      {/* Auxiliary Pump */}
+      {/* Blower */}
       <div className="spec-block">
         <div className="spec-block-header">
-          <h2 className="spec-block-title">Auxiliary Pump</h2>
-          <p className="spec-block-subtitle">Add auxiliary pumps to the project.</p>
+          <h2 className="spec-block-title">Blowers</h2>
+          <p className="spec-block-subtitle">Add a blower to the project.</p>
         </div>
         {renderToggleButtons({
           hasSelection: hasAuxiliaryPumpSelection,
-          noLabel: 'No Auxiliary Pump',
-          addLabel: 'Add Auxiliary Pump',
+          noLabel: 'No Blower',
+          addLabel: 'Add Blower',
           onNo: clearAuxiliaryPumpFlow,
           onAdd: openAuxiliaryPumpFlow,
           addDisabledReason: auxiliaryPumpAddDisabledReason,
@@ -2133,9 +2133,8 @@ function EquipmentSectionNew({
           <>
             {auxiliaryPumps.map((pump, idx) => {
               const isEditing = activeAuxiliaryPumpIndex === idx;
-              const title = buildCardTitle(pump?.name || getDefaultAuxiliaryPump()?.name || 'Auxiliary Pump', [
+              const title = buildCardTitle(pump?.name || getDefaultAuxiliaryPump()?.name || 'Blower', [
                 pump?.autoAddedForSpa ? 'Auto-added for spa' : undefined,
-                pump?.autoAddedReason === 'waterFeature' ? 'Added for water features' : undefined,
               ]);
 
               return (
@@ -2143,7 +2142,7 @@ function EquipmentSectionNew({
                   <div className="spec-subcard-header">
                     <div>
                       <div className="spec-subcard-title">{title}</div>
-                      {!isEditing && <div className="spec-subcard-subtitle">Auxiliary Pump #{idx + 1}</div>}
+                      {!isEditing && <div className="spec-subcard-subtitle">Blower</div>}
                     </div>
                     <div className="spec-subcard-actions stacked-actions">
                       <div className="stacked-primary-actions">
@@ -2154,21 +2153,13 @@ function EquipmentSectionNew({
                         >
                           {isEditing ? 'Collapse' : 'Edit'}
                         </button>
-                        <TooltipAnchor
-                          tooltip={
-                            pump?.autoAddedReason === 'waterFeature'
-                              ? 'This pump will be added again while the package still needs it for water features.'
-                              : undefined
-                          }
+                        <button
+                          type="button"
+                          className="link-btn danger"
+                          onClick={() => removeAuxiliaryPump(idx)}
                         >
-                          <button
-                            type="button"
-                            className="link-btn danger"
-                            onClick={() => removeAuxiliaryPump(idx)}
-                          >
-                            Remove
-                          </button>
-                        </TooltipAnchor>
+                          Remove
+                        </button>
                       </div>
                       {!isEditing && idx === auxiliaryPumps.length - 1 && !auxiliaryPumpAddDisabledReason && (
                         <button
@@ -2190,7 +2181,7 @@ function EquipmentSectionNew({
                       <div className="spec-grid spec-grid-2">
                         <div className="spec-field">
                           <LabelWithRetired
-                            text={`Auxiliary Pump ${idx + 1}`}
+                            text="Blower"
                             showRetired={retiredFlags.auxiliaryPumps[idx]}
                           />
                           <select
@@ -2210,9 +2201,6 @@ function EquipmentSectionNew({
                       </div>
 
                       {pump?.autoAddedForSpa && <small className="form-help">Auto-added for spa.</small>}
-                      {pump?.autoAddedReason === 'waterFeature' && (
-                        <small className="form-help">Additional pump added for Water Feature</small>
-                      )}
 
                       <div className="action-row">
                         <button
@@ -2243,7 +2231,7 @@ function EquipmentSectionNew({
           </>
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
-            No Auxiliary Pump
+            No Blower
           </div>
         )}
       </div>

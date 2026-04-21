@@ -31,8 +31,9 @@ const MIN_FONT_SIZE = 6;
 const HEIGHT_MARGIN = 2; // leave more headroom so text sits cleanly inside shallow fields
 const HEIGHT_SCALE = 0.92; // reduce further to account for field padding/appearance
 const WIDTH_PADDING = 2;
-const BLUE_FILL = rgb(232 / 255, 240 / 255, 255 / 255);
+const BLUE_FILL = rgb(221 / 255, 235 / 255, 247 / 255);
 const YELLOW_FILL = rgb(255 / 255, 247 / 255, 209 / 255);
+const FIELD_BORDER = rgb(26 / 255, 26 / 255, 26 / 255);
 const WHITE_FILL = rgb(1, 1, 1);
 const HEADER_GRAY_FILL = rgb(174 / 255, 170 / 255, 170 / 255);
 const PDF_SAFE_CHARACTER_FALLBACK = '?';
@@ -224,19 +225,15 @@ export async function buildContractPdf(
 
       if (flatten) {
         const fillColor = field.color === 'yellow' ? YELLOW_FILL : BLUE_FILL;
-        const inset = 0.6; // leave the template grid lines intact while covering printed defaults
-        const rectX = x + inset;
-        const rectY = y + inset;
-        const rectWidth = Math.max(0, width - inset * 2);
-        const rectHeight = Math.max(0, height - inset * 2);
-        if (rectWidth > 0 && rectHeight > 0) {
+        if (width > 0 && height > 0) {
           page.drawRectangle({
-            x: rectX,
-            y: rectY,
-            width: rectWidth,
-            height: rectHeight,
+            x,
+            y,
+            width,
+            height,
             color: fillColor,
-            borderWidth: 0,
+            borderColor: FIELD_BORDER,
+            borderWidth: 0.9,
           });
         }
       }

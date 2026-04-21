@@ -416,7 +416,7 @@ export interface Equipment {
   pumpQuantity?: number;
   additionalPumps?: PumpSelection[];
   auxiliaryPump?: PumpSelection; // Deprecated: use auxiliaryPumps
-  auxiliaryPumps?: PumpSelection[]; // Optional auxiliary pumps (up to 2)
+  auxiliaryPumps?: PumpSelection[]; // Blower selections (single-select in current UI)
   filter: FilterSelection;
   filterQuantity?: number;
   cleaner: CleanerSelection;

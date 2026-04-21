@@ -41,10 +41,10 @@ const DEFAULT_FIELDS = contractFieldLayout as TemplateField[];
 const DEFAULT_STATE = 'NC';
 export const DEFAULT_CONTRACT_TEMPLATE_ID: ContractTemplateId = 'nc-gunite';
 
-const NC_GUNITE_URL = new URL('../../docs/Contracts/PPAS Contract Template.pdf', import.meta.url);
-const NC_FIBERGLASS_URL = new URL('../../docs/Contracts/2024 Contract NC Fiberglass.pdf', import.meta.url);
-const SC_GUNITE_URL = new URL('../../docs/Contracts/2024 Contract SC Gunite.pdf', import.meta.url);
-const SC_FIBERGLASS_URL = new URL('../../docs/Contracts/2024 Contract SC Fiberglass.pdf', import.meta.url);
+const NC_GUNITE_URL = new URL('../../docs/Contracts/NEW 2026 Contract NC Shotcrete.pdf', import.meta.url);
+const NC_FIBERGLASS_URL = new URL('../../docs/Contracts/NEW 2026 Contract NC Fiberglass.pdf', import.meta.url);
+const SC_GUNITE_URL = new URL('../../docs/Contracts/NEW 2026 Contract SC Shotcrete.pdf', import.meta.url);
+const SC_FIBERGLASS_URL = new URL('../../docs/Contracts/NEW 2026 Contract SC Fiberglass.pdf', import.meta.url);
 
 type FieldOverride = {
   id: string;
@@ -59,124 +59,11 @@ type PageFieldTransform = {
   yOffset: number;
 };
 
-type AdditionalFeaturesPatchConfig = {
-  fontSize: number;
-  headingLeftRect: [number, number, number, number];
-  headingRightRect?: [number, number, number, number];
-  headingTextY: number;
-  rowRectX: number;
-  rowRectWidth: number;
-  rowRectHeight: number;
-  rowTextX: number;
-  rowTextYs: [number, number, number, number];
-  qtyTextX: number;
-};
-
-const ADDITIONAL_FEATURE_ROW_LABELS = [
-  '54. Bubblers',
-  '55. Umbrella Sleeves',
-  '56. Handrails',
-  '57. Jump Rock',
-] as const;
-
-function buildAdditionalFeaturesStaticPatches(config: AdditionalFeaturesPatchConfig): ContractStaticPatch[] {
-  const rowUnitLabels = ['QTY:', 'QTY:', 'QTY:', 'LNFT:'] as const;
-  const headingLeftPatch: ContractStaticPatch = {
-    page: 2,
-    rect: config.headingLeftRect,
-    fill: 'headerGray',
-    texts: [
-      {
-        x: config.headingLeftRect[0],
-        y: config.headingTextY,
-        text: 'ADDITIONAL FEATURES',
-        fontSize: config.fontSize,
-        width: config.headingLeftRect[2],
-        align: 'center',
-        fontStyle: 'bold',
-      },
-    ],
-  };
-  const headingRightPatch: ContractStaticPatch | null = config.headingRightRect
-    ? {
-        page: 2,
-        rect: config.headingRightRect,
-        fill: 'headerGray',
-      }
-    : null;
-
-  const rowPatches = config.rowTextYs.map((rowTextY, index) => ({
-    page: 2,
-    rect: [config.rowRectX, rowTextY - 1.15, config.rowRectWidth, config.rowRectHeight] as [number, number, number, number],
-    fill: 'white' as const,
-    texts: [
-      {
-        x: config.rowTextX,
-        y: rowTextY,
-        text: ADDITIONAL_FEATURE_ROW_LABELS[index],
-        fontSize: config.fontSize,
-      },
-      {
-        x: config.qtyTextX,
-        y: rowTextY,
-        text: rowUnitLabels[index],
-        fontSize: config.fontSize,
-      },
-    ],
-  }));
-
-  return [...(headingRightPatch ? [headingLeftPatch, headingRightPatch] : [headingLeftPatch]), ...rowPatches];
-}
-
 const STATIC_TEMPLATE_PATCHES: Record<ContractTemplateId, ContractStaticPatch[]> = {
-  'nc-gunite': buildAdditionalFeaturesStaticPatches({
-    fontSize: 6.96,
-    headingLeftRect: [51.84000015258789, 465.42999267578125, 228.5299949645996, 9.480010986328125],
-    headingRightRect: [290.2099914550781, 465.42999267578125, 269.2300109863281, 9.480010986328125],
-    headingTextY: 467.47,
-    rowRectX: 51,
-    rowRectWidth: 220.5,
-    rowRectHeight: 9.1,
-    rowTextX: 53.28,
-    rowTextYs: [458.11, 448.75, 439.39, 430.03],
-    qtyTextX: 239.81,
-  }),
-  'sc-gunite': buildAdditionalFeaturesStaticPatches({
-    fontSize: 6.96,
-    headingLeftRect: [51.84000015258789, 465.42999267578125, 228.5299949645996, 9.480010986328125],
-    headingRightRect: [290.2099914550781, 465.42999267578125, 269.2300109863281, 9.480010986328125],
-    headingTextY: 467.47,
-    rowRectX: 51,
-    rowRectWidth: 220.5,
-    rowRectHeight: 9.1,
-    rowTextX: 53.28,
-    rowTextYs: [458.11, 448.75, 439.39, 430.03],
-    qtyTextX: 239.81,
-  }),
-  'nc-fiberglass': buildAdditionalFeaturesStaticPatches({
-    fontSize: 7.44,
-    headingLeftRect: [37.20000076293945, 448.0299987792969, 241.7299919128418, 10.079986572265625],
-    headingRightRect: [289.25, 448.0299987792969, 284.71002197265625, 10.079986572265625],
-    headingTextY: 450.19,
-    rowRectX: 36.5,
-    rowRectWidth: 233,
-    rowRectHeight: 9.8,
-    rowTextX: 38.76,
-    rowTextYs: [440.23, 430.27, 420.31, 410.35],
-    qtyTextX: 235.97,
-  }),
-  'sc-fiberglass': buildAdditionalFeaturesStaticPatches({
-    fontSize: 7.56,
-    headingLeftRect: [34.20000076293945, 462.54998779296875, 244.2500114440918, 10.20001220703125],
-    headingRightRect: [289.010009765625, 462.54998779296875, 287.95001220703125, 10.20001220703125],
-    headingTextY: 464.83,
-    rowRectX: 34,
-    rowRectWidth: 235,
-    rowRectHeight: 10,
-    rowTextX: 35.76,
-    rowTextYs: [454.75, 444.67, 434.59, 424.51],
-    qtyTextX: 234.77,
-  }),
+  'nc-gunite': [],
+  'sc-gunite': [],
+  'nc-fiberglass': [],
+  'sc-fiberglass': [],
 };
 
 const INLINE_CONTRACT_FIELDS: TemplateField[] = [
@@ -528,28 +415,28 @@ const buildTemplate = (
 const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {
   'nc-gunite': buildTemplate(
     'nc-gunite',
-    '2024 Contract NC Shotcrete',
+    '2026 Contract NC Shotcrete',
     NC_GUNITE_URL,
     PAYMENT_SCHEDULE_OVERRIDES['nc-gunite'],
     STATIC_TEMPLATE_PATCHES['nc-gunite']
   ),
   'nc-fiberglass': buildTemplate(
     'nc-fiberglass',
-    '2024 Contract NC Fiberglass',
+    '2026 Contract NC Fiberglass',
     NC_FIBERGLASS_URL,
     PAYMENT_SCHEDULE_OVERRIDES['nc-fiberglass'],
     STATIC_TEMPLATE_PATCHES['nc-fiberglass']
   ),
   'sc-gunite': buildTemplate(
     'sc-gunite',
-    '2024 Contract SC Shotcrete',
+    '2026 Contract SC Shotcrete',
     SC_GUNITE_URL,
     PAYMENT_SCHEDULE_OVERRIDES['sc-gunite'],
     STATIC_TEMPLATE_PATCHES['sc-gunite']
   ),
   'sc-fiberglass': buildTemplate(
     'sc-fiberglass',
-    '2024 Contract SC Fiberglass',
+    '2026 Contract SC Fiberglass',
     SC_FIBERGLASS_URL,
     PAYMENT_SCHEDULE_OVERRIDES['sc-fiberglass'],
     STATIC_TEMPLATE_PATCHES['sc-fiberglass']

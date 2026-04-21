@@ -1948,10 +1948,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 prefix: '$',
               },
               {
-                label: "Add'l Main Drain (When Aux. Pump is active)",
+                label: "Add'l Main Drain (When Additional Pump is active)",
                 path: ['plumbing', 'addlMainDrainWhenAuxPump'],
                 type: 'number',
-                tooltip: 'Added once when an auxiliary pump is selected.',
+                tooltip: 'Added once when an additional pump is selected.',
                 prefix: '$',
               },
               {
@@ -2632,16 +2632,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
-            title: 'Auxiliary Pumps',
+            title: 'Blowers',
             lists: [
               {
-                title: 'Auxiliary pump models',
+                title: 'Blower models',
                 path: ['equipment', 'auxiliaryPumps'],
-                addLabel: 'Add auxiliary pump',
+                addLabel: 'Add blower',
                 defaultItem: { overheadMultiplier: 1.1, defaultAuxiliaryPump: false },
                 fields: [
-                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Auxiliary pump name' },
-                  { key: 'defaultAuxiliaryPump', label: 'Default for Spa', type: 'boolean' },
+                  { key: 'name', label: 'Name', type: 'text', placeholder: 'Blower name' },
+                  { key: 'defaultAuxiliaryPump', label: 'Default Blower for Spa', type: 'boolean' },
                   { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
                   { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
@@ -3150,7 +3150,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Additional pump (per unit)',
                 path: ['misc', 'equipmentSet', 'additionalPump'],
                 type: 'number',
-                tooltip: 'Applied per pump beyond the first plus each auxiliary pump.',
+                tooltip: 'Applied per pump beyond the first.',
                 prefix: '$',
               },
               {

@@ -1,3 +1,10 @@
+## [2.3.3] - 4/21/26
+### Contracts
+- Updated all 4 Contract templates to the new '2026' format
+    - Wording, spacing, colors, & category names corrected
+- Replaced 'Auxiliary Pump I/II' with 'Additional Pump I/II'
+    - Blower no longer maps to the Auxiliary Pump line item
+-----
 ## [2.3.2] - 4/20/26
 ### Hotfix
 - Contract modifications made before the timestamp update should no longer overwrite stamped changes

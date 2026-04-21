@@ -146,15 +146,15 @@
     },
     {
       "cell": "Q39",
-      "label": "Auxiliary Pump I",
-      "proposalPath": "equipment.auxiliaryPumps[0].name",
+      "label": "Additional Pump I",
+      "proposalPath": "equipment.additionalPumps[0].name",
       "formatter": "text",
       "fallback": "None"
     },
     {
       "cell": "Q40",
-      "label": "Auxiliary Pump II",
-      "proposalPath": "equipment.auxiliaryPumps[1].name",
+      "label": "Additional Pump II",
+      "proposalPath": "equipment.additionalPumps[1].name",
       "formatter": "text",
       "fallback": "None"
     },
@@ -355,9 +355,9 @@
     {
       "cell": "T80",
       "label": "Blower",
-      "proposalPath": null,
-      "formatter": "yesNo",
-      "fallback": "NO "
+      "proposalPath": "equipment.auxiliaryPumps[0].name",
+      "formatter": "text",
+      "fallback": "NO"
     },
     {
       "cell": "Q81",

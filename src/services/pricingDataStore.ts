@@ -40,7 +40,26 @@ function normalizePricingState(snapshot: PricingData, source?: any): PricingData
   syncLegacyFiberglassPricing(normalized, source);
   syncLegacyMiscPricing(normalized, source);
   syncExcavationAdminTables(normalized, source);
+  syncBlowerCatalog(normalized);
   return normalized;
+}
+
+function syncBlowerCatalog(target: PricingData) {
+  const blowerCatalog = (target as any)?.equipment?.auxiliaryPumps;
+  if (!Array.isArray(blowerCatalog)) return;
+
+  blowerCatalog.forEach((entry: any) => {
+    const normalizedName = String(entry?.name || '').trim().toLowerCase();
+    if (
+      normalizedName.includes('no aux') ||
+      normalizedName.includes('no auxiliary') ||
+      normalizedName.includes('select aux pump') ||
+      normalizedName.includes('select auxiliary pump') ||
+      normalizedName.includes('no blower')
+    ) {
+      entry.name = 'No Blower (Select blower)';
+    }
+  });
 }
 
 function syncLegacyFiberglassPricing(target: PricingData, source?: any) {

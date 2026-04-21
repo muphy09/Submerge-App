@@ -90,7 +90,8 @@ const MIRRORED_CONTRACT_FIELD_GROUPS = [
   ['p1_2', 'p2_46'],
   ['p1_3', 'p2_47'],
   ['p1_4', 'p2_48'],
-  ['p1_5', 'p1_6', 'p2_49', 'p2_50'],
+  ['p1_5', 'p2_49'],
+  ['p1_6', 'p2_50'],
 ] as const;
 const MIRRORED_CONTRACT_FIELD_ID_MAP = new Map<string, readonly string[]>(
   MIRRORED_CONTRACT_FIELD_GROUPS.flatMap((group) => group.map((fieldId) => [fieldId, group] as const))
@@ -210,9 +211,12 @@ function formatCurrency(value: number | null | undefined): string {
   return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 }
 
-function normalizeContractMonetaryInput(value: string | number | null | undefined): string {
+export function normalizeContractDepositInput(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
-  return String(value).trim();
+  const trimmed = String(value).trim();
+  if (!trimmed || trimmed === '$') return '';
+  const withoutLeadingDollar = trimmed.replace(/^\$+\s*/, '');
+  return withoutLeadingDollar ? `$${withoutLeadingDollar}` : '';
 }
 
 function parseContractMonetaryInput(value: string | number | null | undefined): number | null {
@@ -220,7 +224,7 @@ function parseContractMonetaryInput(value: string | number | null | undefined): 
     return Number.isFinite(value) ? value : null;
   }
 
-  const normalized = normalizeContractMonetaryInput(value);
+  const normalized = normalizeContractDepositInput(value);
   if (!normalized) return null;
 
   const numeric = normalized.replace(/[^0-9.-]/g, '');
@@ -249,7 +253,7 @@ export function getContractDepositFieldAutoValue(
   totalCashPrice?: string | number | null,
   schedulePercentages: Record<string, number> = DEFAULT_CONTRACT_DEPOSIT_SCHEDULE_PERCENTAGES
 ): string {
-  const normalizedDepositValue = normalizeContractMonetaryInput(depositValue);
+  const normalizedDepositValue = normalizeContractDepositInput(depositValue);
 
   if (CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(fieldId)) {
     return normalizedDepositValue;
@@ -266,7 +270,7 @@ export function getContractDepositFieldAutoValue(
 
 function resolveContractDepositSourceValue(overrides?: ContractOverrides): string {
   for (const fieldId of CONTRACT_DEPOSIT_SOURCE_FIELD_IDS) {
-    const normalized = normalizeContractMonetaryInput(overrides?.[fieldId]);
+    const normalized = normalizeContractDepositInput(overrides?.[fieldId]);
     if (normalized) return normalized;
   }
   return '';
@@ -302,7 +306,13 @@ function stripParenSuffix(value: string): string {
 
 function isPlaceholderPumpName(value?: string | null): boolean {
   const normalized = (value ?? '').trim().toLowerCase();
-  return !normalized || normalized.includes('no pump') || normalized.includes('no aux') || normalized.includes('no auxiliary');
+  return (
+    !normalized ||
+    normalized.includes('no pump') ||
+    normalized.includes('no aux') ||
+    normalized.includes('no auxiliary') ||
+    normalized.includes('no blower')
+  );
 }
 
 function getPrimaryPumpContractName(proposal: Proposal, fallback = 'None'): string {
@@ -338,21 +348,16 @@ function isSpaAutoAddedAuxiliaryPump(pump: Pick<PumpSelection, 'autoAddedForSpa'
 }
 
 function getContractBlowerValue(proposal: Proposal): string {
-  const spaAutoPump = getAuxiliaryPumpSelections(proposal).find((pump) => isSpaAutoAddedAuxiliaryPump(pump));
-  return spaAutoPump?.name || 'NO';
+  const blowerSelections = getAuxiliaryPumpSelections(proposal);
+  if (blowerSelections.length === 0) return 'NO';
+  const preferredBlower = blowerSelections.find((pump) => isSpaAutoAddedAuxiliaryPump(pump)) || blowerSelections[0];
+  return preferredBlower?.name || 'NO';
 }
 
 function getAdditionalPrimaryPumpContractNames(proposal: Proposal): string[] {
   return getAdditionalPumpSelections(proposal.equipment)
     .filter((pump) => pump && !isPlaceholderPumpName(pump.name))
     .map((pump) => pump.name || '');
-}
-
-function getAuxiliaryPumpContractNames(proposal: Proposal): string[] {
-  const auxiliarySelections = getAuxiliaryPumpSelections(proposal);
-  const manualSelections = auxiliarySelections.filter((pump) => !isSpaAutoAddedAuxiliaryPump(pump));
-  const spaSelections = auxiliarySelections.filter((pump) => isSpaAutoAddedAuxiliaryPump(pump));
-  return [...manualSelections, ...spaSelections].map((pump) => pump.name || '');
 }
 
 function getWaterFeatureName(featureId?: string): string {
@@ -702,6 +707,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/city/.test(label) && !/surface/.test(label)) return info.city || '';
   if (/zip/.test(label)) return parseZipFromAddress(info.address) || '';
   if (/phone/.test(label)) return normalizePhone(info.phone);
+  if (field.id === 'p1_5' || field.id === 'p2_49') return info.email || '';
+  if (field.id === 'p1_6' || field.id === 'p2_50') return '';
   if (/email/.test(label)) return info.email || '';
 
   if (/cash price/.test(label) || /retail price/.test(label) || /\$0\.00.*cash/.test(label)) {
@@ -733,11 +740,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/hoa approval/.test(label)) return 'YES';
   if (/financing required/.test(label)) return 'NO';
 
-  if (field.id === 'p1_21' || /\bauxiliary pump i\b/.test(label)) {
+  if (field.id === 'p1_21' || /\b(auxiliary|additional) pump i\b/.test(label)) {
     return getAdditionalPrimaryPumpContractNames(proposal)[0] || 'None';
   }
-  if (field.id === 'p1_22' || /\bauxiliary pump ii\b/.test(label)) {
-    return getAuxiliaryPumpContractNames(proposal)[0] || 'None';
+  if (field.id === 'p1_22' || /\b(auxiliary|additional) pump ii\b/.test(label)) {
+    return getAdditionalPrimaryPumpContractNames(proposal)[1] || 'None';
   }
   if (/sanitation i/.test(label)) {
     const sanitationSelections = [
