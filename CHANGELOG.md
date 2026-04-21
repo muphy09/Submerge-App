@@ -1,4 +1,4 @@
-## [2.3.5] - 4/21/26
+## [2.3.6] - 4/21/26
 ### Proposal Versions
 - Completely overhauled Proposal Versions and the workflow associated with them
     - Proposal versions are now completely independant of each other and do not rely on an 'Active' state

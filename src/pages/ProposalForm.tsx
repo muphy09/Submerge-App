@@ -341,7 +341,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [showCostBreakdownPage, setShowCostBreakdownPage] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAutosaving, setIsAutosaving] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(false);
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const readPapDiscountsFromModel = (): PAPDiscounts => {
     const snapshot = getPricingDataSnapshot();
@@ -699,8 +701,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
+  const latestProposalRef = useRef<Partial<Proposal>>(proposal);
   const previousSpaTypeRef = useRef<string>(proposal.poolSpecs?.spaType ?? 'none');
   const previousHasPoolRef = useRef<boolean>(hasPoolDefinition(proposal.poolSpecs));
+
+  useEffect(() => {
+    latestProposalRef.current = proposal;
+  }, [proposal]);
 
   useEffect(() => {
     if (restrictedRedirectHandledRef.current) return;
@@ -1532,13 +1539,20 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     }
   ): Promise<Proposal | null> => {
     if (isProposalEditingRestricted) return null;
-    if (isSaving) return null;
+    if (saveInFlightRef.current) return null;
 
     const currentVersionId = proposal.versionId || editingVersionId || 'original';
     const isVersionEdit = !(proposal.isOriginalVersion ?? currentVersionId === 'original');
     const effectiveMode = mode;
+    const isSilentDraftAutosave = effectiveMode === 'draft' && Boolean(options?.stayOnPage && options?.silent);
+    const proposalSnapshotAtSaveStart = JSON.stringify(proposal);
 
-    setIsSaving(true);
+    saveInFlightRef.current = true;
+    if (isSilentDraftAutosave) {
+      setIsAutosaving(true);
+    } else {
+      setIsSaving(true);
+    }
     try {
       let proposalToSave: Partial<Proposal> = proposal;
 
@@ -1664,15 +1678,31 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       const savedRequestedVersion =
         savedVersions.find((entry) => (entry.versionId || 'original') === currentVersionId) || savedActive;
       const isPending = (saved as any).syncStatus === 'pending';
-      setProposal({
-        ...cloneProposalData(savedRequestedVersion as Proposal),
-        versions: [],
-        workflow: (saved as Proposal).workflow,
-      });
+      const hasNewerLocalChanges =
+        isSilentDraftAutosave && JSON.stringify(latestProposalRef.current) !== proposalSnapshotAtSaveStart;
+      if (hasNewerLocalChanges) {
+        setProposal((prev) => ({
+          ...prev,
+          proposalNumber: prev.proposalNumber || saved.proposalNumber,
+          createdDate:
+            prev.createdDate ||
+            (savedRequestedVersion as Proposal).createdDate ||
+            (saved as Proposal).createdDate,
+          workflow: (saved as Proposal).workflow,
+        }));
+      } else {
+        setProposal({
+          ...cloneProposalData(savedRequestedVersion as Proposal),
+          versions: [],
+          workflow: (saved as Proposal).workflow,
+        });
+      }
       setVersionList(savedVersions);
       setActiveVersionId(currentVersionId);
       setEditingVersionId(currentVersionId);
-      setHasEdits(false);
+      if (!hasNewerLocalChanges) {
+        setHasEdits(false);
+      }
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
       const isSignedAddendumSubmission = Boolean(getSignedVersionId(containerToSave as Proposal));
       const nonSubmitSuccessMessage =
@@ -1734,7 +1764,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       }
       return null;
     } finally {
-      setIsSaving(false);
+      saveInFlightRef.current = false;
+      if (isSilentDraftAutosave) {
+        setIsAutosaving(false);
+      } else {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -1743,7 +1778,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       window.clearTimeout(autosaveTimeoutRef.current);
       autosaveTimeoutRef.current = null;
     }
-    if (isCreationRestricted || isReadOnlyBuilderView || isLoading || isSaving || !hasEdits) {
+    if (isCreationRestricted || isReadOnlyBuilderView || isLoading || isSaving || isAutosaving || !hasEdits) {
       return;
     }
 
@@ -1762,7 +1797,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         autosaveTimeoutRef.current = null;
       }
     };
-  }, [hasEdits, isCreationRestricted, isLoading, isReadOnlyBuilderView, isSaving, proposal]);
+  }, [hasEdits, isAutosaving, isCreationRestricted, isLoading, isReadOnlyBuilderView, isSaving, proposal]);
 
   const handleHome = () => {
     if (isReadOnlyBuilderView) {
