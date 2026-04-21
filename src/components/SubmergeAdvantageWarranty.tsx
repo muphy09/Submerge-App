@@ -224,21 +224,45 @@ interface Props {
   onWarrantySectionsChange?: (sections: Proposal['warrantySections']) => void;
 }
 
+const areWarrantySectionListsEqual = (a: WarrantySection[], b: WarrantySection[]) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
 function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySectionsChange }: Props) {
   const customerName = (proposal?.customerInfo?.customerName || '').trim();
   const franchiseId = proposal?.franchiseId;
   const { displayName } = useFranchiseAppName(franchiseId);
   const resolvedSections = useMemo(
     () => resolveWarrantySections(proposal, displayName),
-    [displayName, proposal]
+    [
+      displayName,
+      proposal?.versionId,
+      proposal?.warrantySections,
+      proposal?.poolSpecs,
+      proposal?.equipment,
+      proposal?.waterFeatures,
+      proposal?.tileCopingDecking,
+      proposal?.interiorFinish,
+      proposal?.excavation,
+    ]
   );
   const [draftSections, setDraftSections] = useState<WarrantySection[]>(resolvedSections);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
+  const pendingDraftSyncRef = useRef<WarrantySection[] | null>(null);
 
   useEffect(() => {
-    setDraftSections(resolvedSections);
+    setDraftSections((prev) =>
+      areWarrantySectionListsEqual(prev, resolvedSections) ? prev : resolvedSections
+    );
   }, [resolvedSections]);
+
+  useEffect(() => {
+    if (!editable || !onWarrantySectionsChange) return;
+    const pendingSections = pendingDraftSyncRef.current;
+    if (!pendingSections) return;
+    pendingDraftSyncRef.current = null;
+    onWarrantySectionsChange(pendingSections);
+  }, [draftSections, editable, onWarrantySectionsChange]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -268,7 +292,7 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
     if (!editable || !onWarrantySectionsChange) return;
     setDraftSections((prev) => {
       const next = normalizeWarrantySections(updater(prev));
-      onWarrantySectionsChange(next);
+      pendingDraftSyncRef.current = next;
       return next;
     });
   };
