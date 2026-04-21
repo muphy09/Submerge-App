@@ -3,6 +3,7 @@ import {
   useEffect,
   useCallback,
   useRef,
+  type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CostLineItem, Proposal, ProposalWorkflowActor, ProposalWorkflowEvent, RetailAdjustment } from '../types/proposal-new';
@@ -72,12 +73,14 @@ import {
   collapseApprovedProposalVersions,
   completeWorkflowProposal,
   ensureProposalWorkflow,
+  getApprovedVersionIds,
   getApprovedVersionId,
   getLatestSignedBaselineVersionId,
   getPendingReviewVersionId,
   getReviewVersionId,
   getReviewerPrimaryVersionId,
   getReviewerVisibleVersions,
+  getSignedAddendumVersionIds,
   getSignedVersionId,
   hasVersionSubmissionHistory,
   getVersionRecordStatus,
@@ -90,7 +93,6 @@ import {
   reconcileWorkflowVersionStates,
   requestWorkflowChanges,
   submitProposalForWorkflow,
-  willSigningRemoveNonActiveVersions,
 } from '../services/proposalWorkflow';
 
 type PricingModelStatus = 'active' | 'inactive' | 'removed';
@@ -236,6 +238,7 @@ const summarizePumpSelection = (equipment: Proposal['equipment']): string => {
 
 type ProposalViewLocationState = {
   versionId?: string;
+  openSignModal?: boolean;
   reviewerReturnTo?: 'workflow' | 'admin-panel';
   reviewerReturnPath?: string;
   reviewerReturnFilter?: 'needs_approval' | 'approved' | 'signed' | 'archive';
@@ -257,6 +260,23 @@ type CustomerBreakdownEditorState = {
   baselineWarrantySections: Proposal['warrantySections'];
   draftWarrantySections: Proposal['warrantySections'];
 };
+
+type WorkflowVersionOption = {
+  id: string;
+  label: string;
+  detail?: string;
+  disabled?: boolean;
+};
+
+type VersionNameModalMode = 'create' | 'rename';
+
+type VersionContextMenuState = {
+  x: number;
+  y: number;
+  versionId: string;
+};
+
+const SCRATCH_VERSION_SOURCE_ID = '__scratch__';
 
 let contractViewModulePromise: Promise<typeof import('../components/ContractView')> | null = null;
 const loadContractView = () => {
@@ -767,15 +787,21 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [loadedContractView, setLoadedContractView] = useState<ContractViewComponent | null>(null);
   const [loadedBreakdownExportPages, setLoadedBreakdownExportPages] = useState<BreakdownExportPagesModule | null>(null);
   const [showVersionNameModal, setShowVersionNameModal] = useState(false);
+  const [versionNameModalMode, setVersionNameModalMode] = useState<VersionNameModalMode>('create');
   const [newVersionName, setNewVersionName] = useState('');
+  const [newVersionSourceId, setNewVersionSourceId] = useState<string>(SCRATCH_VERSION_SOURCE_ID);
+  const [renameTargetVersionId, setRenameTargetVersionId] = useState<string | null>(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitTargetVersionId, setSubmitTargetVersionId] = useState<string | null>(null);
   const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
   const [showModifySignedConfirm, setShowModifySignedConfirm] = useState(false);
   const [showMarkSignedConfirm, setShowMarkSignedConfirm] = useState(false);
+  const [signTargetVersionId, setSignTargetVersionId] = useState<string | null>(null);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
   const [isWorkflowHistoryExpanded, setIsWorkflowHistoryExpanded] = useState(false);
+  const [isArchiveVersionsExpanded, setIsArchiveVersionsExpanded] = useState(false);
+  const [versionContextMenu, setVersionContextMenu] = useState<VersionContextMenuState | null>(null);
   const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
@@ -787,6 +813,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const contractExportControlRef = useRef<HTMLDivElement>(null);
   const contractViewRef = useRef<ContractViewHandle | null>(null);
   const loadRequestRef = useRef(0);
+  const autoOpenedSignModalRef = useRef(false);
   const { showToast } = useToast();
   const handleContractViewRef = useCallback((instance: ContractViewHandle | null) => {
     contractViewRef.current = instance;
@@ -805,16 +832,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : proposal) || proposal;
   const proposalWorkflowStatus = getWorkflowStatus(proposal);
   const hasSignedBaseline = Boolean(getSignedVersionId(proposal as Proposal));
-  const markSignedConfirmMessage = willSigningRemoveNonActiveVersions(proposal as Proposal)
-    ? 'Marking as Signed will lock the current active version, make it the signed baseline, and remove all non-active versions. All non-active versions will be removed when you do this. If changes are needed afterwards, they must be made through a Proposal Addendum.'
-    : 'Marking as Signed will lock the current active version and make it the signed baseline. If changes are needed afterwards, they must be made through a Proposal Addendum.';
   const isProposalCompleted = proposalWorkflowStatus === 'completed';
   const canOpenReadOnlyBuilder = isProposalEditingRestricted;
   const canManageVersionDrafts =
     !isProposalEditingRestricted &&
     !isReadOnlyReviewerView &&
     !isProposalCompleted;
-  const canChangeActiveVersion = canManageVersionDrafts && !hasSignedBaseline;
   const activeVersionRecordStatus = getVersionRecordStatus(activeEditableVersion);
   const canSendWorkflowMessages = Boolean(proposal?.workflow?.submittedAt) && !isProposalCompleted;
   const editDisabledReason =
@@ -1143,7 +1166,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   }, [location.state, navigate, proposalNumber, showToast]);
 
   useEffect(() => {
+    autoOpenedSignModalRef.current = false;
+  }, [proposalNumber]);
+
+  useEffect(() => {
     setIsWorkflowHistoryExpanded(false);
+    setVersionContextMenu(null);
   }, [proposal?.proposalNumber]);
 
   useEffect(() => {
@@ -1278,60 +1306,19 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     });
   };
 
-  const handleEdit = (version?: Proposal) => {
-    if (!canManageVersionDrafts && !canOpenReadOnlyBuilder) return;
+  const handleEdit = (version?: Proposal, options?: { readOnly?: boolean }) => {
+    if (!canManageVersionDrafts && !canOpenReadOnlyBuilder && !options?.readOnly) return;
     if (!version) return;
-    if (!canOpenReadOnlyBuilder && (isVersionPermanentlyLocked(version) || isProposalCompleted)) return;
+    if (!canOpenReadOnlyBuilder && !options?.readOnly && (isVersionPermanentlyLocked(version) || isProposalCompleted)) return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     navigate(`/proposal/edit/${proposalNumber}`, {
       state: {
         versionId: targetVersionId,
         versionName: version?.versionName,
         versionSnapshot: { ...version, versions: [] },
+        readOnlyVersion: options?.readOnly === true,
       },
     });
-  };
-
-  const handleSetActiveVersion = async (versionId: string) => {
-    if (!canChangeActiveVersion) return;
-    if (!proposal) return;
-    const all = versions.length ? versions : listAllVersions(proposal as Proposal);
-    const target = all.find((v) => (v.versionId || 'original') === versionId);
-    if (!target) return;
-
-    try {
-      const container = buildContainerFromVersions(
-        all.map((entry) => ({ ...entry, versions: [] })),
-        versionId
-      );
-      if (!container) return;
-      await initPricingDataStore(
-        container.franchiseId,
-        container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
-      );
-      const saved = await saveProposalRemote(container);
-      const isPending = (saved as any).syncStatus === 'pending';
-      const updatedVersions = listAllVersions(saved as Proposal).map((v) => ({
-        ...(mergeProposalWithDefaults(v) as Proposal),
-        versionId: v.versionId || 'original',
-        versionName: v.versionName || (v.isOriginalVersion ? 'Original Version' : 'Version'),
-        isOriginalVersion: v.isOriginalVersion,
-        activeVersionId: v.activeVersionId,
-        versions: [],
-      }));
-      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
-      setActiveVersionId(versionId);
-      setVersions(updatedVersions);
-      setProposal(activeApplied as Proposal);
-      showToast({
-        type: isPending ? 'warning' : 'success',
-        message: isPending ? 'Active version updated locally. Will sync when back online.' : 'Active version updated.',
-      });
-    } catch (error) {
-      console.error('Failed to set active version', error);
-      showToast({ type: 'error', message: 'Could not set active version.' });
-    }
   };
 
   const handleDeleteVersion = async (versionId: string) => {
@@ -1425,7 +1412,41 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     }
     const count = (versions.length ? versions.length : listAllVersions(proposal as Proposal).length) + 1;
     const defaultPrefix = 'Version';
+    setVersionNameModalMode('create');
+    setRenameTargetVersionId(null);
     setNewVersionName(`${defaultPrefix} ${count}`);
+    setNewVersionSourceId(resolvedSelectedVersionId || selectedVersionId || activeVersionId || 'original');
+    setShowVersionNameModal(true);
+  };
+
+  const closeVersionNameModal = () => {
+    setShowVersionNameModal(false);
+    setVersionNameModalMode('create');
+    setRenameTargetVersionId(null);
+    setNewVersionName('');
+  };
+
+  const handleVersionContextMenu = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    versionId: string
+  ) => {
+    if (!canManageVersionDrafts) return;
+    event.preventDefault();
+    setVersionContextMenu({
+      versionId,
+      x: Math.min(event.clientX, window.innerWidth - 220),
+      y: Math.min(event.clientY, window.innerHeight - 80),
+    });
+  };
+
+  const handleOpenRenameVersion = (versionId: string) => {
+    const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+    const target = all.find((entry) => (entry.versionId || 'original') === versionId);
+    if (!target) return;
+    setVersionContextMenu(null);
+    setVersionNameModalMode('rename');
+    setRenameTargetVersionId(versionId);
+    setNewVersionName(getDisplayVersionLabel(target));
     setShowVersionNameModal(true);
   };
 
@@ -1436,7 +1457,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return `Proposal Addendum ${existingSignedAddendums + 1}`;
   };
 
-  const createEditableVersion = async (explicitName?: string) => {
+  const createEditableVersion = async (explicitName?: string, sourceId?: string) => {
     if (!canManageVersionDrafts) return;
     if (!proposal) return;
     try {
@@ -1459,6 +1480,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             container.activeVersionId ||
             proposal.versionId ||
             activeVersionId;
+      const creationSource =
+        containerWorkflowStatus === 'signed'
+          ? { mode: 'copy', sourceVersionId } as const
+          : sourceId === SCRATCH_VERSION_SOURCE_ID
+          ? ({ mode: 'scratch' } as const)
+          : ({ mode: 'copy', sourceVersionId: sourceId || sourceVersionId } as const);
       const isAddendumDraft = Boolean(getSignedVersionId(container));
       const resolvedVersionName =
         explicitName && explicitName.trim()
@@ -1470,7 +1497,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.activeVersionId || container.versionId || activeVersionId || 'original';
       const { container: createdContainer, newVersion } = createVersionFromProposal(
         container,
-        sourceVersionId,
+        creationSource,
         resolvedVersionName
       );
       const nextContainer = createdContainer;
@@ -1492,7 +1519,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       setVersions(updatedVersions);
       setProposal(activeApplied as Proposal);
-      setActiveVersionId(activeApplied.activeVersionId || preservedActiveVersionId);
+      setActiveVersionId(newVersion.versionId || activeApplied.activeVersionId || preservedActiveVersionId);
       setSelectedVersionId(newVersion.versionId || activeApplied.activeVersionId || preservedActiveVersionId);
       showToast({
         type: isPending ? 'warning' : 'success',
@@ -1515,14 +1542,94 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     }
   };
 
-  const handleConfirmCreateVersion = async () => {
-    setShowVersionNameModal(false);
-    await createEditableVersion(newVersionName);
-  };
-
   const handleConfirmModifySignedProposal = async () => {
     setShowModifySignedConfirm(false);
     await createEditableVersion();
+  };
+
+  const renameVersion = async (versionId: string, nextName: string) => {
+    if (!canManageVersionDrafts) return false;
+    if (!proposal) return false;
+    const trimmedName = nextName.trim();
+    if (!trimmedName) {
+      showToast({ type: 'warning', message: 'Version name is required.' });
+      return false;
+    }
+
+    try {
+      const all = versions.length ? versions : listAllVersions(proposal as Proposal);
+      const target = all.find((entry) => (entry.versionId || 'original') === versionId);
+      if (!target) return false;
+
+      const updated = all.map((entry) => {
+        const entryId = entry.versionId || 'original';
+        if (entryId !== versionId) return entry;
+        return {
+          ...(entry as Proposal),
+          versionName: trimmedName,
+          lastModified: new Date().toISOString(),
+        };
+      });
+
+      const desiredActiveId =
+        activeVersionId ||
+        (proposal as Proposal).activeVersionId ||
+        (proposal as Proposal).versionId ||
+        'original';
+      const container = buildContainerFromVersions(
+        updated.map((entry) => ({ ...(entry as Proposal), versions: [] })),
+        desiredActiveId
+      );
+      if (!container) return false;
+
+      await initPricingDataStore(
+        container.franchiseId,
+        container.pricingModelId || undefined,
+        container.pricingModelFranchiseId || undefined
+      );
+      const saved = await saveProposalRemote(container);
+      const isPending = (saved as any).syncStatus === 'pending';
+      const updatedVersions = listAllVersions(saved as Proposal).map((entry) => ({
+        ...(mergeProposalWithDefaults(entry) as Proposal),
+        versionId: entry.versionId || 'original',
+        versionName: entry.versionName || (entry.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: entry.isOriginalVersion,
+        activeVersionId: entry.activeVersionId,
+        versions: [],
+      }));
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+      setVersions(updatedVersions);
+      setProposal(activeApplied as Proposal);
+      setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
+      showToast({
+        type: isPending ? 'warning' : 'success',
+        message: isPending ? 'Version name saved locally. Will sync when back online.' : 'Version renamed.',
+      });
+      return true;
+    } catch (error) {
+      console.error('Failed to rename version', error);
+      showToast({ type: 'error', message: 'Could not rename version.' });
+      return false;
+    }
+  };
+
+  const handleConfirmVersionName = async () => {
+    if (versionNameModalMode === 'rename') {
+      if (!renameTargetVersionId) {
+        closeVersionNameModal();
+        return;
+      }
+      const didRename = await renameVersion(renameTargetVersionId, newVersionName);
+      if (didRename) {
+        closeVersionNameModal();
+      }
+      return;
+    }
+
+    const nextVersionName = newVersionName;
+    const sourceVersionId = newVersionSourceId;
+    closeVersionNameModal();
+    await createEditableVersion(nextVersionName, sourceVersionId);
   };
 
   const handleSaveContractOverrides = async (versionId: string, overrides: ContractOverrides) => {
@@ -2006,7 +2113,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return true;
   };
 
-  const ensureVersionCanBeMarkedAsSigned = async (container?: Proposal | null) => {
+  const ensureVersionCanBeMarkedAsSigned = async (container?: Proposal | null, versionId?: string | null) => {
     if (!container) return false;
     const targetFranchiseId = container.franchiseId || proposal?.franchiseId || null;
 
@@ -2026,7 +2133,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       }
     }
 
-    const targetVersionId = getApprovedVersionId(container) || getReviewVersionId(container);
+    const targetVersionId = versionId || getApprovedVersionId(container) || getReviewVersionId(container);
     const targetVersion =
       listAllVersions(container).find((entry) => getVersionIdKey(entry) === (targetVersionId || 'original')) || null;
 
@@ -2072,6 +2179,18 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       if (!draftContainer) return;
 
       if (nextStatus === 'submitted') {
+        if (!active.customerInfo?.customerName?.trim()) {
+          showToast({ type: 'error', message: 'Customer name is required to submit.' });
+          return;
+        }
+        const validationErrors = validateProposal(active);
+        if (validationErrors.length > 0) {
+          showToast({
+            type: 'error',
+            message: `Validation errors: ${validationErrors.map((entry) => entry.message).join(', ')}`,
+          });
+          return;
+        }
         const canSubmitAddendum = await ensureVersionCanSubmitAddendum(active, draftContainer);
         if (!canSubmitAddendum) {
           return;
@@ -2152,22 +2271,58 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleOpenSubmitModal = (versionId?: string) => {
     if (!proposal) return;
-    setSubmitTargetVersionId(
+    const preferredVersionId =
       versionId ||
-        activeVersionId ||
-        (proposal as Proposal).activeVersionId ||
-        (proposal as Proposal).versionId ||
-        'original'
+      selectedVersionId ||
+      activeVersionId ||
+      (proposal as Proposal).activeVersionId ||
+      (proposal as Proposal).versionId ||
+      'original';
+    const preferredOption = submitVersionOptions.find((option) => option.id === preferredVersionId);
+    const fallbackOption = submitVersionOptions.find((option) => !option.disabled);
+    setSubmitTargetVersionId(
+      preferredOption && !preferredOption.disabled
+        ? preferredOption.id
+        : fallbackOption?.id || preferredVersionId
     );
     setSubmitManualReviewRequested(false);
     setSubmitNote('');
     setShowSubmitModal(true);
   };
 
+  const handleOpenSignModal = (versionId?: string) => {
+    const preferredVersionId =
+      versionId ||
+      selectedVersionId ||
+      activeVersionId ||
+      approvedVersionId ||
+      approvedVersionIds[approvedVersionIds.length - 1] ||
+      'original';
+    const preferredOption = signVersionOptions.find((option) => option.id === preferredVersionId);
+    const fallbackOption = signVersionOptions.find((option) => !option.disabled);
+    setSignTargetVersionId(
+      preferredOption && !preferredOption.disabled
+        ? preferredOption.id
+        : fallbackOption?.id || preferredVersionId
+    );
+    setShowMarkSignedConfirm(true);
+  };
+
+  useEffect(() => {
+    if (!locationState?.openSignModal) {
+      autoOpenedSignModalRef.current = false;
+      return;
+    }
+    if (autoOpenedSignModalRef.current || loading || !proposal) return;
+    autoOpenedSignModalRef.current = true;
+    handleOpenSignModal(locationState.versionId);
+  }, [loading, locationState?.openSignModal, locationState?.versionId, proposal]);
+
   const handleSubmitProposal = async (versionId?: string) => {
     if (!proposal || isOffline) return;
     const targetId =
       versionId ||
+      selectedVersionId ||
       activeVersionId ||
       (proposal as Proposal).activeVersionId ||
       (proposal as Proposal).versionId ||
@@ -2175,6 +2330,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const all = versions.length ? versions : listAllVersions(proposal as Proposal);
     const targetVersion =
       all.find((entry) => (entry.versionId || 'original') === targetId) || proposal;
+    const disabledReason = getSubmitVersionDisabledReason(targetVersion as Proposal);
+    if (disabledReason) {
+      showToast({ type: 'warning', message: disabledReason });
+      return;
+    }
     if (!targetVersion?.customerInfo?.customerName?.trim()) {
       showToast({ type: 'error', message: 'Customer name is required to submit.' });
       return;
@@ -2372,7 +2532,16 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       const container = buildContainerFromVersions(normalizedVersions, desiredActiveId);
       if (!container) return;
 
-      const canMarkAsSigned = await ensureVersionCanBeMarkedAsSigned(container);
+      const targetVersion =
+        listAllVersions(container).find((entry) => getVersionIdKey(entry) === (signTargetVersionId || '')) || null;
+      const signDisabledReason = targetVersion ? getSignVersionDisabledReason(targetVersion) : 'Choose an approved version to sign.';
+      if (signDisabledReason) {
+        showToast({ type: 'warning', message: signDisabledReason });
+        setShowMarkSignedConfirm(false);
+        return;
+      }
+
+      const canMarkAsSigned = await ensureVersionCanBeMarkedAsSigned(container, signTargetVersionId || undefined);
       if (!canMarkAsSigned) {
         setShowMarkSignedConfirm(false);
         return;
@@ -2383,7 +2552,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined
       );
-      const saved = await saveProposalRemote(markProposalAsSigned(container), { requireOnline: true });
+      const saved = await saveProposalRemote(
+        markProposalAsSigned(container, undefined, signTargetVersionId || undefined),
+        { requireOnline: true }
+      );
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
         ...(mergeProposalWithDefaults(version) as Proposal),
         versionId: version.versionId || 'original',
@@ -2398,6 +2570,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       setActiveVersionId(activeApplied.activeVersionId || desiredActiveId);
       setProposal(activeApplied as Proposal);
       setShowMarkSignedConfirm(false);
+      setSignTargetVersionId(null);
       showToast({ type: 'success', message: 'Proposal marked as signed.' });
     } catch (error) {
       console.error('Failed to mark proposal as signed', error);
@@ -2852,12 +3025,34 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const versionsForRender = isReadOnlyReviewerView && displayVersionContainer
     ? getReviewerVisibleVersions(displayVersionContainer as Proposal)
     : allVersionsForRender;
+  const approvedVersionIds = proposal ? getApprovedVersionIds(proposal as Proposal) : [];
   const approvedVersionId = proposal ? getApprovedVersionId(proposal as Proposal) : null;
+  const signedVersionId = proposal ? getSignedVersionId(proposal as Proposal) : null;
+  const signedAddendumVersionIds = proposal ? getSignedAddendumVersionIds(proposal as Proposal) : [];
   const latestSignedBaselineVersionId = proposal ? getLatestSignedBaselineVersionId(proposal as Proposal) : null;
+  const signedChainVersionIds = new Set<string>(
+    [signedVersionId, ...signedAddendumVersionIds].filter((entry): entry is string => Boolean(entry))
+  );
   const livePublishedVersionId =
     proposalWorkflowStatus === 'signed'
       ? latestSignedBaselineVersionId || approvedVersionId
       : getPendingReviewVersionId(proposal as Proposal) || approvedVersionId;
+  const isArchivedVersion = (version?: Partial<Proposal> | null) => {
+    if (!version || !hasSignedBaseline) return false;
+    const versionId = getVersionIdKey(version);
+    if (signedChainVersionIds.has(versionId)) return false;
+
+    const versionName = String(version.versionName || '').trim().toLowerCase();
+    if (versionName.includes('addendum')) return false;
+
+    const signedTimestamp = Date.parse(String(proposal?.workflow?.signedAt || ''));
+    const versionTimestamp = Date.parse(String(version.createdDate || version.lastModified || ''));
+    if (Number.isFinite(signedTimestamp) && Number.isFinite(versionTimestamp) && versionTimestamp > signedTimestamp) {
+      return false;
+    }
+
+    return true;
+  };
   const existingEditableAddendumVersion =
     proposalWorkflowStatus === 'signed' && livePublishedVersionId && !isReadOnlyReviewerView
       ? allVersionsForRender.find(
@@ -2884,6 +3079,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const navigationVersions = [...versionsForRender].sort(sortVersionsByCreatedDateDesc);
   const viewModels = navigationVersions.map((v) => buildViewModel(v));
+  const activeNavigationViewModels = viewModels.filter((vm) => !isArchivedVersion(vm.proposal));
+  const archivedNavigationViewModels = viewModels.filter((vm) => isArchivedVersion(vm.proposal));
   const versionMap = new Map<string, ReturnType<typeof buildViewModel>>();
   viewModels.forEach((vm) => {
     versionMap.set(vm.proposal.versionId || 'original', vm);
@@ -2919,6 +3116,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     : 'A proposal version must be signed before the proposal can be completed.';
   const versionActionLabel =
     proposalWorkflowStatus === 'signed' ? 'Create Proposal Addendum' : 'Build Another Version';
+  const buildVersionDisabledReason =
+    !canManageVersionDrafts
+      ? editDisabledReason
+      : proposalWorkflowStatus === 'signed' && existingEditableAddendumVersion
+      ? 'A proposal addendum is already in progress. Continue working in that version before creating another addendum.'
+      : undefined;
   const isEditableAddendumVersion = (version?: Partial<Proposal> | null) => {
     if (!hasSignedBaseline || !version) return false;
     return (
@@ -2929,6 +3132,22 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
   const selectedViewModel = selectedView || primaryView;
   const selectedVersionIdKey = selectedViewModel?.proposal.versionId || 'original';
+  const signableApprovedVersionIds = approvedVersionIds.filter(
+    (versionId) => !hasEquipmentChangeRequired(versionSyncMeta[versionId]?.equipmentFlags)
+  );
+  const versionCreationSourceOptions: WorkflowVersionOption[] =
+    proposalWorkflowStatus === 'signed'
+      ? []
+      : [
+          {
+            id: SCRATCH_VERSION_SOURCE_ID,
+            label: 'Start from Scratch',
+          },
+          ...activeNavigationViewModels.map((vm) => ({
+            id: vm.proposal.versionId || 'original',
+            label: `Start from Copy of ${getDisplayVersionLabel(vm.proposal)}`,
+          })),
+        ];
   const selectedVersionRecordStatus = getVersionRecordStatus(selectedViewModel?.proposal);
   const selectedVersionSubmittedEvent = getLatestWorkflowEventForVersion(
     workflowHistory,
@@ -3095,6 +3314,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     (submitTargetVersionId
       ? allVersionsForRender.find((entry) => (entry.versionId || 'original') === submitTargetVersionId)
       : activeEditableVersion) || proposal;
+  const signTargetVersion =
+    (signTargetVersionId
+      ? allVersionsForRender.find((entry) => (entry.versionId || 'original') === signTargetVersionId)
+      : null) || null;
+  const renameTargetVersion =
+    (renameTargetVersionId
+      ? allVersionsForRender.find((entry) => (entry.versionId || 'original') === renameTargetVersionId)
+      : null) || null;
+  const isRenamingVersion = versionNameModalMode === 'rename';
   const submitPreview = submitTargetVersion
     ? getWorkflowSubmissionPreview(submitTargetVersion as Proposal, {
         manualReviewRequested: submitManualReviewRequested,
@@ -3103,15 +3331,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     : null;
   const isSubmittingSignedAddendum =
     isEditableAddendumVersion(submitTargetVersion);
-  const activeVersionForDisplay =
-    allVersionsForRender.find((entry) => (entry.versionId || 'original') === activeVersionId) || proposal;
-  const activeVersionLabel = activeVersionForDisplay ? getDisplayVersionLabel(activeVersionForDisplay as Proposal) : 'Original';
-  const activeVersionLockTooltip =
-    proposalWorkflowStatus === 'approved'
-      ? 'Active version is locked after signing. Mark this approved addendum as signed to promote the new baseline.'
-      : proposalWorkflowStatus === 'needs_approval'
-      ? 'Active version is locked after signing. This addendum must be approved before it can be marked as signed and become the new baseline.'
-      : 'Active version is locked after signing. Submit and sign an addendum to promote a new signed baseline.';
   const shouldRenderBreakdownExport = breakdownExportActive || breakdownExporting;
   const ContractViewComponent = loadedContractView;
   const BreakdownCostExportPageComponent = loadedBreakdownExportPages?.BreakdownCostExportPage;
@@ -3211,7 +3430,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const versionId = version.versionId || 'original';
     const versionStatus = getVersionRecordStatus(version);
 
-    if (versionId === activeVersionId) return 'active';
+    if (isArchivedVersion(version)) return 'neutral';
     if (versionId === submittedVersionId) {
       if (proposalWorkflowStatus === 'signed') return 'signed';
       if (proposalWorkflowStatus === 'approved') return 'approved';
@@ -3228,6 +3447,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const versionId = version.versionId || 'original';
     const versionStatus = getVersionRecordStatus(version);
 
+    if (isArchivedVersion(version)) {
+      return 'Archived';
+    }
     if (versionId === submittedVersionId) {
       return submittedVersionLabel;
     }
@@ -3238,16 +3460,91 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const getVersionNavBadges = (version: Proposal) => {
-    const versionId = version.versionId || 'original';
-    const badges: Array<{ label: string; tone: string }> = [];
-
-    if (versionId === activeVersionId) {
-      badges.push({ label: 'Active', tone: 'active' });
-    }
-    badges.push({ label: getVersionStatusLabel(version), tone: getVersionStatusTone(version) });
-
-    return badges;
+    return [{ label: getVersionStatusLabel(version), tone: getVersionStatusTone(version) }];
   };
+
+  const getSubmitVersionDisabledReason = (version: Proposal) => {
+    const versionId = version.versionId || 'original';
+    const versionStatus = getVersionRecordStatus(version);
+    const signedBaselineVersion = hasSignedBaseline ? getSignedBaselineVersion(proposal as Proposal) : null;
+
+    if (isArchivedVersion(version)) {
+      return 'Archived versions are read-only.';
+    }
+    if (!canManageVersionDrafts) {
+      return editDisabledReason || 'This proposal is view only.';
+    }
+    if (proposalWorkflowStatus === 'needs_approval' && submittedVersionId && submittedVersionId !== versionId) {
+      return 'Another proposal version is already awaiting approval.';
+    }
+    if (hasSignedBaseline && !isEditableAddendumVersion(version)) {
+      return 'Only editable addendum drafts can be submitted after a proposal is signed.';
+    }
+    if (versionStatus === 'submitted' || versionStatus === 'needs_approval') {
+      return 'This version is already awaiting approval.';
+    }
+    if (versionStatus === 'approved') {
+      return 'This version is already approved and can be signed instead.';
+    }
+    if (versionStatus === 'signed') {
+      return 'Signed versions are locked.';
+    }
+    if (versionStatus === 'completed') {
+      return 'Completed versions are locked.';
+    }
+    if (!version.customerInfo?.customerName?.trim()) {
+      return 'Customer name is required before submission.';
+    }
+    if (hasSignedBaseline && !versionsHaveMeaningfulDifferences(version, signedBaselineVersion)) {
+      return 'Proposal addendums must include changes before they can be submitted.';
+    }
+    if (hasSignedBaseline && hasEquipmentChangeRequired(versionSyncMeta[versionId]?.equipmentFlags)) {
+      return ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE;
+    }
+    return undefined;
+  };
+
+  const getSignVersionDisabledReason = (version: Proposal) => {
+    const versionId = version.versionId || 'original';
+    const versionStatus = getVersionRecordStatus(version);
+
+    if (isArchivedVersion(version)) {
+      return 'Archived versions cannot be signed.';
+    }
+    if (versionStatus === 'signed') {
+      return 'This version is already signed.';
+    }
+    if (versionStatus === 'completed') {
+      return 'Completed versions cannot be signed again.';
+    }
+    if (!approvedVersionIds.includes(versionId)) {
+      if (versionStatus === 'needs_approval' || versionStatus === 'submitted') {
+        return 'This version is still awaiting approval.';
+      }
+      if (versionStatus === 'draft' || versionStatus === 'changes_requested') {
+        return 'This version must be approved before it can be signed.';
+      }
+      return 'Only approved versions can be signed.';
+    }
+    if (hasEquipmentChangeRequired(versionSyncMeta[versionId]?.equipmentFlags)) {
+      return MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE;
+    }
+    return undefined;
+  };
+
+  const submitVersionOptions: WorkflowVersionOption[] = allVersionsForRender.map((version) => ({
+    id: version.versionId || 'original',
+    label: getDisplayVersionLabel(version),
+    detail: getSubmitVersionDisabledReason(version) || getVersionStatusLabel(version),
+    disabled: Boolean(getSubmitVersionDisabledReason(version)),
+  }));
+
+  const signVersionOptions: WorkflowVersionOption[] = allVersionsForRender.map((version) => ({
+    id: version.versionId || 'original',
+    label: getDisplayVersionLabel(version),
+    detail: getSignVersionDisabledReason(version) || getVersionStatusLabel(version),
+    disabled: Boolean(getSignVersionDisabledReason(version)),
+  }));
 
   const getCategoryClassName = (categoryName: string): string => {
     const classMap: { [key: string]: string } = {
@@ -3626,10 +3923,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const renderSelectedVersionSection = (vm: ReturnType<typeof buildViewModel>) => {
     const versionId = vm.proposal.versionId || 'original';
     const versionLabel = getDisplayVersionLabel(vm.proposal);
-    const isActive = versionId === activeVersionId;
-    const isSubmittedVersion = Boolean(submittedVersionId) && versionId === submittedVersionId;
     const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
+    const versionStatusLabel = getVersionStatusLabel(vm.proposal);
+    const shouldShowVersionStatus = versionStatusLabel !== 'Draft';
 
     return (
       <div className="version-section">
@@ -3646,8 +3943,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               <h2 className="hero-title">
                 <span className="hero-title-text">{vm.customerLocation}</span>
                 <span className="hero-title-separator">-</span>
-                <span className={`version-pill ${isActive ? 'active' : 'inactive'}`}>{versionLabel}</span>
-                {isSubmittedVersion && <span className="version-status-pill">{submittedVersionLabel}</span>}
+                <span className="version-pill">{versionLabel}</span>
+                {shouldShowVersionStatus && <span className="version-status-pill">{versionStatusLabel}</span>}
               </h2>
             </div>
           </div>
@@ -3709,7 +4006,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const renderVersionActionsCard = (vm: ReturnType<typeof buildViewModel>) => {
     const versionId = vm.proposal.versionId || 'original';
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
-    const isActive = versionId === activeVersionId;
+    const isArchived = isArchivedVersion(vm.proposal);
     const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
     const versionRecordStatus = getVersionRecordStatus(vm.proposal);
     const isEditableAddendum = hasSignedBaseline && isEditableAddendumVersion(vm.proposal);
@@ -3719,31 +4016,29 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : true;
     const versionHasSubmissionHistory =
       !hasSignedBaseline && hasVersionSubmissionHistory(proposal as Proposal, versionId);
-    const hasVersionBeenSubmitted =
-      versionRecordStatus === 'submitted' ||
-      versionRecordStatus === 'needs_approval' ||
-      versionRecordStatus === 'approved';
     const canOpenVersionInBuilder =
       canOpenReadOnlyBuilder ||
+      isArchived ||
       (canManageVersionDrafts &&
         !isVersionPermanentlyLocked(vm.proposal) &&
         !isProposalCompleted);
-    const showMarkAsSignedButton =
+    const showSignProposalButton =
       !isProposalEditingRestricted &&
-      versionRecordStatus === 'approved' &&
-      isLivePublishedVersion &&
-      isActive;
-    const markAsSignedDisabledReason = isOffline
+      !isReadOnlyReviewerView &&
+      proposalWorkflowStatus === 'approved' &&
+      approvedVersionIds.length > 0;
+    const signProposalDisabledReason = isOffline
       ? offlineActionDisabledReason
       : disableSignedWorkflow
       ? DISABLED_SIGNED_WORKFLOW_MESSAGE
-      : vm.hasEquipmentChangeRequired
+      : signableApprovedVersionIds.length === 0
       ? MARK_SIGNED_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
       : undefined;
-    const canMarkAsSignedVersion = showMarkAsSignedButton && !markAsSignedDisabledReason;
     const editVersionDisabledReason =
       isProposalCompleted
         ? 'Completed proposals are locked.'
+        : isArchived
+        ? 'Open this archived version in the builder with read-only access.'
         : versionRecordStatus === 'signed'
         ? 'Signed proposal versions are locked. Create a proposal addendum to make changes.'
         : versionRecordStatus === 'completed'
@@ -3760,52 +4055,50 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         ? 'Completed proposals are locked.'
         : isOriginal
         ? 'The original version cannot be deleted.'
-        : isActive
-        ? 'Select a different Active Version before deleting this version.'
+        : isArchived
+        ? 'Archived versions cannot be deleted.'
         : isSubmittedVersionLocked(vm.proposal)
         ? 'Submitted versions cannot be deleted.'
         : undefined;
     const canDeleteVersion = !deleteVersionDisabledReason;
-    const shouldRenderModifySignedAction =
+    const shouldRenderSubmitAction =
       !isReadOnlyReviewerView &&
-      proposalWorkflowStatus === 'signed' &&
-      isActive &&
-      versionRecordStatus === 'signed';
-    const modifySignedDisabledReason =
-      !canManageVersionDrafts
+      !isArchived &&
+      !(
+        proposalWorkflowStatus === 'signed' &&
+        versionRecordStatus === 'signed' &&
+        !isEditableAddendum
+      ) &&
+      (isEditableAddendum || versionRecordStatus === 'draft' || versionRecordStatus === 'changes_requested');
+    const submitActionDisabledReason =
+      isOffline
+        ? offlineActionDisabledReason
+        : !canManageVersionDrafts
         ? editDisabledReason
-        : existingEditableAddendumVersion
-        ? 'A proposal addendum is already in progress. Continue working in that version before creating another addendum.'
+        : isEditableAddendum && !hasAddendumDifferences
+        ? 'Proposal addendums must differ from the current signed baseline before they can be submitted.'
+        : isEditableAddendum && vm.hasEquipmentChangeRequired
+        ? ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
+        : !canSubmitProposal
+        ? 'Must include Customer Name'
         : undefined;
-    const shouldRenderSubmitAction = shouldRenderModifySignedAction || !(
-      proposalWorkflowStatus === 'signed' &&
-      versionRecordStatus === 'signed' &&
-      !isEditableAddendum
-    );
-    const shouldRenderPrimarySubmitAction =
-      shouldRenderModifySignedAction ||
-      (shouldRenderSubmitAction && !hasVersionBeenSubmitted && !showMarkAsSignedButton);
-    const submitActionLabel = shouldRenderModifySignedAction
-      ? 'Create Proposal Addendum'
-      : isEditableAddendum
+    const submitActionLabel = isEditableAddendum
       ? 'Submit Addendum'
-      : versionHasSubmissionHistory
+      : versionHasSubmissionHistory || versionRecordStatus === 'changes_requested'
       ? 'Resubmit Proposal'
       : 'Submit Proposal';
-    const submitActionDisabledReason = !shouldRenderModifySignedAction && isOffline
-      ? offlineActionDisabledReason
-      : shouldRenderModifySignedAction
-      ? modifySignedDisabledReason
-      : !canManageVersionDrafts
-      ? editDisabledReason
-      : isEditableAddendum && !hasAddendumDifferences
-      ? 'Proposal addendums must differ from the current signed baseline before they can be submitted.'
-      : isEditableAddendum && vm.hasEquipmentChangeRequired
-      ? ADDENDUM_EQUIPMENT_CHANGE_REQUIRED_MESSAGE
-      : !canSubmitProposal
-      ? 'Must include Customer Name'
-      : undefined;
-    const canUseSubmitAction = !submitActionDisabledReason;
+    const archivedEditLabel = isArchived ? 'Open Read-Only Builder' : 'Edit Proposal';
+    const canUseSubmitAction = shouldRenderSubmitAction && !submitActionDisabledReason;
+    const signActionTooltip = showSignProposalButton ? signProposalDisabledReason : undefined;
+    const shouldRenderArchivedNote =
+      isArchived &&
+      !isReadOnlyReviewerView &&
+      proposalWorkflowStatus === 'signed' &&
+      isLivePublishedVersion === false;
+    const archivedNote =
+      shouldRenderArchivedNote
+        ? 'Archived proposal versions stay available for comparison, but cannot be edited, submitted, signed, or deleted.'
+        : null;
 
     return (
       <div className="proposal-side-card">
@@ -3817,26 +4110,24 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         </div>
         <div className="proposal-side-card-body">
           <div className="side-action-stack">
-            {showMarkAsSignedButton && (
-              <TooltipAnchor tooltip={markAsSignedDisabledReason}>
+            {showSignProposalButton && (
+              <TooltipAnchor tooltip={signActionTooltip}>
                 <button
                   className="action-button primary side-action-button"
-                  onClick={() => setShowMarkSignedConfirm(true)}
-                  disabled={!canMarkAsSignedVersion || reviewerActionSaving}
+                  onClick={() => {
+                    handleOpenSignModal(versionId);
+                  }}
+                  disabled={Boolean(signProposalDisabledReason) || reviewerActionSaving}
                 >
-                  Mark as Signed
+                  Sign Proposal
                 </button>
               </TooltipAnchor>
             )}
-            {shouldRenderPrimarySubmitAction && (
+            {shouldRenderSubmitAction && (
               <TooltipAnchor tooltip={submitActionDisabledReason}>
                 <button
                   className="action-button primary side-action-button"
                   onClick={() => {
-                    if (shouldRenderModifySignedAction) {
-                      handleBuildAnotherVersion();
-                      return;
-                    }
                     void handleSubmitProposal(versionId);
                   }}
                   disabled={!canUseSubmitAction}
@@ -3848,10 +4139,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             <TooltipAnchor tooltip={editVersionDisabledReason}>
               <button
                 className="action-button side-action-button"
-                onClick={() => handleEdit(vm.proposal)}
+                onClick={() => handleEdit(vm.proposal, { readOnly: isArchived })}
                 disabled={!canOpenVersionInBuilder}
               >
-                Edit Proposal
+                {archivedEditLabel}
               </button>
             </TooltipAnchor>
             <TooltipAnchor tooltip={deleteVersionDisabledReason}>
@@ -3864,16 +4155,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               </button>
             </TooltipAnchor>
           </div>
+          {archivedNote && <p className="proposal-side-empty">{archivedNote}</p>}
         </div>
       </div>
     );
   };
 
   const renderProposalActionsCard = () => {
-    const showBuildAnotherVersionButton =
-      !isReadOnlyReviewerView &&
-      !hasSignedBaseline &&
-      proposalWorkflowStatus !== 'signed';
     const hasReviewerActions =
       isReadOnlyReviewerView &&
       (proposalWorkflowStatus === 'needs_approval' ||
@@ -3881,7 +4169,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         (proposalWorkflowStatus !== 'completed' && proposalWorkflowStatus !== 'signed') ||
         proposalWorkflowStatus === 'signed');
 
-    if (!showBuildAnotherVersionButton && !hasReviewerActions) return null;
+    if (!hasReviewerActions) return null;
 
     return (
       <div className="proposal-side-card no-print">
@@ -3892,17 +4180,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         </div>
         <div className="proposal-side-card-body">
           <div className="side-action-stack">
-            {!isReadOnlyReviewerView && (
-              <TooltipAnchor tooltip={!canManageVersionDrafts ? editDisabledReason : undefined}>
-                <button
-                  className="action-button action-button-version side-action-button"
-                  onClick={handleBuildAnotherVersion}
-                  disabled={!canManageVersionDrafts}
-                >
-                  {versionActionLabel}
-                </button>
-              </TooltipAnchor>
-            )}
             {isReadOnlyReviewerView && proposalWorkflowStatus === 'needs_approval' && (
               <TooltipAnchor tooltip={offlineActionDisabledReason}>
                 <button
@@ -3916,7 +4193,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 </button>
               </TooltipAnchor>
             )}
-            {isReadOnlyReviewerView && proposalWorkflowStatus !== 'completed' && proposalWorkflowStatus !== 'signed' && (
+            {isReadOnlyReviewerView && proposalWorkflowStatus !== 'signed' && (
               <TooltipAnchor tooltip={offlineActionDisabledReason}>
                 <button
                   className="action-button danger side-action-button"
@@ -3935,10 +4212,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               >
                 <button
                   className="action-button primary side-action-button"
-                  onClick={() => setShowMarkSignedConfirm(true)}
+                  onClick={() => {
+                    handleOpenSignModal(selectedVersionIdKey);
+                  }}
                   disabled={reviewerActionSaving || disableSignedWorkflow || isOffline}
                 >
-                  Mark as Signed
+                  Sign Proposal
                 </button>
               </TooltipAnchor>
             )}
@@ -4184,49 +4463,27 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
       <div className="proposal-view-shell">
         <aside className="proposal-column proposal-column--nav no-print">
-          <div className="proposal-side-card proposal-active-card">
-            <div className="proposal-side-card-header">
-              <div>
-                <p className="proposal-side-card-kicker">Active Version</p>
+          {!isReadOnlyReviewerView && (
+            <div className="proposal-side-card proposal-active-card">
+              <div className="proposal-side-card-header">
+                <div>
+                  <p className="proposal-side-card-kicker">Proposal Versions</p>
+                </div>
+              </div>
+              <div className="proposal-side-card-body">
+                <TooltipAnchor tooltip={buildVersionDisabledReason}>
+                  <button
+                    type="button"
+                    className="action-button action-button-version side-action-button"
+                    onClick={handleBuildAnotherVersion}
+                    disabled={Boolean(buildVersionDisabledReason)}
+                  >
+                    {versionActionLabel}
+                  </button>
+                </TooltipAnchor>
               </div>
             </div>
-            <div className="proposal-side-card-body">
-              {canChangeActiveVersion ? (
-                <div className="version-switcher version-switcher--stacked">
-                  <TooltipAnchor tooltip={editDisabledReason}>
-                    <select
-                      id="active-version"
-                      aria-label="Choose Active Version"
-                      value={activeVersionId}
-                      onChange={(e) => handleSetActiveVersion(e.target.value)}
-                      disabled={!canChangeActiveVersion}
-                    >
-                      {navigationVersions.map((version) => (
-                        <option key={version.versionId || 'original'} value={version.versionId || 'original'}>
-                          {getDisplayVersionLabel(version)}
-                        </option>
-                      ))}
-                    </select>
-                  </TooltipAnchor>
-                </div>
-              ) : (
-                <div className="proposal-active-version-readonly">
-                  {hasSignedBaseline ? (
-                    <TooltipAnchor tooltip={activeVersionLockTooltip}>
-                      <span className="version-switcher-pill">{activeVersionLabel}</span>
-                    </TooltipAnchor>
-                  ) : (
-                    <>
-                      <span className="version-switcher-pill">{activeVersionLabel}</span>
-                      <p className="proposal-side-empty">
-                        {editDisabledReason || 'Active version cannot be changed in this mode.'}
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          )}
           <div className="proposal-side-card proposal-nav-card">
             <div className="proposal-side-card-header">
               <div>
@@ -4235,7 +4492,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               </div>
             </div>
             <div className="proposal-side-card-body proposal-nav-list">
-              {viewModels.map((vm) => {
+              {activeNavigationViewModels.map((vm) => {
                 const versionId = vm.proposal.versionId || 'original';
                 const isSelected = versionId === resolvedSelectedVersionId;
                 return (
@@ -4243,7 +4500,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                     key={versionId}
                     type="button"
                     className={`proposal-nav-item${isSelected ? ' is-selected' : ''}`}
-                    onClick={() => setSelectedVersionId(versionId)}
+                    onContextMenu={(event) => handleVersionContextMenu(event, versionId)}
+                    onClick={() => {
+                      setSelectedVersionId(versionId);
+                      setActiveVersionId(versionId);
+                    }}
                   >
                     <div className="proposal-nav-item-header">
                       <div className="proposal-nav-item-top-row">
@@ -4282,6 +4543,73 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                   </button>
                 );
               })}
+              {!isReadOnlyReviewerView && archivedNavigationViewModels.length > 0 && (
+                <div className={`proposal-archive-group${isArchiveVersionsExpanded ? ' is-expanded' : ''}`}>
+                  <button
+                    type="button"
+                    className="proposal-archive-toggle"
+                    onClick={() => setIsArchiveVersionsExpanded((current) => !current)}
+                  >
+                    <span>Archive Versions</span>
+                    <span>{archivedNavigationViewModels.length}</span>
+                  </button>
+                  {isArchiveVersionsExpanded && (
+                    <div className="proposal-archive-list">
+                      {archivedNavigationViewModels.map((vm) => {
+                        const versionId = vm.proposal.versionId || 'original';
+                        const isSelected = versionId === resolvedSelectedVersionId;
+                        return (
+                          <button
+                            key={`archived-${versionId}`}
+                            type="button"
+                            className={`proposal-nav-item proposal-nav-item--archived${isSelected ? ' is-selected' : ''}`}
+                            onContextMenu={(event) => handleVersionContextMenu(event, versionId)}
+                            onClick={() => {
+                              setSelectedVersionId(versionId);
+                              setActiveVersionId(versionId);
+                            }}
+                          >
+                            <div className="proposal-nav-item-header">
+                              <div className="proposal-nav-item-top-row">
+                                <div className="proposal-nav-item-location">{vm.customerLocation}</div>
+                                {isSelected && (
+                                  <span className="proposal-nav-item-viewing-indicator" aria-hidden="true">
+                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path
+                                        d="M1.5 8C2.8 5.2 5.1 3.5 8 3.5C10.9 3.5 13.2 5.2 14.5 8C13.2 10.8 10.9 12.5 8 12.5C5.1 12.5 2.8 10.8 1.5 8Z"
+                                        stroke="currentColor"
+                                        strokeWidth="1.4"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                      <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.4" />
+                                    </svg>
+                                  </span>
+                                )}
+                              </div>
+                              <div className="proposal-nav-item-title-row">
+                                <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>
+                                <span className="proposal-nav-item-total">{formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}</span>
+                              </div>
+                            </div>
+                            <div className="proposal-nav-badges">
+                              {getVersionNavBadges(vm.proposal).map((badge) => (
+                                <span key={`${versionId}-${badge.label}`} className={`proposal-nav-badge tone-${badge.tone}`}>
+                                  {badge.label}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="proposal-nav-item-dates">
+                              <span>Created {formatVersionDateTime(vm.proposal.createdDate || vm.proposal.lastModified)}</span>
+                              <span>Updated {formatVersionDateTime(vm.proposal.lastModified || vm.proposal.createdDate)}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </aside>
@@ -4304,21 +4632,63 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           {proposal?.workflow && renderWorkflowActivityCard()}
         </aside>
       </div>
+      {versionContextMenu && (
+        <>
+          <div className="proposal-context-menu-backdrop" onClick={() => setVersionContextMenu(null)} />
+          <div
+            className="proposal-context-menu"
+            style={{ top: versionContextMenu.y, left: versionContextMenu.x }}
+          >
+            <button
+              type="button"
+              className="proposal-context-menu-item"
+              onClick={() => handleOpenRenameVersion(versionContextMenu.versionId)}
+            >
+              Rename Version
+            </button>
+          </div>
+        </>
+      )}
       {showVersionNameModal && (
-        <div className="modal-overlay" onClick={() => setShowVersionNameModal(false)}>
+        <div className="modal-overlay" onClick={closeVersionNameModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div>
-                <p className="modal-eyebrow">New Version</p>
+                <p className="modal-eyebrow">{isRenamingVersion ? 'Rename Version' : 'New Version'}</p>
                 <h2>
-                  Name the alternate version for '{proposal?.customerInfo.customerName || 'Proposal'}'
+                  {isRenamingVersion
+                    ? renameTargetVersion
+                      ? `Rename '${getDisplayVersionLabel(renameTargetVersion as Proposal)}'`
+                      : 'Rename Version'
+                    : `Name the alternate version for '${proposal?.customerInfo.customerName || 'Proposal'}'`}
                 </h2>
               </div>
-              <button className="modal-close" onClick={() => setShowVersionNameModal(false)} aria-label="Close version naming dialog">
+              <button className="modal-close" onClick={closeVersionNameModal} aria-label="Close version naming dialog">
                 x
               </button>
             </div>
             <div className="modal-body-scroll">
+              {!isRenamingVersion && (
+                <div className="version-source-list">
+                  {versionCreationSourceOptions.map((option) => (
+                    <label
+                      key={option.id}
+                      className={`version-source-option${newVersionSourceId === option.id ? ' is-selected' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="new-version-source"
+                        value={option.id}
+                        checked={newVersionSourceId === option.id}
+                        onChange={(event) => setNewVersionSourceId(event.target.value)}
+                      />
+                      <span className="version-source-copy">
+                        <span className="version-source-label">{option.label}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
               <label className="version-name-label">
                 Version Name
                 <input
@@ -4330,8 +4700,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 />
               </label>
               <div className="version-name-actions">
-                <button className="action-button" onClick={() => setShowVersionNameModal(false)}>Cancel</button>
-                <button className="action-button primary" onClick={handleConfirmCreateVersion}>Create</button>
+                <button className="action-button" onClick={closeVersionNameModal}>Cancel</button>
+                <button className="action-button primary" onClick={handleConfirmVersionName}>
+                  {isRenamingVersion ? 'Save' : 'Create'}
+                </button>
               </div>
             </div>
           </div>
@@ -4339,7 +4711,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       )}
       <SubmitProposalModal
         isOpen={showSubmitModal}
+        kicker="Submission Review"
         versionName={submitTargetVersion ? getDisplayVersionLabel(submitTargetVersion as Proposal) : 'Current Version'}
+        versionOptions={submitVersionOptions}
+        selectedVersionId={submitTargetVersionId}
+        versionFieldLabel="Version to Submit"
         isAddendum={isSubmittingSignedAddendum}
         willAutoApprove={submitPreview?.willAutoApprove === true}
         manualReviewRequested={submitManualReviewRequested}
@@ -4347,6 +4723,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         isSubmitting={loading}
         confirmDisabled={isOffline}
         confirmDisabledReason={offlineActionDisabledReason}
+        onVersionChange={setSubmitTargetVersionId}
         onNoteChange={setSubmitNote}
         onManualReviewToggle={() => setSubmitManualReviewRequested((current) => !current)}
         onCancel={() => {
@@ -4359,6 +4736,48 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           void handleConfirmSubmit();
         }}
       />
+      <SubmitProposalModal
+        isOpen={showMarkSignedConfirm}
+        kicker="Signing Review"
+        title={signTargetVersion ? `Sign ${getDisplayVersionLabel(signTargetVersion as Proposal)}?` : 'Sign Proposal?'}
+        versionName={signTargetVersion ? getDisplayVersionLabel(signTargetVersion as Proposal) : 'Selected Version'}
+        versionOptions={signVersionOptions}
+        selectedVersionId={signTargetVersionId}
+        versionFieldLabel="Version to Sign"
+        messages={
+          hasSignedBaseline
+            ? [
+                'Choose which approved proposal addendum should become the next signed baseline.',
+                'Signing locks that addendum in place and makes it the version that remains in effect.',
+                'Previously signed proposal history stays read-only, and future changes must continue through addendums.',
+              ]
+            : [
+                'Choose which approved proposal version should become the signed proposal.',
+                'Signing locks that version in place and moves the remaining proposal versions into Archive Versions.',
+                'Once a proposal version is signed, there is no going back. Future changes must be made through proposal addendums.',
+              ]
+        }
+        confirmLabel="Sign Proposal"
+        submittingLabel="Signing..."
+        allowManualReview={false}
+        manualReviewRequested={false}
+        note=""
+        isSubmitting={reviewerActionSaving}
+        confirmDisabled={isOffline || disableSignedWorkflow}
+        confirmDisabledReason={
+          isOffline ? offlineActionDisabledReason : disableSignedWorkflow ? DISABLED_SIGNED_WORKFLOW_MESSAGE : undefined
+        }
+        onVersionChange={setSignTargetVersionId}
+        onNoteChange={() => {}}
+        onManualReviewToggle={() => {}}
+        onCancel={() => {
+          setShowMarkSignedConfirm(false);
+          setSignTargetVersionId(null);
+        }}
+        onConfirm={() => {
+          void handleConfirmMarkProposalAsSigned();
+        }}
+      />
       <ConfirmDialog
         open={showModifySignedConfirm}
         title="Start proposal addendum?"
@@ -4369,20 +4788,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           void handleConfirmModifySignedProposal();
         }}
         onCancel={() => setShowModifySignedConfirm(false)}
-      />
-      <ConfirmDialog
-        open={showMarkSignedConfirm}
-        title="Are you sure?"
-        message={markSignedConfirmMessage}
-        confirmLabel="Yes I'm sure. Mark as Signed"
-        cancelLabel="No, take me back"
-        isLoading={reviewerActionSaving}
-        confirmDisabled={isOffline}
-        confirmDisabledReason={offlineActionDisabledReason}
-        onConfirm={() => {
-          void handleConfirmMarkProposalAsSigned();
-        }}
-        onCancel={() => setShowMarkSignedConfirm(false)}
       />
       <ConfirmDialog
         open={showCompleteConfirm}

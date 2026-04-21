@@ -135,6 +135,8 @@ const formatGrossMarginIndicator = (value?: number): string => {
 
 const buildProposalIndicator = (value?: number): string => `Proposal #26${formatGrossMarginIndicator(value)}`;
 
+const cloneProposalData = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
 type SectionKey =
   | 'poolSpecs'
   | 'excavation'
@@ -310,7 +312,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const sessionRole = getSessionRole();
   const isMasterUser = isMasterSession();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
-  const isReadOnlyBuilderView = isProposalEditingRestricted && Boolean(proposalNumber);
+  const isExplicitReadOnlyVersionView = Boolean((location.state as any)?.readOnlyVersion);
+  const isReadOnlyBuilderView =
+    (isProposalEditingRestricted && Boolean(proposalNumber)) || isExplicitReadOnlyVersionView;
+  const readOnlyBuilderMessage = isExplicitReadOnlyVersionView
+    ? 'Read-only mode for archived proposal versions. Review the builder, but changes are disabled.'
+    : 'Read-only mode while acting as franchise owner. Review the proposal builder, but changes are disabled.';
   const isCreationRestricted = isProposalEditingRestricted && !proposalNumber;
   const canViewCostBreakdown =
     sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
@@ -359,7 +366,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
   const [versionList, setVersionList] = useState<Proposal[]>([]);
-  const [activeVersionId, setActiveVersionId] = useState<string>('original');
+  const [, setActiveVersionId] = useState<string>('original');
   const [editingVersionId, setEditingVersionId] = useState<string>('original');
   const restrictedRedirectHandledRef = useRef(false);
   const sessionCommissionRates = getSessionCommissionRates();
@@ -1268,11 +1275,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         hydratedVersions[0] ||
         ((await mergeWithPricingSnapshot(versioned)) as Proposal);
       const sanitizedTarget: Proposal = {
-        ...(targetVersion as Proposal),
+        ...cloneProposalData(targetVersion as Proposal),
         versions: [],
         workflow: sourceProposal.workflow,
       };
-      const nextActiveId = versioned.activeVersionId || sanitizedTarget.versionId || 'original';
+      const nextActiveId = sanitizedTarget.versionId || desiredVersionId || 'original';
 
       const targetVersionStatus = getVersionRecordStatus(sanitizedTarget);
       if (!isReadOnlyBuilderView && (isVersionPermanentlyLocked(sanitizedTarget) || getWorkflowStatus(versioned) === 'completed')) {
@@ -1293,8 +1300,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       if (loadRequestRef.current === requestId) {
         previousSpaTypeRef.current = sanitizedTarget.poolSpecs?.spaType ?? 'none';
         previousHasPoolRef.current = hasPoolDefinition(sanitizedTarget.poolSpecs);
-        setProposal(sanitizedTarget);
-        setVersionList(hydratedVersions);
+        setProposal(cloneProposalData(sanitizedTarget));
+        setVersionList(hydratedVersions.map((entry) => cloneProposalData(entry)));
         setActiveVersionId(nextActiveId);
         setEditingVersionId(sanitizedTarget.versionId || 'original');
         setSelectedPricingModelId(sanitizedTarget.pricingModelId || null);
@@ -1481,7 +1488,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       ...normalized,
       versionId,
       versionName,
-      activeVersionId: activeVersionId || versionId,
+      activeVersionId: versionId,
       isOriginalVersion: input.isOriginalVersion ?? versionId === 'original',
       versions: [],
       franchiseId: normalized.franchiseId || getSessionFranchiseId(),
@@ -1586,7 +1593,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         versionId: currentVersionId,
         versionName,
         isOriginalVersion: totals.isOriginalVersion ?? currentVersionId === 'original',
-        activeVersionId: activeVersionId || currentVersionId,
+        activeVersionId: currentVersionId,
         versions: [],
         lastModified: now,
         createdDate: totals.createdDate || now,
@@ -1611,11 +1618,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ...ensureProposalWorkflow(proposal as Proposal),
           ...finalProposal,
           versions: withoutTarget,
-          activeVersionId: activeVersionId || finalProposal.versionId || currentVersionId,
+          activeVersionId: currentVersionId,
           status: options?.forceDraftStatus ? 'draft' : getWorkflowStatus(proposal as Proposal),
         } as Proposal,
         finalProposal as Proposal,
-        activeVersionId || finalProposal.versionId || currentVersionId
+        currentVersionId
       );
       const existingVersion =
         listAllVersions(ensureProposalWorkflow(proposal as Proposal)).find(
@@ -1653,11 +1660,18 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       );
 
       const savedActive = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+      const savedVersions = listAllVersions(saved as Proposal).map((entry) => cloneProposalData(entry));
+      const savedRequestedVersion =
+        savedVersions.find((entry) => (entry.versionId || 'original') === currentVersionId) || savedActive;
       const isPending = (saved as any).syncStatus === 'pending';
-      setProposal({ ...(savedActive as Proposal) });
-      setVersionList(listAllVersions(saved as Proposal));
-      setActiveVersionId(savedActive.activeVersionId || currentVersionId);
-      setEditingVersionId(savedActive.versionId || currentVersionId);
+      setProposal({
+        ...cloneProposalData(savedRequestedVersion as Proposal),
+        versions: [],
+        workflow: (saved as Proposal).workflow,
+      });
+      setVersionList(savedVersions);
+      setActiveVersionId(currentVersionId);
+      setEditingVersionId(currentVersionId);
       setHasEdits(false);
       const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
       const isSignedAddendumSubmission = Boolean(getSignedVersionId(containerToSave as Proposal));
@@ -2056,12 +2070,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       className={`form-header-pricing ${pricingModelHeaderStateClass}`}
       data-tooltip={
         isReadOnlyBuilderView
-          ? 'Read-only mode while acting as owner.'
+          ? readOnlyBuilderMessage
           : 'Click to change from the Active Price Model'
       }
       aria-label={
         isReadOnlyBuilderView
-          ? `Current pricing model: ${pricingModelDisplayName}. Read-only mode while acting as owner.`
+          ? `Current pricing model: ${pricingModelDisplayName}. ${readOnlyBuilderMessage}`
           : `Current pricing model: ${pricingModelDisplayName}. Click to change from the Active Price Model`
       }
     >
@@ -2229,7 +2243,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             </div>
             {isReadOnlyBuilderView && (
               <div className="proposal-builder-readonly-note" role="status">
-                Read-only mode while acting as franchise owner. Review the proposal builder, but changes are disabled.
+                {readOnlyBuilderMessage}
               </div>
             )}
             {isReadOnlyBuilderView ? (

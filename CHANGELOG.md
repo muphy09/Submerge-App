@@ -1,3 +1,14 @@
+## [2.3.5] - 4/21/26
+### Proposal Versions
+- Completely overhauled Proposal Versions and the workflow associated with them
+    - Proposal versions are now completely independant of each other and do not rely on an 'Active' state
+        - No overlap with Contract, Breakdown, or COGS
+    - Active & Inactive status states has been removed
+    - When a Proposal is 'Submitted', the designer will be asked to choose which Draft version to Submit
+    - When a Proposal is 'Signed', the designer will be asked to choose which Approved version to Sign
+        - *Additional versions are archived after a version has been 'Signed'*
+    - Proposal Versions can be renamed by right-clicking the version in the Nav column
+-----
 ## [2.3.4] - 4/21/26
 ### Contracts
 - Updated all 4 Contract templates to the new '2026' format

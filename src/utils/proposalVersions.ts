@@ -1,5 +1,5 @@
 import { Proposal } from '../types/proposal-new';
-import { VERSION_RESETTABLE_CONTRACT_OVERRIDE_FIELD_IDS } from '../services/contractTemplates';
+import { getDefaultProposal } from './proposalDefaults';
 
 export const ORIGINAL_VERSION_ID = 'original';
 
@@ -8,15 +8,11 @@ const randomId = () => `version-${Math.random().toString(36).slice(2, 9)}`;
 const cloneProposalVersionData = (proposal: Proposal): Proposal =>
   JSON.parse(JSON.stringify(proposal)) as Proposal;
 
-const cloneContractOverridesForNewVersion = (
-  overrides?: Proposal['contractOverrides'] | null
-): Proposal['contractOverrides'] => {
-  if (!overrides) return {};
+const cloneFieldValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-  return Object.fromEntries(
-    Object.entries(overrides).filter(([fieldId]) => !VERSION_RESETTABLE_CONTRACT_OVERRIDE_FIELD_IDS.has(fieldId))
-  );
-};
+export type ProposalVersionCreationSource =
+  | { mode: 'scratch' }
+  | { mode: 'copy'; sourceVersionId?: string };
 
 const stripNestedVersions = (proposal: Proposal): Proposal => {
   const clone: Proposal = { ...proposal };
@@ -143,26 +139,95 @@ const nextVersionName = (proposal: Proposal): string => {
   return `Version ${suffix}`;
 };
 
+const COPYABLE_VERSION_FIELDS: Array<keyof Proposal> = [
+  'customerInfo',
+  'poolSpecs',
+  'excavation',
+  'plumbing',
+  'electrical',
+  'tileCopingDecking',
+  'drainage',
+  'equipment',
+  'waterFeatures',
+  'customFeatures',
+  'masonry',
+  'interiorFinish',
+  'papDiscounts',
+  'pricingModelId',
+  'pricingModelName',
+  'pricingModelFranchiseId',
+  'pricingModelIsDefault',
+];
+
+const buildVersionDraftSeed = (
+  container: Proposal,
+  source: Proposal,
+  creationSource: ProposalVersionCreationSource
+): Proposal => {
+  const defaults = cloneProposalVersionData(getDefaultProposal() as Proposal);
+  const sourceSnapshot = cloneProposalVersionData(source);
+  const sharedMetadata = {
+    proposalNumber: sourceSnapshot.proposalNumber || container.proposalNumber || defaults.proposalNumber,
+    franchiseId: sourceSnapshot.franchiseId || container.franchiseId || defaults.franchiseId,
+    designerName: sourceSnapshot.designerName || container.designerName || defaults.designerName,
+    designerRole: sourceSnapshot.designerRole || container.designerRole || defaults.designerRole,
+    designerCode: sourceSnapshot.designerCode || container.designerCode || defaults.designerCode,
+  };
+
+  if (creationSource.mode === 'scratch') {
+    return stripNestedVersions({
+      ...defaults,
+      ...sharedMetadata,
+      customerInfo: {
+        ...(defaults.customerInfo || {}),
+        customerName: sourceSnapshot.customerInfo?.customerName || '',
+        city: sourceSnapshot.customerInfo?.city || '',
+        state: sourceSnapshot.customerInfo?.state || defaults.customerInfo?.state || 'NC',
+      } as Proposal['customerInfo'],
+    } as Proposal);
+  }
+
+  const copiedFields = COPYABLE_VERSION_FIELDS.reduce<Partial<Proposal>>((accumulator, field) => {
+    const value = sourceSnapshot[field];
+    if (value !== undefined) {
+      (accumulator as Record<string, unknown>)[field] = cloneFieldValue(value);
+    }
+    return accumulator;
+  }, {});
+
+  return stripNestedVersions({
+    ...defaults,
+    ...sharedMetadata,
+    ...copiedFields,
+  } as Proposal);
+};
+
 export const createVersionFromProposal = (
   proposal: Proposal,
-  sourceVersionId?: string,
+  sourceVersion?: ProposalVersionCreationSource | string,
   explicitName?: string
 ): { container: Proposal; newVersion: Proposal } => {
   const normalized = ensureVersionDefaults(proposal);
   const allVersions = listAllVersions(normalized);
   const now = new Date().toISOString();
+  const creationSource: ProposalVersionCreationSource =
+    typeof sourceVersion === 'string' || !sourceVersion
+      ? { mode: 'copy', sourceVersionId: typeof sourceVersion === 'string' ? sourceVersion : undefined }
+      : sourceVersion;
+  const sourceVersionId =
+    creationSource.mode === 'copy' ? creationSource.sourceVersionId : undefined;
   const source =
     allVersions.find((v) => v.versionId === sourceVersionId) ||
     allVersions.find((v) => v.versionId === normalized.activeVersionId) ||
     allVersions[0];
   const sourceSnapshot = cloneProposalVersionData(source || normalized);
+  const draftSeed = buildVersionDraftSeed(normalized, sourceSnapshot, creationSource);
 
   const newVersion: Proposal = stripNestedVersions({
-    ...sourceSnapshot,
+    ...draftSeed,
     versionId: randomId(),
     versionName: explicitName || nextVersionName(normalized),
     isOriginalVersion: false,
-    contractOverrides: cloneContractOverridesForNewVersion(sourceSnapshot.contractOverrides),
     status: 'draft',
     versionLocked: false,
     versionLockedAt: null,

@@ -8,7 +8,6 @@ import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedW
 import type { CostLineItem, Proposal, ProposalWorkflowEvent } from '../types/proposal-new';
 import {
   DISABLED_SIGNED_WORKFLOW_MESSAGE,
-  loadFranchiseSignedWorkflowDisabled,
 } from '../services/franchiseBranding';
 import {
   addWorkflowNote,
@@ -27,10 +26,8 @@ import {
   getSignedVersion,
   getWorkflowStatus,
   hasUnreadWorkflowEvents,
-  markProposalAsSigned,
   markWorkflowRead,
   requestWorkflowChanges,
-  willSigningRemoveNonActiveVersions,
 } from '../services/proposalWorkflow';
 import { listFranchiseUsers, type FranchiseUser } from '../services/franchiseUsersAdapter';
 import { getProposal, listProposals, saveProposal } from '../services/proposalsAdapter';
@@ -290,7 +287,6 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
   const [noteDraft, setNoteDraft] = useState('');
   const [showNoteComposer, setShowNoteComposer] = useState(false);
   const [noteComposerMode, setNoteComposerMode] = useState<WorkflowNoteComposerMode>('note');
-  const [showMarkSignedConfirm, setShowMarkSignedConfirm] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const [expandedCogsCategories, setExpandedCogsCategories] = useState<string[]>([]);
@@ -499,9 +495,6 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
   const selectedApprovedVersion = selectedProposal ? getApprovedVersion(selectedProposal) : null;
   const selectedSignedVersion = selectedProposal ? getSignedVersion(selectedProposal) : null;
   const selectedDisplayVersion = selectedReviewVersion || selectedApprovedVersion || selectedSignedVersion || selectedProposal;
-  const markSignedConfirmMessage = willSigningRemoveNonActiveVersions(selectedProposal)
-    ? 'Marking as Signed will lock the current approved version, make it the signed baseline, and remove all non-active versions. All non-active versions will be removed when you do this. If changes are needed afterwards, they must be made through a Proposal Addendum.'
-    : 'Marking as Signed will lock the current approved version and make it the signed baseline. If changes are needed afterwards, they must be made through a Proposal Addendum.';
   const selectedWorkflowReasons = (selectedProposal?.workflow?.approvalReasons || []).filter(
     (reason) => reason.code !== 'manual_review'
   );
@@ -671,32 +664,6 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
     );
   };
 
-  const handleMarkAsSigned = async () => {
-    if (!selectedProposal || isOffline) return;
-    const targetFranchiseId = selectedProposal.franchiseId || session?.franchiseId || null;
-
-    try {
-      const isSignedWorkflowDisabled = targetFranchiseId
-        ? await loadFranchiseSignedWorkflowDisabled(targetFranchiseId, { force: true })
-        : disableSignedWorkflow;
-      if (isSignedWorkflowDisabled) {
-        showToast({ type: 'error', message: DISABLED_SIGNED_WORKFLOW_MESSAGE });
-        return;
-      }
-    } catch (error) {
-      console.warn('Unable to verify signed workflow setting before marking proposal as signed:', error);
-      if (disableSignedWorkflow) {
-        showToast({ type: 'error', message: DISABLED_SIGNED_WORKFLOW_MESSAGE });
-        return;
-      }
-    }
-
-    await persistSelectedProposal(
-      markProposalAsSigned(selectedProposal, session),
-      'Proposal marked as signed.'
-    );
-  };
-
   const handleComplete = async () => {
     if (!selectedProposal || getWorkflowStatus(selectedProposal) !== 'signed' || isOffline) return;
     await persistSelectedProposal(
@@ -729,11 +696,15 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
     );
   };
 
-  const openSelectedProposalVersion = (versionId?: string | null) => {
+  const openSelectedProposalVersion = (
+    versionId?: string | null,
+    options?: { openSignModal?: boolean }
+  ) => {
     if (!selectedProposal) return;
     navigate(`/proposal/view/${selectedProposal.proposalNumber}`, {
       state: {
         versionId: versionId || undefined,
+        openSignModal: options?.openSignModal === true,
         reviewerReturnTo: 'workflow',
         reviewerReturnPath: '/workflow',
         reviewerReturnFilter: selectedFilter,
@@ -1532,9 +1503,9 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
                         type="button"
                         className="workflow-primary-btn"
                         disabled={Boolean(savingAction) || disableSignedWorkflow || isOffline}
-                        onClick={() => setShowMarkSignedConfirm(true)}
+                        onClick={() => openSelectedProposalVersion(selectedApprovedVersionId, { openSignModal: true })}
                       >
-                        Mark as Signed
+                        Sign Proposal
                       </button>
                     </TooltipAnchor>
                   )}
@@ -1551,21 +1522,6 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
           )}
         </section>
       </div>
-      <ConfirmDialog
-        open={showMarkSignedConfirm}
-        title="Are you sure?"
-        message={markSignedConfirmMessage}
-        confirmLabel="Yes I'm sure. Mark as Signed"
-        cancelLabel="No, take me back"
-        isLoading={Boolean(savingAction)}
-        confirmDisabled={isOffline}
-        confirmDisabledReason={offlineActionDisabledReason}
-        onConfirm={() => {
-          setShowMarkSignedConfirm(false);
-          void handleMarkAsSigned();
-        }}
-        onCancel={() => setShowMarkSignedConfirm(false)}
-      />
       <ConfirmDialog
         open={showCompleteConfirm}
         title="Are you sure?"
