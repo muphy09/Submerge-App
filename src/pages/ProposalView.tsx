@@ -91,6 +91,7 @@ import {
   markProposalAsSigned,
   markWorkflowRead,
   reconcileWorkflowVersionStates,
+  resetWorkflowAfterVersionEdit,
   requestWorkflowChanges,
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
@@ -1759,14 +1760,24 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         'original';
       const container = buildContainerFromVersions(updatedVersions, desiredActiveId);
       if (!container) return false;
+      const targetVersionStatus = getVersionRecordStatus(targetVersion);
+      const versionRequiresResubmission =
+        targetVersionStatus === 'submitted' ||
+        targetVersionStatus === 'needs_approval' ||
+        targetVersionStatus === 'approved' ||
+        hasVersionSubmissionHistory(proposal as Proposal, versionId);
+      const containerToSave = versionRequiresResubmission
+        ? resetWorkflowAfterVersionEdit(container as Proposal, versionId)
+        : ensureProposalWorkflow(container as Proposal);
 
       await initPricingDataStore(
-        container.franchiseId,
-        container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        containerToSave.franchiseId,
+        containerToSave.pricingModelId || undefined,
+        containerToSave.pricingModelFranchiseId || undefined
       );
-      const saved = await saveProposalRemote(container);
+      const saved = await saveProposalRemote(containerToSave);
       const isPending = (saved as any).syncStatus === 'pending';
+      const savedWorkflowStatus = getWorkflowStatus(saved as Proposal);
       const updated = listAllVersions(saved as Proposal).map((entry) => ({
         ...(mergeProposalWithDefaults(entry) as Proposal),
         versionId: entry.versionId || 'original',
@@ -1791,6 +1802,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         type: isPending ? 'warning' : 'success',
         message: isPending
           ? 'Customer cost and warranty changes saved locally. Will sync when back online.'
+          : savedWorkflowStatus === 'draft'
+          ? 'Customer cost and warranty changes saved. Resubmit when ready.'
           : 'Customer cost and warranty changes saved.',
       });
       return true;
@@ -3277,6 +3290,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           warrantySections: customerBreakdownEditor.draftWarrantySections,
         }
       : customerModalView?.proposal;
+  const customerBreakdownPreviewView = customerBreakdownPreviewProposal
+    ? buildViewModel(customerBreakdownPreviewProposal as Proposal)
+    : customerModalView;
   const closeContractModal = () => {
     setPendingUnsavedCloseTarget(null);
     setContractExportOpen(false);
@@ -5013,10 +5029,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               </div>
               <div className="modal-body-scroll">
                 <CostBreakdownView
-                  costBreakdown={customerModalView.costBreakdownForDisplay}
-                  customerName={customerModalView.proposal.customerInfo.customerName}
+                  costBreakdown={customerBreakdownPreviewView!.costBreakdownForDisplay}
+                  customerName={customerBreakdownPreviewView!.proposal.customerInfo.customerName}
                   proposal={customerBreakdownPreviewProposal}
-                  pricing={customerModalView.pricing}
+                  pricing={customerBreakdownPreviewView!.pricing}
                   allowRetailAdjustments={canEditCustomerBreakdownVersion}
                   editableWarranty={canEditCustomerBreakdownVersion}
                   onRetailAdjustmentsChange={
@@ -5045,10 +5061,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             >
               <div className="export-breakdown-page export-breakdown-page--cost">
                 <BreakdownCostExportPageComponent
-                  costBreakdown={customerModalView.costBreakdownForDisplay}
-                  customerName={customerModalView.proposal.customerInfo.customerName}
+                  costBreakdown={customerBreakdownPreviewView!.costBreakdownForDisplay}
+                  customerName={customerBreakdownPreviewView!.proposal.customerInfo.customerName}
                   proposal={customerBreakdownPreviewProposal}
-                  pricing={customerModalView.pricing}
+                  pricing={customerBreakdownPreviewView!.pricing}
                 />
               </div>
               <BreakdownWarrantyExportPagesComponent proposal={customerBreakdownPreviewProposal} />

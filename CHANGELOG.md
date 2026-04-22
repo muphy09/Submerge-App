@@ -1,3 +1,7 @@
+## [2.3.7] - 4/21/26
+### Hotfix
+- Proposal discount UI was not applying as soon as the discount was entered
+----
 ## [2.3.6] - 4/21/26
 ### Proposal Versions
 - Completely overhauled Proposal Versions and the workflow associated with them
