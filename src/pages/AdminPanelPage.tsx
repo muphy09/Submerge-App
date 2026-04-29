@@ -37,6 +37,7 @@ import {
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
+import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import {
   getReviewerPrimaryVersionId,
   getReviewerVisibleVersions,
@@ -231,7 +232,7 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
           interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
           manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
-          papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+          papDiscounts: resolveProposalPapDiscounts(input, (base as any).papDiscounts),
           warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
         };
       };

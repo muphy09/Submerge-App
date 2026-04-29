@@ -584,6 +584,7 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
     setCopyError(null);
     setCopySuccess(null);
     setEditingFranchise(franchise);
+    void Promise.all([loadData(), loadPricingModels()]);
   };
 
   const handleCloseFranchiseEditor = () => {

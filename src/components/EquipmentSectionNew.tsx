@@ -12,6 +12,7 @@ import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { getDefaultCleanerOption, getDefaultCleanerQuantity, getNoCleanerOption, isNoCleanerSelection } from '../utils/cleanerDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { getRetiredEquipmentFlags } from '../utils/retiredEquipment';
+import { getAuxiliaryPumpDependencyLabel } from '../utils/proposalSelectionSanitizer';
 import {
   automationIncludesSaltCell,
   buildIncludedSaltCellOption,
@@ -2133,8 +2134,9 @@ function EquipmentSectionNew({
           <>
             {auxiliaryPumps.map((pump, idx) => {
               const isEditing = activeAuxiliaryPumpIndex === idx;
+              const dependencyLabel = getAuxiliaryPumpDependencyLabel(pump);
               const title = buildCardTitle(pump?.name || getDefaultAuxiliaryPump()?.name || 'Blower', [
-                pump?.autoAddedForSpa ? 'Auto-added for spa' : undefined,
+                dependencyLabel,
               ]);
 
               return (
@@ -2200,7 +2202,7 @@ function EquipmentSectionNew({
                         </div>
                       </div>
 
-                      {pump?.autoAddedForSpa && <small className="form-help">Auto-added for spa.</small>}
+                      {dependencyLabel && <small className="form-help">{dependencyLabel}.</small>}
 
                       <div className="action-row">
                         <button

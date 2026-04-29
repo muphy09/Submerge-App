@@ -10,6 +10,7 @@ import {
 } from '../utils/costBreakdownSubcategories';
 import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
+import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import './CostBreakdownPage.css';
 
 interface CostBreakdownPageProps {
@@ -37,20 +38,10 @@ const splitCustomOptions = (items: CostLineItem[]) => ({
 function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreakdownPageProps) {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<BreakdownViewMode>('cogs');
-  const papDiscounts: PAPDiscounts =
-    proposal.papDiscounts || pricingData.papDiscountRates || {
-      excavation: 0,
-      plumbing: 0,
-      steel: 0,
-      electrical: 0,
-      shotcrete: 0,
-      tileCopingLabor: 0,
-      tileCopingMaterial: 0,
-      equipment: 0,
-      interiorFinish: 0,
-      startup: 0,
-      fiberglassShell: 0,
-    };
+  const papDiscounts: PAPDiscounts = resolveProposalPapDiscounts(
+    proposal,
+    pricingData.papDiscountRates
+  );
   const [manualAdjustments, setManualAdjustments] = useState<ManualAdjustments>(
     proposal.manualAdjustments ||
       (pricingData as any).manualAdjustments || {

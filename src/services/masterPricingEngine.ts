@@ -33,6 +33,7 @@ import {
   normalizeCustomFeatures,
 } from '../utils/customFeatures';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
+import { normalizePapDiscounts } from '../utils/papDiscounts';
 
 const hasPoolDefinition = (poolSpecs: any): boolean => {
   if (!poolSpecs) return false;
@@ -189,8 +190,7 @@ export class MasterPricingEngine {
     const interiorFinish = proposal.interiorFinish!;
     const county = proposal.customerInfo?.county;
     const isFiberglass = CalculationModules.Pool.isFiberglassPool(poolSpecs);
-    const appliedPapDiscounts: PAPDiscounts | undefined =
-      papDiscounts || proposal.papDiscounts || pricingData.papDiscountRates;
+    const appliedPapDiscounts: PAPDiscounts = normalizePapDiscounts(papDiscounts ?? pricingData.papDiscountRates);
 
     // Calculate all sections
     const plansItems = this.calculatePlansEngineering(poolSpecs, excavation, waterFeatures);

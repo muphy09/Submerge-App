@@ -67,6 +67,7 @@ import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } 
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
+import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import {
   addWorkflowNote,
   approveWorkflowProposal,
@@ -912,7 +913,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
       manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
       retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
-      papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+      papDiscounts: resolveProposalPapDiscounts(input, (base as any).papDiscounts),
       contractOverrides: (input as Proposal).contractOverrides || (base as Proposal).contractOverrides || {},
       warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
     };
@@ -928,10 +929,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const results = await Promise.all(
       entries.map(async (entry) => {
         const versionKey = getVersionIdKey(entry);
-
-        if (!shouldUseLiveVersionSync(container, entry)) {
-          return [versionKey, getFrozenVersionSyncMeta(entry)] as const;
-        }
 
         const sourceFranchiseId = entry.pricingModelFranchiseId || entry.franchiseId || container.franchiseId || 'default';
         let pricingDirectory = pricingDirectoryCache.get(sourceFranchiseId);
@@ -951,6 +948,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           pricingDirectoryCache.set(sourceFranchiseId, pricingDirectory);
         }
 
+        const useLiveVersionSync = shouldUseLiveVersionSync(container, entry);
         const resolvedFranchiseId = entry.franchiseId || container.franchiseId || 'default';
         const pricingModelId = entry.pricingModelId || undefined;
         const pricingModelFranchiseId = entry.pricingModelFranchiseId || undefined;
@@ -968,7 +966,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         const mergedVersion = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(entry)) as Proposal;
         const priceModelStatus = resolveCurrentPricingModelStatus(entry, pricingSnapshot, pricingDirectory);
         const equipmentFlags =
-          priceModelStatus === 'removed'
+          !useLiveVersionSync || priceModelStatus === 'removed'
             ? getEmptyRetiredEquipmentFlags()
             : withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
                 getRetiredEquipmentFlags(mergedVersion.equipment)
@@ -2676,16 +2674,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const buildViewModel = (input: Proposal) => {
     const syncMeta = getCachedVersionSyncMeta(input) ?? getFrozenVersionSyncMeta(input);
     const livePricingSnapshot = syncMeta.pricingSnapshot;
-    const canUseLivePricingSnapshot =
+    const canUsePricingSnapshot =
       Boolean(proposal) &&
       Boolean(livePricingSnapshot) &&
-      syncMeta.priceModelStatus !== 'removed' &&
-      shouldUseLiveVersionSync(proposal as Proposal, input);
-    const mergedProposal = canUseLivePricingSnapshot
+      syncMeta.priceModelStatus !== 'removed';
+    const mergedProposal = canUsePricingSnapshot
       ? (withTemporaryPricingSnapshot(livePricingSnapshot!, () => mergeProposalWithDefaults(input)) as Proposal)
       : (input as Proposal);
     let calculated: ReturnType<typeof MasterPricingEngine.calculateCompleteProposal> | null = null;
-    if (canUseLivePricingSnapshot) {
+    if (canUsePricingSnapshot) {
       try {
         calculated = withTemporaryPricingSnapshot(livePricingSnapshot!, () =>
           MasterPricingEngine.calculateCompleteProposal(mergedProposal, mergedProposal.papDiscounts)
@@ -3938,7 +3935,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const renderSelectedVersionSection = (vm: ReturnType<typeof buildViewModel>) => {
     const versionId = vm.proposal.versionId || 'original';
-    const versionLabel = getDisplayVersionLabel(vm.proposal);
+    const contractTypeLabel = getContractTypeLabel(vm.proposal);
     const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
     const proposalIndicator = buildProposalIndicator(vm.grossMargin);
     const versionStatusLabel = getVersionStatusLabel(vm.proposal);
@@ -3959,7 +3956,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               <h2 className="hero-title">
                 <span className="hero-title-text">{vm.customerLocation}</span>
                 <span className="hero-title-separator">-</span>
-                <span className="version-pill">{versionLabel}</span>
+                <span className="version-pill">{contractTypeLabel}</span>
                 {shouldShowVersionStatus && <span className="version-status-pill">{versionStatusLabel}</span>}
               </h2>
             </div>
@@ -4501,7 +4498,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             </div>
           )}
           <div className="proposal-side-card proposal-nav-card">
-            <div className="proposal-side-card-header">
+            <div className="proposal-side-card-header proposal-nav-card-header">
               <div>
                 <p className="proposal-side-card-kicker">Versions & Addendums</p>
                 <h2>{viewModels.length} Available</h2>
@@ -4525,20 +4522,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                     <div className="proposal-nav-item-header">
                       <div className="proposal-nav-item-top-row">
                         <div className="proposal-nav-item-location">{vm.customerLocation}</div>
-                        {isSelected && (
-                          <span className="proposal-nav-item-viewing-indicator" aria-hidden="true">
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path
-                                d="M1.5 8C2.8 5.2 5.1 3.5 8 3.5C10.9 3.5 13.2 5.2 14.5 8C13.2 10.8 10.9 12.5 8 12.5C5.1 12.5 2.8 10.8 1.5 8Z"
-                                stroke="currentColor"
-                                strokeWidth="1.4"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.4" />
-                            </svg>
-                          </span>
-                        )}
                       </div>
                       <div className="proposal-nav-item-title-row">
                         <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>
@@ -4588,20 +4571,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                             <div className="proposal-nav-item-header">
                               <div className="proposal-nav-item-top-row">
                                 <div className="proposal-nav-item-location">{vm.customerLocation}</div>
-                                {isSelected && (
-                                  <span className="proposal-nav-item-viewing-indicator" aria-hidden="true">
-                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path
-                                        d="M1.5 8C2.8 5.2 5.1 3.5 8 3.5C10.9 3.5 13.2 5.2 14.5 8C13.2 10.8 10.9 12.5 8 12.5C5.1 12.5 2.8 10.8 1.5 8Z"
-                                        stroke="currentColor"
-                                        strokeWidth="1.4"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                      />
-                                      <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.4" />
-                                    </svg>
-                                  </span>
-                                )}
                               </div>
                               <div className="proposal-nav-item-title-row">
                                 <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>

@@ -19,6 +19,7 @@ import {
   isOffContractCustomFeature,
   normalizeCustomFeatures,
 } from '../utils/customFeatures';
+import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 
 export type ContractOverrides = Record<string, string | number | null>;
 
@@ -178,7 +179,10 @@ function resolveMirroredContractOverride(
 
 function normalizeProposal(pr: Proposal): ProposalWithPricing {
   try {
-    const calc = MasterPricingEngine.calculateCompleteProposal(pr, pr.papDiscounts);
+    const calc = MasterPricingEngine.calculateCompleteProposal(
+      pr,
+      resolveProposalPapDiscounts(pr, pricingData.papDiscountRates)
+    );
     return {
       ...pr,
       pricing: calc?.pricing || pr.pricing,
@@ -344,7 +348,9 @@ function getAuxiliaryPumpSelections(proposal: Proposal): PumpSelection[] {
 }
 
 function isSpaAutoAddedAuxiliaryPump(pump: Pick<PumpSelection, 'autoAddedForSpa' | 'autoAddedReason'> | undefined): boolean {
-  return Boolean(pump?.autoAddedForSpa || pump?.autoAddedReason === 'spa');
+  return Boolean(
+    pump?.autoAddedForSpa || pump?.autoAddedReason === 'spa' || pump?.autoAddedReason === 'fiberglass'
+  );
 }
 
 function getContractBlowerValue(proposal: Proposal): string {

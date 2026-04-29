@@ -209,54 +209,76 @@ const PAYMENT_SCHEDULE_OVERRIDES: Record<ContractTemplateId, FieldOverride[]> = 
   ],
 };
 
-const FIBERGLASS_PAGE_ONE_FIELD_OVERRIDES: Partial<Record<ContractTemplateId, FieldOverride[]>> = {
-  'nc-fiberglass': [
+const PAGE_ONE_FIELD_OVERRIDES: Partial<Record<ContractTemplateId, FieldOverride[]>> = {
+  'sc-gunite': [
     {
       id: 'p1_body_buyer_name',
       page: 1,
-      rect: [379.45, 172.583, 484.18, 181.875],
+      rect: [374.7, 166.34, 472.5, 175.100009765625],
     },
     {
       id: 'p1_body_job_site_address',
       page: 1,
-      rect: [230.77, 181.748, 339.07, 191.04],
+      rect: [234.8, 174.98, 332.8, 183.740009765625],
     },
     {
       id: 'p1_7',
       page: 1,
-      rect: [403.96, 182.002, 508.3, 191.294],
+      rect: [399.25, 175.219970703125, 494.8, 183.97998046875],
     },
     {
       id: 'p1_deposit_amount',
       page: 1,
-      rect: [392.38, 191.167, 508.3, 200.332],
+      rect: [392.5, 183.8599853515625, 494.8, 192.5],
+    },
+  ],
+  'nc-fiberglass': [
+    {
+      id: 'p1_body_buyer_name',
+      page: 1,
+      rect: [382.25, 172.583, 482.25, 181.875],
+    },
+    {
+      id: 'p1_body_job_site_address',
+      page: 1,
+      rect: [232.75, 181.748, 335.5, 191.04],
+    },
+    {
+      id: 'p1_7',
+      page: 1,
+      rect: [404, 182.002, 505.8, 191.294],
+    },
+    {
+      id: 'p1_deposit_amount',
+      page: 1,
+      rect: [409.87, 191.167, 506.85, 200.332],
     },
     {
       id: 'p1_installment_count',
       page: 1,
-      rect: [173, 199.568, 197, 209.624],
+      rect: [181.94, 199.568, 206.18, 209.624],
     },
   ],
   'sc-fiberglass': [
     {
       id: 'p1_body_buyer_name',
       page: 1,
-      rect: [386.05, 156.226, 485.98, 165.64],
+      rect: [384.85, 156.226, 483.8, 165.64],
     },
     {
       id: 'p1_body_job_site_address',
       page: 1,
-      rect: [233.51, 165.511, 339.31, 174.926],
+      rect: [233, 165.511, 333.2, 174.926],
     },
     {
       id: 'p1_7',
       page: 1,
-      rect: [406.15, 165.769, 510.34, 175.184],
+      rect: [402.8, 165.769, 507.8, 175.184],
     },
     {
       id: 'p1_deposit_amount',
       page: 1,
-      rect: [399.86, 175.055, 510.34, 184.34],
+      rect: [396.4, 175.055, 507.8, 184.34],
     },
     {
       id: 'p1_installment_count',
@@ -399,7 +421,7 @@ const buildTemplate = (
   overrides: FieldOverride[] = [],
   staticPatches: ContractStaticPatch[] = []
 ): ContractTemplate => {
-  const fieldOverrides = [...(FIBERGLASS_PAGE_ONE_FIELD_OVERRIDES[id] || []), ...overrides];
+  const fieldOverrides = [...(PAGE_ONE_FIELD_OVERRIDES[id] || []), ...overrides];
   return {
     id,
     label,

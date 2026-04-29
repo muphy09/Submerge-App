@@ -375,6 +375,14 @@
 .adjustment-cost-input {
   text-align: right;
   font-family: 'Courier New', monospace;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.adjustment-cost-input::-webkit-outer-spin-button,
+.adjustment-cost-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .adjustment-input.is-warning {

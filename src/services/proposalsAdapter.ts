@@ -11,9 +11,11 @@ import {
 } from './session';
 import { isEnvFlagTrue } from './env';
 import { applyActiveVersion } from '../utils/proposalVersions';
+import { sanitizeEditableProposalVersions } from '../utils/proposalSelectionSanitizer';
+import { removeHardcodedPapDiscountsFromProposal } from '../utils/papDiscounts';
 import { logLedgerEventSafe } from './ledger';
 import { upgradeProposalContractTemplateRevision } from './contractTemplateUpgrade';
-import { ensureProposalWorkflow, getWorkflowStatus } from './proposalWorkflow';
+import { countUnreadWorkflowEvents, ensureProposalWorkflow, getWorkflowStatus } from './proposalWorkflow';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
@@ -32,6 +34,14 @@ type StoredProposalRow = {
   designer_role?: UserSession['role'] | null;
   designer_code?: string | null;
   status?: string | null;
+};
+type WorkflowUnreadProjectionRow = {
+  proposal_number?: string | null;
+  status?: string | null;
+  workflow?: Proposal['workflow'] | null;
+  versions?: Proposal['versions'] | null;
+  version_id?: string | null;
+  proposal_status?: string | null;
 };
 
 const PENDING_MESSAGE = 'Awaiting cloud sync';
@@ -347,7 +357,9 @@ function ensureProposalWriteMetadata(proposal: Proposal, session?: UserSession |
 }
 
 function normalizeForConsumption(proposal: Proposal, session?: UserSession | null, stored?: StoredProposalRow): Proposal {
-  const withMeta = upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(proposal, session, stored));
+  const withMeta = removeHardcodedPapDiscountsFromProposal(
+    upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(proposal, session, stored))
+  );
   const active = ensureProposalWorkflow(applyActiveVersion(withMeta));
   const normalizedActive = ensureProposalWorkflow(
     upgradeProposalContractTemplateRevision(ensureProposalReadMetadata(active, session, stored))
@@ -372,7 +384,9 @@ function withSyncStatus(proposal: Proposal, status: SyncStatus, message?: string
 async function persistLocalProposal(proposal: Proposal) {
   if (!window.electron?.saveProposal) return;
   try {
-    const upgradedProposal = upgradeProposalContractTemplateRevision(proposal);
+    const upgradedProposal = removeHardcodedPapDiscountsFromProposal(
+      upgradeProposalContractTemplateRevision(proposal)
+    );
     setLocalProposalOwner(upgradedProposal.proposalNumber, readSession(), upgradedProposal.franchiseId);
     await window.electron.saveProposal(upgradedProposal);
   } catch (error) {
@@ -468,8 +482,10 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase not configured');
 
-  const normalized = ensureProposalWorkflow(
-    upgradeProposalContractTemplateRevision(ensureProposalWriteMetadata(applyActiveVersion(proposal)))
+  const normalized = removeHardcodedPapDiscountsFromProposal(
+    ensureProposalWorkflow(
+      upgradeProposalContractTemplateRevision(ensureProposalWriteMetadata(applyActiveVersion(proposal)))
+    )
   );
   const now = nowIso();
 
@@ -725,6 +741,38 @@ export async function listDashboardProposals(franchiseId?: string): Promise<Prop
   return proposals.filter((proposal) => isOwnProposal(proposal, session));
 }
 
+export async function getWorkflowUnreadCount(franchiseId: string, userId?: string | null): Promise<number> {
+  const normalizedUserId = normalizeIdentity(userId);
+  if (!normalizedUserId) return 0;
+
+  const supabaseOnline = await hasSupabaseConnection();
+  if (!supabaseOnline) return 0;
+
+  const supabase = getSupabaseClient();
+  if (!supabase) return 0;
+
+  const { data, error } = await supabase
+    .from('franchise_proposals')
+    .select(
+      'proposal_number,status,workflow:proposal_json->workflow,versions:proposal_json->versions,version_id:proposal_json->versionId,proposal_status:proposal_json->status'
+    )
+    .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID);
+  if (error) throw error;
+
+  return (data || []).reduce((sum, row) => {
+    const entry = row as WorkflowUnreadProjectionRow;
+    const proposal = {
+      proposalNumber: entry.proposal_number || '',
+      status: entry.proposal_status || entry.status || 'draft',
+      versionId: entry.version_id || 'original',
+      workflow: entry.workflow || undefined,
+      versions: Array.isArray(entry.versions) ? entry.versions : [],
+    } as Proposal;
+    if (!canReadProposal(proposal)) return sum;
+    return sum + countUnreadWorkflowEvents(proposal, normalizedUserId);
+  }, 0);
+}
+
 export async function getProposal(proposalNumber: string): Promise<Proposal | null> {
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
@@ -798,7 +846,11 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
     ...normalized,
     versions: (normalized.versions || []).map((v) => ensureProposalWriteMetadata(v, session)),
   };
-  const persistenceReady = upgradeProposalContractTemplateRevision(normalizedWithVersions);
+  const persistenceReady = removeHardcodedPapDiscountsFromProposal(
+    upgradeProposalContractTemplateRevision(
+      sanitizeEditableProposalVersions(normalizedWithVersions)
+    )
+  );
   const franchiseId = persistenceReady.franchiseId || DEFAULT_FRANCHISE_ID;
 
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {

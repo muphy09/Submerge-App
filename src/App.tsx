@@ -51,6 +51,7 @@ import {
   hasPendingChangelog,
   recordAppLaunch,
 } from './services/changelogPrompt';
+import { reportCurrentUserAppVersion } from './services/appVersionReporter';
 import type { MasterFranchise } from './services/masterAdminAdapter';
 import AdminPinModal from './components/AdminPinModal';
 import { useFranchiseAppName } from './hooks/useFranchiseAppName';
@@ -77,8 +78,7 @@ import { hasSeenFeedbackTutorial, markFeedbackTutorialSeen } from './services/fe
 import FeedbackLauncher from './components/FeedbackLauncher';
 import FeedbackTutorialOverlay, { type FeedbackTutorialTargetRect } from './components/FeedbackTutorialOverlay';
 import FeedbackSubmissionModal from './components/FeedbackSubmissionModal';
-import { listProposals } from './services/proposalsAdapter';
-import { countUnreadWorkflowEvents } from './services/proposalWorkflow';
+import { getWorkflowUnreadCount } from './services/proposalsAdapter';
 import './App.css';
 
 const ProposalForm = lazy(() => import('./pages/ProposalForm'));
@@ -246,6 +246,14 @@ function AppContent() {
   useEffect(() => {
     recordAppLaunch(appVersion);
   }, [appVersion]);
+
+  useEffect(() => {
+    if (!session?.userId) return;
+    void reportCurrentUserAppVersion({
+      userId: session.userId,
+      version: appVersion,
+    });
+  }, [appVersion, session?.userId]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -434,15 +442,13 @@ function AppContent() {
     }
 
     let cancelled = false;
+    const activeFranchiseId = effectiveSession.franchiseId;
+    const activeUserId = effectiveSession.userId;
 
     const loadWorkflowUnreadCount = async () => {
       try {
-        const proposals = await listProposals(effectiveSession.franchiseId);
+        const nextCount = await getWorkflowUnreadCount(activeFranchiseId, activeUserId);
         if (cancelled) return;
-        const nextCount = proposals.reduce(
-          (sum, proposal) => sum + countUnreadWorkflowEvents(proposal, effectiveSession.userId),
-          0
-        );
         setWorkflowUnreadCount(nextCount);
       } catch (error) {
         if (!cancelled) {
@@ -454,7 +460,7 @@ function AppContent() {
     void loadWorkflowUnreadCount();
     const intervalId = window.setInterval(() => {
       void loadWorkflowUnreadCount();
-    }, 30000);
+    }, 120000);
     const handleOnline = () => {
       void loadWorkflowUnreadCount();
     };

@@ -1,4 +1,5 @@
 import pricingData from './pricingData';
+import { removeHardcodedPapDiscountsFromPricing } from '../utils/papDiscounts';
 import {
   loadPricingModel as loadPricingModelRemote,
   loadDefaultFranchisePricing,
@@ -34,7 +35,7 @@ let pricingState: PricingData = deepClone(pricingData);
 const listeners = new Set<(data: PricingData) => void>();
 
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
-  const normalized = deepClone(snapshot);
+  const normalized = removeHardcodedPapDiscountsFromPricing(deepClone(snapshot));
   ensureMasonryFacingCatalogs(normalized, source, defaultSnapshot);
   ensureTileCopingDeckingCatalogs(normalized, source, defaultSnapshot);
   syncLegacyFiberglassPricing(normalized, source);

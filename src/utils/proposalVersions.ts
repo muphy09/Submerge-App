@@ -152,7 +152,6 @@ const COPYABLE_VERSION_FIELDS: Array<keyof Proposal> = [
   'customFeatures',
   'masonry',
   'interiorFinish',
-  'papDiscounts',
   'pricingModelId',
   'pricingModelName',
   'pricingModelFranchiseId',

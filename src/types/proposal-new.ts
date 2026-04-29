@@ -279,7 +279,7 @@ export interface PumpSelection {
   addCost1?: number;
   addCost2?: number;
   autoAddedForSpa?: boolean;
-  autoAddedReason?: 'spa' | 'waterFeature';
+  autoAddedReason?: 'spa' | 'waterFeature' | 'fiberglass';
 }
 
 export interface FilterSelection {

@@ -107,6 +107,18 @@ function CostBreakdownView({
 
   const roundToTwo = (value: number): number =>
     Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+  const EMPTY_CUSTOM_FEATURES_ROW_THRESHOLD = 0.05;
+  const hasSummaryRowContent = (row: { cost: number; items?: CostLineItem[] }): boolean =>
+    roundToTwo(row.cost) !== 0 || (row.items?.length ?? 0) > 0;
+  const shouldHideEmptyCustomFeaturesRow = (row: {
+    label: string;
+    cost: number;
+    items?: CostLineItem[];
+    retail: number;
+  }): boolean =>
+    row.label === 'Custom Features' &&
+    !hasSummaryRowContent(row) &&
+    Math.abs(roundToTwo(row.retail)) <= EMPTY_CUSTOM_FEATURES_ROW_THRESHOLD;
 
   const baseTotals = displayCostBreakdown?.totals || ({} as CostBreakdown['totals']);
   const costBasis =
@@ -214,10 +226,18 @@ function CostBreakdownView({
     { label: 'Startup/Orientation', cost: baseTotals.startupOrientation ?? 0, items: displayCostBreakdown.startupOrientation || [] },
     { label: 'Custom Features', cost: baseTotals.customFeatures ?? 0, items: displayCostBreakdown.customFeatures || [] },
   ];
+  const roundingAdjustmentIndex = (() => {
+    for (let index = categoryRows.length - 1; index >= 0; index -= 1) {
+      if (hasSummaryRowContent(categoryRows[index])) {
+        return index;
+      }
+    }
+    return categoryRows.length - 1;
+  })();
 
   let runningRetailTotal = 0;
   const retailRows = categoryRows.map((row, idx) => {
-    const isLastRow = idx === categoryRows.length - 1;
+    const isRoundingAdjustmentRow = idx === roundingAdjustmentIndex;
     const overrideRetailTotalForRow = (row.items || []).reduce(
       (sum, item) => sum + (getRetailOverride(item) || 0),
       0
@@ -229,8 +249,8 @@ function CostBreakdownView({
     const remainingCostForRow = row.cost - overrideCostForRow;
     let retailValue = roundToTwo(overrideRetailTotalForRow + (remainingCostForRow * safeAdjustedRetailFactor));
 
-    if (isLastRow) {
-      // Nudge the final row to absorb any rounding difference.
+    if (isRoundingAdjustmentRow) {
+      // Nudge the last meaningful row to absorb any rounding difference.
       const targetTotal = safeRetailTarget || runningRetailTotal + retailValue;
       const adjustment = roundToTwo(targetTotal - (runningRetailTotal + retailValue));
       retailValue = roundToTwo(retailValue + adjustment);
@@ -239,6 +259,7 @@ function CostBreakdownView({
     runningRetailTotal += retailValue;
     return { ...row, retail: retailValue };
   });
+  const visibleRetailRows = retailRows.filter((row) => !shouldHideEmptyCustomFeaturesRow(row));
 
   const displayRetailPrice = roundToTwo(retailPrice || (runningRetailTotal + retailAdjustmentsTotal + offContractTotal));
 
@@ -416,7 +437,7 @@ function CostBreakdownView({
     transformOrigin: 'top center',
   };
   const exportSummaryRows = [
-    ...retailRows.map((row) => ({ label: `${row.label}:`, value: formatCurrency(row.retail) })),
+    ...visibleRetailRows.map((row) => ({ label: `${row.label}:`, value: formatCurrency(row.retail) })),
     ...(roundToTwo(offContractTotal) !== 0
       ? [{ label: 'Off Contract Items:', value: formatCurrency(offContractTotal) }]
       : []),
@@ -470,7 +491,7 @@ function CostBreakdownView({
             </div>
           ) : (
             <div className="summary-grid">
-              {retailRows.map((row) => (
+              {visibleRetailRows.map((row) => (
                 <div className="summary-row" key={row.label}>
                   <span>{row.label}:</span>
                   <span>{formatCurrency(row.retail)}</span>

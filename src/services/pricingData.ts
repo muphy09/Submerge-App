@@ -107,19 +107,20 @@ const defaultFiberglassFinishUpgrades = [
 
 const pricingData = {
   // PAP (Preferred Approved Provider) Discount Rates
-  // These are applied as negative line items in various sections
+  // These are admin pricing-model settings. Keep code defaults neutral so
+  // older or partial pricing models do not receive accidental discounts.
   papDiscountRates: {
-    excavation: 0.10, // 10%
-    plumbing: 0.10, // 10%
-    steel: 0.10, // 10%
-    electrical: 0.00, // No discount in Excel
-    shotcrete: 0.10, // 10% (combined labor + material)
-    tileCopingLabor: 0.10, // 10%
-    tileCopingMaterial: 0.10, // 10% (on specific quantities)
-    equipment: 0.10, // 10%
-    interiorFinish: 0.10, // 10%
-    startup: 0.10, // 10%
-    fiberglassShell: 0.20, // Workbook fiberglass shell PAP-equivalent discount
+    excavation: 0.00,
+    plumbing: 0.00,
+    steel: 0.00,
+    electrical: 0.00,
+    shotcrete: 0.00,
+    tileCopingLabor: 0.00,
+    tileCopingMaterial: 0.00,
+    equipment: 0.00,
+    interiorFinish: 0.00,
+    startup: 0.00,
+    fiberglassShell: 0.00,
   },
   // Manual retail adjustments (designer-facing)
   manualAdjustments: {

@@ -516,7 +516,7 @@ function summarizeWarrantySections(sections?: Proposal['warrantySections']) {
 }
 
 function summarizePumpArray(
-  pumps?: Array<{ name?: string | null; autoAddedReason?: 'spa' | 'waterFeature' | null }>
+  pumps?: Array<{ name?: string | null; autoAddedReason?: 'spa' | 'waterFeature' | 'fiberglass' | null }>
 ) {
   if (!Array.isArray(pumps) || pumps.length === 0) return 'None';
   return pumps
@@ -525,6 +525,8 @@ function summarizePumpArray(
       const reason =
         pump?.autoAddedReason === 'spa'
           ? 'auto for spa'
+          : pump?.autoAddedReason === 'fiberglass'
+          ? 'required by fiberglass'
           : pump?.autoAddedReason === 'waterFeature'
           ? 'auto for water feature'
           : '';

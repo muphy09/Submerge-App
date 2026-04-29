@@ -225,6 +225,15 @@
 .master-editor-user-name {
   color: #0f2a4f;
   font-weight: 700;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  word-break: break-word;
+}
+
+.master-editor-user-version {
+  color: #60738a;
+  font-weight: 600;
 }
 
 .master-editor-user-email {

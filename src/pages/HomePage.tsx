@@ -9,6 +9,7 @@ import heroImage from '../../docs/img/newback.jpg';
 import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
 import { getSessionFranchiseId, isMasterActingAsOwnerSession, type UserSession } from '../services/session';
 import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
+import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import {
   acknowledgeFeedbackReply,
   isFeedbackFeatureUnavailableError,
@@ -109,7 +110,7 @@ function HomePage({
           interiorFinish: { ...getDefaultInteriorFinish(), ...(input.interiorFinish || {}) },
           manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
-          papDiscounts: input.papDiscounts || (base as any).papDiscounts,
+          papDiscounts: resolveProposalPapDiscounts(input, (base as any).papDiscounts),
           warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
         };
       };

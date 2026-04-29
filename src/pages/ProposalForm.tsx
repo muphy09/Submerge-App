@@ -90,6 +90,10 @@ import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '.
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
+  normalizePapDiscounts,
+  resolveProposalPapDiscounts,
+} from '../utils/papDiscounts';
+import {
   ensureProposalWorkflow,
   hasVersionSubmissionHistory,
   getVersionRecordStatus,
@@ -100,6 +104,7 @@ import {
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
 import { sanitizeWaterFeatureSelections } from '../utils/waterFeatureCost';
+import { sanitizeProposalSelectionState } from '../utils/proposalSelectionSanitizer';
 
 const normalizeWaterFeatureSelections = (selections: any): WaterFeatureSelection[] => {
   return sanitizeWaterFeatureSelections(selections, pricingData.waterFeatures);
@@ -270,9 +275,42 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     customFeatures: normalizeCustomFeatures(input.customFeatures),
     manualAdjustments: { ...getDefaultManualAdjustments(), ...(input.manualAdjustments || {}) },
     retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
-    papDiscounts: input.papDiscounts || base.papDiscounts,
+    papDiscounts: resolveProposalPapDiscounts(input, base.papDiscounts),
     costBreakdown: input.costBreakdown || base.costBreakdown,
     warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
+  };
+};
+
+const getDefaultAuxiliaryPumpForCurrentPricing = (): Proposal['equipment']['auxiliaryPump'] | null => {
+  const snapshot = getPricingDataSnapshot();
+  const equipmentCatalog = (snapshot as any)?.equipment;
+  const auxiliaryPumpCatalog =
+    equipmentCatalog?.auxiliaryPumps?.length
+      ? equipmentCatalog.auxiliaryPumps
+      : equipmentCatalog?.pumps || [];
+  const isAuxPumpPlaceholder = (name: string) => {
+    const lowered = String(name || '').toLowerCase();
+    return (
+      lowered.includes('no pump') ||
+      lowered.includes('no aux') ||
+      lowered.includes('no auxiliary') ||
+      lowered.includes('no blower')
+    );
+  };
+  const defaultAuxiliaryPump =
+    auxiliaryPumpCatalog.find((pump: any) => pump.defaultAuxiliaryPump) ||
+    auxiliaryPumpCatalog.find((pump: any) => !isAuxPumpPlaceholder(pump.name)) ||
+    auxiliaryPumpCatalog[0];
+  if (!defaultAuxiliaryPump) return null;
+
+  const pumpOverhead = equipmentCatalog?.pumpOverheadMultiplier ?? 1;
+  return {
+    name: defaultAuxiliaryPump.name,
+    model: (defaultAuxiliaryPump as any).model,
+    basePrice: (defaultAuxiliaryPump as any).basePrice,
+    addCost1: (defaultAuxiliaryPump as any).addCost1,
+    addCost2: (defaultAuxiliaryPump as any).addCost2,
+    price: getEquipmentItemCost(defaultAuxiliaryPump as any, pumpOverhead),
   };
 };
 
@@ -347,7 +385,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const readPapDiscountsFromModel = (): PAPDiscounts => {
     const snapshot = getPricingDataSnapshot();
-    return snapshot?.papDiscountRates ? { ...snapshot.papDiscountRates } : getDefaultPAPDiscounts();
+    return normalizePapDiscounts(snapshot?.papDiscountRates || getDefaultPAPDiscounts());
   };
   const readManualAdjustmentsFromModel = (): ManualAdjustments => {
     const snapshot = getPricingDataSnapshot() as any;
@@ -355,8 +393,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       ? { ...snapshot.manualAdjustments }
       : getDefaultManualAdjustments();
   };
-  const [papDiscounts, setPapDiscounts] = useState<PAPDiscounts>(readPapDiscountsFromModel());
-  const papDiscountSourceRef = useRef<'pricingModel' | 'proposal'>('pricingModel');
+  const [, setPapDiscounts] = useState<PAPDiscounts>(readPapDiscountsFromModel());
   const [manualAdjustments, setManualAdjustments] = useState<ManualAdjustments>(readManualAdjustmentsFromModel());
   const manualAdjustmentsSourceRef = useRef<'pricingModel' | 'proposal'>('pricingModel');
   const pricingModelManualAdjustmentsRef = useRef<ManualAdjustments>(readManualAdjustmentsFromModel());
@@ -387,10 +424,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   }, [canOpenCogsBreakdown]);
 
   const syncPapDiscountsFromModel = () => {
-    const snapshot = getPricingDataSnapshot();
-    const nextDiscounts = snapshot?.papDiscountRates ? { ...snapshot.papDiscountRates } : getDefaultPAPDiscounts();
-    setPapDiscounts(nextDiscounts);
-    papDiscountSourceRef.current = 'pricingModel';
+    setPapDiscounts(readPapDiscountsFromModel());
   };
 
   const mergeDesignerAdjustmentsWithModel = (nextModelAdjustments: ManualAdjustments) => {
@@ -441,9 +475,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     if (modelId && !skipRemote) {
       await setActivePricingModel(modelId, modelFranchiseId || undefined);
     }
-    if (papDiscountSourceRef.current !== 'proposal' || markDirty) {
-      syncPapDiscountsFromModel();
-    }
+    syncPapDiscountsFromModel();
 
     const nextModelAdjustments = readManualAdjustmentsFromModel();
     pricingModelManualAdjustmentsRef.current = nextModelAdjustments;
@@ -729,8 +761,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
-      if (snapshot?.papDiscountRates && papDiscountSourceRef.current === 'pricingModel') {
-        setPapDiscounts(snapshot.papDiscountRates as PAPDiscounts);
+      if (snapshot?.papDiscountRates) {
+        setPapDiscounts(normalizePapDiscounts(snapshot.papDiscountRates as PAPDiscounts));
       }
       if (snapshot?.manualAdjustments && manualAdjustmentsSourceRef.current === 'pricingModel') {
         pricingModelManualAdjustmentsRef.current = snapshot.manualAdjustments as ManualAdjustments;
@@ -836,7 +868,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           }
         }
 
-        return updated ? { ...prev, equipment: nextEquipment } : prev;
+        return updated
+          ? sanitizeProposalSelectionState({ ...prev, equipment: nextEquipment } as Proposal)
+          : prev;
       });
       setHasEdits(true);
     } else if (spaRemoved && ((proposal.equipment?.spaLights?.length ?? 0) > 0 || hasAutoAddedAuxPump)) {
@@ -871,7 +905,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           updated = true;
         }
 
-        return updated ? { ...prev, equipment: nextEquipment } : prev;
+        return updated
+          ? sanitizeProposalSelectionState({ ...prev, equipment: nextEquipment } as Proposal)
+          : prev;
       });
       setHasEdits(true);
     }
@@ -924,19 +960,21 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                   hasSpa: (prev.poolSpecs?.spaType ?? 'none') !== 'none',
                 }
               );
-        return { ...prev, equipment: nextEquipment };
+        return sanitizeProposalSelectionState({ ...prev, equipment: nextEquipment } as Proposal);
       });
       setHasEdits(true);
     } else if (poolRemoved && (proposal.equipment?.poolLights?.length ?? 0) > 0) {
-      setProposal(prev => ({
-        ...prev,
-        equipment: {
-          ...(prev.equipment || getDefaultEquipment()),
-          includePoolLights: false,
-          poolLights: [],
-          numberOfLights: 0,
-        },
-      }));
+      setProposal(prev =>
+        sanitizeProposalSelectionState({
+          ...prev,
+          equipment: {
+            ...(prev.equipment || getDefaultEquipment()),
+            includePoolLights: false,
+            poolLights: [],
+            numberOfLights: 0,
+          },
+        } as Proposal)
+      );
       setHasEdits(true);
     }
 
@@ -965,7 +1003,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       if ((baseEquipment.poolLights?.length ?? 0) > 0) return prev;
       if (baseEquipment.applyCustomPackageDefaultPoolLights === false) return prev;
 
-      return {
+      return sanitizeProposalSelectionState({
         ...prev,
         equipment: {
           ...baseEquipment,
@@ -975,7 +1013,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           numberOfLights:
             packageSeed.numberOfLights ?? Math.max((packageSeed.poolLights?.length ?? 1) - 1, 0),
         },
-      };
+      } as Proposal);
     });
     setHasEdits(true);
   }, [
@@ -1015,7 +1053,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       }
 
       const normalizedPumpQuantity = Math.max(activePackage.includedPumpQuantity ?? 0, 0);
-      return {
+      return sanitizeProposalSelectionState({
         ...prev,
         equipment: {
           ...baseEquipment,
@@ -1024,7 +1062,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           auxiliaryPumps: [],
           auxiliaryPump: undefined,
         } as Proposal['equipment'],
-      };
+      } as Proposal);
     });
     setHasEdits(true);
   }, [proposal.equipment]);
@@ -1065,13 +1103,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           const nextAdditionalSelections = getAdditionalPumpSelections(baseEquipment).filter(
             (pump) => pump?.autoAddedReason !== 'waterFeature'
           );
-          return {
+          return sanitizeProposalSelectionState({
             ...prev,
             equipment: {
               ...baseEquipment,
               additionalPumps: nextAdditionalSelections,
             } as Proposal['equipment'],
-          };
+          } as Proposal);
         });
         setHasEdits(true);
       }
@@ -1090,13 +1128,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
         const currentAdditionalSelections = getAdditionalPumpSelections(baseEquipment);
         const nextAdditionalSelections = [...currentAdditionalSelections, selection];
-        return {
+        return sanitizeProposalSelectionState({
           ...prev,
           equipment: {
             ...baseEquipment,
             additionalPumps: nextAdditionalSelections,
           } as Proposal['equipment'],
-        };
+        } as Proposal);
       });
       setHasEdits(true);
       return;
@@ -1107,13 +1145,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
         const currentAdditionalSelections = getAdditionalPumpSelections(baseEquipment);
         const nextAdditionalSelections = currentAdditionalSelections.filter((pump) => pump?.autoAddedReason !== 'waterFeature');
-        return {
+        return sanitizeProposalSelectionState({
           ...prev,
           equipment: {
             ...baseEquipment,
             additionalPumps: nextAdditionalSelections,
           } as Proposal['equipment'],
-        };
+        } as Proposal);
       });
       setHasEdits(true);
     }
@@ -1314,14 +1352,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         setSelectedPricingModelId(sanitizedTarget.pricingModelId || null);
         setSelectedPricingModelName(sanitizedTarget.pricingModelName || null);
         setCurrentSection(0);
-        // Load PAP discounts if they exist
-        if (sanitizedTarget.papDiscounts) {
-          setPapDiscounts(sanitizedTarget.papDiscounts);
-          papDiscountSourceRef.current = 'proposal';
-        } else {
-          papDiscountSourceRef.current = 'pricingModel';
-          setPapDiscounts(readPapDiscountsFromModel());
-        }
+        setPapDiscounts(readPapDiscountsFromModel());
         if (sanitizedTarget.manualAdjustments) {
           setManualAdjustments(sanitizedTarget.manualAdjustments);
           manualAdjustmentsSourceRef.current = 'proposal';
@@ -1345,12 +1376,44 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     }
   };
 
+  const sanitizeCurrentProposalState = (input: Proposal): Proposal => {
+    const selectedPackage = getSelectedEquipmentPackage(input.equipment as any);
+    const allowDependencyAuxiliaryPump =
+      !selectedPackage ||
+      !isFixedEquipmentPackage(selectedPackage) ||
+      packageAllowsAdditionalPumps(selectedPackage);
+
+    return sanitizeProposalSelectionState(input, {
+      defaultAuxiliaryPump: allowDependencyAuxiliaryPump
+        ? getDefaultAuxiliaryPumpForCurrentPricing() || undefined
+        : undefined,
+    });
+  };
+
   const updateProposal = (section: string, data: any) => {
-    setProposal(prev => ({
-      ...prev,
-      [section]: data,
-      lastModified: new Date().toISOString(),
-    }));
+    setProposal(prev => {
+      const nextProposal = {
+        ...prev,
+        [section]: data,
+        lastModified: new Date().toISOString(),
+      } as Proposal;
+
+      if (
+        section === 'poolSpecs' &&
+        (prev.poolSpecs?.spaType ?? 'none') !== 'none' &&
+        (data?.spaType ?? 'none') === 'none'
+      ) {
+        nextProposal.plumbing = {
+          ...(prev.plumbing || getDefaultPlumbing()),
+          runs: {
+            ...((prev.plumbing || getDefaultPlumbing()).runs || {}),
+            spaRun: 0,
+          },
+        };
+      }
+
+      return sanitizeCurrentProposalState(nextProposal);
+    });
     if (!isReadOnlyBuilderView) {
       setHasEdits(true);
     }
@@ -1400,7 +1463,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         nextRuns[field] = 0;
       });
 
-      return {
+      return sanitizeCurrentProposalState({
         ...prev,
         equipment: {
           ...nextEquipment,
@@ -1419,7 +1482,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           },
         },
         lastModified: new Date().toISOString(),
-      };
+      } as Proposal);
     });
     setHasEdits(true);
   };
@@ -1485,7 +1548,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   const calculateTotals = (input: Partial<Proposal> = proposal): Proposal => {
     const normalized = mergeWithDefaults(applySessionCommissionRates(input));
-    const result = MasterPricingEngine.calculateCompleteProposal(normalized, papDiscounts);
+    const modelPapDiscounts = readPapDiscountsFromModel();
+    const result = MasterPricingEngine.calculateCompleteProposal(normalized, modelPapDiscounts);
     const versionId = input.versionId || editingVersionId || 'original';
     const versionName =
       input.versionName ||
@@ -1506,7 +1570,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         normalized.pricingModelId
           ? normalized.pricingModelFranchiseId || normalized.franchiseId || getSessionFranchiseId()
           : undefined,
-      papDiscounts,
+      papDiscounts: modelPapDiscounts,
       costBreakdown: result.costBreakdown,
       pricing: result.pricing,
       subtotal: result.subtotal,
@@ -1554,7 +1618,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       setIsSaving(true);
     }
     try {
-      let proposalToSave: Partial<Proposal> = proposal;
+      let proposalToSave: Partial<Proposal> = sanitizeCurrentProposalState(proposal as Proposal);
 
       if (!proposalToSave.pricingModelId && defaultPricingModelId) {
         const def = pricingModels.find((m) => m.id === defaultPricingModelId);
@@ -2006,7 +2070,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(
     mergeWithDefaults(applySessionCommissionRates(proposal)),
-    papDiscounts
+    readPapDiscountsFromModel()
   );
   const proposalSummaryTooltip = !isReadOnlyBuilderView && isOffline
     ? 'Offline: opening the summary will save locally and sync later.'
@@ -2352,7 +2416,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         <CostBreakdownPage
           proposal={applySessionCommissionRates({
             ...proposal,
-            papDiscounts,
+            papDiscounts: readPapDiscountsFromModel(),
             manualAdjustments: proposal.manualAdjustments,
           }) as Proposal}
           onClose={() => setShowCostBreakdownPage(false)}

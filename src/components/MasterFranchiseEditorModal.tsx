@@ -3,6 +3,7 @@ import type { Proposal } from '../types/proposal-new';
 import TempPasswordModal from './TempPasswordModal';
 import './MasterFranchiseEditorModal.css';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
+import { formatReportedAppVersion } from '../services/appVersionReporter';
 import {
   saveMasterFranchiseSettings,
   type MasterFranchise,
@@ -515,11 +516,15 @@ function MasterFranchiseEditorModal({
     const transferOptions = transferEligibleUsers.filter((candidate) => candidate.id !== user.id);
     const hasTransferOptions = transferOptions.length > 0;
     const isTransferBlocked = requiresTransfer && !hasTransferOptions;
+    const reportedVersionLabel = formatReportedAppVersion(user.currentAppVersion);
 
     return (
     <div className={`master-editor-user-row role-${user.role}`} key={user.id}>
       <div className="master-editor-user-meta">
-        <div className="master-editor-user-name">{getDisplayName(user)}</div>
+        <div className="master-editor-user-name">
+          <span>{getDisplayName(user)}</span>
+          {reportedVersionLabel && <span className="master-editor-user-version">({reportedVersionLabel})</span>}
+        </div>
         <div className="master-editor-user-email">{user.email}</div>
         {options.canRemoveDesigner && (
           <div className="master-editor-user-transfer">

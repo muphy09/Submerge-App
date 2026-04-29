@@ -25,6 +25,7 @@ import { CURRENT_CONTRACT_TEMPLATE_REVISION } from '../services/contractTemplate
 import { getEquipmentItemCost } from './equipmentCost';
 import { getDefaultCleanerOption, getNoCleanerOption } from './cleanerDefaults';
 import { getNoPumpSelection } from './pumpDefaults';
+import { normalizePapDiscounts } from './papDiscounts';
 
 export function getDefaultPoolSpecs(): PoolSpecs {
   return {
@@ -427,7 +428,7 @@ export function getDefaultProposal(): Partial<Proposal> {
     interiorFinish: getDefaultInteriorFinish(),
     manualAdjustments: getDefaultManualAdjustments(),
     retailAdjustments: getDefaultRetailAdjustments(),
-    papDiscounts: { ...(pricingData.papDiscountRates || getDefaultPAPDiscounts()) },
+    papDiscounts: normalizePapDiscounts(pricingData.papDiscountRates || getDefaultPAPDiscounts()),
     costBreakdown: getDefaultCostBreakdown(),
     subtotal: 0,
     taxRate: 0,

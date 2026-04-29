@@ -39,6 +39,7 @@ interface CogsExportProps {
 interface ExportRow {
   label: string;
   value: number;
+  items?: CostLineItem[];
 }
 
 const PX_PER_INCH = 96;
@@ -51,12 +52,20 @@ const WARRANTY_PAGE_SAFETY_BUFFER_PX = 14;
 
 const roundToTwo = (value: number): number =>
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+const EMPTY_CUSTOM_FEATURES_ROW_THRESHOLD = 0.05;
 
 const formatCurrency = (value: number): string =>
   `$${(Number.isFinite(value) ? value : 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+const hasSummaryRowContent = (row: Pick<ExportRow, 'value' | 'items'>): boolean =>
+  roundToTwo(row.value) !== 0 || (row.items?.length ?? 0) > 0;
+
+const shouldHideEmptyCustomFeaturesRow = (row: Pick<ExportRow, 'label' | 'value' | 'items'>): boolean =>
+  row.label === 'Custom Features' &&
+  !hasSummaryRowContent(row) &&
+  Math.abs(roundToTwo(row.value)) <= EMPTY_CUSTOM_FEATURES_ROW_THRESHOLD;
 
 const normalizedRetailAdjustments = (input?: RetailAdjustment[]): RetailAdjustment[] =>
   (Array.isArray(input) ? input : []).map((adjustment) => ({
@@ -369,35 +378,39 @@ const toCostRows = (costBreakdown: CostBreakdown, proposal?: Partial<Proposal>):
   const copingDeckingMaterialLabel = shouldUseCopingOnlyLabels ? 'Coping Material' : 'Coping/Decking Material';
 
   return [
-    { label: 'Plans & Engineering', value: baseTotals.plansAndEngineering ?? 0 },
-    { label: 'Layout', value: baseTotals.layout ?? 0 },
-    { label: 'Permit', value: baseTotals.permit ?? 0 },
-    { label: 'Excavation', value: baseTotals.excavation ?? 0 },
-    { label: 'Plumbing', value: baseTotals.plumbing ?? 0 },
-    { label: 'Gas', value: baseTotals.gas ?? 0 },
-    { label: 'Steel', value: baseTotals.steel ?? 0 },
-    { label: 'Electrical', value: baseTotals.electrical ?? 0 },
-    { label: 'Shotcrete Labor', value: baseTotals.shotcreteLabor ?? 0 },
-    { label: 'Shotcrete Material', value: baseTotals.shotcreteMaterial ?? 0 },
-    { label: 'Tile Labor', value: baseTotals.tileLabor ?? 0 },
-    { label: 'Tile Material', value: baseTotals.tileMaterial ?? 0 },
-    { label: copingDeckingLaborLabel, value: baseTotals.copingDeckingLabor ?? 0 },
-    { label: copingDeckingMaterialLabel, value: baseTotals.copingDeckingMaterial ?? 0 },
+    { label: 'Plans & Engineering', value: baseTotals.plansAndEngineering ?? 0, items: costBreakdown.plansAndEngineering || [] },
+    { label: 'Layout', value: baseTotals.layout ?? 0, items: costBreakdown.layout || [] },
+    { label: 'Permit', value: baseTotals.permit ?? 0, items: costBreakdown.permit || [] },
+    { label: 'Excavation', value: baseTotals.excavation ?? 0, items: costBreakdown.excavation || [] },
+    { label: 'Plumbing', value: baseTotals.plumbing ?? 0, items: costBreakdown.plumbing || [] },
+    { label: 'Gas', value: baseTotals.gas ?? 0, items: costBreakdown.gas || [] },
+    { label: 'Steel', value: baseTotals.steel ?? 0, items: costBreakdown.steel || [] },
+    { label: 'Electrical', value: baseTotals.electrical ?? 0, items: costBreakdown.electrical || [] },
+    { label: 'Shotcrete Labor', value: baseTotals.shotcreteLabor ?? 0, items: costBreakdown.shotcreteLabor || [] },
+    { label: 'Shotcrete Material', value: baseTotals.shotcreteMaterial ?? 0, items: costBreakdown.shotcreteMaterial || [] },
+    { label: 'Tile Labor', value: baseTotals.tileLabor ?? 0, items: costBreakdown.tileLabor || [] },
+    { label: 'Tile Material', value: baseTotals.tileMaterial ?? 0, items: costBreakdown.tileMaterial || [] },
+    { label: copingDeckingLaborLabel, value: baseTotals.copingDeckingLabor ?? 0, items: costBreakdown.copingDeckingLabor || [] },
+    { label: copingDeckingMaterialLabel, value: baseTotals.copingDeckingMaterial ?? 0, items: costBreakdown.copingDeckingMaterial || [] },
     {
       label: 'Stone/Rockwork',
       value: (baseTotals.stoneRockworkLabor ?? 0) + (baseTotals.stoneRockworkMaterial ?? 0),
+      items: [
+        ...(costBreakdown.stoneRockworkLabor || []),
+        ...(costBreakdown.stoneRockworkMaterial || []),
+      ],
     },
-    { label: 'Drainage', value: baseTotals.drainage ?? 0 },
-    { label: 'Equipment Ordered', value: baseTotals.equipmentOrdered ?? 0 },
-    { label: 'Equipment Set', value: baseTotals.equipmentSet ?? 0 },
-    { label: 'Water Features', value: baseTotals.waterFeatures ?? 0 },
-    { label: 'Cleanup', value: baseTotals.cleanup ?? 0 },
-    { label: 'Interior Finish', value: baseTotals.interiorFinish ?? 0 },
-    { label: 'Water Truck', value: baseTotals.waterTruck ?? 0 },
-    { label: 'Fiberglass Shell', value: baseTotals.fiberglassShell ?? 0 },
-    { label: 'Fiberglass Install', value: baseTotals.fiberglassInstall ?? 0 },
-    { label: 'Startup/Orientation', value: baseTotals.startupOrientation ?? 0 },
-    { label: 'Custom Features', value: baseTotals.customFeatures ?? 0 },
+    { label: 'Drainage', value: baseTotals.drainage ?? 0, items: costBreakdown.drainage || [] },
+    { label: 'Equipment Ordered', value: baseTotals.equipmentOrdered ?? 0, items: costBreakdown.equipmentOrdered || [] },
+    { label: 'Equipment Set', value: baseTotals.equipmentSet ?? 0, items: costBreakdown.equipmentSet || [] },
+    { label: 'Water Features', value: baseTotals.waterFeatures ?? 0, items: costBreakdown.waterFeatures || [] },
+    { label: 'Cleanup', value: baseTotals.cleanup ?? 0, items: costBreakdown.cleanup || [] },
+    { label: 'Interior Finish', value: baseTotals.interiorFinish ?? 0, items: costBreakdown.interiorFinish || [] },
+    { label: 'Water Truck', value: baseTotals.waterTruck ?? 0, items: costBreakdown.waterTruck || [] },
+    { label: 'Fiberglass Shell', value: baseTotals.fiberglassShell ?? 0, items: costBreakdown.fiberglassShell || [] },
+    { label: 'Fiberglass Install', value: baseTotals.fiberglassInstall ?? 0, items: costBreakdown.fiberglassInstall || [] },
+    { label: 'Startup/Orientation', value: baseTotals.startupOrientation ?? 0, items: costBreakdown.startupOrientation || [] },
+    { label: 'Custom Features', value: baseTotals.customFeatures ?? 0, items: costBreakdown.customFeatures || [] },
   ];
 };
 
@@ -478,16 +491,43 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
     const safeAdjustedRetailFactor = Number.isFinite(adjustedRetailFactor)
       ? adjustedRetailFactor
       : retailFactor;
+    const roundingAdjustmentIndex = (() => {
+      for (let index = baseRows.length - 1; index >= 0; index -= 1) {
+        if (hasSummaryRowContent(baseRows[index])) {
+          return index;
+        }
+      }
+      return baseRows.length - 1;
+    })();
 
     let runningRetailTotal = 0;
-    const retailRows = baseRows.map((row) => {
-      const retailValue = roundToTwo(row.value * safeAdjustedRetailFactor);
+    const retailRows = baseRows.map((row, index) => {
+      const isRoundingAdjustmentRow = index === roundingAdjustmentIndex;
+      const overrideRetailTotalForRow = (row.items || []).reduce(
+        (sum, item) => sum + (getRetailOverride(item) || 0),
+        0
+      );
+      const overrideCostForRow = (row.items || []).reduce(
+        (sum, item) => sum + (getRetailOverride(item) !== null ? (item.total ?? 0) : 0),
+        0
+      );
+      const remainingCostForRow = row.value - overrideCostForRow;
+      let retailValue = roundToTwo(overrideRetailTotalForRow + (remainingCostForRow * safeAdjustedRetailFactor));
+
+      if (isRoundingAdjustmentRow) {
+        const targetTotal = retailTarget || runningRetailTotal + retailValue;
+        const adjustment = roundToTwo(targetTotal - (runningRetailTotal + retailValue));
+        retailValue = roundToTwo(retailValue + adjustment);
+      }
+
       runningRetailTotal += retailValue;
       return {
         label: row.label,
         value: retailValue,
+        items: row.items,
       };
     });
+    const visibleRetailRows = retailRows.filter((row) => !shouldHideEmptyCustomFeaturesRow(row));
 
     const adjustmentRows = adjustments.map((adjustment, index) => ({
       label: adjustment.name.trim() || `Line Item ${index + 1}`,
@@ -497,7 +537,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
       roundToTwo(offContractTotal) !== 0
         ? [{ label: 'Off Contract Items', value: offContractTotal }]
         : [];
-    const combined = [...retailRows, ...offContractRows, ...adjustmentRows];
+    const combined = [...visibleRetailRows, ...offContractRows, ...adjustmentRows];
     const split = Math.ceil(combined.length / 2);
 
     return {
