@@ -42,6 +42,13 @@ const defaultExcavationRaisedBondBeamRows = [
   { id: 'rbb-36', rbbSize: '36" RBB', height: 36, price: 10 },
 ];
 
+const defaultExcavationExposedPoolWallRows = defaultExcavationRaisedBondBeamRows.map((row) => ({
+  id: `exposed-pool-wall-${row.height}`,
+  rbbSize: `${row.height}" Out of Ground`,
+  height: row.height,
+  price: row.price,
+}));
+
 const defaultExcavationBaseRanges = defaultExcavationBasePricingRows
   .filter((row) => row.kind === 'range')
   .map(({ max, price }) => ({ max, price }));
@@ -51,6 +58,9 @@ const defaultExcavationOver1000Sqft =
 
 const getDefaultExcavationRaisedBondBeamPrice = (height: number) =>
   defaultExcavationRaisedBondBeamRows.find((row) => row.height === height)?.price ?? 0;
+
+const getDefaultExcavationExposedPoolWallPrice = (height: number) =>
+  defaultExcavationExposedPoolWallRows.find((row) => row.height === height)?.price ?? 0;
 
 const defaultFiberglassSmallModels = [
   { name: 'Caeser', shellPrice: 11325, freight: 950, crane: 550, install: 9000, gravel: 1900 },
@@ -146,12 +156,19 @@ const pricingData = {
     over1000Sqft: defaultExcavationOver1000Sqft,
     additional6InchDepth: 90,
     raisedBondBeamTable: defaultExcavationRaisedBondBeamRows.map((row) => ({ ...row })),
+    exposedPoolWallFormingTable: defaultExcavationExposedPoolWallRows.map((row) => ({ ...row })),
     rbb6: getDefaultExcavationRaisedBondBeamPrice(6),
     rbb12: getDefaultExcavationRaisedBondBeamPrice(12),
     rbb18: getDefaultExcavationRaisedBondBeamPrice(18),
     rbb24: getDefaultExcavationRaisedBondBeamPrice(24),
     rbb30: getDefaultExcavationRaisedBondBeamPrice(30),
     rbb36: getDefaultExcavationRaisedBondBeamPrice(36),
+    exposedPoolWall6: getDefaultExcavationExposedPoolWallPrice(6),
+    exposedPoolWall12: getDefaultExcavationExposedPoolWallPrice(12),
+    exposedPoolWall18: getDefaultExcavationExposedPoolWallPrice(18),
+    exposedPoolWall24: getDefaultExcavationExposedPoolWallPrice(24),
+    exposedPoolWall30: getDefaultExcavationExposedPoolWallPrice(30),
+    exposedPoolWall36: getDefaultExcavationExposedPoolWallPrice(36),
     baseSpa: 200,
     raisedSpa: 350,
     sitePrep: 200,
@@ -194,6 +211,7 @@ const pricingData = {
     manifold: 175,
     stripForms: 700,
     stripFormsRbbAdditional: 2.5,
+    exposedPoolWallStripFormsAdditional: 2.5,
     cleanerPerFt: 3.25,
     autoFillPerFt: 3.5,
     additionalSkimmer: 275,
@@ -262,6 +280,7 @@ const pricingData = {
     poolBase: 25,
     spaBase: 450,
     fourBarBeam: 100,
+    poolBonding: 500,
     raisedSpa: 150,
     stepsPerLnft: 8,
     tanningShelf: 275,

@@ -40,6 +40,7 @@ function normalizePricingState(snapshot: PricingData, source?: any): PricingData
   ensureTileCopingDeckingCatalogs(normalized, source, defaultSnapshot);
   syncLegacyFiberglassPricing(normalized, source);
   syncLegacyMiscPricing(normalized, source);
+  syncOutOfGroundPlumbingPricing(normalized, source);
   syncExcavationAdminTables(normalized, source);
   syncBlowerCatalog(normalized);
   return normalized;
@@ -163,6 +164,22 @@ function syncLegacyMiscPricing(target: PricingData, source?: any) {
   if (resolvedWarranty !== undefined) {
     target.misc.startup.fiveYearWarranty = resolvedWarranty;
     target.misc.startup.premium = resolvedWarranty;
+  }
+}
+
+function syncOutOfGroundPlumbingPricing(target: PricingData, source?: any) {
+  const sourcePlumbing = source?.plumbing && typeof source.plumbing === 'object' ? source.plumbing : undefined;
+  const targetPlumbing = (target as any).plumbing;
+  if (!targetPlumbing || typeof targetPlumbing !== 'object') {
+    return;
+  }
+
+  if (
+    sourcePlumbing &&
+    !Number.isFinite(Number(sourcePlumbing.exposedPoolWallStripFormsAdditional)) &&
+    Number.isFinite(Number(sourcePlumbing.stripFormsRbbAdditional))
+  ) {
+    targetPlumbing.exposedPoolWallStripFormsAdditional = Number(sourcePlumbing.stripFormsRbbAdditional);
   }
 }
 
@@ -307,6 +324,48 @@ function buildRaisedBondBeamTableFromTable(tableRows: any[], excavation: any) {
   return buildRaisedBondBeamTableRows(pricesByHeight);
 }
 
+function buildExposedPoolWallFormingTableRows(pricesByHeight: Map<number, number>) {
+  return EXCAVATION_RBB_HEIGHTS.map((height) => ({
+    id: `exposed-pool-wall-${height}`,
+    rbbSize: `${height}" Out of Ground`,
+    height,
+    price: toFiniteNumber(pricesByHeight.get(height)),
+  }));
+}
+
+function buildExposedPoolWallFormingTableFromFallback(rows: any[], excavation: any) {
+  const pricesByHeight = new Map<number, number>();
+  EXCAVATION_RBB_HEIGHTS.forEach((height) => {
+    pricesByHeight.set(
+      height,
+      toFiniteNumber(excavation?.[`exposedPoolWall${height}`], toFiniteNumber(excavation?.[`rbb${height}`]))
+    );
+  });
+
+  (rows || []).forEach((row, index) => {
+    const height = parseExcavationRbbHeight(row?.height ?? row?.rbbSize, EXCAVATION_RBB_HEIGHTS[index]);
+    if (height === null) {
+      return;
+    }
+    pricesByHeight.set(height, toFiniteNumber(row?.price, pricesByHeight.get(height) ?? 0));
+  });
+
+  return buildExposedPoolWallFormingTableRows(pricesByHeight);
+}
+
+function buildExposedPoolWallFormingTableFromRaisedBondBeam(raisedBondBeamTable: any[]) {
+  const pricesByHeight = new Map<number, number>();
+  (raisedBondBeamTable || []).forEach((row, index) => {
+    const height = parseExcavationRbbHeight(row?.height ?? row?.rbbSize, EXCAVATION_RBB_HEIGHTS[index]);
+    if (height === null) {
+      return;
+    }
+    pricesByHeight.set(height, toFiniteNumber(row?.price));
+  });
+
+  return buildExposedPoolWallFormingTableRows(pricesByHeight);
+}
+
 function syncExcavationAdminTables(target: PricingData, source?: any) {
   const targetExcavation = (target as any).excavation;
   if (!targetExcavation || typeof targetExcavation !== 'object') {
@@ -340,12 +399,28 @@ function syncExcavationAdminTables(target: PricingData, source?: any) {
     }
     targetExcavation[`rbb${height}`] = toFiniteNumber(row?.price);
   });
+
+  const exposedPoolWallFormingTable = Array.isArray(sourceExcavation?.exposedPoolWallFormingTable)
+    ? buildExposedPoolWallFormingTableFromFallback(sourceExcavation.exposedPoolWallFormingTable, targetExcavation)
+    : buildExposedPoolWallFormingTableFromRaisedBondBeam(raisedBondBeamTable);
+  targetExcavation.exposedPoolWallFormingTable = exposedPoolWallFormingTable;
+  exposedPoolWallFormingTable.forEach((row: any) => {
+    const height = parseExcavationRbbHeight(row?.height);
+    if (height === null) {
+      return;
+    }
+    targetExcavation[`exposedPoolWall${height}`] = toFiniteNumber(row?.price);
+  });
 }
 
 function isExcavationAdminTablePath(path: (string | number)[]) {
   return (
     path[0] === 'excavation' &&
-    (path[1] === 'baseExcavationTable' || path[1] === 'raisedBondBeamTable')
+    (
+      path[1] === 'baseExcavationTable' ||
+      path[1] === 'raisedBondBeamTable' ||
+      path[1] === 'exposedPoolWallFormingTable'
+    )
   );
 }
 

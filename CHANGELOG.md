@@ -1,10 +1,16 @@
 ## [2.3.9] - 4/28/26
+### Admin Options
+- Added Pool Bonding charge to Steel category
+    - Configurable in Admin Panel (Default $500)
+- Out of Ground Forming cost can be independantly edited in the Admin Pricing editor
+-----
+## [2.3.8] - 4/28/26
 ### PAP Discount Fix
 - Removed accidental hardcoded PAP discounts from Pricing Engine math
 ### Book Keeper Tab
 - Swapped visual style of Book Keeper to new UX format (in progress)
 -----
-## [2.3.8] - 4/22/26
+## [2.3.7] - 4/22/26
 ### Fixes
 - Items automatically added (like a Blower for a Spa) are now also removed if the (Spa) was removed
     - Does not apply if the item was manually added beforehand
@@ -12,11 +18,11 @@
 - Selected Version in Proposal Summary now has a purple background to distinguish selection
 - Proposal Versions column can be scrolled cleanly
 ---
-## [2.3.7] - 4/21/26
+## [2.3.6] - 4/21/26
 ### Hotfix
 - Proposal discount UI was not applying as soon as the discount was entered
 ----
-## [2.3.6] - 4/21/26
+## [2.3.5] - 4/21/26
 ### Proposal Versions
 - Completely overhauled Proposal Versions and the workflow associated with them
     - Proposal versions are now completely independant of each other and do not rely on an 'Active' state

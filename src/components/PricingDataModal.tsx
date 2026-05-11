@@ -840,6 +840,26 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     []
   );
+  const excavationExposedPoolWallFields: ListField[] = useMemo(
+    () => [
+      {
+        key: 'rbbSize',
+        label: 'Height',
+        type: 'text',
+        readOnly: true,
+        tooltip: 'Fixed out of ground forming height billed per linear foot.',
+      },
+      {
+        key: 'price',
+        label: 'Cost',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        tooltip: 'Out of Ground / Exposed Pool Wall forming cost applied per linear foot for this height.',
+      },
+    ],
+    []
+  );
   const bubblerFields: ListField[] = useMemo(
     () => [
       ...waterFeatureFields,
@@ -1775,6 +1795,32 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               },
             ],
           },
+          {
+            title: 'Out of Ground forming (per lnft)',
+            lists: [
+              {
+                title: 'Out of Ground forming rates',
+                path: ['excavation', 'exposedPoolWallFormingTable'],
+                addLabel: 'Add Out of Ground size',
+                allowAdd: false,
+                allowRemove: false,
+                variant: 'table',
+                fields: excavationExposedPoolWallFields,
+              },
+            ],
+          },
+          {
+            title: 'Out of Ground strip forms',
+            scalars: [
+              {
+                label: 'Out of Ground strip forms additional',
+                path: ['plumbing', 'exposedPoolWallStripFormsAdditional'],
+                type: 'number',
+                tooltip: 'Additional strip forms cost per LNFT of Out of Ground / Exposed Pool Wall. This is independent from the RBB strip forms additional rate.',
+                prefix: '$',
+              },
+            ],
+          },
         ],
       },
       {
@@ -2243,6 +2289,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 path: ['steel', 'fourBarBeam'],
                 type: 'number',
                 tooltip: 'Added once for the pool.',
+                prefix: '$',
+              },
+              {
+                label: 'Pool bonding',
+                path: ['steel', 'poolBonding'],
+                type: 'number',
+                tooltip: 'Added once per pool and billed under Steel.',
                 prefix: '$',
               },
               {
@@ -3487,6 +3540,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       data,
       additionalDeckingFields,
       excavationBaseTableFields,
+      excavationExposedPoolWallFields,
       excavationRaisedBondBeamFields,
       fixedTileCopingRateFields,
       masonryFacingFields,

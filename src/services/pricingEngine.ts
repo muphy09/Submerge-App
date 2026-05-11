@@ -234,8 +234,11 @@ export class ExcavationCalculations {
 
     (excavation.exposedPoolWallLevels ?? []).forEach((level) => {
       if (level.length > 0) {
-        const priceKey = `rbb${level.height}` as keyof typeof prices;
-        const unitPrice = prices[priceKey] as number;
+        const exposedPrice = (prices as any)[`exposedPoolWall${level.height}`];
+        const rbbFallbackPrice = (prices as any)[`rbb${level.height}`];
+        const unitPrice = Number.isFinite(Number(exposedPrice))
+          ? Number(exposedPrice)
+          : Number(rbbFallbackPrice) || 0;
         items.push({
           category: 'Excavation',
           description: 'Exposed Pool Wall forming',
@@ -637,13 +640,18 @@ export class PlumbingCalculations {
         total: prices.stripFormsRbbAdditional * rbbTotalLnft,
       });
     }
-    if (exposedPoolWallTotalLnft > 0 && (prices.stripFormsRbbAdditional ?? 0) > 0) {
+    const exposedPoolWallStripFormsAdditional = Number.isFinite(
+      Number((prices as any).exposedPoolWallStripFormsAdditional)
+    )
+      ? Number((prices as any).exposedPoolWallStripFormsAdditional)
+      : prices.stripFormsRbbAdditional ?? 0;
+    if (exposedPoolWallTotalLnft > 0 && exposedPoolWallStripFormsAdditional > 0) {
       items.push({
         category: 'Plumbing',
         description: 'Exposed Pool Wall Strip Forms',
-        unitPrice: prices.stripFormsRbbAdditional,
+        unitPrice: exposedPoolWallStripFormsAdditional,
         quantity: exposedPoolWallTotalLnft,
-        total: prices.stripFormsRbbAdditional * exposedPoolWallTotalLnft,
+        total: exposedPoolWallStripFormsAdditional * exposedPoolWallTotalLnft,
       });
     }
 
@@ -984,6 +992,16 @@ export class SteelCalculations {
       quantity: 1,
       total: prices.fourBarBeam,
     });
+
+    if ((prices.poolBonding ?? 0) > 0) {
+      items.push({
+        category: 'Steel',
+        description: 'Pool Bonding',
+        unitPrice: prices.poolBonding,
+        quantity: 1,
+        total: prices.poolBonding,
+      });
+    }
 
     // Spa base
     if (isGuniteSpa && hasSpa) {
