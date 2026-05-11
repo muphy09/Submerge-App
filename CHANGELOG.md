@@ -1,4 +1,4 @@
-## [2.3.9] - 4/28/26
+## [2.3.9] - 5/10/26
 ### Admin Options
 - Added Pool Bonding charge to Steel category
     - Configurable in Admin Panel (Default $500)
