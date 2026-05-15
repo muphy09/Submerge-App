@@ -1,8 +1,6 @@
 ## [2.3.10] - 5/15/26
-### Bug Fix
-- Gas Run entries are preserved when other run fields or equipment package selections are changed.
-
-
+### Gas Run Bug
+- Changing an Equipment Package no longer clears the Gas Run input field
 -----
 ## [2.3.9] - 5/10/26
 ### Admin Options
