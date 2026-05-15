@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Proposal, WaterFeatures, WaterFeatureSelection, PAPDiscounts, ManualAdjustments } from '../types/proposal-new';
+import {
+  Proposal,
+  WaterFeatures,
+  WaterFeatureSelection,
+  PAPDiscounts,
+  ManualAdjustments,
+  PlumbingRuns,
+} from '../types/proposal-new';
 import {
   getDefaultProposal,
   getDefaultPAPDiscounts,
@@ -259,14 +266,26 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   const base = getDefaultProposal();
   const mergedPoolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
   const mergedEquipment = mergeEquipmentDefaults(getDefaultEquipment, input.equipment, mergedPoolSpecs);
+  const defaultPlumbing = getDefaultPlumbing();
+  const inputPlumbing = (input.plumbing || {}) as Partial<Proposal['plumbing']>;
+  const defaultElectrical = getDefaultElectrical();
+  const inputElectrical = (input.electrical || {}) as Partial<Proposal['electrical']>;
   return {
     ...base,
     ...input,
     customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
     poolSpecs: mergedPoolSpecs,
     excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
-    plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
-    electrical: { ...getDefaultElectrical(), ...(input.electrical || {}) },
+    plumbing: {
+      ...defaultPlumbing,
+      ...inputPlumbing,
+      runs: { ...defaultPlumbing.runs, ...(inputPlumbing.runs || {}) },
+    },
+    electrical: {
+      ...defaultElectrical,
+      ...inputElectrical,
+      runs: { ...defaultElectrical.runs, ...(inputElectrical.runs || {}) },
+    },
     tileCopingDecking: { ...getDefaultTileCopingDecking(), ...(input.tileCopingDecking || {}) },
     drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
     equipment: mergedEquipment,
@@ -1419,6 +1438,28 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     }
   };
 
+  const updatePlumbingRuns = (runUpdates: Partial<PlumbingRuns>) => {
+    setProposal((prev) => {
+      const defaultPlumbing = getDefaultPlumbing();
+      const existingPlumbing = prev.plumbing || defaultPlumbing;
+      return sanitizeCurrentProposalState({
+        ...prev,
+        plumbing: {
+          ...existingPlumbing,
+          runs: {
+            ...defaultPlumbing.runs,
+            ...(existingPlumbing.runs || {}),
+            ...runUpdates,
+          },
+        },
+        lastModified: new Date().toISOString(),
+      } as Proposal);
+    });
+    if (!isReadOnlyBuilderView) {
+      setHasEdits(true);
+    }
+  };
+
   const handleSelectEquipmentPackage = (packageId: string) => {
     const nextPackage = getEnabledEquipmentPackageOptions().find((option) => option.id === packageId);
     if (!nextPackage) return;
@@ -1457,7 +1498,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ...existingPlumbing.runs,
         cleanerRun: 0,
         autoFillRun: 0,
-        gasRun: 0,
       };
       WATER_FEATURE_RUN_FIELDS.forEach((field) => {
         nextRuns[field] = 0;
@@ -1960,9 +2000,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChange={(data) => updateProposal('electrical', data)}
               plumbingRuns={proposal.plumbing!.runs}
               waterFeatures={proposal.waterFeatures!}
-              onChangePlumbingRuns={(runs) =>
-                updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
-              }
+              onChangePlumbingRuns={updatePlumbingRuns}
               hasSpa={hasSpa}
             />
           );
@@ -1989,9 +2027,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChange={(data) => updateProposal('equipment', data)}
               onSelectPackage={handleSelectEquipmentPackage}
               plumbingRuns={proposal.plumbing!.runs}
-              onChangePlumbingRuns={(runs) =>
-                updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
-              }
+              onChangePlumbingRuns={updatePlumbingRuns}
               hasSpa={hasSpa}
               hasPool={hasPool}
             />
@@ -2002,9 +2038,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               data={proposal.waterFeatures!}
               onChange={(data) => updateProposal('waterFeatures', data)}
               plumbingRuns={proposal.plumbing!.runs}
-              onChangePlumbingRuns={(runs) =>
-                updateProposal('plumbing', { ...(proposal.plumbing || { cost: 0, runs }), runs })
-              }
+              onChangePlumbingRuns={updatePlumbingRuns}
               disabledReason={waterFeatureDisabledReason}
               packageWarningMessage={packageWaterFeatureWarningMessage}
             />

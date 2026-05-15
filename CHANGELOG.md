@@ -1,3 +1,9 @@
+## [2.3.10] - 5/15/26
+### Bug Fix
+- Gas Run entries are preserved when other run fields or equipment package selections are changed.
+
+
+-----
 ## [2.3.9] - 5/10/26
 ### Admin Options
 - Added Pool Bonding charge to Steel category

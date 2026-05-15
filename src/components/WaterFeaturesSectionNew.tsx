@@ -24,7 +24,7 @@ interface Props {
   data: WaterFeatures;
   onChange: (data: WaterFeatures) => void;
   plumbingRuns: PlumbingRuns;
-  onChangePlumbingRuns: (runs: PlumbingRuns) => void;
+  onChangePlumbingRuns: (runs: Partial<PlumbingRuns>) => void;
   disabledReason?: string;
   packageWarningMessage?: string;
 }
@@ -407,11 +407,14 @@ function WaterFeaturesSectionNew({
       nextRuns[runField] = preservedValue;
     });
 
-    const runsChanged = WATER_FEATURE_RUN_FIELDS.some(
-      (runField) => (nextRuns[runField] ?? 0) !== (plumbingRuns[runField] ?? 0)
-    );
-    if (runsChanged) {
-      onChangePlumbingRuns(nextRuns);
+    const runUpdates = WATER_FEATURE_RUN_FIELDS.reduce<Partial<PlumbingRuns>>((updates, runField) => {
+      if ((nextRuns[runField] ?? 0) !== (plumbingRuns[runField] ?? 0)) {
+        updates[runField] = nextRuns[runField] ?? 0;
+      }
+      return updates;
+    }, {});
+    if (Object.keys(runUpdates).length > 0) {
+      onChangePlumbingRuns(runUpdates);
     }
 
     prevRunKeysRef.current = runOrderKeys;
@@ -425,7 +428,7 @@ function WaterFeaturesSectionNew({
         <label className="spec-label">{label}</label>
         <CompactInput
           value={plumbingRuns[field] ?? 0}
-          onChange={(e) => onChangePlumbingRuns({ ...plumbingRuns, [field]: parseFloat(e.target.value) || 0 })}
+          onChange={(e) => onChangePlumbingRuns({ [field]: parseFloat(e.target.value) || 0 })}
           unit="LNFT"
           min="0"
           step="1"

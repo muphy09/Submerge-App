@@ -9,7 +9,7 @@ interface Props {
   onChange: (data: Electrical) => void;
   plumbingRuns: PlumbingRuns;
   waterFeatures: WaterFeatures;
-  onChangePlumbingRuns: (runs: PlumbingRuns) => void;
+  onChangePlumbingRuns: (runs: Partial<PlumbingRuns>) => void;
   hasSpa: boolean;
 }
 
@@ -70,7 +70,7 @@ function ElectricalSectionNew({
   };
 
   const handleGasRunChange = (value: number) => {
-    onChangePlumbingRuns({ ...plumbingRuns, gasRun: value });
+    onChangePlumbingRuns({ gasRun: value });
   };
 
   // Pricing constants

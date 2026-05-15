@@ -215,6 +215,10 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
           } as Proposal['equipment'],
           { poolSpecs, hasSpa: poolSpecs.spaType !== 'none' }
         );
+        const defaultPlumbing = getDefaultPlumbing();
+        const inputPlumbing = (input.plumbing || {}) as Partial<Proposal['plumbing']>;
+        const defaultElectrical = getDefaultElectrical();
+        const inputElectrical = (input.electrical || {}) as Partial<Proposal['electrical']>;
 
         return {
           ...(base as Proposal),
@@ -222,8 +226,16 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
           customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
           poolSpecs,
           excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
-          plumbing: { ...getDefaultPlumbing(), ...(input.plumbing || {}) },
-          electrical: { ...getDefaultElectrical(), ...(input.electrical || {}) },
+          plumbing: {
+            ...defaultPlumbing,
+            ...inputPlumbing,
+            runs: { ...defaultPlumbing.runs, ...(inputPlumbing.runs || {}) },
+          },
+          electrical: {
+            ...defaultElectrical,
+            ...inputElectrical,
+            runs: { ...defaultElectrical.runs, ...(inputElectrical.runs || {}) },
+          },
           tileCopingDecking: { ...getDefaultTileCopingDecking(), ...(input.tileCopingDecking || {}) },
           drainage: { ...getDefaultDrainage(), ...(input.drainage || {}) },
           equipment: mergedEquipment,

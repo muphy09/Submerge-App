@@ -43,7 +43,7 @@ interface Props {
   onChange: (data: Equipment) => void;
   onSelectPackage: (packageId: string) => void;
   plumbingRuns: PlumbingRuns;
-  onChangePlumbingRuns: (runs: PlumbingRuns) => void;
+  onChangePlumbingRuns: (runs: Partial<PlumbingRuns>) => void;
   hasSpa: boolean;
   hasPool: boolean;
 }
@@ -661,7 +661,7 @@ function EquipmentSectionNew({
   };
 
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
-    onChangePlumbingRuns({ ...plumbingRuns, [field]: value });
+    onChangePlumbingRuns({ [field]: value });
   };
 
   const setAuxiliaryPumps = (pumps: PumpSelection[]) => {
