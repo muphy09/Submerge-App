@@ -8,6 +8,7 @@ interface Props {
   onChange: (data: Plumbing) => void;
   allowSpaRunInput: boolean;
   hasSpa: boolean;
+  additionalPumpCount?: number;
 }
 
 // Compact input mirrors Pool Specs / Excavation styling with inline unit label
@@ -51,7 +52,7 @@ const CompactInput = ({
   );
 };
 
-function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa }: Props) {
+function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa, additionalPumpCount = 0 }: Props) {
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
     onChange({
       ...data,
@@ -62,6 +63,14 @@ function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa }: Props)
   const SKIMMER_THRESHOLD = pricingData.plumbing.poolOverrunThreshold;
   const skimmerOverrun = Math.max(0, (data.runs.skimmerRun || 0) - SKIMMER_THRESHOLD);
   const skimmerOverrunMessage = 'Additional charges apply';
+  const activeAdditionalPumpCount = Math.max(0, Math.floor(additionalPumpCount || 0));
+  const mainDrainRunMultiplier = 1 + activeAdditionalPumpCount;
+  const enteredMainDrainRun = Math.max(0, data.runs.mainDrainRun || 0);
+  const billedMainDrainRun = enteredMainDrainRun * mainDrainRunMultiplier;
+  const mainDrainHelper =
+    activeAdditionalPumpCount > 0
+      ? `Main drain to equipment; billed ${mainDrainRunMultiplier} times because ${activeAdditionalPumpCount} additional pump${activeAdditionalPumpCount === 1 ? '' : 's'} ${activeAdditionalPumpCount === 1 ? 'is' : 'are'} selected`
+      : 'Main drain to equipment; each added pump repeats this run';
 
   const renderRunInput = (
     label: string,
@@ -102,7 +111,7 @@ function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa }: Props)
 
         <div className="spec-grid spec-grid-3">
           {renderRunInput('Total Skimmer Run', 'skimmerRun', 'All skimmers to equipment pad')}
-          {renderRunInput('Main Drain Run', 'mainDrainRun', 'Main drain to equipment; each added pump repeats this run')}
+          {renderRunInput('Main Drain Run', 'mainDrainRun', mainDrainHelper)}
           {allowSpaRunInput
             ? renderRunInput(
                 'Spa Run',
@@ -111,6 +120,15 @@ function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa }: Props)
               )
             : renderRunInput('Spa Run', 'spaRun', 'Enable a spa in Pool Specs to activate', { readOnly: true, placeholder: '0' })}
         </div>
+
+        {activeAdditionalPumpCount > 0 && (
+          <div className="info-box" style={{ marginTop: '8px' }}>
+            <strong>Main Drain Multiplier:</strong>{' '}
+            {enteredMainDrainRun > 0
+              ? `${enteredMainDrainRun} LNFT x ${mainDrainRunMultiplier} pump runs = ${billedMainDrainRun} LNFT billed.`
+              : `Enter the main drain run once; pricing will bill it ${mainDrainRunMultiplier} times.`}
+          </div>
+        )}
 
         {skimmerOverrun > 0 && (
           <div className="info-box" style={{ marginTop: '8px', background: '#fff7ed', borderColor: '#fdba74', color: '#9a3412' }}>

@@ -176,6 +176,21 @@ function EquipmentSectionNew({
     (accessory: any) => !accessory.name.toLowerCase().includes('no sanitation')
   );
 
+  const normalizeOptionName = (value?: string | null) => String(value || '').trim().toLowerCase();
+  const findActiveOptionByName = <T extends { name?: string | null }>(
+    options: T[],
+    name?: string | null
+  ): T | undefined => {
+    const target = normalizeOptionName(name);
+    if (!target) return undefined;
+    return options.find((option) => normalizeOptionName(option?.name) === target);
+  };
+  const getActiveOrDefaultOption = <T extends { name?: string | null }>(
+    options: T[],
+    name?: string | null,
+    fallback?: T
+  ): T | undefined => findActiveOptionByName(options, name) || fallback || options[0];
+
   const buildAutoFillSelection = (system: any) => ({
     name: system?.name || '',
     model: (system as any)?.model,
@@ -351,7 +366,7 @@ function EquipmentSectionNew({
 
   const renderRetiredOption = (name?: string) =>
     name ? (
-      <option key={`retired-${name}`} value={name} disabled>
+      <option key={`retired-${name}`} value={name}>
         Removed - Please Select Another
       </option>
     ) : null;
@@ -385,6 +400,7 @@ function EquipmentSectionNew({
   const [automationEditing, setAutomationEditing] = useState(false);
   const [sanitationEditing, setSanitationEditing] = useState(false);
   const [autoFillEditing, setAutoFillEditing] = useState(false);
+  const [activeAdditionalPumpIndex, setActiveAdditionalPumpIndex] = useState<number | null>(null);
   const [activeAuxiliaryPumpIndex, setActiveAuxiliaryPumpIndex] = useState<number | null>(null);
   const [activePoolLightIndex, setActivePoolLightIndex] = useState<number | null>(null);
   const [activeSpaLightIndex, setActiveSpaLightIndex] = useState<number | null>(null);
@@ -780,6 +796,16 @@ function EquipmentSectionNew({
   );
 
   useEffect(() => {
+    if (additionalPumps.length === 0) {
+      setActiveAdditionalPumpIndex(null);
+      return;
+    }
+    if (activeAdditionalPumpIndex !== null && activeAdditionalPumpIndex >= additionalPumps.length) {
+      setActiveAdditionalPumpIndex(additionalPumps.length - 1);
+    }
+  }, [activeAdditionalPumpIndex, additionalPumps.length]);
+
+  useEffect(() => {
     if (auxiliaryPumps.length === 0) {
       setActiveAuxiliaryPumpIndex(null);
       return;
@@ -833,9 +859,17 @@ function EquipmentSectionNew({
   };
 
   const togglePump = (val: boolean) => {
-    setIncludePump(val);
     if (val) {
-      const selectedPump = hasRealSelection(safeData.pump?.name, 'no pump') ? safeData.pump : selectableDefaults.pump;
+      const selectedPump = getActiveOrDefaultOption(
+        pumpOptions,
+        safeData.pump?.name,
+        selectableDefaults.pump
+      );
+      if (!selectedPump) {
+        setIncludePump(false);
+        return;
+      }
+      setIncludePump(true);
       updateData({
         pump: {
           name: selectedPump?.name || defaults.pump.name,
@@ -851,6 +885,7 @@ function EquipmentSectionNew({
         auxiliaryPump: auxiliaryPumps[0],
       });
     } else {
+      setIncludePump(false);
       updateData({
         pump: {
           name: defaults.pump.name,
@@ -869,9 +904,17 @@ function EquipmentSectionNew({
   };
 
   const toggleFilter = (val: boolean) => {
-    setIncludeFilter(val);
     if (val) {
-      const selectedFilter = hasRealSelection(safeData.filter?.name, 'no filter') ? safeData.filter : selectableDefaults.filter;
+      const selectedFilter = getActiveOrDefaultOption(
+        filterOptions,
+        safeData.filter?.name,
+        selectableDefaults.filter
+      );
+      if (!selectedFilter) {
+        setIncludeFilter(false);
+        return;
+      }
+      setIncludeFilter(true);
       updateData({
         filter: {
           name: selectedFilter?.name || defaults.filter.name,
@@ -884,6 +927,7 @@ function EquipmentSectionNew({
         filterQuantity: Math.max(safeData.filterQuantity ?? 1, 1),
       });
     } else {
+      setIncludeFilter(false);
       updateData({
         filter: {
           name: defaults.filter.name,
@@ -899,9 +943,17 @@ function EquipmentSectionNew({
   };
 
   const toggleCleaner = (val: boolean) => {
-    setIncludeCleaner(val);
     if (val) {
-      const selected = hasRealSelection(safeData.cleaner?.name, 'no cleaner') ? safeData.cleaner : selectableDefaults.cleaner;
+      const selected = getActiveOrDefaultOption(
+        cleanerOptions,
+        safeData.cleaner?.name,
+        selectableDefaults.cleaner
+      );
+      if (!selected) {
+        setIncludeCleaner(false);
+        return;
+      }
+      setIncludeCleaner(true);
       const baseQty = 1;
       updateData({
         cleaner: {
@@ -914,6 +966,7 @@ function EquipmentSectionNew({
         cleanerQuantity: Math.max(safeData.cleanerQuantity ?? baseQty, baseQty),
       });
     } else {
+      setIncludeCleaner(false);
       updateData({
         cleaner: {
           name: defaults.noCleaner.name,
@@ -929,9 +982,17 @@ function EquipmentSectionNew({
   };
 
   const toggleHeater = (val: boolean) => {
-    setIncludeHeater(val);
     if (val) {
-      const selected = hasRealSelection(safeData.heater?.name, 'no heater') ? safeData.heater : selectableDefaults.heater;
+      const selected = getActiveOrDefaultOption(
+        heaterOptions,
+        safeData.heater?.name,
+        selectableDefaults.heater
+      );
+      if (!selected) {
+        setIncludeHeater(false);
+        return;
+      }
+      setIncludeHeater(true);
       updateData({
         heater: {
           name: selected?.name || defaults.heater.name,
@@ -944,6 +1005,7 @@ function EquipmentSectionNew({
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
       });
     } else {
+      setIncludeHeater(false);
       updateData({
         heater: {
           name: defaults.heater.name,
@@ -1247,11 +1309,17 @@ function EquipmentSectionNew({
   };
 
   const toggleAutomation = (val: boolean) => {
-    setIncludeAutomation(val);
     if (val) {
-      const selected = hasRealSelection(safeData.automation?.name, 'no automation')
-        ? safeData.automation
-        : selectableDefaults.automation;
+      const selected = getActiveOrDefaultOption(
+        automationOptions,
+        safeData.automation?.name,
+        selectableDefaults.automation
+      );
+      if (!selected) {
+        setIncludeAutomation(false);
+        return;
+      }
+      setIncludeAutomation(true);
       updateData({
         automation: {
           name: selected?.name || defaults.automation.name,
@@ -1267,6 +1335,7 @@ function EquipmentSectionNew({
         automationQuantity: Math.max(safeData.automationQuantity ?? 1, 1),
       });
     } else {
+      setIncludeAutomation(false);
       updateData({
         automation: {
           name: defaults.automation.name,
@@ -1284,19 +1353,27 @@ function EquipmentSectionNew({
   };
 
   const toggleSalt = (val: boolean) => {
-    setIncludeSalt(val);
     if (val) {
       if (automationHasIncludedSaltCell) {
+        setIncludeSalt(true);
         updateData({ saltSystem: buildIncludedSaltCellOption(), saltSystemQuantity: 0 });
         return;
       }
 
       const selectedSystem =
-        isRealSaltSystemSelection(safeData.saltSystem) && !isExcludedFromSaltCell(safeData.saltSystem)
-          ? safeData.saltSystem
-          : primarySaltOptions[0] || selectableDefaults.saltSystem;
-      if (!selectedSystem) return;
+        getActiveOrDefaultOption(
+          primarySaltOptions,
+          isRealSaltSystemSelection(safeData.saltSystem) && !isExcludedFromSaltCell(safeData.saltSystem)
+            ? safeData.saltSystem?.name
+            : undefined,
+          selectableDefaults.saltSystem
+        );
+      if (!selectedSystem) {
+        setIncludeSalt(false);
+        return;
+      }
 
+      setIncludeSalt(true);
       updateData({
         saltSystem: buildSaltSystemSelection(selectedSystem),
         saltSystemQuantity: Math.max(safeData.saltSystemQuantity ?? 1, 1),
@@ -1304,6 +1381,7 @@ function EquipmentSectionNew({
       return;
     }
 
+    setIncludeSalt(false);
     updateData({
       saltSystem: undefined,
       saltSystemQuantity: 0,
@@ -1314,13 +1392,18 @@ function EquipmentSectionNew({
   };
 
   const toggleAutoFill = (val: boolean) => {
-    setIncludeAutoFill(val);
     if (val) {
-      const selectedSystem = hasRealSelection(safeData.autoFillSystem?.name, 'no auto')
-        ? safeData.autoFillSystem
-        : autoFillOptions[0] || selectableDefaults.autoFillSystem || defaults.autoFillSystem;
-      if (!selectedSystem) return;
+      const selectedSystem = getActiveOrDefaultOption(
+        autoFillOptions,
+        safeData.autoFillSystem?.name,
+        selectableDefaults.autoFillSystem || defaults.autoFillSystem
+      );
+      if (!selectedSystem) {
+        setIncludeAutoFill(false);
+        return;
+      }
 
+      setIncludeAutoFill(true);
       updateData({
         autoFillSystem: buildAutoFillSelection(selectedSystem),
         autoFillSystemQuantity: Math.max(safeData.autoFillSystemQuantity ?? 1, 1),
@@ -1329,6 +1412,7 @@ function EquipmentSectionNew({
       return;
     }
 
+    setIncludeAutoFill(false);
     updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
     handleRunChange('autoFillRun', 0);
   };
@@ -1466,10 +1550,11 @@ function EquipmentSectionNew({
 
   const addAdditionalPump = () => {
     if (!packageAllowsPumpChanges) return;
-    const selectedPump =
-      hasRealSelection(safeData.pump?.name, 'no pump') && safeData.pump?.name
-        ? pumpOptions.find((pump) => pump.name === safeData.pump?.name) || safeData.pump
-        : selectableDefaults.pump;
+    const selectedPump = getActiveOrDefaultOption(
+      pumpOptions,
+      hasRealSelection(safeData.pump?.name, 'no pump') ? safeData.pump?.name : undefined,
+      selectableDefaults.pump
+    );
     if (!selectedPump) return;
 
     setAdditionalPumps([
@@ -1483,6 +1568,7 @@ function EquipmentSectionNew({
         price: costOf(selectedPump, true),
       },
     ]);
+    setActiveAdditionalPumpIndex(additionalPumps.length);
   };
 
   const removeAuxiliaryPump = (index: number) => {
@@ -1716,12 +1802,9 @@ function EquipmentSectionNew({
   const buildCardTitle = (label: string, extras: Array<string | undefined> = []) =>
     [label, ...extras.filter(Boolean)].join(' | ');
 
-  const primaryPumpCardTitle = buildCardTitle(
-    summarizeQuantity(
-      safeData.pump?.name || selectedPackage?.includedPumpName || 'Pump',
-      packageIncludesPump ? Math.max(selectedPackage?.includedPumpQuantity ?? pumpQuantity, 0) : pumpQuantity
-    ),
-    [additionalPumps.length > 0 ? `${additionalPumps.length} Additional Pump${additionalPumps.length === 1 ? '' : 's'}` : undefined]
+  const primaryPumpCardTitle = summarizeQuantity(
+    safeData.pump?.name || selectedPackage?.includedPumpName || 'Pump',
+    packageIncludesPump ? Math.max(selectedPackage?.includedPumpQuantity ?? pumpQuantity, 0) : pumpQuantity
   );
   const filterCardTitle = summarizeQuantity(
     safeData.filter?.name || selectedPackage?.includedFilterName || 'Filter',
@@ -1991,123 +2074,158 @@ function EquipmentSectionNew({
         })}
 
         {hasPumpBlockSelection ? (
-          <div className="spec-subcard">
-            <div className="spec-subcard-header">
-              <div>
-                <div className="spec-subcard-title">{primaryPumpCardTitle}</div>
-                {!pumpEditing && <div className="spec-subcard-subtitle">Primary Pump</div>}
-              </div>
-              <div className="spec-subcard-actions stacked-actions">
-                <div className="stacked-primary-actions">
-                  <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => setPumpEditing((current) => !current)}
-                  >
-                    {pumpEditing ? 'Collapse' : 'Edit'}
-                  </button>
-                  {!packageIncludesPump && (
-                    <button type="button" className="link-btn danger" onClick={clearPumpFlow}>
-                      Clear
+          <>
+            <div className="spec-subcard">
+              <div className="spec-subcard-header">
+                <div>
+                  <div className="spec-subcard-title">{primaryPumpCardTitle}</div>
+                  {!pumpEditing && <div className="spec-subcard-subtitle">Primary Pump</div>}
+                </div>
+                <div className="spec-subcard-actions stacked-actions">
+                  <div className="stacked-primary-actions">
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setPumpEditing((current) => !current)}
+                    >
+                      {pumpEditing ? 'Collapse' : 'Edit'}
                     </button>
-                  )}
+                    {!packageIncludesPump && (
+                      <button type="button" className="link-btn danger" onClick={clearPumpFlow}>
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {pumpEditing && (
-              <>
-                <div className="spec-grid spec-grid-2">
-                  {packageIncludesPump
-                    ? renderReadOnlySelection(
-                        'Pump',
-                        safeData.pump?.name || selectedPackage?.includedPumpName || 'Included',
-                        packageLockedCategoryMessage
-                      )
-                    : (
-                      <div className="spec-field">
-                        <LabelWithRetired text="Pump" showRetired={retiredFlags.pump} />
-                        <select
-                          className="compact-input equipment-select"
-                          value={includePump ? safeData.pump.name : noneOptionValue}
-                          onChange={(e) => handlePumpSelect(e.target.value)}
-                        >
-                          <option value={noneOptionValue}>None</option>
-                          {retiredFlags.pump && renderRetiredOption(safeData.pump.name)}
-                          {pumpOptions.map((pump) => (
-                            <option key={pump.name} value={pump.name}>
-                              {formatOptionLabel(pump.name, costOf(pump, true))}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                  {packageIncludesPump
-                    ? renderReadOnlyQuantity(
-                        'Pump Quantity',
-                        Math.max(selectedPackage?.includedPumpQuantity ?? pumpQuantity, 0)
-                      )
-                    : includePump && renderReadOnlyQuantity('Pump Quantity', pumpQuantity)}
-
-                  {showPrimaryPumpControls &&
-                    additionalPumps.map((pump, idx) => (
-                      <div key={`additional-pump-${idx}`} className="spec-field equipment-extra-field spec-full-width">
-                        <LabelWithRetired
-                          text={`Additional Pump ${idx + 1}`}
-                          showRetired={retiredFlags.additionalPumps[idx]}
-                        />
-                        <div className="equipment-inline-row">
+              {pumpEditing && (
+                <>
+                  <div className="spec-grid spec-grid-2">
+                    {packageIncludesPump
+                      ? renderReadOnlySelection(
+                          'Pump',
+                          safeData.pump?.name || selectedPackage?.includedPumpName || 'Included',
+                          packageLockedCategoryMessage
+                        )
+                      : (
+                        <div className="spec-field">
+                          <LabelWithRetired text="Pump" showRetired={retiredFlags.pump} />
                           <select
                             className="compact-input equipment-select"
-                            value={pump?.name || safeData.pump?.name || selectableDefaults.pump?.name || ''}
+                            value={includePump ? safeData.pump.name : noneOptionValue}
+                            onChange={(e) => handlePumpSelect(e.target.value)}
+                          >
+                            <option value={noneOptionValue}>None</option>
+                            {retiredFlags.pump && renderRetiredOption(safeData.pump.name)}
+                            {pumpOptions.map((pump) => (
+                              <option key={pump.name} value={pump.name}>
+                                {formatOptionLabel(pump.name, costOf(pump, true))}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                    {packageIncludesPump
+                      ? renderReadOnlyQuantity(
+                          'Pump Quantity',
+                          Math.max(selectedPackage?.includedPumpQuantity ?? pumpQuantity, 0)
+                        )
+                      : includePump && renderReadOnlyQuantity('Pump Quantity', pumpQuantity)}
+                  </div>
+
+                  <div className="action-row">
+                    <button type="button" className="action-btn" onClick={() => setPumpEditing(false)}>
+                      Done
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {additionalPumps.map((pump, idx) => {
+              const isEditing = activeAdditionalPumpIndex === idx;
+              const title = pump?.name || selectableDefaults.pump?.name || 'Additional Pump';
+
+              return (
+                <div key={`additional-pump-card-${idx}`} className="spec-subcard">
+                  <div className="spec-subcard-header">
+                    <div>
+                      <div className="spec-subcard-title">{`Additional Pump ${idx + 1}: ${title}`}</div>
+                      <div className="spec-subcard-subtitle">*Main Drain automatically doubled</div>
+                    </div>
+                    <div className="spec-subcard-actions stacked-actions">
+                      <div className="stacked-primary-actions">
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => setActiveAdditionalPumpIndex(isEditing ? null : idx)}
+                        >
+                          {isEditing ? 'Collapse' : 'Edit'}
+                        </button>
+                        <button
+                          type="button"
+                          className="link-btn danger"
+                          onClick={() => removeAdditionalPump(idx)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <>
+                      <div className="spec-grid spec-grid-2">
+                        <div className="spec-field">
+                          <LabelWithRetired
+                            text={`Additional Pump ${idx + 1}`}
+                            showRetired={retiredFlags.additionalPumps[idx]}
+                          />
+                          <select
+                            className="compact-input equipment-select"
+                            value={pump?.name || selectableDefaults.pump?.name || ''}
                             onChange={(e) => handleAdditionalPumpChange(idx, e.target.value)}
                           >
-                            {retiredFlags.additionalPumps[idx] &&
-                              renderRetiredOption(pump?.name || safeData.pump?.name)}
+                            {retiredFlags.additionalPumps[idx] && renderRetiredOption(pump?.name)}
                             {pumpOptions.map((option) => (
                               <option key={option.name} value={option.name}>
                                 {formatOptionLabel(option.name, costOf(option, true))}
                               </option>
                             ))}
                           </select>
-                          <button
-                            type="button"
-                            className="link-btn danger"
-                            onClick={() => removeAdditionalPump(idx)}
-                          >
-                            Remove
-                          </button>
                         </div>
+                        {renderReadOnlyQuantity('Additional Pump Quantity', 1)}
                       </div>
-                    ))}
+
+                      <div className="action-row">
+                        <button
+                          type="button"
+                          className="action-btn"
+                          onClick={() => setActiveAdditionalPumpIndex(null)}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
+              );
+            })}
 
-                {packageAllowsPumpChanges && showPrimaryPumpControls && (
-                  <div className="action-row">
-                    <button
-                      type="button"
-                      className="action-btn secondary"
-                      onClick={addAdditionalPump}
-                    >
-                      Add Additional Pump
-                    </button>
-                    <button type="button" className="action-btn" onClick={() => setPumpEditing(false)}>
-                      Done
-                    </button>
-                  </div>
-                )}
-
-                {!packageAllowsPumpChanges && (
-                  <div className="action-row">
-                    <button type="button" className="action-btn" onClick={() => setPumpEditing(false)}>
-                      Done
-                    </button>
-                  </div>
-                )}
-              </>
+            {packageAllowsPumpChanges && showPrimaryPumpControls && (
+              <div className="action-row">
+                <button
+                  type="button"
+                  className="action-btn secondary"
+                  onClick={addAdditionalPump}
+                >
+                  Add Additional Pump
+                </button>
+              </div>
             )}
-          </div>
+          </>
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
             No Pump

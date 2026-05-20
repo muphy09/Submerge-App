@@ -1093,6 +1093,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       return lowered.includes('no pump') || lowered.includes('no aux') || lowered.includes('no auxiliary') || lowered.includes('no blower');
     };
     const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
+    const activePumpOptions = pricingData.equipment.pumps.filter(
+      (pump) => !isAuxPumpPlaceholder(String(pump?.name || ''))
+    );
+    const findActivePumpOption = (name?: string | null) => {
+      const target = String(name || '').trim().toLowerCase();
+      if (!target) return undefined;
+      return activePumpOptions.find((pump) => String(pump?.name || '').trim().toLowerCase() === target);
+    };
     const buildWaterFeaturePump = (pump: any) =>
       pump
         ? {
@@ -1140,7 +1148,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
     if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0) {
       const selection = buildWaterFeaturePump(
-        !isAuxPumpPlaceholder(String(equipment.pump?.name || '')) ? equipment.pump : undefined
+        findActivePumpOption(equipment.pump?.name) || activePumpOptions[0]
       );
       if (!selection) return;
       setProposal((prev) => {
@@ -1991,6 +1999,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChange={(data) => updateProposal('plumbing', data)}
               allowSpaRunInput={allowSpaRunInput}
               hasSpa={hasSpa}
+              additionalPumpCount={additionalPumpSelections.length}
             />
           );
         case 'electrical':

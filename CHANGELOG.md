@@ -1,3 +1,9 @@
+## [2.3.11] - 5/20/26
+### Additional Pump Fix
+- Fixed Additional Pump not appearing as a selection
+- Fixed tooltip when adding an Additional Pump
+- Blower now maps as "Blower" in the Warranty Breakdown
+-----
 ## [2.3.10] - 5/15/26
 ### Gas Run Bug
 - Changing an Equipment Package no longer clears the Gas Run input field

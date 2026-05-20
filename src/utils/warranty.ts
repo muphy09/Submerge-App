@@ -9,7 +9,7 @@ import {
 } from '../types/warranty';
 import { getLightCounts } from './lighting';
 import { getEffectivePrimarySanitationSystemName } from './equipmentPackages';
-import { hasRealPumpSelection } from './pumpSelections';
+import { getAdditionalPumpSelections, hasRealPumpSelection } from './pumpSelections';
 import { flattenWaterFeatures } from './waterFeatureCost';
 import {
   getAdditionalDeckingSelections,
@@ -582,6 +582,13 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[]
     advantage: EQUIPMENT_WARRANTY_ADVANTAGE_TEXT,
   });
 
+  getAdditionalPumpSelections(equipment)
+    .map((pump) => pump?.name?.trim())
+    .filter((name): name is string => Boolean(name) && hasRealPumpSelection({ name }))
+    .forEach((name, index) => {
+      pushEquipmentItem(`additional-pump-${index + 1}`, 'Additional Pump', name);
+    });
+
   const auxiliaryPumps =
     equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
       ? equipment.auxiliaryPumps
@@ -591,7 +598,7 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[]
 
   const auxiliaryPumpSummary = summarizeSelectionNames(auxiliaryPumps.map((pump) => pump?.name));
   if (auxiliaryPumpSummary) {
-    pushEquipmentItem('auxiliary-pump', 'Auxiliary Pump', auxiliaryPumpSummary);
+    pushEquipmentItem('auxiliary-pump', 'Blower', auxiliaryPumpSummary);
   }
 
   pushEquipmentItem(
