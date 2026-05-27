@@ -306,6 +306,8 @@ export interface HeaterSelection {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
+  autoAddedForSpa?: boolean;
+  autoAddedReason?: 'spa';
 }
 
 export interface AutomationSelection {

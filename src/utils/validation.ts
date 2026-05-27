@@ -40,10 +40,20 @@ export function validateProposal(proposal: Partial<Proposal>): ValidationError[]
   }
 
   // Spa validation
-  const hasSpa = proposal.poolSpecs?.spaType !== 'none';
+  const hasSpa = (proposal.poolSpecs?.spaType ?? 'none') !== 'none';
   if (hasSpa) {
-    // Check heater capability
     const heaterName = proposal.equipment?.heater?.name || '';
+    const heaterQuantity = Number(proposal.equipment?.heaterQuantity || 0);
+    const hasHeater = heaterName.trim().length > 0 && !heaterName.toLowerCase().includes('no heater') && heaterQuantity > 0;
+
+    if (!hasHeater) {
+      errors.push({
+        field: 'heater',
+        message: 'A heater is required when a spa is selected',
+      });
+    }
+
+    // Check heater capability
     if (heaterName.includes('260K')) {
       errors.push({
         field: 'heater',

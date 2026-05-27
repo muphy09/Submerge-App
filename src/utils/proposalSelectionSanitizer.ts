@@ -1,10 +1,11 @@
 import pricingData from '../services/pricingData';
 import { getVersionRecordStatus } from '../services/proposalWorkflow';
-import { Proposal, PumpSelection, WaterFeatureSelection } from '../types/proposal-new';
+import { HeaterSelection, Proposal, PumpSelection, WaterFeatureSelection } from '../types/proposal-new';
 import { getDefaultPoolSpecs } from './proposalDefaults';
 import { flattenWaterFeatures } from './waterFeatureCost';
 import { getAdditionalPumpSelections } from './pumpSelections';
 import { normalizeEquipmentLighting } from './lighting';
+import { getEquipmentItemCost } from './equipmentCost';
 
 const SPA_CONTRACT_FIELD_IDS = ['p2_52'];
 const SPA_LIGHT_CONTRACT_FIELD_IDS = ['p2_53', 'p2_54'];
@@ -63,10 +64,90 @@ const isPlaceholderNamedSelection = (name?: string | null) => {
   return !normalized || normalized === 'none' || normalized.startsWith('no ');
 };
 
+const isPlaceholderHeaterName = (name?: string | null) => {
+  const normalized = String(name || '').trim().toLowerCase();
+  return !normalized || normalized === 'none' || normalized.includes('no heater');
+};
+
 const clonePump = (pump?: PumpSelection | null): PumpSelection | null => {
   if (!pump) return null;
   return {
     ...pump,
+  };
+};
+
+const buildHeaterSelection = (
+  heater: Partial<HeaterSelection> | null | undefined,
+  autoAddedForSpa: boolean
+): HeaterSelection | null => {
+  if (!heater || isPlaceholderHeaterName(heater.name)) return null;
+  return {
+    name: heater.name || '',
+    btu: (heater as any)?.btu,
+    basePrice: (heater as any)?.basePrice,
+    addCost1: (heater as any)?.addCost1,
+    addCost2: (heater as any)?.addCost2,
+    price: getEquipmentItemCost(heater as any, 1),
+    autoAddedForSpa,
+    autoAddedReason: autoAddedForSpa ? 'spa' : undefined,
+  };
+};
+
+const getFirstSelectableHeater = () =>
+  pricingData.equipment.heaters.find((heater) => !isPlaceholderHeaterName(heater.name));
+
+const getNoHeaterSelection = (): HeaterSelection => {
+  const noHeater =
+    pricingData.equipment.heaters.find((heater) => isPlaceholderHeaterName(heater.name)) ||
+    pricingData.equipment.heaters[0];
+
+  return {
+    name: noHeater?.name || 'No Heater',
+    btu: (noHeater as any)?.btu ?? 0,
+    basePrice: (noHeater as any)?.basePrice ?? 0,
+    addCost1: (noHeater as any)?.addCost1 ?? 0,
+    addCost2: (noHeater as any)?.addCost2 ?? 0,
+    price: getEquipmentItemCost(noHeater as any, 1),
+  };
+};
+
+const hasRequiredHeaterSelection = (equipment?: Proposal['equipment'] | null) =>
+  Boolean(
+    equipment?.heater?.name &&
+      !isPlaceholderHeaterName(equipment.heater.name) &&
+      Number(equipment.heaterQuantity || 0) > 0
+  );
+
+const isSpaAutoAddedHeater = (heater?: HeaterSelection | null) =>
+  Boolean(heater?.autoAddedForSpa || heater?.autoAddedReason === 'spa');
+
+const syncSpaHeaterSelection = (equipment: Proposal['equipment'], hasSpa: boolean): Proposal['equipment'] => {
+  if (hasSpa) {
+    if (hasRequiredHeaterSelection(equipment)) {
+      return equipment;
+    }
+
+    const defaultHeater = getFirstSelectableHeater();
+    const heaterSelection = buildHeaterSelection(defaultHeater, true);
+    if (!heaterSelection) {
+      return equipment;
+    }
+
+    return {
+      ...equipment,
+      heater: heaterSelection,
+      heaterQuantity: 1,
+    };
+  }
+
+  if (!isSpaAutoAddedHeater(equipment.heater)) {
+    return equipment;
+  }
+
+  return {
+    ...equipment,
+    heater: getNoHeaterSelection(),
+    heaterQuantity: 0,
   };
 };
 
@@ -418,12 +499,17 @@ export function sanitizeProposalSelectionState(
     options
   );
 
-  const nextEquipment = normalizeEquipmentLighting(
+  const equipmentWithDependencies = syncSpaHeaterSelection(
     {
       ...(proposal.equipment || {}),
       auxiliaryPumps: nextAuxiliarySelections,
       auxiliaryPump: nextAuxiliarySelections[0],
     } as Proposal['equipment'],
+    poolSpecs.spaType !== 'none'
+  );
+
+  const nextEquipment = normalizeEquipmentLighting(
+    equipmentWithDependencies,
     {
       poolSpecs,
       hasPool: hasPoolDefinition(poolSpecs),

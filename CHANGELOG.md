@@ -1,3 +1,7 @@
+## [2.3.12] - 5/26/26
+### Heater Defaults
+- Heater is now automatically added if a Spa is added to the Proposal
+---
 ## [2.3.11] - 5/20/26
 ### Additional Pump Fix
 - Fixed Additional Pump not appearing as a selection

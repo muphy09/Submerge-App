@@ -915,6 +915,27 @@ select.compact-input {
   font-weight: 700;
 }
 
+.spec-subcard-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.equipment-auto-indicator {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .spec-subcard-subtitle {
   margin-top: 4px;
   color: #6b7280;

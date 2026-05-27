@@ -146,6 +146,8 @@ function EquipmentSectionNew({
   const costOf = (item: any, applyPumpOverhead?: boolean) =>
     getEquipmentItemCost(item, applyPumpOverhead ? pumpOverhead : 1);
   const hasHeaterSelection = hasRealSelection(data?.heater?.name, 'no heater');
+  const isSpaAutoAddedHeater = (heater?: Equipment['heater']) =>
+    Boolean(heater?.autoAddedForSpa || heater?.autoAddedReason === 'spa');
   const noneOptionValue = 'none';
   const formatOptionLabel = (label: string, _amount?: number) => label;
   const isAuxPumpPlaceholder = (name: string) => {
@@ -353,6 +355,13 @@ function EquipmentSectionNew({
   const packageDimensionsRequiredMessage = 'Define dimensions in Pool Specs first';
   const packageSelectionRequiredMessage = 'An equipment package must be chosen first';
   const packageLockedCategoryMessage = `${selectedPackageName} includes this selection. Change the package to modify it.`;
+  const heaterRequiredBySpa = hasSpa;
+  const heaterNoDisabledReason = heaterRequiredBySpa
+    ? 'A heater is required when a spa is selected.'
+    : packageIncludesHeater
+      ? packageLockedCategoryMessage
+      : undefined;
+  const heaterAutoAddedBySpa = isSpaAutoAddedHeater(safeData.heater);
   const addSpaLightDisabledReason =
     isFixedPackage && !packageAllowsSpaLightChanges
       ? 'This equipment package does not allow spa light upgrades.'
@@ -1001,6 +1010,8 @@ function EquipmentSectionNew({
           addCost1: (selected as any)?.addCost1 ?? (defaults.heater as any).addCost1,
           addCost2: (selected as any)?.addCost2 ?? (defaults.heater as any).addCost2,
           price: costOf(selected || defaults.heater),
+          autoAddedForSpa: false,
+          autoAddedReason: undefined,
         },
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
       });
@@ -1014,6 +1025,8 @@ function EquipmentSectionNew({
           addCost1: (defaults.heater as any).addCost1,
           addCost2: (defaults.heater as any).addCost2,
           price: costOf(defaults.heater),
+          autoAddedForSpa: false,
+          autoAddedReason: undefined,
         },
         heaterQuantity: 0,
       });
@@ -1446,6 +1459,7 @@ function EquipmentSectionNew({
 
   const handleHeaterSelect = (name: string) => {
     if (name === noneOptionValue) {
+      if (heaterRequiredBySpa) return;
       toggleHeater(false);
       return;
     }
@@ -1626,6 +1640,8 @@ function EquipmentSectionNew({
           addCost1: (heater as any).addCost1,
           addCost2: (heater as any).addCost2,
           price: costOf(heater),
+          autoAddedForSpa: false,
+          autoAddedReason: undefined,
         },
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
       });
@@ -1892,7 +1908,7 @@ function EquipmentSectionNew({
   };
 
   const clearHeaterFlow = () => {
-    if (packageIncludesHeater) return;
+    if (packageIncludesHeater || heaterRequiredBySpa) return;
     toggleHeater(false);
     setHeaterEditing(false);
   };
@@ -2594,7 +2610,7 @@ function EquipmentSectionNew({
           addLabel: 'Add Heater',
           onNo: clearHeaterFlow,
           onAdd: openHeaterFlow,
-          noDisabledReason: packageIncludesHeater ? packageLockedCategoryMessage : undefined,
+          noDisabledReason: heaterNoDisabledReason,
           addDisabledReason: heaterAddDisabledReason,
         })}
 
@@ -2602,7 +2618,12 @@ function EquipmentSectionNew({
           <div className="spec-subcard">
             <div className="spec-subcard-header">
               <div>
-                <div className="spec-subcard-title">{heaterCardTitle}</div>
+                <div className="spec-subcard-title-row">
+                  <div className="spec-subcard-title">{heaterCardTitle}</div>
+                  {heaterAutoAddedBySpa && (
+                    <span className="equipment-auto-indicator">Automatically added because of Spa selection</span>
+                  )}
+                </div>
                 {!heaterEditing && <div className="spec-subcard-subtitle">Heater</div>}
               </div>
               <div className="spec-subcard-actions stacked-actions">
@@ -2614,7 +2635,7 @@ function EquipmentSectionNew({
                   >
                     {heaterEditing ? 'Collapse' : 'Edit'}
                   </button>
-                  {!packageIncludesHeater && (
+                  {!packageIncludesHeater && !heaterRequiredBySpa && (
                     <button type="button" className="link-btn danger" onClick={clearHeaterFlow}>
                       Clear
                     </button>
@@ -2640,7 +2661,9 @@ function EquipmentSectionNew({
                           value={includeHeater ? safeData.heater.name : noneOptionValue}
                           onChange={(e) => handleHeaterSelect(e.target.value)}
                         >
-                          <option value={noneOptionValue}>None</option>
+                          <option value={noneOptionValue} disabled={heaterRequiredBySpa}>
+                            None
+                          </option>
                           {retiredFlags.heater && renderRetiredOption(safeData.heater.name)}
                           {heaterOptions.map((heater) => (
                             <option key={heater.name} value={heater.name}>
@@ -2662,10 +2685,12 @@ function EquipmentSectionNew({
                         <CompactInput
                           value={heaterQuantity}
                           onChange={(e) =>
-                            updateData({ heaterQuantity: Math.max(0, parseInt(e.target.value) || 0) })
+                            updateData({
+                              heaterQuantity: Math.max(heaterRequiredBySpa ? 1 : 0, parseInt(e.target.value) || 0),
+                            })
                           }
                           unit="ea"
-                          min="0"
+                          min={heaterRequiredBySpa ? '1' : '0'}
                           step="1"
                           placeholder="1"
                         />

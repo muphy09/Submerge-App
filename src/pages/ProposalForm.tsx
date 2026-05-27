@@ -270,7 +270,7 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   const inputPlumbing = (input.plumbing || {}) as Partial<Proposal['plumbing']>;
   const defaultElectrical = getDefaultElectrical();
   const inputElectrical = (input.electrical || {}) as Partial<Proposal['electrical']>;
-  return {
+  const merged = {
     ...base,
     ...input,
     customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
@@ -298,6 +298,8 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     costBreakdown: input.costBreakdown || base.costBreakdown,
     warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
   };
+
+  return sanitizeProposalSelectionState(merged as Proposal);
 };
 
 const getDefaultAuxiliaryPumpForCurrentPricing = (): Proposal['equipment']['auxiliaryPump'] | null => {
