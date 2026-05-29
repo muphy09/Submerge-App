@@ -261,14 +261,49 @@
 }
 
 .breakdown-export-cogs-sheet .cogs-category-table th {
-  padding: 8px 12px;
+  padding: 8px 7px;
   font-size: 10px;
+  vertical-align: middle;
 }
 
 .breakdown-export-cogs-sheet .cogs-category-table td {
-  padding: 7px 12px;
-  font-size: 11px;
-  line-height: 1.35;
+  padding: 7px 7px;
+  font-size: 10.5px;
+  line-height: 1.3;
+  vertical-align: middle;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table th:nth-child(1),
+.breakdown-export-cogs-sheet .cogs-category-table td:nth-child(1) {
+  width: 38%;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table th:nth-child(2),
+.breakdown-export-cogs-sheet .cogs-category-table td:nth-child(2) {
+  width: 13%;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table th:nth-child(3),
+.breakdown-export-cogs-sheet .cogs-category-table td:nth-child(3) {
+  width: 23%;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table th:nth-child(4),
+.breakdown-export-cogs-sheet .cogs-category-table td:nth-child(4) {
+  width: 26%;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table td:nth-child(1) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  line-height: 1.22;
+}
+
+.breakdown-export-cogs-sheet .cogs-category-table th:nth-child(n + 2),
+.breakdown-export-cogs-sheet .cogs-category-table td:nth-child(n + 2) {
+  font-variant-numeric: tabular-nums;
 }
 
 .breakdown-export-cogs-sheet .cogs-category-table tbody tr:hover {

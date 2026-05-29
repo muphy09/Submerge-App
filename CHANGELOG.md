@@ -1,3 +1,7 @@
+## [2.3.13] - 5/29/26
+### COGS Breakdown Export
+- PDF and Print exports for the COGS Breakdown have been scaled to fit all text
+---
 ## [2.3.12] - 5/26/26
 ### Heater Defaults
 - Heater is now automatically added if a Spa is added to the Proposal
