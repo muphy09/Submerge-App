@@ -46,6 +46,7 @@ const PX_PER_INCH = 96;
 const COGS_PAGE_HEIGHT_IN = 10.2;
 const COGS_PAGE_HEIGHT_PX = COGS_PAGE_HEIGHT_IN * PX_PER_INCH;
 const COGS_PAGE_SAFETY_BUFFER_PX = 16;
+const COGS_EXPORT_TABLE_COLUMN_WIDTHS = ['38%', '13%', '23%', '26%'];
 const WARRANTY_PAGE_HEIGHT_IN = 10.2;
 const WARRANTY_PAGE_HEIGHT_PX = WARRANTY_PAGE_HEIGHT_IN * PX_PER_INCH;
 const WARRANTY_PAGE_SAFETY_BUFFER_PX = 14;
@@ -601,6 +602,14 @@ function BreakdownCogsExportCard({
     ? category.items.filter((item) => !hasLineItemSubcategory(item))
     : category.items;
 
+  const renderExportColgroup = () => (
+    <colgroup>
+      {COGS_EXPORT_TABLE_COLUMN_WIDTHS.map((width, index) => (
+        <col style={{ width }} key={`cogs-export-column-${index}`} />
+      ))}
+    </colgroup>
+  );
+
   return (
     <div
       className={`cogs-category-card ${getCogsCategoryClassName(category.name)}`}
@@ -620,12 +629,7 @@ function BreakdownCogsExportCard({
         <div className="cogs-subcategories">
           {!category.hideBaseItems && baseItems.length > 0 && (
             <table className="cogs-category-table">
-              <colgroup>
-                <col style={{ width: '40%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '25%' }} />
-                <col style={{ width: '25%' }} />
-              </colgroup>
+              {renderExportColgroup()}
               <thead>
                 <tr>
                   <th>Description</th>
@@ -656,12 +660,7 @@ function BreakdownCogsExportCard({
                 </span>
               </div>
               <table className="cogs-category-table">
-                <colgroup>
-                  <col style={{ width: '40%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '25%' }} />
-                  <col style={{ width: '25%' }} />
-                </colgroup>
+                {renderExportColgroup()}
                 <thead>
                   <tr>
                     <th>Description</th>
@@ -686,12 +685,7 @@ function BreakdownCogsExportCard({
         </div>
       ) : (
         <table className="cogs-category-table">
-          <colgroup>
-            <col style={{ width: '40%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '25%' }} />
-            <col style={{ width: '25%' }} />
-          </colgroup>
+          {renderExportColgroup()}
           <thead>
             <tr>
               <th>Description</th>
