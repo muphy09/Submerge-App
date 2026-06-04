@@ -1,10 +1,13 @@
 import { Drainage } from '../types/proposal-new';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import CustomOptionsSection from './CustomOptionsSection';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
   data: Drainage;
   onChange: (data: Drainage) => void;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 const CompactInput = ({
@@ -47,7 +50,7 @@ const CompactInput = ({
   );
 };
 
-function DrainageSectionNew({ data, onChange }: Props) {
+function DrainageSectionNew({ data, onChange, noteOverrides }: Props) {
   const handleChange = (field: keyof Drainage, value: number) => {
     onChange({ ...data, [field]: value });
   };
@@ -57,6 +60,7 @@ function DrainageSectionNew({ data, onChange }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Core Drainage</h2>
+          <ProposalNote categoryKey="drainage" subcategoryId="coreDrainage" overrides={noteOverrides} />
         </div>
 
         <div className="spec-grid spec-grid-2">
@@ -113,6 +117,8 @@ function DrainageSectionNew({ data, onChange }: Props) {
       <CustomOptionsSection
         data={data.customOptions || []}
         onChange={(customOptions) => onChange({ ...data, customOptions })}
+        noteCategoryKey="drainage"
+        noteOverrides={noteOverrides}
       />
     </div>
   );

@@ -1,0 +1,81 @@
+.admin-notes-page-shell {
+  background: linear-gradient(180deg, #f3f6fb 0%, #e8eef7 100%);
+}
+
+.admin-notes-page-shell .pricing-page__main {
+  align-content: start;
+}
+
+.admin-notes-hero {
+  min-height: 106px;
+}
+
+.admin-notes-hero .pricing-hero__content {
+  align-content: start;
+  gap: 8px;
+}
+
+.admin-notes-hero__lede {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 740px;
+}
+
+.admin-notes-page-shell .pricing-model-summary-card {
+  align-self: start;
+}
+
+.admin-notes-section-body {
+  gap: 14px;
+}
+
+.admin-note-block {
+  gap: 16px;
+}
+
+.admin-note-textarea {
+  min-height: 118px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.admin-notes-conditional-mark {
+  color: #b45309;
+}
+
+.admin-notes-conditional-note {
+  margin: 2px 0 0;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-notes-status {
+  color: #166534;
+  background: #ecfdf3;
+  border: 1px solid #bbf7d0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin: 4px 0 0;
+  font-weight: 700;
+}
+
+.admin-notes-leave-card {
+  max-width: 560px;
+}
+
+.admin-notes-leave-actions {
+  flex-wrap: wrap;
+}
+
+.admin-notes-leave-actions .pricing-chip-button {
+  min-width: 150px;
+}
+
+@media (max-width: 640px) {
+  .admin-notes-leave-actions .pricing-chip-button {
+    width: 100%;
+  }
+}

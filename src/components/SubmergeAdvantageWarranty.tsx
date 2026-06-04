@@ -10,6 +10,7 @@ import {
   createEmptyWarrantyAdvantageItem,
   createEmptyWarrantyFeatureItem,
   createEmptyWarrantySection,
+  isCopingDeckingWarrantySectionTitle,
   normalizeWarrantySections,
   resolveWarrantySections,
 } from '../utils/warranty';
@@ -770,7 +771,7 @@ function SubmergeAdvantageWarranty({ proposal, editable = false, onWarrantySecti
                     })
                   }
                 >
-                  {!section.advantageItems.length && (
+                  {!section.advantageItems.length && !isCopingDeckingWarrantySectionTitle(section.title) && (
                     <div className="warranty-advantage-card muted">
                       No warranty advantages listed. Right-click here to add one.
                     </div>

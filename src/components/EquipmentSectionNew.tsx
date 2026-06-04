@@ -33,8 +33,10 @@ import {
 } from '../utils/equipmentPackages';
 import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpSelections';
 import { getNoPumpSelection } from '../utils/pumpDefaults';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import { TooltipAnchor } from './AppTooltip';
 import CustomOptionsSection from './CustomOptionsSection';
+import ProposalNote from './ProposalNote';
 import RetiredEquipmentIndicator from './RetiredEquipmentIndicator';
 import './SectionStyles.css';
 
@@ -46,6 +48,7 @@ interface Props {
   onChangePlumbingRuns: (runs: Partial<PlumbingRuns>) => void;
   hasSpa: boolean;
   hasPool: boolean;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 const CompactInput = ({
@@ -103,6 +106,7 @@ function EquipmentSectionNew({
   onChangePlumbingRuns,
   hasSpa,
   hasPool,
+  noteOverrides,
 }: Props) {
   const autoFillSelectionRequiresElectric = (selection?: { name?: string; requiresElectricRun?: boolean }) => {
     const selectionName = selection?.name?.trim() || '';
@@ -2007,6 +2011,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Package Options</h2>
+          <ProposalNote categoryKey="equipment" subcategoryId="packageOptions" overrides={noteOverrides} />
         </div>
         <div className="equipment-package-options">
           {packageOptions.map((option) => {
@@ -2077,7 +2082,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Pump</h2>
-          <p className="spec-block-subtitle">Add a primary pump and any additional pumps to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="pump" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasPumpBlockSelection,
@@ -2253,7 +2258,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Blowers</h2>
-          <p className="spec-block-subtitle">Add a blower to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="blowers" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasAuxiliaryPumpSelection,
@@ -2376,7 +2381,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Filter</h2>
-          <p className="spec-block-subtitle">Add a filter to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="filter" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasFilterSelection,
@@ -2482,7 +2487,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Cleaner</h2>
-          <p className="spec-block-subtitle">Add a cleaner to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="cleaner" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasCleanerSelection,
@@ -2602,7 +2607,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Heater</h2>
-          <p className="spec-block-subtitle">Add a heater to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="heater" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasHeaterSelectionState,
@@ -2717,7 +2722,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Pool Lights</h2>
-          <p className="spec-block-subtitle">Add pool lights to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="poolLights" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasPoolLightSelection,
@@ -2856,7 +2861,7 @@ function EquipmentSectionNew({
         <div className="spec-block">
           <div className="spec-block-header">
             <h2 className="spec-block-title">Spa Lights</h2>
-            <p className="spec-block-subtitle">Add spa lights to the project.</p>
+            <ProposalNote categoryKey="equipment" subcategoryId="spaLights" overrides={noteOverrides} />
           </div>
           {renderToggleButtons({
             hasSelection: hasSpaLightSelectionState,
@@ -2994,7 +2999,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Automation</h2>
-          <p className="spec-block-subtitle">Add automation to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="automation" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasAutomationSelection,
@@ -3104,7 +3109,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Sanitation System</h2>
-          <p className="spec-block-subtitle">Add a sanitation system to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="sanitationSystem" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasSanitationSelection,
@@ -3215,7 +3220,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Additional Sanitation Options</h2>
-          <p className="spec-block-subtitle">Choose an additional sanitation option.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="additionalSanitationOptions" overrides={noteOverrides} />
         </div>
 
         {additionalSanitationOptions.length > 0 ? (
@@ -3290,7 +3295,7 @@ function EquipmentSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Auto-fill</h2>
-          <p className="spec-block-subtitle">Add an auto-fill system to the project.</p>
+          <ProposalNote categoryKey="equipment" subcategoryId="autoFill" overrides={noteOverrides} />
         </div>
         {renderToggleButtons({
           hasSelection: hasAutoFillSelection,
@@ -3412,6 +3417,8 @@ function EquipmentSectionNew({
       <CustomOptionsSection
         data={safeData.customOptions || []}
         onChange={(customOptions) => updateData({ customOptions })}
+        noteCategoryKey="equipment"
+        noteOverrides={noteOverrides}
       />
     </div>
   );

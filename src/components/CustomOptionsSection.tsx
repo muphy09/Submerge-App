@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react';
 import { CustomOption } from '../types/proposal-new';
 import { getCustomOptionTotal, normalizeCustomOption } from '../utils/customOptions';
+import {
+  type ProposalNoteCategoryKey,
+  type ProposalNoteOverrides,
+} from '../utils/proposalNotes';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
   data: CustomOption[];
   onChange: (data: CustomOption[]) => void;
+  noteCategoryKey?: ProposalNoteCategoryKey;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
-function CustomOptionsSection({ data, onChange }: Props) {
+function CustomOptionsSection({ data, onChange, noteCategoryKey, noteOverrides }: Props) {
   const [activeOptionIndex, setActiveOptionIndex] = useState<number | null>(null);
   const maxOptions = 7;
 
@@ -60,6 +67,13 @@ function CustomOptionsSection({ data, onChange }: Props) {
     <div className="spec-block custom-options-block">
       <div className="spec-block-header">
         <h2 className="spec-block-title">Custom Options</h2>
+        {noteCategoryKey && (
+          <ProposalNote
+            categoryKey={noteCategoryKey}
+            subcategoryId="customOptions"
+            overrides={noteOverrides}
+          />
+        )}
       </div>
 
       {data.map((option, index) => {

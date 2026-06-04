@@ -1,6 +1,8 @@
 import { Plumbing, PlumbingRuns } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import CustomOptionsSection from './CustomOptionsSection';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
   allowSpaRunInput: boolean;
   hasSpa: boolean;
   additionalPumpCount?: number;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 // Compact input mirrors Pool Specs / Excavation styling with inline unit label
@@ -52,7 +55,7 @@ const CompactInput = ({
   );
 };
 
-function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa, additionalPumpCount = 0 }: Props) {
+function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa, additionalPumpCount = 0, noteOverrides }: Props) {
   const handleRunChange = (field: keyof PlumbingRuns, value: number) => {
     onChange({
       ...data,
@@ -106,7 +109,7 @@ function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa, addition
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Core Plumbing</h2>
-          <p className="spec-block-subtitle">Overruns will calculate automatically.</p>
+          <ProposalNote categoryKey="plumbing" subcategoryId="corePlumbing" overrides={noteOverrides} />
         </div>
 
         <div className="spec-grid spec-grid-3">
@@ -161,6 +164,8 @@ function PlumbingSectionNew({ data, onChange, allowSpaRunInput, hasSpa, addition
       <CustomOptionsSection
         data={data.customOptions || []}
         onChange={(customOptions) => onChange({ ...data, customOptions })}
+        noteCategoryKey="plumbing"
+        noteOverrides={noteOverrides}
       />
     </div>
   );

@@ -87,6 +87,7 @@ const WorkflowPage = lazy(() => import('./pages/WorkflowPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const AdminPanelPage = lazy(() => import('./pages/AdminPanelPage'));
 const AdminPricingPage = lazy(() => import('./pages/AdminPricingPage'));
+const AdminNotesPage = lazy(() => import('./pages/AdminNotesPage'));
 const MasterPage = lazy(() => import('./pages/MasterPage'));
 const ContractPrintPreviewPage = lazy(() => import('./pages/ContractPrintPreviewPage'));
 
@@ -1022,6 +1023,7 @@ function AppContent() {
               canRenderAdminPanel ? (
                 <AdminPanelPage
                   onOpenPricingData={() => navigate('/admin/pricing')}
+                  onOpenNotes={() => navigate('/admin/notes')}
                   session={effectiveSession}
                   offsetSettingsLauncher={Boolean(actingLabel)}
                 />
@@ -1031,6 +1033,18 @@ function AppContent() {
           <Route
             path="/admin/pricing"
             element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
+          />
+          <Route
+            path="/admin/notes"
+            element={
+              canRenderAdminPanel ? (
+                <AdminNotesPage
+                  franchiseId={effectiveSession?.franchiseId}
+                  franchiseName={effectiveSession?.franchiseName}
+                  franchiseCode={effectiveSession?.franchiseCode}
+                />
+              ) : null
+            }
           />
           <Route path="/workflow" element={<WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} />} />
           <Route path="/workflow/:proposalNumber" element={<WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} />} />

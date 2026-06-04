@@ -55,6 +55,7 @@ import equipmentIconImg from '../../docs/img/equip.png';
 import customIconImg from '../../docs/img/custom.png';
 import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
+import { useProposalNotes } from '../hooks/useProposalNotes';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { getTileSelectionId } from '../utils/tileCopingCatalogs';
@@ -754,6 +755,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
+  const proposalNotesFranchiseId = proposal.franchiseId || getSessionFranchiseId();
+  const { notes: proposalNoteOverrides } = useProposalNotes(proposalNotesFranchiseId);
   const latestProposalRef = useRef<Partial<Proposal>>(proposal);
   const previousSpaTypeRef = useRef<string>(proposal.poolSpecs?.spaType ?? 'none');
   const previousHasPoolRef = useRef<boolean>(hasPoolDefinition(proposal.poolSpecs));
@@ -1985,6 +1988,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChangeTileCopingDecking={(data) => updateProposal('tileCopingDecking', data)}
               disableSpaSelections={disableSpaSelections}
               disabledSpaMessage={disabledSpaMessage}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'excavation':
@@ -1992,6 +1996,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             <ExcavationSectionNew
               data={proposal.excavation!}
               onChange={(data) => updateProposal('excavation', data)}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'plumbing':
@@ -2002,6 +2007,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               allowSpaRunInput={allowSpaRunInput}
               hasSpa={hasSpa}
               additionalPumpCount={additionalPumpSelections.length}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'electrical':
@@ -2013,6 +2019,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               waterFeatures={proposal.waterFeatures!}
               onChangePlumbingRuns={updatePlumbingRuns}
               hasSpa={hasSpa}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'tileCopingDecking':
@@ -2022,6 +2029,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChange={(data) => updateProposal('tileCopingDecking', data)}
               isFiberglass={isFiberglass}
               poolDeckingArea={proposal.poolSpecs.deckingArea || 0}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'drainage':
@@ -2029,6 +2037,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             <DrainageSectionNew
               data={proposal.drainage!}
               onChange={(data) => updateProposal('drainage', data)}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'equipment':
@@ -2041,6 +2050,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChangePlumbingRuns={updatePlumbingRuns}
               hasSpa={hasSpa}
               hasPool={hasPool}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'waterFeatures':
@@ -2052,6 +2062,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChangePlumbingRuns={updatePlumbingRuns}
               disabledReason={waterFeatureDisabledReason}
               packageWarningMessage={packageWaterFeatureWarningMessage}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'interiorFinish':
@@ -2061,6 +2072,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChange={(data) => updateProposal('interiorFinish', data)}
               hasSpa={hasSpa}
               isFiberglass={isFiberglass}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         case 'customFeatures':
@@ -2071,6 +2083,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               retailPrice={retailPrice}
               additionalOptions={(pricingData as any).customFeatures?.groupedSubcategories || []}
               groupedOptions={(pricingData as any).customFeatures?.groupedOptions || []}
+              noteOverrides={proposalNoteOverrides}
             />
           );
         default:

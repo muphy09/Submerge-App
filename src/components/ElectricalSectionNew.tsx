@@ -1,7 +1,9 @@
 import { Electrical, ElectricalRuns, PlumbingRuns, WaterFeatures } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { getDerivedWaterFeatureGasRunTotal, getTotalGasRunForBilling } from '../utils/waterFeatureCost';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import CustomOptionsSection from './CustomOptionsSection';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
@@ -11,6 +13,7 @@ interface Props {
   waterFeatures: WaterFeatures;
   onChangePlumbingRuns: (runs: Partial<PlumbingRuns>) => void;
   hasSpa: boolean;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 // Reusable compact input to mirror Pool Specs / Excavation styling
@@ -61,6 +64,7 @@ function ElectricalSectionNew({
   waterFeatures,
   onChangePlumbingRuns,
   hasSpa,
+  noteOverrides,
 }: Props) {
   const handleRunChange = (field: keyof ElectricalRuns, value: number) => {
     onChange({
@@ -97,7 +101,7 @@ function ElectricalSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Gas Run</h2>
-          <p className="spec-block-subtitle">Base Gas includes the first 25ft of billed gas run.</p>
+          <ProposalNote categoryKey="electrical" subcategoryId="gasRun" overrides={noteOverrides} />
         </div>
 
         <div className="spec-grid spec-grid-3-fixed">
@@ -132,7 +136,7 @@ function ElectricalSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Electrical Runs</h2>
-          <p className="spec-block-subtitle">Base Electrical includes the first 65ft</p>
+          <ProposalNote categoryKey="electrical" subcategoryId="electricalRuns" overrides={noteOverrides} />
         </div>
 
         <div className="spec-grid spec-grid-3">
@@ -191,6 +195,8 @@ function ElectricalSectionNew({
       <CustomOptionsSection
         data={data.customOptions || []}
         onChange={(customOptions) => onChange({ ...data, customOptions })}
+        noteCategoryKey="electrical"
+        noteOverrides={noteOverrides}
       />
     </div>
   );

@@ -23,6 +23,8 @@ import {
   normalizeGroupedCustomFeatureOptions,
   normalizeGroupedCustomFeatureSubcategories,
 } from '../utils/customFeatures';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
@@ -31,6 +33,7 @@ interface Props {
   retailPrice?: number;
   additionalOptions?: GroupedCustomFeatureSubcategoryConfig[];
   groupedOptions?: GroupedCustomFeatureOption[];
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 type GroupedFeatureCard = GroupedCustomFeatureOption & {
@@ -53,6 +56,7 @@ function CustomFeaturesSectionNew({
   retailPrice,
   additionalOptions = [],
   groupedOptions = [],
+  noteOverrides,
 }: Props) {
   const [activeFeatureIndex, setActiveFeatureIndex] = useState<number | null>(null);
   const maxManualFeatures = 7;
@@ -319,6 +323,7 @@ function CustomFeaturesSectionNew({
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Grouped Features</h2>
+          <ProposalNote categoryKey="customFeatures" subcategoryId="groupedFeatures" overrides={noteOverrides} />
         </div>
 
         {groupedFeatureCards.length === 0 ? (
@@ -500,6 +505,7 @@ function CustomFeaturesSectionNew({
       <div className="spec-block custom-options-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Manual Custom Features</h2>
+          <ProposalNote categoryKey="customFeatures" subcategoryId="manualCustomFeatures" overrides={noteOverrides} />
         </div>
 
         {manualFeatures.map((feature, index) => {

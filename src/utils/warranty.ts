@@ -17,7 +17,11 @@ import {
   getResolvedProposalPrimaryDeckingArea,
   hasIncludedDecking,
 } from './decking';
-import { getCopingOptionLabel } from './tileCopingCatalogs';
+import {
+  getCopingOptionLabel,
+  normalizeCopingOptionId,
+  normalizeDeckingOptionId,
+} from './tileCopingCatalogs';
 
 type LegacyWarrantyItem = {
   id?: string;
@@ -43,6 +47,7 @@ const GENERATED_ELECTRIC_WARRANTY_ID_PREFIX = 'generated-electric';
 const GENERATED_INTERIOR_FINISH_WARRANTY_ID_PREFIX = 'generated-interior-finish';
 const GENERATED_COPING_DECKING_WARRANTY_ID_PREFIX = 'generated-coping-decking';
 const GENERATED_COPING_DECKING_WARRANTY_SECTION_ID = 'generated-coping-decking-section';
+const COPING_DECKING_WARRANTY_SECTION_TITLES = new Set(['coping & decking', 'coping', 'decking']);
 const PLUMBING_WARRANTY_ADVANTAGE_TEXT = 'Designed to Create a more efficient and higher performing system';
 const LEGACY_INTERIOR_FINISH_ADVANTAGE = 'Combines durability and functionality';
 const EQUIPMENT_WARRANTY_ADVANTAGE_TEXT = '5-Year NO-FAULT Warranty on all Hayward Equipment';
@@ -164,6 +169,9 @@ export const normalizeWarrantySectionsSetting = (sections: unknown): WarrantySec
   if (Array.isArray(sections)) return normalizeWarrantySections(sections);
   return null;
 };
+
+export const isCopingDeckingWarrantySectionTitle = (title?: string): boolean =>
+  COPING_DECKING_WARRANTY_SECTION_TITLES.has((title || '').trim().toLowerCase());
 
 export const createEmptyWarrantyFeatureItem = (): WarrantyFeatureItem => ({
   id: createWarrantyId('warranty-feature'),
@@ -421,6 +429,83 @@ const buildInteriorFinishWarrantyItem = (proposal?: Partial<Proposal>): LegacyWa
 const getCopingTypeWarrantyLabel = (copingType?: string) =>
   getCopingOptionLabel(pricingData.tileCoping, copingType) || copingType || 'Coping';
 
+type CopingDeckingWarrantyMaterial = 'Travertine' | 'Pavers';
+
+const getCopingDeckingWarrantyMaterial = (
+  value: string | undefined,
+  label: string,
+  normalizer: (optionId?: string | null) => string
+): CopingDeckingWarrantyMaterial | null => {
+  const normalizedValue = normalizer(value);
+  const normalizedLabel = label.trim().toLowerCase();
+  if (normalizedValue.includes('travertine') || normalizedLabel.includes('travertine')) {
+    return 'Travertine';
+  }
+  if (normalizedValue.includes('paver') || normalizedLabel.includes('paver')) {
+    return 'Pavers';
+  }
+  return null;
+};
+
+const buildCopingDeckingWarrantyAdvantageText = (proposal?: Partial<Proposal>): string => {
+  const tileCopingDecking = proposal?.tileCopingDecking;
+  if (!tileCopingDecking) return '';
+
+  const selectedMaterials = new Set<CopingDeckingWarrantyMaterial>();
+  const copingType = String(tileCopingDecking.copingType || '').trim();
+  if (copingType && copingType !== 'none') {
+    const copingMaterial = getCopingDeckingWarrantyMaterial(
+      copingType,
+      getCopingTypeWarrantyLabel(copingType),
+      normalizeCopingOptionId
+    );
+    if (copingMaterial) {
+      selectedMaterials.add(copingMaterial);
+    }
+  }
+
+  const primaryDeckingType = String(tileCopingDecking.deckingType || '').trim();
+  const primaryDeckingArea = getResolvedProposalPrimaryDeckingArea(proposal);
+  if (
+    primaryDeckingType &&
+    primaryDeckingType !== 'none' &&
+    primaryDeckingArea > 0 &&
+    !tileCopingDecking.isDeckingOffContract
+  ) {
+    const deckingMaterial = getCopingDeckingWarrantyMaterial(
+      primaryDeckingType,
+      getDeckingTypeFullLabel(primaryDeckingType),
+      normalizeDeckingOptionId
+    );
+    if (deckingMaterial) {
+      selectedMaterials.add(deckingMaterial);
+    }
+  }
+
+  getAdditionalDeckingSelections(tileCopingDecking).forEach((selection) => {
+    const deckingType = String(selection.deckingType || '').trim();
+    const area = Number(selection.area || 0);
+    if (!deckingType || area <= 0 || selection.isOffContract) {
+      return;
+    }
+
+    const deckingMaterial = getCopingDeckingWarrantyMaterial(
+      deckingType,
+      getDeckingTypeFullLabel(deckingType),
+      normalizeDeckingOptionId
+    );
+    if (deckingMaterial) {
+      selectedMaterials.add(deckingMaterial);
+    }
+  });
+
+  const materialLabels = (['Travertine', 'Pavers'] as const).filter((material) =>
+    selectedMaterials.has(material)
+  );
+  if (!materialLabels.length) return '';
+  return `1 Year Warranty included with ${materialLabels.join(' and ')}`;
+};
+
 const getCopingSquareFootMultiplier = (copingSize?: string) => {
   switch (copingSize) {
     case '12x24':
@@ -507,6 +592,7 @@ const buildCopingDeckingSection = (proposal?: Partial<Proposal>): WarrantySectio
   const hasCoping = Boolean(copingType) && copingType !== 'none';
   const includesDecking = hasIncludedDecking(proposal);
   const title = hasCoping && includesDecking ? 'Coping & Decking' : hasCoping ? 'Coping' : 'Decking';
+  const warrantyAdvantageText = buildCopingDeckingWarrantyAdvantageText(proposal);
 
   return {
     id: GENERATED_COPING_DECKING_WARRANTY_SECTION_ID,
@@ -517,7 +603,14 @@ const buildCopingDeckingSection = (proposal?: Partial<Proposal>): WarrantySectio
       label: item.label || '',
       detail: item.detail,
     })),
-    advantageItems: [],
+    advantageItems: warrantyAdvantageText
+      ? [
+          {
+            id: `${createGeneratedCopingDeckingWarrantyId('selected-materials')}-advantage`,
+            text: warrantyAdvantageText,
+          },
+        ]
+      : [],
   };
 };
 
@@ -732,6 +825,9 @@ const isGeneratedInteriorFinishWarrantyAdvantageItem = (item: WarrantyAdvantageI
   typeof item.id === 'string' && item.id.startsWith(`${GENERATED_INTERIOR_FINISH_WARRANTY_ID_PREFIX}-`);
 
 const isGeneratedCopingDeckingWarrantyItem = (item: WarrantyFeatureItem) =>
+  typeof item.id === 'string' && item.id.startsWith(`${GENERATED_COPING_DECKING_WARRANTY_ID_PREFIX}-`);
+
+const isGeneratedCopingDeckingWarrantyAdvantageItem = (item: WarrantyAdvantageItem) =>
   typeof item.id === 'string' && item.id.startsWith(`${GENERATED_COPING_DECKING_WARRANTY_ID_PREFIX}-`);
 
 const isGeneratedPlumbingWarrantyAdvantageItem = (item: WarrantyAdvantageItem) =>
@@ -1006,12 +1102,11 @@ const mergeCopingDeckingSection = (
   proposal?: Partial<Proposal>
 ): WarrantySection[] => {
   const generatedSection = buildCopingDeckingSection(proposal);
-  const targetTitles = new Set(['coping & decking', 'coping', 'decking']);
   let foundSection = false;
 
   const mergedSections = sections
     .map((section) => {
-      if (!targetTitles.has(section.title.trim().toLowerCase())) {
+      if (!isCopingDeckingWarrantySectionTitle(section.title)) {
         return section;
       }
 
@@ -1021,8 +1116,20 @@ const mergeCopingDeckingSection = (
         ...manualFeatureItems,
         ...(generatedSection?.featureItems || []),
       ];
+      const manualAdvantageItems = section.advantageItems.filter(
+        (item) => !isGeneratedCopingDeckingWarrantyAdvantageItem(item)
+      );
+      const nextAdvantageItems = [
+        ...manualAdvantageItems,
+        ...(generatedSection?.advantageItems || []),
+      ];
 
-      if (!generatedSection && section.id === GENERATED_COPING_DECKING_WARRANTY_SECTION_ID && !manualFeatureItems.length) {
+      if (
+        !generatedSection &&
+        section.id === GENERATED_COPING_DECKING_WARRANTY_SECTION_ID &&
+        !manualFeatureItems.length &&
+        !manualAdvantageItems.length
+      ) {
         return null;
       }
 
@@ -1032,6 +1139,7 @@ const mergeCopingDeckingSection = (
         title: generatedSection?.title || section.title,
         icon: generatedSection?.icon || section.icon,
         featureItems: nextFeatureItems,
+        advantageItems: nextAdvantageItems,
       };
     })
     .filter((section): section is WarrantySection => Boolean(section));

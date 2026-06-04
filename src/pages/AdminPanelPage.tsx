@@ -64,6 +64,7 @@ type SelectedUserStatus = {
 
 interface AdminPanelPageProps {
   onOpenPricingData?: () => void;
+  onOpenNotes?: () => void;
   session?: SessionInfo | null;
   offsetSettingsLauncher?: boolean;
 }
@@ -116,7 +117,7 @@ const isSubmittedStatus = (status?: string) => {
   );
 };
 
-function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = false }: AdminPanelPageProps) {
+function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSettingsLauncher = false }: AdminPanelPageProps) {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(true);
@@ -1131,14 +1132,24 @@ function AdminPanelPage({ onOpenPricingData, session, offsetSettingsLauncher = f
               <h2 className="admin-card-title">Franchise Pricing</h2>
               <p className="admin-kicker">Manage Pricing Models</p>
             </div>
-            <button
-              className="admin-primary-btn"
-              type="button"
-              onClick={onOpenPricingData}
-              disabled={!onOpenPricingData}
-            >
-              Open Admin Pricing
-            </button>
+            <div className="admin-card-actions">
+              <button
+                className="admin-primary-btn"
+                type="button"
+                onClick={onOpenPricingData}
+                disabled={!onOpenPricingData}
+              >
+                Open Admin Pricing
+              </button>
+              <button
+                className="admin-primary-btn ghost"
+                type="button"
+                onClick={onOpenNotes}
+                disabled={!onOpenNotes}
+              >
+                Edit Notes
+              </button>
+            </div>
           </div>
           <div className="admin-divider" />
           <div className="admin-models-list" role="list">

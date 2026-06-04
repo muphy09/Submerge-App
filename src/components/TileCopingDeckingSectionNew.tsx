@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import pricingData from '../services/pricingData';
 import { AdditionalDeckingSelection, TileCopingDecking } from '../types/proposal-new';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import {
   getAdditionalDeckingOption,
   getAdditionalDeckingSelections,
@@ -21,6 +22,7 @@ import {
   normalizeTileOptionId,
 } from '../utils/tileCopingCatalogs';
 import CustomOptionsSection from './CustomOptionsSection';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
@@ -28,6 +30,7 @@ interface Props {
   onChange: (data: TileCopingDecking) => void;
   isFiberglass: boolean;
   poolDeckingArea: number;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 const CompactInput = ({
@@ -96,7 +99,7 @@ const ensureSelectedOption = (
   ];
 };
 
-function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDeckingArea }: Props) {
+function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDeckingArea, noteOverrides }: Props) {
   const showStoneRockwork = false;
   const isDeckingOffContract = Boolean(data.isDeckingOffContract);
   const selectedTileOptionId = getTileSelectionId(data);
@@ -239,6 +242,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
         <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Tile</h2>
+          <ProposalNote categoryKey="tileCopingDecking" subcategoryId="tile" overrides={noteOverrides} />
         </div>
 
           <div className="spec-grid-3-fixed">
@@ -286,6 +290,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Coping</h2>
+          <ProposalNote categoryKey="tileCopingDecking" subcategoryId="coping" overrides={noteOverrides} />
         </div>
 
         <div className="spec-grid-4-fixed">
@@ -346,9 +351,12 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
           className="spec-block-header"
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}
         >
-          <h2 className="spec-block-title" style={{ width: 'auto', margin: 0 }}>
-            Decking
-          </h2>
+          <div style={{ display: 'grid', gap: '4px', minWidth: 0, flex: '1 1 260px' }}>
+            <h2 className="spec-block-title" style={{ width: 'auto', margin: 0 }}>
+              Decking
+            </h2>
+            <ProposalNote categoryKey="tileCopingDecking" subcategoryId="decking" overrides={noteOverrides} />
+          </div>
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
             <label className="form-checkbox">
               <input
@@ -533,6 +541,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
         <div className="spec-block">
           <div className="spec-block-header">
             <h2 className="spec-block-title">Stone / Rockwork</h2>
+            <ProposalNote categoryKey="tileCopingDecking" subcategoryId="stoneRockwork" overrides={noteOverrides} />
           </div>
 
           <div className="spec-grid spec-grid-2">
@@ -590,6 +599,7 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Options</h2>
+          <ProposalNote categoryKey="tileCopingDecking" subcategoryId="options" overrides={noteOverrides} />
         </div>
 
         <div className="pool-type-buttons" style={{ maxWidth: '360px' }}>
@@ -606,6 +616,8 @@ function TileCopingDeckingSectionNew({ data, onChange, isFiberglass, poolDecking
       <CustomOptionsSection
         data={data.customOptions || []}
         onChange={(customOptions) => handleChange('customOptions', customOptions)}
+        noteCategoryKey="tileCopingDecking"
+        noteOverrides={noteOverrides}
       />
     </div>
   );

@@ -1,3 +1,10 @@
+## [2.3.14] - 6/4/26
+### Warranty Defaults
+- Travertine & Pavers now include a 1 Year Warranty. Concrete remains blank
+### Category Notes
+- Admins can now configure the descriptions of each subcategory for the proposal builder
+- New "Edit Notes" button placed inside of the Admin Panel
+---
 ## [2.3.12] - 5/26/26
 ### Heater Defaults
 - Heater is now automatically added if a Spa is added to the Proposal

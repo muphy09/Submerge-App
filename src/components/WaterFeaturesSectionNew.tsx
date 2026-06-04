@@ -16,8 +16,10 @@ import {
   waterFeatureNeedsConduitRun,
   waterFeatureNeedsGasRun,
 } from '../utils/waterFeatureCost';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import { TooltipAnchor } from './AppTooltip';
 import CustomOptionsSection from './CustomOptionsSection';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
@@ -27,6 +29,7 @@ interface Props {
   onChangePlumbingRuns: (runs: Partial<PlumbingRuns>) => void;
   disabledReason?: string;
   packageWarningMessage?: string;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 type WaterFeatureOption = {
@@ -43,7 +46,7 @@ type WaterFeatureOption = {
 
 type CategoryConfig = {
   title: string;
-  subtitle: string;
+  noteId: string;
   emptyLabel: string;
   noLabel: string;
   addLabel: string;
@@ -129,6 +132,7 @@ function WaterFeaturesSectionNew({
   onChangePlumbingRuns,
   disabledReason,
   packageWarningMessage,
+  noteOverrides,
 }: Props) {
   const [activeSheerIndex, setActiveSheerIndex] = useState<number | null>(null);
   const [activeWokIndex, setActiveWokIndex] = useState<number | null>(null);
@@ -479,7 +483,7 @@ function WaterFeaturesSectionNew({
 
   const renderCategoryBlock = ({
     title,
-    subtitle,
+    noteId,
     emptyLabel,
     noLabel,
     addLabel,
@@ -499,7 +503,7 @@ function WaterFeaturesSectionNew({
       <div className="spec-block" key={title}>
         <div className="spec-block-header">
           <h2 className="spec-block-title">{title}</h2>
-          <p className="spec-block-subtitle">{subtitle}</p>
+          <ProposalNote categoryKey="waterFeatures" subcategoryId={noteId} overrides={noteOverrides} />
         </div>
 
         <div className="pool-type-buttons stackable">
@@ -663,7 +667,7 @@ function WaterFeaturesSectionNew({
   const categoryBlocks: CategoryConfig[] = [
     {
       title: 'Sheer Descents',
-      subtitle: 'Add Sheer Descents to the project.',
+      noteId: 'sheerDescents',
       emptyLabel: 'No Sheer Descents',
       noLabel: 'No Sheer Descent',
       addLabel: 'Add Sheer Descent',
@@ -677,7 +681,7 @@ function WaterFeaturesSectionNew({
     },
     {
       title: 'Wok Pots',
-      subtitle: 'Add Wok Pots to the project.',
+      noteId: 'wokPots',
       emptyLabel: 'No Wok Pots',
       noLabel: 'No Wok Pot',
       addLabel: 'Add Wok Pot',
@@ -691,7 +695,7 @@ function WaterFeaturesSectionNew({
     },
     {
       title: 'Jets',
-      subtitle: 'Add Jets to the project.',
+      noteId: 'jets',
       emptyLabel: 'No Jets',
       noLabel: 'No Jet',
       addLabel: 'Add Jet',
@@ -705,7 +709,7 @@ function WaterFeaturesSectionNew({
     },
     {
       title: 'Bubblers',
-      subtitle: 'Add Bubblers to the project.',
+      noteId: 'bubblers',
       emptyLabel: 'No Bubblers',
       noLabel: 'No Bubbler',
       addLabel: 'Add Bubbler',
@@ -749,6 +753,8 @@ function WaterFeaturesSectionNew({
           <CustomOptionsSection
             data={data.customOptions || []}
             onChange={(customOptions) => onChange({ ...data, customOptions })}
+            noteCategoryKey="waterFeatures"
+            noteOverrides={noteOverrides}
           />
         </div>
         {isDisabled && <div className="package-disabled-overlay" aria-hidden="true" />}

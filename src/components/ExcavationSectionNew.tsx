@@ -7,12 +7,15 @@ import {
   normalizeMasonryFacingId,
   type MasonryFacingOption,
 } from '../utils/masonryFacing';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import CustomOptionsSection from './CustomOptionsSection';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
   data: Excavation;
   onChange: (data: Excavation) => void;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 const defaultRBBLevel: RBBLevel = {
@@ -128,7 +131,7 @@ const formatColumnsTitle = (columns: Excavation['columns'], facingOptions: Mason
   return parts.join(' | ');
 };
 
-function ExcavationSectionNew({ data, onChange }: Props) {
+function ExcavationSectionNew({ data, onChange, noteOverrides }: Props) {
   const [activeRBBIndex, setActiveRBBIndex] = useState<number | null>(null);
   const [activeExposedPoolWallIndex, setActiveExposedPoolWallIndex] = useState<number | null>(null);
   const [columnsEditing, setColumnsEditing] = useState<boolean>(data.columns.count > 0);
@@ -345,7 +348,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Raised Bond Beam (RBB)</h2>
-          <p className="spec-block-subtitle">Add Raised Bond Beams to the project.</p>
+          <ProposalNote categoryKey="excavation" subcategoryId="raisedBondBeam" overrides={noteOverrides} />
         </div>
 
         <div className="pool-type-buttons stackable">
@@ -504,7 +507,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Columns</h2>
-          <p className="spec-block-subtitle">Add columns to the project.</p>
+          <ProposalNote categoryKey="excavation" subcategoryId="columns" overrides={noteOverrides} />
         </div>
 
         <div className="pool-type-buttons stackable">
@@ -663,7 +666,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Retaining Wall</h2>
-          <p className="spec-block-subtitle">Add Retaining Walls to the project.</p>
+          <ProposalNote categoryKey="excavation" subcategoryId="retainingWall" overrides={noteOverrides} />
         </div>
 
         <div className="pool-type-buttons stackable">
@@ -749,7 +752,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Exposed Pool Wall (Out of Ground Forming)</h2>
-          <p className="spec-block-subtitle">Add exposed pool wall forming to the project.</p>
+          <ProposalNote categoryKey="excavation" subcategoryId="exposedPoolWall" overrides={noteOverrides} />
         </div>
 
         <div className="pool-type-buttons stackable">
@@ -935,7 +938,7 @@ function ExcavationSectionNew({ data, onChange }: Props) {
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Additional Options</h2>
-          <p className="spec-block-subtitle">Gravel Install and Dirt Haul included by default.</p>
+          <ProposalNote categoryKey="excavation" subcategoryId="additionalOptions" overrides={noteOverrides} />
         </div>
         <div className="pool-type-buttons stackable" style={{ marginTop: '10px' }}>
           <button
@@ -1012,6 +1015,8 @@ function ExcavationSectionNew({ data, onChange }: Props) {
       <CustomOptionsSection
         data={data.customOptions || []}
         onChange={(customOptions) => handleChange('customOptions', customOptions)}
+        noteCategoryKey="excavation"
+        noteOverrides={noteOverrides}
       />
     </div>
   );

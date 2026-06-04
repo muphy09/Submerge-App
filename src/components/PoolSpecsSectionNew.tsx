@@ -16,7 +16,9 @@ import {
   getFiberglassPoolModelsBySize,
   normalizeFiberglassSize,
 } from '../utils/fiberglass';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import { TooltipAnchor } from './AppTooltip';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
@@ -28,6 +30,7 @@ interface Props {
   onChangeTileCopingDecking?: (data: TileCopingDecking) => void;
   disableSpaSelections?: boolean;
   disabledSpaMessage?: string;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
 // Helper component for compact inputs with inline unit labels
@@ -104,6 +107,7 @@ function PoolSpecsSectionNew({
   onChangeTileCopingDecking,
   disableSpaSelections = false,
   disabledSpaMessage,
+  noteOverrides,
 }: Props) {
   const dropdownStyle = { width: '100%', height: '38px', padding: '6px 10px', lineHeight: '20px', boxSizing: 'border-box' as const };
   const raisedSpaFacingOptions = getMasonryFacingOptions(pricingData.masonry, 'raisedSpa');
@@ -207,6 +211,7 @@ function PoolSpecsSectionNew({
       {/* ==================== CUSTOMER INFORMATION ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Customer Information</h2>
+        <ProposalNote categoryKey="poolSpecs" subcategoryId="customerInformation" overrides={noteOverrides} />
         <div className="spec-grid-3">
           <div className="spec-field">
             <label className="spec-label required">Customer Name</label>
@@ -247,6 +252,7 @@ function PoolSpecsSectionNew({
       {/* ==================== POOL DIMENSIONS BLOCK ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Pool Dimensions</h2>
+        <ProposalNote categoryKey="poolSpecs" subcategoryId="poolDimensions" overrides={noteOverrides} />
 
         {/* Pool Type Button Selection */}
         <div className="pool-type-buttons">
@@ -499,6 +505,7 @@ function PoolSpecsSectionNew({
       {/* ==================== SPA BLOCK ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Spa</h2>
+        <ProposalNote categoryKey="poolSpecs" subcategoryId="spa" overrides={noteOverrides} />
 
         {/* Spa Type Button Selection */}
         <div className="pool-type-buttons">
@@ -709,6 +716,7 @@ function PoolSpecsSectionNew({
       {/* ==================== TRAVEL BLOCK ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Travel</h2>
+        <ProposalNote categoryKey="poolSpecs" subcategoryId="travel" overrides={noteOverrides} />
 
         <div className="spec-grid-2">
           <div className="spec-field">
@@ -740,6 +748,7 @@ function PoolSpecsSectionNew({
       {/* ==================== ADDITIONAL OPTIONS BLOCK ==================== */}
       <div className="spec-block">
         <h2 className="spec-block-title">Additional Options</h2>
+        <ProposalNote categoryKey="poolSpecs" subcategoryId="additionalOptions" overrides={noteOverrides} />
 
         <div className="spec-grid-3">
           {[

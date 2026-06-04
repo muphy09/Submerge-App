@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import FranchiseLogo from './FranchiseLogo';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
-import { resolveWarrantySections } from '../utils/warranty';
+import { isCopingDeckingWarrantySectionTitle, resolveWarrantySections } from '../utils/warranty';
 import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay';
 import { hasIncludedDecking } from '../utils/decking';
 import type { CostBreakdownSubcategory } from '../utils/costBreakdownSubcategories';
@@ -967,6 +967,8 @@ function BreakdownWarrantySectionCard({
   displayName: string;
   sectionKey: string;
 }) {
+  const suppressEmptyAdvantagePlaceholder = isCopingDeckingWarrantySectionTitle(section.title);
+
   return (
     <section className="breakdown-export-warranty-card" data-warranty-section-key={sectionKey}>
       <div className="breakdown-export-warranty-card-header">
@@ -989,7 +991,7 @@ function BreakdownWarrantySectionCard({
                 {item.text}
               </div>
             ))
-          ) : (
+          ) : suppressEmptyAdvantagePlaceholder ? null : (
             <div className="breakdown-export-advantage-chip muted">No {displayName} advantages listed.</div>
           )}
         </div>

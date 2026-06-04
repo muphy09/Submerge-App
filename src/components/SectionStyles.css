@@ -503,6 +503,7 @@ select.compact-input {
   margin: 4px 0 0 0;
   color: #6b7280;
   font-size: 0.9rem;
+  white-space: pre-wrap;
 }
 
 .spec-grid {

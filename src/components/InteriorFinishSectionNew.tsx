@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { InteriorFinish, InteriorFinishType } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { subscribeToPricingData } from '../services/pricingDataStore';
+import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import CustomOptionsSection from './CustomOptionsSection';
 import { TooltipAnchor } from './AppTooltip';
+import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 
 interface Props {
@@ -11,9 +13,10 @@ interface Props {
   onChange: (data: InteriorFinish) => void;
   hasSpa: boolean;
   isFiberglass: boolean;
+  noteOverrides?: ProposalNoteOverrides;
 }
 
-function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass }: Props) {
+function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, noteOverrides }: Props) {
   const [finishes, setFinishes] = useState(pricingData.interiorFinish.finishes || []);
   const fiberglassDisabledMessage = 'Cannot be adjusted, Fiberglass selected';
 
@@ -90,7 +93,7 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass }: Prop
       <div className="spec-block">
         <div className="spec-block-header">
           <h2 className="spec-block-title">Finish Type</h2>
-          <p className="spec-block-subtitle">Select interior finish and color / style.</p>
+          <ProposalNote categoryKey="interiorFinish" subcategoryId="finishType" overrides={noteOverrides} />
         </div>
 
         {isFiberglass && (
@@ -164,6 +167,8 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass }: Prop
         <CustomOptionsSection
           data={data.customOptions || []}
           onChange={(customOptions) => onChange({ ...data, customOptions })}
+          noteCategoryKey="interiorFinish"
+          noteOverrides={noteOverrides}
         />
       )}
     </div>
