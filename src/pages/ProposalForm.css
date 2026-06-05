@@ -161,6 +161,20 @@
   --pricing-status-color: #ffffff;
 }
 
+.form-header-pricing--bronze {
+  --pricing-box-bg:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, #ffffff 0%, #fff8ee 62%, #f4dcc4 100%);
+  --pricing-box-border: #c08a55;
+  --pricing-box-color: #7c3f13;
+  --pricing-status-bg: linear-gradient(135deg, #92400e 0%, #b45309 100%);
+  --pricing-status-color: #ffffff;
+}
+
+.form-header-pricing--tier {
+  width: min(100%, clamp(150px, 14vw, 190px));
+}
+
 .form-header-pricing-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -190,7 +204,7 @@
   white-space: nowrap;
   font-size: 0.88rem;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.35;
 }
 
@@ -1048,6 +1062,7 @@
   min-width: 0;
   justify-content: flex-start;
   grid-column: 1;
+  gap: 8px;
 }
 
 .section-title {
@@ -1433,12 +1448,17 @@
   .section-title-pricing {
     width: 100%;
     align-items: flex-start;
+    flex-wrap: wrap;
   }
 
   .section-title-pricing .form-header-pricing {
-    width: 100%;
+    width: min(100%, 320px);
     max-width: 100%;
     min-width: 0;
+  }
+
+  .section-title-pricing .form-header-pricing--tier {
+    width: min(100%, 190px);
   }
 
   .section-title {

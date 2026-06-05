@@ -22,6 +22,7 @@ import {
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { CURRENT_CONTRACT_TEMPLATE_REVISION } from '../services/contractTemplateUpgrade';
+import { NORMAL_PRICING_TIER_ID, getPricingTierName } from '../services/pricingTiers';
 import { getEquipmentItemCost } from './equipmentCost';
 import { getDefaultCleanerOption, getNoCleanerOption } from './cleanerDefaults';
 import { getNoPumpSelection } from './pumpDefaults';
@@ -410,6 +411,8 @@ export function getDefaultProposal(): Partial<Proposal> {
     activeVersionId: 'original',
     versions: [],
     isOriginalVersion: true,
+    pricingTierId: NORMAL_PRICING_TIER_ID,
+    pricingTierName: getPricingTierName(NORMAL_PRICING_TIER_ID),
     customerInfo: {
       customerName: '',
       city: '',

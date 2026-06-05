@@ -1,3 +1,12 @@
+## [2.4.0] - 6/4/26
+### Tiered Pricing
+- Introduced a new pricing structure accomodating for different 'Pricing Tiers'
+- 2 Pricing Tiers currently exist: Normal and Bronze
+    - Bronze Pricing Tier can be edited in the Admin Pricing Menu
+    - Default Bronze Pricing values are modeled from the Excel Workbook
+    - Variables that differ from the Normal Tier will be highlighted in Red
+    - A few options (like Microglass) are disabled for selection in the Bronze Tier
+---
 ## [2.3.13] - 6/4/26
 ### Warranty Defaults
 - Travertine & Pavers now include a 1 Year Warranty. Concrete remains blank

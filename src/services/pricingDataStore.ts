@@ -7,11 +7,28 @@ import {
 } from './pricingModelsAdapter';
 import { ensureMasonryFacingCatalogs } from '../utils/masonryFacing';
 import { ensureTileCopingDeckingCatalogs } from '../utils/tileCopingCatalogs';
+import {
+  BRONZE_PRICING_TIER_ID,
+  NORMAL_PRICING_TIER_ID,
+  getPricingTierName,
+  isBronzeLockedPricingPath,
+  normalizePricingTierId,
+  normalizePricingTiers,
+  removePricingTierOverride,
+  resolvePricingForTier,
+  upsertPricingTierOverride,
+  withoutPricingRuntimeFields,
+  type PricingData as TieredPricingData,
+  type PricingTierId,
+} from './pricingTiers';
 
-type PricingData = typeof pricingData;
+type PricingData = TieredPricingData;
 type PricingLoadState = {
   franchiseId: string;
   pricing: PricingData;
+  basePricing: PricingData;
+  pricingTierId: PricingTierId;
+  pricingTierName: string;
   pricingModelId: string | null;
   pricingModelName: string | null;
   pricingModelFranchiseId: string | null;
@@ -30,8 +47,10 @@ let activePricingModelId: string | null = null;
 let activePricingModelName: string | null = null;
 let activePricingModelFranchiseId: string | null = null;
 let activePricingModelIsDefault = true;
+let activePricingTierId: PricingTierId = NORMAL_PRICING_TIER_ID;
 const defaultSnapshot: PricingData = deepClone(pricingData);
-let pricingState: PricingData = deepClone(pricingData);
+let basePricingState: PricingData = normalizePricingTiers(deepClone(pricingData));
+let pricingState: PricingData = resolvePricingForTier(basePricingState, activePricingTierId);
 const listeners = new Set<(data: PricingData) => void>();
 
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
@@ -43,7 +62,7 @@ function normalizePricingState(snapshot: PricingData, source?: any): PricingData
   syncOutOfGroundPlumbingPricing(normalized, source);
   syncExcavationAdminTables(normalized, source);
   syncBlowerCatalog(normalized);
-  return normalized;
+  return normalizePricingTiers(normalized);
 }
 
 function syncBlowerCatalog(target: PricingData) {
@@ -432,19 +451,6 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
-function setDeep(target: any, path: (string | number)[], value: any) {
-  if (!path.length) return;
-  let cursor = target;
-  for (let i = 0; i < path.length - 1; i++) {
-    const key = path[i];
-    if (cursor[key] === undefined || cursor[key] === null) {
-      cursor[key] = typeof path[i + 1] === 'number' ? [] : {};
-    }
-    cursor = cursor[key];
-  }
-  cursor[path[path.length - 1]] = value;
-}
-
 function getDeep(target: any, path: (string | number)[]) {
   return path.reduce((acc, key) => (acc ? acc[key] : undefined), target);
 }
@@ -565,19 +571,25 @@ function notify() {
 async function resolvePricingState(
   franchiseId: string,
   pricingModelId?: string,
-  pricingModelFranchiseId?: string
+  pricingModelFranchiseId?: string,
+  pricingTierId?: string | null
 ): Promise<PricingLoadState> {
+  const resolvedTierId = normalizePricingTierId(pricingTierId);
   try {
     if (pricingModelId) {
       const sourceFranchiseId = pricingModelFranchiseId || franchiseId;
       const result = await loadPricingModelRemote(sourceFranchiseId, pricingModelId);
       if (result?.pricing) {
+        const basePricing = normalizePricingState(
+          mergeDeep(defaultSnapshot, result.pricing ?? {}),
+          result.pricing
+        );
         return {
           franchiseId,
-          pricing: normalizePricingState(
-            mergeDeep(defaultSnapshot, result.pricing ?? {}),
-            result.pricing
-          ),
+          pricing: resolvePricingForTier(basePricing, resolvedTierId),
+          basePricing,
+          pricingTierId: resolvedTierId,
+          pricingTierName: getPricingTierName(resolvedTierId),
           pricingModelId: result.pricingModelId || pricingModelId,
           pricingModelName: result.pricingModelName || null,
           pricingModelFranchiseId: result.franchiseId || sourceFranchiseId,
@@ -590,9 +602,13 @@ async function resolvePricingState(
   }
 
   const saved = await fetchPersistedPricing(franchiseId);
+  const basePricing = normalizePricingState(mergeDeep(defaultSnapshot, saved.pricing ?? {}), saved.pricing);
   return {
     franchiseId,
-    pricing: normalizePricingState(mergeDeep(defaultSnapshot, saved.pricing ?? {}), saved.pricing),
+    pricing: resolvePricingForTier(basePricing, resolvedTierId),
+    basePricing,
+    pricingTierId: resolvedTierId,
+    pricingTierName: getPricingTierName(resolvedTierId),
     pricingModelId: saved.pricingModelId,
     pricingModelName: saved.pricingModelName,
     pricingModelFranchiseId: saved.pricingModelFranchiseId,
@@ -601,12 +617,14 @@ async function resolvePricingState(
 }
 
 function applyPricingState(state: PricingLoadState) {
+  basePricingState = normalizePricingTiers(deepClone(state.basePricing));
   pricingState = state.pricing;
   activeFranchiseId = state.franchiseId;
   activePricingModelId = state.pricingModelId;
   activePricingModelName = state.pricingModelName;
   activePricingModelFranchiseId = state.pricingModelFranchiseId;
   activePricingModelIsDefault = state.isDefault;
+  activePricingTierId = state.pricingTierId;
   syncBaseFromState();
   notify();
 }
@@ -614,10 +632,11 @@ function applyPricingState(state: PricingLoadState) {
 async function loadPricingForFranchise(
   franchiseId: string,
   pricingModelId?: string,
-  pricingModelFranchiseId?: string
+  pricingModelFranchiseId?: string,
+  pricingTierId?: string | null
 ) {
   const requestId = ++latestLoadRequestId;
-  const resolved = await resolvePricingState(franchiseId, pricingModelId, pricingModelFranchiseId);
+  const resolved = await resolvePricingState(franchiseId, pricingModelId, pricingModelFranchiseId, pricingTierId);
   if (requestId !== latestLoadRequestId) {
     return resolved;
   }
@@ -628,13 +647,14 @@ async function loadPricingForFranchise(
 export async function initPricingDataStore(
   franchiseId?: string,
   pricingModelId?: string,
-  pricingModelFranchiseId?: string
+  pricingModelFranchiseId?: string,
+  pricingTierId?: string | null
 ) {
-  if (loadingPromise && !franchiseId && !pricingModelId && !pricingModelFranchiseId) return loadingPromise;
+  if (loadingPromise && !franchiseId && !pricingModelId && !pricingModelFranchiseId && !pricingTierId) return loadingPromise;
 
   const currentPromise = (async () => {
     const targetId = await resolveTargetFranchiseId(franchiseId);
-    await loadPricingForFranchise(targetId, pricingModelId, pricingModelFranchiseId);
+    await loadPricingForFranchise(targetId, pricingModelId, pricingModelFranchiseId, pricingTierId);
   })();
 
   loadingPromise = currentPromise;
@@ -669,24 +689,40 @@ export function getActivePricingModelMeta() {
     pricingModelName: activePricingModelName,
     pricingModelFranchiseId: activePricingModelFranchiseId,
     isDefault: activePricingModelIsDefault,
+    pricingTierId: activePricingTierId,
+    pricingTierName: getPricingTierName(activePricingTierId),
   };
 }
 
-export async function setActivePricingModel(pricingModelId: string, pricingModelFranchiseId?: string) {
+export async function setActivePricingModel(
+  pricingModelId: string,
+  pricingModelFranchiseId?: string,
+  pricingTierId?: string | null
+) {
   if (!pricingModelId) return;
-  await loadPricingForFranchise(activeFranchiseId, pricingModelId, pricingModelFranchiseId);
+  await loadPricingForFranchise(activeFranchiseId, pricingModelId, pricingModelFranchiseId, pricingTierId ?? activePricingTierId);
+}
+
+export async function setActivePricingTier(pricingTierId: string | null | undefined) {
+  const nextTierId = normalizePricingTierId(pricingTierId);
+  activePricingTierId = nextTierId;
+  pricingState = resolvePricingForTier(basePricingState, activePricingTierId);
+  syncBaseFromState();
+  notify();
 }
 
 export async function loadPricingSnapshotForFranchise(
   franchiseId?: string,
   pricingModelId?: string,
-  pricingModelFranchiseId?: string
+  pricingModelFranchiseId?: string,
+  pricingTierId?: string | null
 ) {
   const targetId = await resolveTargetFranchiseId(franchiseId);
-  const resolved = await resolvePricingState(targetId, pricingModelId, pricingModelFranchiseId);
+  const resolved = await resolvePricingState(targetId, pricingModelId, pricingModelFranchiseId, pricingTierId);
   return {
     ...resolved,
     pricing: deepClone(resolved.pricing),
+    basePricing: deepClone(resolved.basePricing),
   };
 }
 
@@ -705,6 +741,7 @@ export function clearActivePricingModelMeta() {
   activePricingModelName = null;
   activePricingModelFranchiseId = null;
   activePricingModelIsDefault = false;
+  activePricingTierId = NORMAL_PRICING_TIER_ID;
 }
 
 export async function savePricingModelSnapshot(options: {
@@ -716,7 +753,7 @@ export async function savePricingModelSnapshot(options: {
 }) {
   return savePricingModelRemote({
     franchiseId: activeFranchiseId,
-    pricing: pricingState,
+    pricing: withoutPricingRuntimeFields(basePricingState),
     version: STORAGE_VERSION,
     name: options.name,
     pricingModelId: options.createNew ? undefined : activePricingModelId || undefined,
@@ -731,27 +768,48 @@ export function getPricingDataSnapshot(): PricingData {
   return deepClone(pricingState);
 }
 
+export function getNormalPricingDataSnapshot(): PricingData {
+  return deepClone(basePricingState);
+}
+
+export function getActivePricingTierId(): PricingTierId {
+  return activePricingTierId;
+}
+
+export function resetPricingTierOverride(path: (string | number)[]) {
+  if (activePricingTierId === NORMAL_PRICING_TIER_ID) return;
+  basePricingState = removePricingTierOverride(basePricingState, activePricingTierId, path);
+  refreshEffectivePricingState();
+}
+
+export function isActiveBronzeLockedPricingPath(path: (string | number)[]) {
+  return activePricingTierId === BRONZE_PRICING_TIER_ID && isBronzeLockedPricingPath(path);
+}
+
+function refreshEffectivePricingState() {
+  basePricingState = normalizePricingTiers(basePricingState);
+  pricingState = resolvePricingForTier(basePricingState, activePricingTierId);
+  syncBaseFromState();
+  notify();
+}
+
 export function updatePricingValue(path: (string | number)[], value: any) {
-  setDeep(pricingState, path, value);
-  setDeep(pricingData as any, path, deepClone(value));
+  basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, path, value);
 
   const pathKey = path.join('.');
   if (pathKey.startsWith('misc.waterTruck.')) {
     const legacyPath = ['interiorFinish', 'waterTruck', path[path.length - 1] as string];
-    setDeep(pricingState, legacyPath, value);
-    setDeep(pricingData as any, legacyPath, deepClone(value));
+    basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, legacyPath, value);
   }
   if (pathKey === 'misc.startup.fiveYearWarranty') {
     const legacyPath = ['misc', 'startup', 'premium'];
-    setDeep(pricingState, legacyPath, value);
-    setDeep(pricingData as any, legacyPath, deepClone(value));
+    basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, legacyPath, value);
   }
   if (isExcavationAdminTablePath(path)) {
-    syncExcavationAdminTables(pricingState, pricingState);
-    syncExcavationAdminTables(pricingData as any, pricingData as any);
+    syncExcavationAdminTables(basePricingState, basePricingState);
   }
 
-  notify();
+  refreshEffectivePricingState();
 }
 
 export function updatePricingListItem(
@@ -762,41 +820,32 @@ export function updatePricingListItem(
 ) {
   const list = getDeep(pricingState, path);
   if (!Array.isArray(list) || !list[index]) return;
-  const updated = { ...list[index], [key]: value };
-  const nextList = [...list];
-  nextList[index] = updated;
-  setDeep(pricingState, path, nextList);
-  setDeep(pricingData as any, path, deepClone(nextList));
+  basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, [...path, index, key], value);
   if (isExcavationAdminTablePath(path)) {
-    syncExcavationAdminTables(pricingState, pricingState);
-    syncExcavationAdminTables(pricingData as any, pricingData as any);
+    syncExcavationAdminTables(basePricingState, basePricingState);
   }
-  notify();
+  refreshEffectivePricingState();
 }
 
 export function addPricingListItem(path: (string | number)[], item: any) {
   const list = getDeep(pricingState, path) || [];
   const nextList = [...list, item];
-  setDeep(pricingState, path, nextList);
-  setDeep(pricingData as any, path, deepClone(nextList));
+  basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, path, nextList);
   if (isExcavationAdminTablePath(path)) {
-    syncExcavationAdminTables(pricingState, pricingState);
-    syncExcavationAdminTables(pricingData as any, pricingData as any);
+    syncExcavationAdminTables(basePricingState, basePricingState);
   }
-  notify();
+  refreshEffectivePricingState();
 }
 
 export function removePricingListItem(path: (string | number)[], index: number) {
   const list = getDeep(pricingState, path);
   if (!Array.isArray(list)) return;
   const nextList = list.filter((_: any, i: number) => i !== index);
-  setDeep(pricingState, path, nextList);
-  setDeep(pricingData as any, path, deepClone(nextList));
+  basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, path, nextList);
   if (isExcavationAdminTablePath(path)) {
-    syncExcavationAdminTables(pricingState, pricingState);
-    syncExcavationAdminTables(pricingData as any, pricingData as any);
+    syncExcavationAdminTables(basePricingState, basePricingState);
   }
-  notify();
+  refreshEffectivePricingState();
 }
 
 export function subscribeToPricingData(listener: (data: PricingData) => void) {

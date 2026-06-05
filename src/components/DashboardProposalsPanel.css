@@ -204,7 +204,7 @@
 
 .dashboard-proposals-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1080px;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -329,6 +329,21 @@
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.dashboard-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0.22rem 0.58rem;
+  border-radius: 999px;
+  border: 1px solid #d7e1ed;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 800;
   white-space: nowrap;
 }
 

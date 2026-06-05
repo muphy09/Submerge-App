@@ -5,6 +5,7 @@
 import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts, CustomOption } from '../types/proposal-new';
 import pricingData from './pricingData';
 import { CalculationModules } from './pricingEngineComplete';
+import { isBronzePricingTier } from './pricingTiers';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { CUSTOM_OPTIONS_SUBCATEGORY } from '../utils/costBreakdownSubcategories';
 import { getSelectedEquipmentPackage, isFixedEquipmentPackage } from '../utils/equipmentPackages';
@@ -822,7 +823,9 @@ export class MasterPricingEngine {
       total: prices.base,
     });
 
-    const warrantyCost = prices.fiveYearWarranty ?? prices.premium ?? 0;
+    const warrantyCost = isBronzePricingTier((pricingData as any).pricingTierId)
+      ? 0
+      : prices.fiveYearWarranty ?? prices.premium ?? 0;
     if (warrantyCost > 0) {
       items.push({
         category: 'Start-Up / Orientation',

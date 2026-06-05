@@ -46,6 +46,7 @@ import {
 import TempPasswordModal from '../components/TempPasswordModal';
 import AdminSettingsModal from '../components/AdminSettingsModal';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
+import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 type SessionInfo = {
@@ -198,6 +199,7 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
 
       const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
         const base = getDefaultProposal();
+        const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
         const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
         const sourceEquipment = (input.equipment || {}) as Proposal['equipment'];
         const hasExplicitPackageTouchState = Object.prototype.hasOwnProperty.call(
@@ -221,7 +223,7 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
         const defaultElectrical = getDefaultElectrical();
         const inputElectrical = (input.electrical || {}) as Partial<Proposal['electrical']>;
 
-        return {
+        const merged = {
           ...(base as Proposal),
           ...input,
           customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
@@ -247,19 +249,28 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
           papDiscounts: resolveProposalPapDiscounts(input, (base as any).papDiscounts),
           warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
+          pricingTierId,
+          pricingTierName: getPricingTierName(pricingTierId),
         };
+        if (isBronzePricingTier(pricingTierId)) {
+          merged.excavation = { ...merged.excavation, hasGravelInstall: false };
+          merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
+        }
+        return merged;
       };
 
       for (const raw of data || []) {
         try {
           const resolvedFranchiseId = raw.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID;
-          const pricingCacheKey = `${resolvedFranchiseId}::${raw.pricingModelFranchiseId || resolvedFranchiseId}::${raw.pricingModelId || 'default'}`;
+          const pricingTierId = normalizePricingTierId(raw.pricingTierId || raw.pricingTierName);
+          const pricingCacheKey = `${resolvedFranchiseId}::${raw.pricingModelFranchiseId || resolvedFranchiseId}::${raw.pricingModelId || 'default'}::${pricingTierId}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
             pricingSnapshot = await loadPricingSnapshotForFranchise(
               resolvedFranchiseId,
               raw.pricingModelId || undefined,
-              raw.pricingModelFranchiseId || undefined
+              raw.pricingModelFranchiseId || undefined,
+              pricingTierId
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }
@@ -1309,16 +1320,17 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
           <div className="admin-table-wrapper">
             <table className="admin-table">
               <colgroup>
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '9%' }} />
                 <col style={{ width: '10%' }} />
                 <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '9%' }} />
               </colgroup>
               <thead>
                 <tr>
@@ -1327,6 +1339,7 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                   <th>Date Modified</th>
                   <th>Proposal Status</th>
                   <th>Pricing Model</th>
+                  <th>Pricing Tier</th>
                   <th className="th-center">Proposal Versions</th>
                   <th className="th-right">Retail Price</th>
                   <th className="th-right">Total COGS</th>
@@ -1402,6 +1415,11 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                         <span className={modelClass}>
                           {(displayProposal.pricingModelName || 'Pricing Model') +
                             (isRemoved && !explicitRemoved ? ' (Removed)' : '')}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="proposal-tier-pill">
+                          {getPricingTierName(displayProposal.pricingTierId || displayProposal.pricingTierName)}
                         </span>
                       </td>
                       <td className="versions-cell">{proposalVersionCount}</td>

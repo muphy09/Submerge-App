@@ -22,6 +22,7 @@ import {
   normalizeCopingOptionId,
   normalizeDeckingOptionId,
 } from './tileCopingCatalogs';
+import { isBronzeProposal } from '../services/pricingTiers';
 
 type LegacyWarrantyItem = {
   id?: string;
@@ -647,6 +648,7 @@ const buildLegacyEquipmentLabels = (proposal?: Partial<Proposal>): string[] => {
 
 const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[] => {
   const equipment = proposal?.equipment;
+  const hasFiveYearWarranty = !isBronzeProposal(proposal);
 
   if (!equipment) {
     return [];
@@ -672,7 +674,7 @@ const buildEquipmentItems = (proposal?: Partial<Proposal>): LegacyWarrantyItem[]
     ? equipment.pump?.name?.trim()
     : undefined;
   pushEquipmentItem('pump', 'Pump', primaryPumpName, {
-    advantage: EQUIPMENT_WARRANTY_ADVANTAGE_TEXT,
+    advantage: hasFiveYearWarranty ? EQUIPMENT_WARRANTY_ADVANTAGE_TEXT : undefined,
   });
 
   getAdditionalPumpSelections(equipment)

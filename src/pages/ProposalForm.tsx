@@ -65,6 +65,7 @@ import {
   getPricingDataSnapshot,
   loadPricingSnapshotForFranchise,
   setActivePricingModel,
+  setActivePricingTier,
   subscribeToPricingData,
   withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
@@ -113,6 +114,14 @@ import {
 } from '../services/proposalWorkflow';
 import { sanitizeWaterFeatureSelections } from '../utils/waterFeatureCost';
 import { sanitizeProposalSelectionState } from '../utils/proposalSelectionSanitizer';
+import {
+  BRONZE_PRICING_TIER_ID,
+  NORMAL_PRICING_TIER_ID,
+  PRICING_TIER_OPTIONS,
+  getPricingTierName,
+  isBronzePricingTier,
+  normalizePricingTierId,
+} from '../services/pricingTiers';
 
 const normalizeWaterFeatureSelections = (selections: any): WaterFeatureSelection[] => {
   return sanitizeWaterFeatureSelections(selections, pricingData.waterFeatures);
@@ -265,6 +274,7 @@ const mergeEquipmentDefaults = (
 
 const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   const base = getDefaultProposal();
+  const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
   const mergedPoolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
   const mergedEquipment = mergeEquipmentDefaults(getDefaultEquipment, input.equipment, mergedPoolSpecs);
   const defaultPlumbing = getDefaultPlumbing();
@@ -298,7 +308,20 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     papDiscounts: resolveProposalPapDiscounts(input, base.papDiscounts),
     costBreakdown: input.costBreakdown || base.costBreakdown,
     warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
+    pricingTierId,
+    pricingTierName: getPricingTierName(pricingTierId),
   };
+
+  if (isBronzePricingTier(pricingTierId)) {
+    merged.excavation = {
+      ...(merged.excavation || getDefaultExcavation()),
+      hasGravelInstall: false,
+    };
+    merged.interiorFinish = {
+      ...(merged.interiorFinish || getDefaultInteriorFinish()),
+      hasWaterproofing: false,
+    };
+  }
 
   return sanitizeProposalSelectionState(merged as Proposal);
 };
@@ -426,6 +449,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
+  const [selectedPricingTierId, setSelectedPricingTierId] = useState<string>(NORMAL_PRICING_TIER_ID);
+  const [pendingPricingTierId, setPendingPricingTierId] = useState<string | null>(null);
   const [versionList, setVersionList] = useState<Proposal[]>([]);
   const [, setActiveVersionId] = useState<string>('original');
   const [editingVersionId, setEditingVersionId] = useState<string>('original');
@@ -494,8 +519,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     markDirty?: boolean,
     modelFranchiseId?: string | null
   ) => {
+    const activeTierId = normalizePricingTierId(latestProposalRef.current.pricingTierId || selectedPricingTierId);
     if (modelId && !skipRemote) {
-      await setActivePricingModel(modelId, modelFranchiseId || undefined);
+      await setActivePricingModel(modelId, modelFranchiseId || undefined, activeTierId);
     }
     syncPapDiscountsFromModel();
 
@@ -521,6 +547,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       pricingModelFranchiseId:
         modelId ? modelFranchiseId || prev.pricingModelFranchiseId || prev.franchiseId || getSessionFranchiseId() : undefined,
       pricingModelIsDefault: isDefault ?? undefined,
+      pricingTierId: activeTierId,
+      pricingTierName: getPricingTierName(activeTierId),
       franchiseId: prev.franchiseId || getSessionFranchiseId(),
     }));
     if (markDirty) {
@@ -750,6 +778,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       pricingModelName: shouldUseActiveDefault ? modelMeta.pricingModelName || undefined : undefined,
       pricingModelFranchiseId: shouldUseActiveDefault ? modelMeta.pricingModelFranchiseId || franchiseId : undefined,
       pricingModelIsDefault: shouldUseActiveDefault ? modelMeta.isDefault : undefined,
+      pricingTierId: NORMAL_PRICING_TIER_ID,
+      pricingTierName: getPricingTierName(NORMAL_PRICING_TIER_ID),
       equipment: buildStartingEquipment(base.poolSpecs),
     };
   };
@@ -1221,6 +1251,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           setEditingVersionId((freshProposal as Proposal).versionId || 'original');
           setSelectedPricingModelId(freshProposal.pricingModelId || null);
           setSelectedPricingModelName(freshProposal.pricingModelName || null);
+          setSelectedPricingTierId(normalizePricingTierId(freshProposal.pricingTierId));
           setCurrentSection(0);
           setIsLoading(false);
           setHasEdits(false);
@@ -1237,13 +1268,16 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const franchiseId = proposal.franchiseId || getSessionFranchiseId();
     const desiredModelId = proposal.pricingModelId || null;
     const desiredModelFranchiseId = proposal.pricingModelFranchiseId || null;
-    void initPricingDataStore(franchiseId, desiredModelId || undefined, desiredModelFranchiseId || undefined);
+    const desiredPricingTierId = normalizePricingTierId(proposal.pricingTierId || proposal.pricingTierName);
+    void initPricingDataStore(franchiseId, desiredModelId || undefined, desiredModelFranchiseId || undefined, desiredPricingTierId);
     void loadPricingModels(franchiseId, desiredModelId, desiredModelFranchiseId);
   }, [
     isProposalEditingRestricted,
     proposal.franchiseId,
     proposal.pricingModelId,
     proposal.pricingModelFranchiseId,
+    proposal.pricingTierId,
+    proposal.pricingTierName,
     proposalNumber,
     isLoading,
   ]);
@@ -1270,13 +1304,15 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || getSessionFranchiseId();
         const pricingModelId = input.pricingModelId || undefined;
         const pricingModelFranchiseId = input.pricingModelFranchiseId || undefined;
-        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
+        const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingTierId}`;
         let pricingSnapshot = pricingCache.get(pricingCacheKey);
         if (!pricingSnapshot) {
           pricingSnapshot = await loadPricingSnapshotForFranchise(
             resolvedFranchiseId,
             pricingModelId,
-            pricingModelFranchiseId
+            pricingModelFranchiseId,
+            pricingTierId
           );
           pricingCache.set(pricingCacheKey, pricingSnapshot);
         }
@@ -1299,6 +1335,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       freshData.proposalNumber = freshData.proposalNumber || num;
       freshData.createdDate = freshData.createdDate || new Date().toISOString();
       freshData.lastModified = freshData.lastModified || new Date().toISOString();
+      const freshPricingTierId = normalizePricingTierId(freshData.pricingTierId || freshData.pricingTierName);
+      freshData.pricingTierId = freshPricingTierId;
+      freshData.pricingTierName = getPricingTierName(freshPricingTierId);
 
       const versioned = ensureProposalWorkflow(applyActiveVersion(freshData as Proposal));
       const allVersions = listAllVersions(ensureProposalWorkflow(freshData as Proposal));
@@ -1383,6 +1422,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         setEditingVersionId(sanitizedTarget.versionId || 'original');
         setSelectedPricingModelId(sanitizedTarget.pricingModelId || null);
         setSelectedPricingModelName(sanitizedTarget.pricingModelName || null);
+        const targetTierId = normalizePricingTierId(sanitizedTarget.pricingTierId || sanitizedTarget.pricingTierName);
+        setSelectedPricingTierId(targetTierId);
+        void setActivePricingTier(targetTierId);
         setCurrentSection(0);
         setPapDiscounts(readPapDiscountsFromModel());
         if (sanitizedTarget.manualAdjustments) {
@@ -1469,6 +1511,46 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       } as Proposal);
     });
     if (!isReadOnlyBuilderView) {
+      setHasEdits(true);
+    }
+  };
+
+  const applyPricingTierSelection = async (tierValue: string, markDirty = true) => {
+    if (isReadOnlyBuilderView) return;
+    const pricingTierId = normalizePricingTierId(tierValue);
+    await setActivePricingTier(pricingTierId);
+    setSelectedPricingTierId(pricingTierId);
+    setProposal((prev) => {
+      const nextProposal: Partial<Proposal> = {
+        ...prev,
+        pricingTierId,
+        pricingTierName: getPricingTierName(pricingTierId),
+        lastModified: new Date().toISOString(),
+      };
+
+      if (isBronzePricingTier(pricingTierId)) {
+        nextProposal.excavation = {
+          ...(prev.excavation || getDefaultExcavation()),
+          hasGravelInstall: false,
+        };
+        nextProposal.interiorFinish = {
+          ...(prev.interiorFinish || getDefaultInteriorFinish()),
+          hasWaterproofing: false,
+        };
+      } else {
+        nextProposal.excavation = {
+          ...(prev.excavation || getDefaultExcavation()),
+          hasGravelInstall: true,
+        };
+        nextProposal.interiorFinish = {
+          ...(prev.interiorFinish || getDefaultInteriorFinish()),
+          hasWaterproofing: true,
+        };
+      }
+
+      return sanitizeCurrentProposalState(nextProposal as Proposal);
+    });
+    if (markDirty) {
       setHasEdits(true);
     }
   };
@@ -1607,6 +1689,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const versionName =
       input.versionName ||
       (input.isOriginalVersion === false || versionId !== 'original' ? 'Version' : 'Original Version');
+    const pricingTierId = normalizePricingTierId(normalized.pricingTierId || normalized.pricingTierName);
 
     return {
       ...normalized,
@@ -1623,6 +1706,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         normalized.pricingModelId
           ? normalized.pricingModelFranchiseId || normalized.franchiseId || getSessionFranchiseId()
           : undefined,
+      pricingTierId,
+      pricingTierName: getPricingTierName(pricingTierId),
       papDiscounts: modelPapDiscounts,
       costBreakdown: result.costBreakdown,
       pricing: result.pricing,
@@ -1941,6 +2026,23 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     );
   };
 
+  const handleSelectPricingTier = (tierValue: string) => {
+    if (isReadOnlyBuilderView) return;
+    const pricingTierId = normalizePricingTierId(tierValue);
+    if (pricingTierId === selectedPricingTierId) return;
+    if (isBronzePricingTier(pricingTierId)) {
+      setPendingPricingTierId(pricingTierId);
+      return;
+    }
+    void applyPricingTierSelection(pricingTierId);
+  };
+
+  const handleConfirmBronzePricingTier = () => {
+    const pricingTierId = normalizePricingTierId(pendingPricingTierId);
+    setPendingPricingTierId(null);
+    void applyPricingTierSelection(pricingTierId);
+  };
+
   const renderSection = () => {
     // Ensure we have valid proposal data before rendering
     if (!proposal.poolSpecs || !proposal.customerInfo) {
@@ -1996,6 +2098,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             <ExcavationSectionNew
               data={proposal.excavation!}
               onChange={(data) => updateProposal('excavation', data)}
+              pricingTierId={normalizePricingTierId(proposal.pricingTierId || selectedPricingTierId)}
               noteOverrides={proposalNoteOverrides}
             />
           );
@@ -2072,6 +2175,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChange={(data) => updateProposal('interiorFinish', data)}
               hasSpa={hasSpa}
               isFiberglass={isFiberglass}
+              pricingTierId={normalizePricingTierId(proposal.pricingTierId || selectedPricingTierId)}
               noteOverrides={proposalNoteOverrides}
             />
           );
@@ -2270,6 +2374,46 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       </span>
     </label>
   );
+  const normalizedSelectedPricingTierId = normalizePricingTierId(proposal.pricingTierId || selectedPricingTierId);
+  const pricingTierDisplayName = getPricingTierName(normalizedSelectedPricingTierId);
+  const pricingTierControl = (
+    <label
+      className={`form-header-pricing form-header-pricing--tier ${
+        isBronzePricingTier(normalizedSelectedPricingTierId)
+          ? 'form-header-pricing--bronze'
+          : 'form-header-pricing--active'
+      }`}
+      data-tooltip={
+        isReadOnlyBuilderView
+          ? readOnlyBuilderMessage
+          : 'Select the pricing tier for this proposal'
+      }
+      aria-label={
+        isReadOnlyBuilderView
+          ? `Current pricing tier: ${pricingTierDisplayName}. ${readOnlyBuilderMessage}`
+          : `Current pricing tier: ${pricingTierDisplayName}. Select the pricing tier for this proposal`
+      }
+    >
+      <select
+        value={normalizedSelectedPricingTierId}
+        onChange={(e) => handleSelectPricingTier(e.target.value)}
+        className="form-header-pricing-select"
+        disabled={isSaving || isReadOnlyBuilderView}
+        aria-label={`Pricing Tier. Current selection: ${pricingTierDisplayName}`}
+      >
+        {PRICING_TIER_OPTIONS.map((tier) => (
+          <option key={tier.id} value={tier.id}>
+            {tier.name}
+          </option>
+        ))}
+      </select>
+      <span className="form-header-pricing-body">
+        <span className="form-header-pricing-name">{pricingTierDisplayName}</span>
+        <span className="form-header-pricing-pill">Tier</span>
+        <span className="form-header-pricing-arrow" aria-hidden="true" />
+      </span>
+    </label>
+  );
 
   const handleProposalSummaryClick = () => {
     if (isSaving) return;
@@ -2384,7 +2528,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showCostSidebar ? 'no-right-cost' : ''}`}>
           <div className="section-content" ref={sectionContentRef}>
             <div className="section-title-row">
-              <div className="section-title-pricing">{pricingModelControl}</div>
+              <div className="section-title-pricing">
+                {pricingModelControl}
+                {pricingTierControl}
+              </div>
               <h2 className="section-title">{sections[currentSection]?.label}</h2>
               <div className="section-title-actions">
                 <TooltipAnchor tooltip={proposalSummaryTooltip}>
@@ -2505,6 +2652,15 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           setHasEdits(false);
           navigate('/');
         }}
+      />
+      <ConfirmDialog
+        open={pendingPricingTierId === BRONZE_PRICING_TIER_ID}
+        title="Change Pricing Tier?"
+        message="Changing to the Bronze Pricing Tier will incur restrictions and cost differences, are you sure you would like to proceed?"
+        confirmLabel="Continue"
+        cancelLabel="No"
+        onConfirm={handleConfirmBronzePricingTier}
+        onCancel={() => setPendingPricingTierId(null)}
       />
     </div>
   );

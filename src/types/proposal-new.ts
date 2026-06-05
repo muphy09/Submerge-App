@@ -834,6 +834,8 @@ export interface Proposal {
   pricingModelName?: string;
   pricingModelFranchiseId?: string;
   pricingModelIsDefault?: boolean;
+  pricingTierId?: string;
+  pricingTierName?: string;
   syncStatus?: 'synced' | 'pending' | 'error';
   syncMessage?: string;
   versionLocked?: boolean;

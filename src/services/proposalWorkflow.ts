@@ -27,6 +27,7 @@ import {
   getTileOptionLabel,
   getTileSelectionId,
 } from '../utils/tileCopingCatalogs';
+import { getPricingTierName } from './pricingTiers';
 
 export type SubmissionRequest = {
   manualReviewRequested?: boolean;
@@ -786,6 +787,7 @@ function extractPricingAdjustmentFields(
 ): WorkflowFieldSnapshot[] {
   const manual = proposal.manualAdjustments;
   return compactSnapshots([
+    { key: 'pricingTier', label: 'Pricing Tier', value: getPricingTierName(proposal.pricingTierId || proposal.pricingTierName) },
     { key: 'manualPositive1', label: 'Manual Positive 1', value: formatCurrencyValue(manual?.positive1) },
     { key: 'manualPositive2', label: 'Manual Positive 2', value: formatCurrencyValue(manual?.positive2) },
     { key: 'manualNegative1', label: 'Manual Negative 1', value: formatCurrencyValue(manual?.negative1) },

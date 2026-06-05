@@ -10,6 +10,7 @@ import { listDashboardProposals, deleteProposal } from '../services/proposalsAda
 import { getSessionFranchiseId, isMasterActingAsOwnerSession, type UserSession } from '../services/session';
 import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
+import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
 import {
   acknowledgeFeedbackReply,
   isFeedbackFeatureUnavailableError,
@@ -75,6 +76,7 @@ function HomePage({
 
       const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
         const base = getDefaultProposal();
+        const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
         const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
         const sourceEquipment = (input.equipment || {}) as Proposal['equipment'];
         const hasExplicitPackageTouchState = Object.prototype.hasOwnProperty.call(
@@ -98,7 +100,7 @@ function HomePage({
         const defaultElectrical = getDefaultElectrical();
         const inputElectrical = (input.electrical || {}) as Partial<Proposal['electrical']>;
 
-        return {
+        const merged = {
           ...(base as Proposal),
           ...input,
           customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
@@ -124,7 +126,14 @@ function HomePage({
           retailAdjustments: mergeRetailAdjustments(input.retailAdjustments),
           papDiscounts: resolveProposalPapDiscounts(input, (base as any).papDiscounts),
           warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
+          pricingTierId,
+          pricingTierName: getPricingTierName(pricingTierId),
         };
+        if (isBronzePricingTier(pricingTierId)) {
+          merged.excavation = { ...merged.excavation, hasGravelInstall: false };
+          merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
+        }
+        return merged;
       };
 
       const recalculated: Proposal[] = [];
@@ -132,13 +141,15 @@ function HomePage({
       for (const raw of filtered) {
         try {
           const targetFranchiseId = raw.franchiseId || sessionFranchiseId;
-          const pricingCacheKey = `${targetFranchiseId}::${raw.pricingModelFranchiseId || targetFranchiseId}::${raw.pricingModelId || 'default'}`;
+          const pricingTierId = normalizePricingTierId(raw.pricingTierId || raw.pricingTierName);
+          const pricingCacheKey = `${targetFranchiseId}::${raw.pricingModelFranchiseId || targetFranchiseId}::${raw.pricingModelId || 'default'}::${pricingTierId}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
             pricingSnapshot = await loadPricingSnapshotForFranchise(
               targetFranchiseId,
               raw.pricingModelId || undefined,
-              raw.pricingModelFranchiseId || undefined
+              raw.pricingModelFranchiseId || undefined,
+              pricingTierId
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }

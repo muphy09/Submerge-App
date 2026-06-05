@@ -5,6 +5,7 @@ import { listPricingModels as listPricingModelsRemote } from '../services/pricin
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
 import { getReviewerVisibleVersions, isApprovedButNotSigned } from '../services/proposalWorkflow';
 import { listAllVersions } from '../utils/proposalVersions';
+import { getPricingTierName } from '../services/pricingTiers';
 import './DashboardProposalsPanel.css';
 
 type DashboardProposalsPanelProps = {
@@ -23,6 +24,7 @@ type SortField =
   | 'lastModified'
   | 'status'
   | 'pricingModel'
+  | 'pricingTier'
   | 'proposalVersions'
   | 'contractType';
 
@@ -76,6 +78,8 @@ function getSortValue(proposal: Proposal, field: SortField, viewerRole?: string 
       return String(proposal.status || '').toLowerCase();
     case 'pricingModel':
       return String(proposal.pricingModelName || '').toLowerCase();
+    case 'pricingTier':
+      return getPricingTierName(proposal.pricingTierId || proposal.pricingTierName).toLowerCase();
     case 'proposalVersions':
       return getVersionCount(proposal, viewerRole);
     case 'contractType':
@@ -489,6 +493,12 @@ function DashboardProposalsPanel({
                           <SortIndicator active={sortField === 'pricingModel'} direction={sortDirection} />
                         </button>
                       </th>
+                      <th>
+                        <button type="button" onClick={() => handleSort('pricingTier')}>
+                          <span>Pricing Tier</span>
+                          <SortIndicator active={sortField === 'pricingTier'} direction={sortDirection} />
+                        </button>
+                      </th>
                       <th className="is-center">
                         <button type="button" onClick={() => handleSort('proposalVersions')}>
                           <span>Proposal Versions</span>
@@ -551,6 +561,11 @@ function DashboardProposalsPanel({
                             <span className={pricingModelClass}>
                               {pricingModelName}
                               {shouldAppendRemoved ? ' (Removed)' : ''}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="dashboard-tier-pill">
+                              {getPricingTierName(proposal.pricingTierId || proposal.pricingTierName)}
                             </span>
                           </td>
                           <td className="dashboard-number-cell">{versionCount}</td>

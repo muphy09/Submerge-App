@@ -1,5 +1,6 @@
 import { Proposal } from '../types/proposal-new';
 import { getDefaultProposal } from './proposalDefaults';
+import { getPricingTierName, normalizePricingTierId } from '../services/pricingTiers';
 
 export const ORIGINAL_VERSION_ID = 'original';
 
@@ -38,6 +39,12 @@ const ensureVersionDefaults = (proposal: Proposal, defaultName?: string): Propos
 const inheritSharedVersionMetadata = (container: Proposal, version: Proposal): Proposal => {
   const resolvedFranchiseId = version.franchiseId || container.franchiseId;
   const resolvedPricingModelId = version.pricingModelId || container.pricingModelId;
+  const resolvedPricingTierId = normalizePricingTierId(
+    version.pricingTierId ||
+      version.pricingTierName ||
+      container.pricingTierId ||
+      container.pricingTierName
+  );
   const canReuseContainerPricingMeta =
     !version.pricingModelId || version.pricingModelId === container.pricingModelId;
 
@@ -59,6 +66,8 @@ const inheritSharedVersionMetadata = (container: Proposal, version: Proposal): P
     pricingModelIsDefault:
       version.pricingModelIsDefault ??
       (canReuseContainerPricingMeta ? container.pricingModelIsDefault : undefined),
+    pricingTierId: resolvedPricingTierId,
+    pricingTierName: getPricingTierName(resolvedPricingTierId),
   };
 };
 
@@ -156,6 +165,8 @@ const COPYABLE_VERSION_FIELDS: Array<keyof Proposal> = [
   'pricingModelName',
   'pricingModelFranchiseId',
   'pricingModelIsDefault',
+  'pricingTierId',
+  'pricingTierName',
 ];
 
 const buildVersionDraftSeed = (

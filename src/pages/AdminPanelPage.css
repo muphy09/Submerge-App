@@ -960,6 +960,22 @@
   box-sizing: border-box;
 }
 
+.admin-table .proposal-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0.2rem 0.52rem;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #f8fafc;
+  color: #374151;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .admin-table .status-badge-table[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;

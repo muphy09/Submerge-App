@@ -24,6 +24,7 @@ import {
   waterFeatureNeedsConduitRun,
 } from '../utils/waterFeatureCost';
 import { getAdditionalPumpSelections } from '../utils/pumpSelections';
+import { isBronzePricingTier } from './pricingTiers';
 
 /**
  * ROUNDUP function - Excel-style ceiling function
@@ -292,7 +293,7 @@ export class ExcavationCalculations {
     });
 
     // Gravel install (price per sqft from EXC sheet)
-    if (excavation.hasGravelInstall) {
+    if (excavation.hasGravelInstall && !isBronzePricingTier((pricingData as any).pricingTierId)) {
       items.push({
         category: 'Excavation',
         description: 'Gravel',
@@ -554,7 +555,7 @@ export class PlumbingCalculations {
     // Add'l water feature run allowance
     const totalWFRun = waterFeatureRuns.filter(r => r > 0).reduce((sum, r) => sum + Math.max(r, baseFeatureAllowance), 0);
     if (totalWFRun > 0) {
-      const linkedWaterFeatureRate = prices.twoInchPipe ?? prices.additionalWaterFeatureRunPerFt ?? featureRate;
+      const linkedWaterFeatureRate = prices.additionalWaterFeatureRunPerFt ?? prices.twoInchPipe ?? featureRate;
       items.push({
         category: 'Plumbing',
         description: 'Additional Water Feature Run',
@@ -1156,8 +1157,13 @@ export class ShotcreteCalculations {
     const maxWidth = Math.max(0, Number(poolSpecs.maxWidth) || 0);
     const autoCoverUnits = poolSpecs.hasAutomaticCover ? roundUp(((maxWidth + 2) * 7) / 22) : 0;
 
+    const isBronzeTier = isBronzePricingTier((pricingData as any).pricingTierId);
+    const wallPerimeterMultiplier = isBronzeTier ? 0.85 : 1;
+    const wallInteriorMultiplier = isBronzeTier ? 0.6 : 0.67;
+    const wallBeamDivisor = isBronzeTier ? 25 : 24;
+
     const baseYardage =
-      ((perimeter + (interiorArea * 0.67) + rbbSqft) / 24) +
+      (((perimeter * wallPerimeterMultiplier) + (interiorArea * wallInteriorMultiplier) + rbbSqft) / wallBeamDivisor) +
       ((spaPerimeter + (spaPerimeter * 3) + 40) / 25) +
       (doubleBullnoseLnft / 10);
 

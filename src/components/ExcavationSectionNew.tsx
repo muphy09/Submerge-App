@@ -11,10 +11,12 @@ import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import CustomOptionsSection from './CustomOptionsSection';
 import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
+import { isBronzePricingTier } from '../services/pricingTiers';
 
 interface Props {
   data: Excavation;
   onChange: (data: Excavation) => void;
+  pricingTierId?: string;
   noteOverrides?: ProposalNoteOverrides;
 }
 
@@ -131,7 +133,7 @@ const formatColumnsTitle = (columns: Excavation['columns'], facingOptions: Mason
   return parts.join(' | ');
 };
 
-function ExcavationSectionNew({ data, onChange, noteOverrides }: Props) {
+function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: Props) {
   const [activeRBBIndex, setActiveRBBIndex] = useState<number | null>(null);
   const [activeExposedPoolWallIndex, setActiveExposedPoolWallIndex] = useState<number | null>(null);
   const [columnsEditing, setColumnsEditing] = useState<boolean>(data.columns.count > 0);
@@ -338,6 +340,7 @@ function ExcavationSectionNew({ data, onChange, noteOverrides }: Props) {
   };
 
   const gravelSelected = data.hasGravelInstall;
+  const isBronzeTier = isBronzePricingTier(pricingTierId);
   const dirtSelected = data.hasDirtHaul;
   const soilSelected = data.needsSoilSampleEngineer;
   const hasDoubleCurtain = doubleCurtainActive;
@@ -944,7 +947,12 @@ function ExcavationSectionNew({ data, onChange, noteOverrides }: Props) {
           <button
             type="button"
             className={`pool-type-btn ${gravelSelected ? 'active' : ''}`}
-            onClick={() => handleChange('hasGravelInstall', !data.hasGravelInstall)}
+            onClick={() => {
+              if (isBronzeTier) return;
+              handleChange('hasGravelInstall', !data.hasGravelInstall);
+            }}
+            disabled={isBronzeTier}
+            title={isBronzeTier ? 'Gravel Install is not available in Bronze pricing.' : undefined}
           >
             Gravel Install
           </button>

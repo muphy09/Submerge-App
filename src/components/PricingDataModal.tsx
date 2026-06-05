@@ -6,9 +6,14 @@ import {
   getActiveFranchiseId,
   getActivePricingModelMeta,
   clearActivePricingModelMeta,
+  getActivePricingTierId,
+  getNormalPricingDataSnapshot,
+  isActiveBronzeLockedPricingPath,
   savePricingModelSnapshot,
   setActivePricingModel,
+  setActivePricingTier,
   removePricingListItem,
+  resetPricingTierOverride,
   subscribeToPricingData,
   updatePricingListItem,
   updatePricingValue,
@@ -32,6 +37,12 @@ import {
   normalizeDeckingOptionId,
   normalizeTileOptionId,
 } from '../utils/tileCopingCatalogs';
+import {
+  PRICING_TIER_OPTIONS,
+  arePricingValuesEqual,
+  isBronzePricingTier,
+  normalizePricingTierId,
+} from '../services/pricingTiers';
 import './PricingDataModal.css';
 
 type Path = (string | number)[];
@@ -158,6 +169,8 @@ interface PricingDataModalProps {
 
 const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseId }) => {
   const [data, setData] = useState(getPricingDataSnapshot());
+  const [normalData, setNormalData] = useState(getNormalPricingDataSnapshot());
+  const [selectedPricingTierId, setSelectedPricingTierId] = useState<string>(() => getActivePricingTierId());
   const [isInitializing, setIsInitializing] = useState(true);
   const [fieldLabelOverrides, setFieldLabelOverrides] = useState<PricingFieldLabelOverrides>({});
   const [activeListFieldRename, setActiveListFieldRename] = useState<ActiveListFieldRename | null>(null);
@@ -233,13 +246,17 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     const unsubscribe = subscribeToPricingData((nextData) => {
       if (!cancelled) {
         setData(nextData);
+        setNormalData(getNormalPricingDataSnapshot());
+        setSelectedPricingTierId(getActivePricingTierId());
       }
     });
     const load = async () => {
       try {
-        await initPricingDataStore(targetFranchise || undefined);
+        await initPricingDataStore(targetFranchise || undefined, undefined, undefined, selectedPricingTierId);
         if (cancelled) return;
         setData(getPricingDataSnapshot());
+        setNormalData(getNormalPricingDataSnapshot());
+        setSelectedPricingTierId(getActivePricingTierId());
         await loadModels(targetFranchise);
       } finally {
         if (!cancelled) {
@@ -272,6 +289,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       const rows = await listPricingModels(idToUse);
       setPricingModels(rows || []);
       const activeMeta = getActivePricingModelMeta();
+      setSelectedPricingTierId(activeMeta.pricingTierId || getActivePricingTierId());
       if (rows?.length) {
         if (activeMeta.pricingModelId) {
           const activeModel = rows.find((model) => model.id === activeMeta.pricingModelId);
@@ -304,11 +322,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setSelectedModelId(modelId);
     setIsInitializing(true);
     try {
-      await setActivePricingModel(modelId);
+      await setActivePricingModel(modelId, undefined, selectedPricingTierId);
       const meta = getActivePricingModelMeta();
       const selectedRow = pricingModels.find((model) => model.id === modelId);
       setModelName(meta.pricingModelName || selectedRow?.name || '');
       setHideModelFromView(Boolean(selectedRow?.isHiddenFromView));
+      setData(getPricingDataSnapshot());
+      setNormalData(getNormalPricingDataSnapshot());
+      setSelectedPricingTierId(getActivePricingTierId());
       setSelectedListItem(null);
       setContextHelp(null);
       setPricingModels((prev) =>
@@ -330,6 +351,21 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setHasChanges(false);
   };
 
+  const handleSelectPricingTier = async (tierId: string) => {
+    const nextTierId = normalizePricingTierId(tierId);
+    setSelectedPricingTierId(nextTierId);
+    setIsInitializing(true);
+    try {
+      await setActivePricingTier(nextTierId);
+      setData(getPricingDataSnapshot());
+      setNormalData(getNormalPricingDataSnapshot());
+      setSelectedListItem(null);
+      setContextHelp(null);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
   const handleSaveModel = async () => {
     if (!modelName.trim()) {
       setSaveError('Please provide a model name.');
@@ -349,7 +385,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         createNew: savingAsNew,
       });
       if (savedModel?.pricingModelId) {
-        await setActivePricingModel(savedModel.pricingModelId);
+        await setActivePricingModel(savedModel.pricingModelId, undefined, selectedPricingTierId);
+        setData(getPricingDataSnapshot());
+        setNormalData(getNormalPricingDataSnapshot());
+        setSelectedPricingTierId(getActivePricingTierId());
       }
       setSavingAsNew(false);
       await loadModels();
@@ -366,12 +405,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setIsInitializing(true);
     try {
       clearActivePricingModelMeta();
+      await setActivePricingTier('normal');
       setSelectedModelId(null);
       setModelName('');
       setSaveError(null);
       setSelectedListItem(null);
       setContextHelp(null);
       setSavingAsNew(true);
+      setSelectedPricingTierId(getActivePricingTierId());
+      setData(getPricingDataSnapshot());
+      setNormalData(getNormalPricingDataSnapshot());
       setHasChanges(false);
     } catch (error) {
       console.warn('Unable to start new pricing model', error);
@@ -428,6 +471,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const handleScalarChange = (field: ScalarField, value: string | boolean) => {
+    if (isActiveBronzeLockedPricingPath(field.path)) return;
     let parsed: any = value;
     if (field.type === 'number') {
       const numericValue = typeof value === 'string' ? toNumber(value) : Number(value);
@@ -438,7 +482,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     updatePricingValue(field.path, parsed);
     if (field.path.join('.') === 'plumbing.twoInchPipe') {
       updatePricingValue(['plumbing', 'waterFeatureRun', 'perFt'], parsed);
-      updatePricingValue(['plumbing', 'additionalWaterFeatureRunPerFt'], parsed);
     }
     if (field.path.join('.') === 'tileCoping.tile.labor.level1') {
       updatePricingValue(['tileCoping', 'tile', 'labor', 'level2'], parsed);
@@ -448,6 +491,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const handleListChange = (list: ListConfig, index: number, field: ListField, raw: any) => {
+    if (isActiveBronzeLockedPricingPath([...list.path, index, field.key])) return;
     const parsed =
       field.type === 'number'
         ? field.allowBlank && String(raw).trim() === ''
@@ -1921,7 +1965,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: '2" pipe (per ft)',
                 path: ['plumbing', 'twoInchPipe'],
                 type: 'number',
-                tooltip: 'Used for core plumbing runs, cleaner line, water feature overage, and additional water feature run rate.',
+                tooltip: 'Used for core plumbing runs, cleaner line, and water feature overage.',
                 prefix: '$',
               },
               {
@@ -1968,10 +2012,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               {
                 label: 'Additional Water Feature Run (per ft)',
                 path: ['plumbing', 'additionalWaterFeatureRunPerFt'],
-                valuePath: ['plumbing', 'twoInchPipe'],
                 type: 'number',
-                disabled: true,
-                tooltip: 'Applied to total water feature run length; rate is linked to 2" pipe.',
+                tooltip: 'Applied to total water feature run length; Bronze defaults to $6 and is independent from 2" pipe.',
                 prefix: '$',
               },
             ],
@@ -3713,17 +3755,64 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     };
   }, [activeSection, data, selectedListItem]);
 
+  const isBronzeEditor = isBronzePricingTier(selectedPricingTierId);
+  const isTierPathDifferent = (path: Path) =>
+    isBronzeEditor && !arePricingValuesEqual(getValue(data, path), getValue(normalData, path));
+  const handleResetTierPath = (path: Path) => {
+    resetPricingTierOverride(path);
+    setData(getPricingDataSnapshot());
+    setNormalData(getNormalPricingDataSnapshot());
+    setSelectedPricingTierId(getActivePricingTierId());
+    setHasChanges(true);
+  };
+  const renderTierResetButton = (path: Path, disabled = false) => {
+    if (!isTierPathDifferent(path) || disabled || isActiveBronzeLockedPricingPath(path)) return null;
+    return (
+      <button
+        type="button"
+        className="pricing-tier-reset-button"
+        data-tooltip="Reset to Normal Tier value"
+        aria-label="Reset to Normal Tier value"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleResetTierPath(path);
+        }}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            d="M12.6 5.4A5 5 0 108 13"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M12.6 2.5v2.9H9.7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    );
+  };
+
   const renderScalar = (field: ScalarField, sectionTitle: string, groupTitle: string) => {
     const value = getValue(data, field.valuePath ?? field.path);
     const displayValue =
       field.type === 'number' && field.isPercent && typeof value === 'number'
         ? value * 100
         : value;
-    const isDisabled = Boolean(field.disabled);
+    const isLocked = isActiveBronzeLockedPricingPath(field.path);
+    const isDisabled = Boolean(field.disabled) || isLocked;
     const isUnused = Boolean(field.isUnused);
+    const isTierDifferent = isTierPathDifferent(field.path);
     if (field.type === 'boolean') {
       return (
-        <label className={`pricing-field${isDisabled ? ' is-disabled' : ''}${isUnused ? ' is-unused' : ''}`}>
+        <label className={`pricing-field${isDisabled ? ' is-disabled' : ''}${isUnused ? ' is-unused' : ''}${isLocked ? ' is-tier-locked' : ''}${isTierDifferent ? ' is-tier-different' : ''}`}>
           <div className="pricing-field__label">
             <input
               type="checkbox"
@@ -3745,6 +3834,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 i
               </span>
             )}
+            {renderTierResetButton(field.path, isDisabled)}
           </div>
           {field.note && <div className="pricing-field__note">{field.note}</div>}
         </label>
@@ -3752,7 +3842,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     }
 
     return (
-      <label className={`pricing-field${isDisabled ? ' is-disabled' : ''}${isUnused ? ' is-unused' : ''}`}>
+      <label className={`pricing-field${isDisabled ? ' is-disabled' : ''}${isUnused ? ' is-unused' : ''}${isLocked ? ' is-tier-locked' : ''}${isTierDifferent ? ' is-tier-different' : ''}`}>
         <div className="pricing-field__label">
           {renderLabelText(field.label)}
           {field.tooltip && (
@@ -3766,6 +3856,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               i
             </span>
           )}
+          {renderTierResetButton(field.path, isDisabled)}
         </div>
         <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
           {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
@@ -3875,9 +3966,19 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                           {isSelected ? '>' : ''}
                         </span>
                       </td>
-                      {getPreviewFields(config).map((field) => (
-                        <td key={field.key}>{formatListFieldValue(config, entry, field, index)}</td>
-                      ))}
+                      {getPreviewFields(config).map((field) => {
+                        const cellPath = [...config.path, index, field.key];
+                        const isCellDifferent = isTierPathDifferent(cellPath);
+                        const isCellLocked = isActiveBronzeLockedPricingPath(cellPath);
+                        return (
+                          <td
+                            key={field.key}
+                            className={`${isCellDifferent ? 'is-tier-different' : ''}${isCellLocked ? ' is-tier-locked' : ''}`}
+                          >
+                            {formatListFieldValue(config, entry, field, index)}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}
@@ -3935,8 +4036,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         <div className="pricing-rail-card__body">
           {list.fields.map((field) => {
             const cellKey = `${list.path.join('.')}.${index}.${field.key}`;
+            const cellPath = [...list.path, index, field.key];
             const fieldValue = getListFieldValue(list, entry, field, index);
-            const isReadOnly = isListFieldReadOnly(field, entry, index);
+            const isLocked = isActiveBronzeLockedPricingPath(cellPath);
+            const isReadOnly = isListFieldReadOnly(field, entry, index) || isLocked;
+            const isTierDifferent = isTierPathDifferent(cellPath);
 
             if (isListFieldHidden(field, entry)) {
               return null;
@@ -3944,7 +4048,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
 
             if (field.type === 'boolean') {
               return (
-                <label key={field.key} className="pricing-field">
+                <label
+                  key={field.key}
+                  className={`pricing-field${isReadOnly ? ' is-disabled' : ''}${isLocked ? ' is-tier-locked' : ''}${isTierDifferent ? ' is-tier-different' : ''}`}
+                >
                   <div className={getListFieldLabelClassName(field)}>
                     <input
                       type="checkbox"
@@ -3988,6 +4095,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                         i
                       </span>
                     )}
+                    {renderTierResetButton(cellPath, isReadOnly)}
                   </div>
                 </label>
               );
@@ -3996,7 +4104,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             if (field.type === 'select') {
               const options = getListFieldOptions(list, field, entry, index);
               return (
-                <label key={field.key} className="pricing-field">
+                <label
+                  key={field.key}
+                  className={`pricing-field${isReadOnly ? ' is-disabled' : ''}${isLocked ? ' is-tier-locked' : ''}${isTierDifferent ? ' is-tier-different' : ''}`}
+                >
                   <div className={getListFieldLabelClassName(field)}>
                     {renderListFieldLabelText(list, field, cellKey)}
                     {field.tooltip && (
@@ -4010,6 +4121,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                         i
                       </span>
                     )}
+                    {renderTierResetButton(cellPath, isReadOnly)}
                   </div>
                   <div className="pricing-choice-toggle" role="group" aria-label={getListFieldLabel(list, field)}>
                     {options.map((option) => (
@@ -4029,7 +4141,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             }
 
             return (
-              <label key={field.key} className="pricing-field">
+              <label
+                key={field.key}
+                className={`pricing-field${isReadOnly ? ' is-disabled' : ''}${isLocked ? ' is-tier-locked' : ''}${isTierDifferent ? ' is-tier-different' : ''}`}
+              >
                 <div className={getListFieldLabelClassName(field)}>
                   {renderListFieldLabelText(list, field, cellKey)}
                   {isRenamableAddCostField(field) && (
@@ -4067,6 +4182,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       i
                     </span>
                   )}
+                  {renderTierResetButton(cellPath, isReadOnly)}
                 </div>
                 <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
                   {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
@@ -4196,6 +4312,22 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       {pricingModels.map((model) => (
                         <option key={model.id} value={model.id}>
                           {`${model.name}${model.isDefault ? ' (Active)' : ''}${model.isHiddenFromView ? ' (Hidden)' : ''}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+                <label className="pricing-input-block pricing-hero__control pricing-hero__control--tier">
+                  <span className="pricing-input-block__label">Pricing Tier</span>
+                  <div className="pricing-select">
+                    <select
+                      value={selectedPricingTierId}
+                      onChange={(e) => void handleSelectPricingTier(e.target.value)}
+                      disabled={isInitializing}
+                    >
+                      {PRICING_TIER_OPTIONS.map((tier) => (
+                        <option key={tier.id} value={tier.id}>
+                          {tier.name}
                         </option>
                       ))}
                     </select>

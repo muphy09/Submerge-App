@@ -4,6 +4,7 @@
 
 import { PoolSpecs, Excavation, TileCopingDecking, Drainage, Equipment, WaterFeatures, InteriorFinish, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
+import { isBronzePricingTier } from './pricingTiers';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
 import {
@@ -1390,7 +1391,8 @@ export class InteriorFinishCalculations {
         });
       }
 
-      const includeMicroglass = interiorFinish.hasWaterproofing !== false;
+      const includeMicroglass =
+        interiorFinish.hasWaterproofing !== false && !isBronzePricingTier((pricingData as any).pricingTierId);
       if (poolSpecs.poolType === 'gunite' && includeMicroglass) {
         const waterproofRate = prices.extras.waterproofingPerSqft ?? 0;
         const spaPerimeter = isGuniteSpa
@@ -1732,7 +1734,9 @@ export class FiberglassCalculations {
     }
     if (poolModel) {
       addInstallItem('Install', Number(poolModel.install) || 0);
-      addInstallItem('Gravel', Number(poolModel.gravel) || 0);
+      if (!isBronzePricingTier((pricingData as any).pricingTierId)) {
+        addInstallItem('Gravel', Number(poolModel.gravel) || 0);
+      }
     }
 
     // Drennen workbook FIBER!G74 / COST - NEW!D320 applies spa install labor

@@ -68,6 +68,7 @@ import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
+import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
 import {
   addWorkflowNote,
   approveWorkflowProposal,
@@ -878,6 +879,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
   const mergeProposalWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     const base = getDefaultProposal();
+    const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
     const poolSpecs = { ...getDefaultPoolSpecs(), ...(input.poolSpecs || {}) };
     const sourceEquipment = (input.equipment || {}) as Proposal['equipment'];
     const hasExplicitPackageTouchState = Object.prototype.hasOwnProperty.call(
@@ -901,7 +903,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const defaultElectrical = getDefaultElectrical();
     const inputElectrical = (input.electrical || {}) as Partial<Proposal['electrical']>;
 
-    return {
+    const merged = {
       ...(base as Proposal),
       ...input,
       customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
@@ -928,7 +930,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       papDiscounts: resolveProposalPapDiscounts(input, (base as any).papDiscounts),
       contractOverrides: (input as Proposal).contractOverrides || (base as Proposal).contractOverrides || {},
       warrantySections: normalizeWarrantySectionsSetting(input.warrantySections),
+      pricingTierId,
+      pricingTierName: getPricingTierName(pricingTierId),
     };
+    if (isBronzePricingTier(pricingTierId)) {
+      merged.excavation = { ...merged.excavation, hasGravelInstall: false };
+      merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
+    }
+    return merged;
   };
 
   const resolveVersionSyncMetaEntries = async (
@@ -964,13 +973,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         const resolvedFranchiseId = entry.franchiseId || container.franchiseId || 'default';
         const pricingModelId = entry.pricingModelId || undefined;
         const pricingModelFranchiseId = entry.pricingModelFranchiseId || undefined;
-        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
+        const pricingTierId = normalizePricingTierId(entry.pricingTierId || entry.pricingTierName);
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingTierId}`;
         let pricingSnapshot = pricingSnapshotCache.get(pricingCacheKey);
         if (!pricingSnapshot) {
           pricingSnapshot = await loadPricingSnapshotForFranchise(
             resolvedFranchiseId,
             pricingModelId,
-            pricingModelFranchiseId
+            pricingModelFranchiseId,
+            pricingTierId
           );
           pricingSnapshotCache.set(pricingCacheKey, pricingSnapshot);
         }
@@ -1091,13 +1102,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || 'default';
         const pricingModelId = input.pricingModelId || undefined;
         const pricingModelFranchiseId = input.pricingModelFranchiseId || undefined;
-        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}`;
+        const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingTierId}`;
         let pricingSnapshot = pricingCache.get(pricingCacheKey);
         if (!pricingSnapshot) {
           pricingSnapshot = await loadPricingSnapshotForFranchise(
             resolvedFranchiseId,
             pricingModelId,
-            pricingModelFranchiseId
+            pricingModelFranchiseId,
+            pricingTierId
           );
           pricingCache.set(pricingCacheKey, pricingSnapshot);
         }
@@ -1148,7 +1161,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         activeVersion.franchiseId,
         activeVersion.pricingModelId || undefined,
-        activeVersion.pricingModelFranchiseId || undefined
+        activeVersion.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(activeVersion.pricingTierId || activeVersion.pricingTierName)
       );
       if (requestId !== loadRequestRef.current) return;
 
@@ -1366,7 +1380,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        container.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
       );
       const saved = await saveProposalRemote(container);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1515,7 +1530,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         nextContainer.franchiseId,
         nextContainer.pricingModelId || undefined,
-        nextContainer.pricingModelFranchiseId || undefined
+        nextContainer.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(nextContainer.pricingTierId || nextContainer.pricingTierName)
       );
       const saved = await saveProposalRemote(nextContainer);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1596,7 +1612,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        container.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
       );
       const saved = await saveProposalRemote(container);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1673,7 +1690,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        container.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
       );
       const saved = await saveProposalRemote(container);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1783,7 +1801,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         containerToSave.franchiseId,
         containerToSave.pricingModelId || undefined,
-        containerToSave.pricingModelFranchiseId || undefined
+        containerToSave.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(containerToSave.pricingTierId || containerToSave.pricingTierName)
       );
       const saved = await saveProposalRemote(containerToSave);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -2233,7 +2252,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        container.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
       );
       const saved = await saveProposalRemote(
         payload,
@@ -2421,7 +2441,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        container.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
       );
       const saved = await saveProposalRemote(payload, { requireOnline: true });
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
@@ -2481,7 +2502,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        container.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
       );
       const saved = await saveProposalRemote(payload, { requireOnline: true });
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
@@ -2573,7 +2595,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       await initPricingDataStore(
         container.franchiseId,
         container.pricingModelId || undefined,
-        container.pricingModelFranchiseId || undefined
+        container.pricingModelFranchiseId || undefined,
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
       );
       const saved = await saveProposalRemote(
         markProposalAsSigned(container, undefined, signTargetVersionId || undefined),
