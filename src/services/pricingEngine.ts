@@ -25,6 +25,7 @@ import {
 } from '../utils/waterFeatureCost';
 import { getAdditionalPumpSelections } from '../utils/pumpSelections';
 import { isBronzePricingTier } from './pricingTiers';
+import { getPricingTaxRate } from './taxRate';
 
 /**
  * ROUNDUP function - Excel-style ceiling function
@@ -1124,7 +1125,6 @@ export class ShotcreteCalculations {
   static calculateShotcreteCost(
     poolSpecs: PoolSpecs,
     excavation: Excavation,
-    county?: string,
     tileCopingDecking?: any,
   ): { labor: CostLineItem[]; material: CostLineItem[] } {
     const laborItems: CostLineItem[] = [];
@@ -1299,49 +1299,15 @@ export class ShotcreteCalculations {
       });
     }
 
-    // Tax breakdown (Excel SHOT sheet)
-    // NC State Tax: 4.75% (0.0475)
-    // MECK County Tax: 2.5% (0.025)
-    // Combined for MECK County NC: 7.25% (4.75% + 2.5%)
     const materialSubtotal = materialItems.reduce((sum, i) => sum + i.total, 0);
-
-    if (county === 'MECK') {
-      // MECK County NC: Show state + county tax separately
-      const stateTax = materialSubtotal * 0.0475;
-      const countyTax = materialSubtotal * 0.025;
-
+    const taxRate = getPricingTaxRate(pricingData);
+    if (materialSubtotal > 0 && taxRate > 0) {
       materialItems.push({
         category: 'Shotcrete Material',
-        description: 'NC State Tax (4.75%)',
-        unitPrice: 0.0475,
+        description: 'Material Tax',
+        unitPrice: taxRate,
         quantity: materialSubtotal,
-        total: stateTax,
-      });
-
-      materialItems.push({
-        category: 'Shotcrete Material',
-        description: 'MECK County Tax (2.5%)',
-        unitPrice: 0.025,
-        quantity: materialSubtotal,
-        total: countyTax,
-      });
-    } else if (county === 'NC') {
-      // Other NC counties: Only state tax
-      materialItems.push({
-        category: 'Shotcrete Material',
-        description: 'NC State Tax (4.75%)',
-        unitPrice: 0.0475,
-        quantity: materialSubtotal,
-        total: materialSubtotal * 0.0475,
-      });
-    } else {
-      // Default: Combined tax (for other states or unspecified)
-      materialItems.push({
-        category: 'Shotcrete Material',
-        description: 'Material Tax (7.25%)',
-        unitPrice: prices.material.taxRate,
-        quantity: materialSubtotal,
-        total: materialSubtotal * prices.material.taxRate,
+        total: materialSubtotal * taxRate,
       });
     }
 

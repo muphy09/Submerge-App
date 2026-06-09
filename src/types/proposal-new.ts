@@ -12,7 +12,7 @@ export interface CustomerInfo {
   address?: string;
   phone?: string;
   email?: string;
-  county?: 'MECK' | 'NC' | string; // For tax rate calculations (MECK: 2.5%, NC other: 4.75%)
+  county?: 'MECK' | 'NC' | string;
 }
 
 // ============================================================================

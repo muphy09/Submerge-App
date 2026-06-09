@@ -315,12 +315,12 @@ const pricingData = {
       autoCover: 0,
       misc: 125, // Fixed: Excel shows $125, not $150
       travelPerMile: 7,
-      taxRate: 0.0725, // Default 7.25% (can be overridden by county-based calculation)
+      taxRate: 0.0725, // Legacy alias for misc.taxRate
     },
   },
   tileCoping: {
     materialTaxRate: 0.0725,
-    tileMaterialTaxRate: 0.075,
+    tileMaterialTaxRate: 0.0725,
     flagstoneQuantityMultiplier: 1.1, // 10% overage for flagstone materials (Excel rows 192-197)
     rockworkMaterialWaste: {
       panelLedge: 1.15, // 15% material overage on panel ledge (matches TILE COPING sheet)
@@ -477,7 +477,7 @@ const pricingData = {
     startupChemicals: 0,
     checkValve: 48.04,
     baseWhiteGoods: 1046.1,
-    taxRate: 0.0725, // Equipment tax rate (Excel shows 7.3% -> effective 7.25% with rounding)
+    taxRate: 0.0725, // Legacy alias for misc.taxRate
     packageOptions: [
       {
         id: 'custom',
@@ -626,7 +626,7 @@ const pricingData = {
     finishUpgrades: defaultFiberglassFinishUpgrades,
     spillover: 525,
     spaInstall: 2600,
-    shellTaxRate: 0.0725,
+    shellTaxRate: 0.0725, // Legacy alias for misc.taxRate
     equipmentPadCost: 250,
     small: 12192,
     medium: 15120,
@@ -641,7 +641,7 @@ const pricingData = {
     freight: 900, // Per shell (Excel: SUM(FIBER!G62:G64))
     surcharge2022: 0, // 2022 surcharge per shell (Excel: FIBER!C65)
     discountRate: 0.10, // 10% discount on shell costs
-    taxRate: 0.0725, // 7.25% tax on total
+    taxRate: 0.0725, // Legacy alias for misc.taxRate
     fiberglassInstall: {
       labor: 2500, // Installation labor
       gravel: 600, // Gravel for base
@@ -678,7 +678,8 @@ const pricingData = {
       { name: 'Royal', price: 5000 },
     ],
   },
-    misc: {
+  misc: {
+    taxRate: 0.0725,
     layout: {
       poolOnly: 50,
       spa: 15,

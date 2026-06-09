@@ -4,6 +4,7 @@
 
 import { PoolSpecs, Excavation, TileCopingDecking, Drainage, Equipment, WaterFeatures, InteriorFinish, CostLineItem } from '../types/proposal-new';
 import pricingData from './pricingData';
+import { getPricingTaxRate } from './taxRate';
 import { isBronzePricingTier } from './pricingTiers';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
 import { getLightCounts, normalizeEquipmentLighting } from '../utils/lighting';
@@ -615,61 +616,60 @@ export class TileCopingDeckingCalculations {
       totalMaterialSubtotal - tileMaterialSubtotal - rockworkMaterialSubtotal - deckingMaterialSubtotal
     );
 
-    const tileTaxRate = prices.tileMaterialTaxRate ?? prices.materialTaxRate;
-    const materialTaxRate = prices.materialTaxRate;
+    const taxRate = getPricingTaxRate(pricingData);
 
-    if (tileMaterialSubtotal > 0) {
+    if (tileMaterialSubtotal > 0 && taxRate > 0) {
       materialItems.push({
         category: 'Tile Material',
         description: 'Tile Materials Tax',
-        unitPrice: tileTaxRate,
+        unitPrice: taxRate,
         quantity: tileMaterialSubtotal,
-        total: tileMaterialSubtotal * tileTaxRate,
+        total: tileMaterialSubtotal * taxRate,
       });
     }
 
-    if (copingMaterialSubtotal > 0) {
+    if (copingMaterialSubtotal > 0 && taxRate > 0) {
       materialItems.push({
         category: 'Coping Material',
         description: 'Coping Material Tax',
-        unitPrice: materialTaxRate,
+        unitPrice: taxRate,
         quantity: copingMaterialSubtotal,
-        total: copingMaterialSubtotal * materialTaxRate,
+        total: copingMaterialSubtotal * taxRate,
       });
     }
 
-    if (primaryDeckingMaterialSubtotal > 0) {
+    if (primaryDeckingMaterialSubtotal > 0 && taxRate > 0) {
       materialItems.push(tagPrimaryDeckingItem({
         category: 'Decking Material',
         description: 'Decking Material Tax',
-        unitPrice: materialTaxRate,
+        unitPrice: taxRate,
         quantity: primaryDeckingMaterialSubtotal,
-        total: primaryDeckingMaterialSubtotal * materialTaxRate,
+        total: primaryDeckingMaterialSubtotal * taxRate,
       }));
     }
 
     additionalDeckingMaterialSubtotals.forEach((subtotal, key) => {
       const selection = additionalDeckingSelections.find((entry) => entry.key === key);
-      if (!selection || subtotal <= 0 || !selection.selectionLabel) {
+      if (!selection || subtotal <= 0 || taxRate <= 0 || !selection.selectionLabel) {
         return;
       }
 
       materialItems.push(tagAdditionalDeckingItem({
         category: 'Decking Material',
         description: formatAdditionalDeckingLabel(selection.selectionLabel, 'Material Tax'),
-        unitPrice: materialTaxRate,
+        unitPrice: taxRate,
         quantity: subtotal,
-        total: subtotal * materialTaxRate,
+        total: subtotal * taxRate,
       }, selection));
     });
 
-    if (rockworkMaterialSubtotal > 0) {
+    if (rockworkMaterialSubtotal > 0 && taxRate > 0) {
       materialItems.push({
         category: 'Stone & Rockwork Material',
         description: 'Stone & Rockwork Material Tax',
-        unitPrice: materialTaxRate,
+        unitPrice: taxRate,
         quantity: rockworkMaterialSubtotal,
-        total: rockworkMaterialSubtotal * materialTaxRate,
+        total: rockworkMaterialSubtotal * taxRate,
       });
     }
 
@@ -1184,14 +1184,14 @@ export class EquipmentCalculations {
       pushItem('Equipment Pad', equipmentPadCost, equipmentPadQuantity);
     }
 
-    // Equipment tax (7.25% in sheet) - shown as separate line item
     const subtotal = items.reduce((sum, i) => sum + i.total, 0);
-    if (subtotal > 0 && prices.taxRate) {
-      const taxAmount = Math.round(subtotal * prices.taxRate * 100) / 100; // match Excel cent rounding
+    const taxRate = getPricingTaxRate(pricingData);
+    if (subtotal > 0 && taxRate > 0) {
+      const taxAmount = Math.round(subtotal * taxRate * 100) / 100; // match Excel cent rounding
       items.push({
         category: 'Equipment',
         description: 'Equipment Tax',
-        unitPrice: prices.taxRate,
+        unitPrice: taxRate,
         quantity: subtotal,
         total: taxAmount,
       });
@@ -1574,7 +1574,6 @@ export class CleanupCalculations {
 export class FiberglassCalculations {
   static calculateFiberglassCost(poolSpecs: PoolSpecs, papDiscountRate: number = 0): CostLineItem[] {
     const items: CostLineItem[] = [];
-    const prices = pricingData.fiberglass as any;
 
     const poolIsFiberglass = poolSpecs.poolType === 'fiberglass';
     const spaIsFiberglass = poolSpecs.spaType === 'fiberglass';
@@ -1687,7 +1686,7 @@ export class FiberglassCalculations {
     }
 
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-    const shellTaxRate = Number(prices.shellTaxRate ?? prices.taxRate ?? 0);
+    const shellTaxRate = getPricingTaxRate(pricingData);
     if (subtotal > 0 && shellTaxRate > 0) {
       items.push({
         category: 'Fiberglass Shell',

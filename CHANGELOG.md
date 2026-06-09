@@ -1,3 +1,8 @@
+## [2.4.1] - 6/4/26
+### Tax Unification
+- Adjusted all Tax values to a single exposed input in the Admin Pricing Menu (Misc)
+    - Default 7.25%
+----
 ## [2.4.0] - 6/4/26
 ### Tiered Pricing
 - Introduced a new pricing structure accomodating for different 'Pricing Tiers'

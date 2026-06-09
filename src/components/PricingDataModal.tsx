@@ -2547,12 +2547,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 tooltip: 'Applied per mile of travel distance.',
                 prefix: '$',
               },
-              {
-                label: 'Tax rate',
-                path: ['shotcrete', 'material', 'taxRate'],
-                type: 'number',
-                tooltip: 'Applied to shotcrete material subtotal.',
-              },
             ],
           },
         ],
@@ -2668,24 +2662,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
-            title: 'Material tax & multipliers',
+            title: 'Material multipliers',
             scalars: [
-              {
-                label: 'Tile material tax rate',
-                path: ['tileCoping', 'tileMaterialTaxRate'],
-                type: 'number',
-                tooltip: 'Applied to tile material subtotal.',
-                prefix: '%',
-                isPercent: true,
-              },
-              {
-                label: 'Coping/decking material tax rate',
-                path: ['tileCoping', 'materialTaxRate'],
-                type: 'number',
-                tooltip: 'Applied to coping and decking material subtotals.',
-                prefix: '%',
-                isPercent: true,
-              },
               {
                 label: 'Flagstone material multiplier',
                 path: ['tileCoping', 'flagstoneQuantityMultiplier'],
@@ -2704,7 +2682,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             scalars: [
               { label: 'Check Valve', path: ['equipment', 'checkValve'], type: 'number', prefix: '$', tooltip: 'Added to fixed package totals when enabled, and billed directly on the Custom package option.' },
               { label: 'Base White Goods', path: ['equipment', 'baseWhiteGoods'], type: 'number', prefix: '$', tooltip: 'Legacy itemized equipment charge used outside of fixed package pricing.' },
-              { label: 'Equipment Tax Rate', path: ['equipment', 'taxRate'], type: 'number', prefix: '%', isPercent: true, tooltip: 'Applied after equipment subtotal, including package totals and upgrades.' },
             ],
             render: renderEquipmentPackageBuilder,
           },
@@ -3053,14 +3030,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 prefix: '$',
               },
               {
-                label: 'Shell tax rate',
-                path: ['fiberglass', 'shellTaxRate'],
-                type: 'number',
-                tooltip: 'Applied to the fiberglass shell subtotal after the fiberglass shell PAP discount.',
-                prefix: '%',
-                isPercent: true,
-              },
-              {
                 label: 'Equipment pad cost',
                 path: ['fiberglass', 'equipmentPadCost'],
                 type: 'number',
@@ -3224,6 +3193,19 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       {
         title: 'Misc',
         groups: [
+          {
+            title: 'Tax',
+            scalars: [
+              {
+                label: 'Tax Rate',
+                path: ['misc', 'taxRate'],
+                type: 'number',
+                tooltip: 'Default tax rate used by all tax line calculations.',
+                prefix: '%',
+                isPercent: true,
+              },
+            ],
+          },
           {
             title: 'Equipment Set',
             scalars: [
@@ -3670,6 +3652,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     return value.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
   };
 
+  const formatPercentInputValue = (value: number) => {
+    if (!Number.isFinite(value)) {
+      return '';
+    }
+    return value.toFixed(6).replace(/\.?0+$/, '');
+  };
+
   const formatPrefixedValue = (prefix: string | undefined, value: string) => {
     if (!prefix) {
       return value;
@@ -3804,7 +3793,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     const value = getValue(data, field.valuePath ?? field.path);
     const displayValue =
       field.type === 'number' && field.isPercent && typeof value === 'number'
-        ? value * 100
+        ? formatPercentInputValue(value * 100)
         : value;
     const isLocked = isActiveBronzeLockedPricingPath(field.path);
     const isDisabled = Boolean(field.disabled) || isLocked;
@@ -3864,6 +3853,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
             type={field.type === 'number' ? 'number' : 'text'}
             value={typeof displayValue === 'number' ? displayValue : displayValue ?? ''}
+            step={field.type === 'number' && field.isPercent ? '0.01' : undefined}
             disabled={isDisabled}
             aria-disabled={isDisabled}
             onFocus={() => setCenterFieldHelp(sectionTitle, groupTitle, field.label, field.tooltip || field.note)}

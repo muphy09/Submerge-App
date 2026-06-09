@@ -4,6 +4,7 @@
 
 import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts, CustomOption } from '../types/proposal-new';
 import pricingData from './pricingData';
+import { getPricingTaxRate } from './taxRate';
 import { CalculationModules } from './pricingEngineComplete';
 import { isBronzePricingTier } from './pricingTiers';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
@@ -62,7 +63,7 @@ import {
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
 function rebuildEquipmentTax(equipmentItems: CostLineItem[]): CostLineItem[] {
-  const taxRate = pricingData.equipment.taxRate ?? 0;
+  const taxRate = getPricingTaxRate(pricingData);
   const withoutTax = equipmentItems.filter((item) => !item.description.toLowerCase().includes('tax'));
   const subtotal = withoutTax.reduce((sum, item) => sum + (item.total ?? 0), 0);
   if (subtotal > 0 && taxRate > 0) {
@@ -189,7 +190,6 @@ export class MasterPricingEngine {
     const selectedEquipmentPackage = getSelectedEquipmentPackage(equipment);
     const customFeatures = normalizeCustomFeatures(proposal.customFeatures);
     const interiorFinish = proposal.interiorFinish!;
-    const county = proposal.customerInfo?.county;
     const isFiberglass = CalculationModules.Pool.isFiberglassPool(poolSpecs);
     const appliedPapDiscounts: PAPDiscounts = normalizePapDiscounts(papDiscounts ?? pricingData.papDiscountRates);
 
@@ -219,7 +219,7 @@ export class MasterPricingEngine {
     excavationItems = excavationItems.concat(buildCustomOptionItems(excavation.customOptions, 'Excavation'));
     plumbingItems = plumbingItems.concat(buildCustomOptionItems(plumbing.customOptions, 'Plumbing'));
     electricalItems = electricalItems.concat(buildCustomOptionItems(electrical.customOptions, 'Electrical'));
-    const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation, county, tileCopingDecking);
+    const shotcrete = ShotcreteCalculations.calculateShotcreteCost(poolSpecs, excavation, tileCopingDecking);
     const tileCoping = CalculationModules.TileCopingDecking.calculateCosts(poolSpecs, tileCopingDecking);
     const tileCustomOptionsItems = buildCustomOptionItems(tileCopingDecking.customOptions, 'Tile');
     const tileLaborOnly = tileCoping.labor.filter(i => i.category.toLowerCase().includes('tile')).concat(tileCustomOptionsItems);
@@ -257,12 +257,13 @@ export class MasterPricingEngine {
     const rockworkMaterial = masonryCalc.material.concat(tileCoping.material.filter(i => i.category.includes('Rockwork')));
     const masonryMaterialSubtotal = masonryCalc.material.reduce((sum, i) => sum + i.total, 0);
     if (masonryMaterialSubtotal > 0) {
+      const taxRate = getPricingTaxRate(pricingData);
       rockworkMaterial.push({
         category: 'Stone & Rockwork Material',
         description: 'Stone & Rockwork Material Tax (Masonry)',
-        unitPrice: pricingData.tileCoping.materialTaxRate,
+        unitPrice: taxRate,
         quantity: masonryMaterialSubtotal,
-        total: masonryMaterialSubtotal * pricingData.tileCoping.materialTaxRate,
+        total: masonryMaterialSubtotal * taxRate,
       });
     }
 
@@ -400,7 +401,7 @@ export class MasterPricingEngine {
           };
           if (taxIndex >= 0) {
             equipmentItems.splice(taxIndex, 0, discountItem);
-            const taxRate = pricingData.equipment.taxRate ?? 0;
+            const taxRate = getPricingTaxRate(pricingData);
             const taxableBase = subtotalBeforeTax - discountAmount;
             equipmentItems[taxIndex + 1] = {
               ...equipmentItems[taxIndex + 1],
@@ -410,7 +411,7 @@ export class MasterPricingEngine {
             };
           } else {
             equipmentItems.push(discountItem);
-            const taxRate = pricingData.equipment.taxRate ?? 0;
+            const taxRate = getPricingTaxRate(pricingData);
             equipmentItems.push({
               category: 'Equipment',
               description: 'Equipment Tax',
@@ -638,7 +639,7 @@ export class MasterPricingEngine {
       costBreakdown,
       pricing,
       subtotal: totals.grandTotal,
-      taxRate: 0,
+      taxRate: getPricingTaxRate(pricingData),
       taxAmount: 0,
       totalCost: retailPrice, // Return retail price, not just costs
     };

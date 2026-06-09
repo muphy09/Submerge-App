@@ -1,5 +1,6 @@
 import pricingData from './pricingData';
 import { removeHardcodedPapDiscountsFromPricing } from '../utils/papDiscounts';
+import { DEFAULT_TAX_RATE, normalizeTaxRate, syncLegacyTaxRateAliases } from './taxRate';
 import {
   loadPricingModel as loadPricingModelRemote,
   loadDefaultFranchisePricing,
@@ -59,10 +60,23 @@ function normalizePricingState(snapshot: PricingData, source?: any): PricingData
   ensureTileCopingDeckingCatalogs(normalized, source, defaultSnapshot);
   syncLegacyFiberglassPricing(normalized, source);
   syncLegacyMiscPricing(normalized, source);
+  syncGlobalTaxRatePricing(normalized, source);
   syncOutOfGroundPlumbingPricing(normalized, source);
   syncExcavationAdminTables(normalized, source);
   syncBlowerCatalog(normalized);
   return normalizePricingTiers(normalized);
+}
+
+function syncGlobalTaxRatePricing(target: PricingData, source?: any) {
+  const sourceMiscTaxRate = source?.misc?.taxRate;
+  const sourceEquipmentTaxRate = source?.equipment?.taxRate;
+  const taxRate = Number.isFinite(Number(sourceMiscTaxRate))
+    ? normalizeTaxRate(sourceMiscTaxRate)
+    : Number.isFinite(Number(sourceEquipmentTaxRate))
+      ? normalizeTaxRate(sourceEquipmentTaxRate)
+      : normalizeTaxRate((target as any)?.misc?.taxRate, DEFAULT_TAX_RATE);
+
+  syncLegacyTaxRateAliases(target, taxRate);
 }
 
 function syncBlowerCatalog(target: PricingData) {
@@ -804,6 +818,9 @@ export function updatePricingValue(path: (string | number)[], value: any) {
   if (pathKey === 'misc.startup.fiveYearWarranty') {
     const legacyPath = ['misc', 'startup', 'premium'];
     basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, legacyPath, value);
+  }
+  if (pathKey === 'misc.taxRate' && activePricingTierId === NORMAL_PRICING_TIER_ID) {
+    syncLegacyTaxRateAliases(basePricingState, value);
   }
   if (isExcavationAdminTablePath(path)) {
     syncExcavationAdminTables(basePricingState, basePricingState);

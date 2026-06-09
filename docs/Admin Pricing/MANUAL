@@ -146,7 +146,7 @@ I) Shotcrete (Labor + Material)
   - Env/Fuel per yard
   - Miscellaneous
   - Travel
-  - Tax lines (county-sensitive: MECK split, NC state-only, default combined)
+  - Tax line using Misc > Tax Rate
 
 J) Tile / Coping / Decking / Rockwork
 1. Tile
@@ -178,7 +178,7 @@ J) Tile / Coping / Decking / Rockwork
 
 5. Material tax split
 - Engine separates tile material, coping/deck material, and rockwork material,
-  then applies tax lines per subtotal bucket.
+  then applies tax lines per subtotal bucket using Misc > Tax Rate.
 
 K) Drainage
 - For each drain type (downspout, deck, french, box):
@@ -241,7 +241,7 @@ Q) Fiberglass Shell + Fiberglass Install
 - Spa shell
 - Spillover
 - Shell discount line (configured discount rate)
-- Shell tax line
+- Shell tax line using Misc > Tax Rate
 
 2. Fiberglass Install
 - Freight by size
@@ -259,7 +259,7 @@ R) Masonry / Stone
 - Raised spa facing (with waste factors)
 - Raised spa spillway labor/material
 - Retaining walls (configured wall type/height cost model)
-- Master engine may add an extra rockwork material tax line for masonry subtotal.
+- Master engine may add an extra rockwork material tax line for masonry subtotal using Misc > Tax Rate.
 
 S) Custom Options and Custom Features
 - Most sections support “custom options” where line total is:
@@ -309,7 +309,7 @@ Admin Checklist (what to verify when totals look wrong)
 6) Check custom options/features for unintended negative values.
 7) Check PAP discount percentages.
 8) Check manual adjustment values.
-9) Check county (shotcrete material tax behavior differs).
+9) Check Misc > Tax Rate when tax line totals look wrong.
 10) Re-open cost breakdown and inspect which line item is driving the change.
 
 Notes on Pricing Data and Overrides
