@@ -55,6 +55,8 @@ const ADDITIONAL_SPEC_FIELD_IDS = [
   'p2_additional_spec_82',
 ] as const;
 const ADDITIONAL_SPEC_FIELD_ID_SET = new Set<string>(ADDITIONAL_SPEC_FIELD_IDS);
+const SHOTCRETE_EQUIPMENT_WARRANTY_TEXT = '5 Year Warranty on Equipment';
+const SHOTCRETE_EQUIPMENT_WARRANTY_EFFECTIVE_AT = '2026-06-24T00:00:00.000-04:00';
 const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set([
   'p1_39',
   'p1_40',
@@ -427,7 +429,20 @@ function groupLightSelections(lights?: Array<{ name?: string }>) {
   return groups;
 }
 
-function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
+function isProposalCreatedOnOrAfter(proposal: ProposalWithPricing, effectiveDate: string): boolean {
+  const createdAt = Date.parse(proposal.createdDate || '');
+  const effectiveAt = Date.parse(effectiveDate);
+  return Number.isFinite(createdAt) && Number.isFinite(effectiveAt) && createdAt >= effectiveAt;
+}
+
+function shouldIncludeShotcreteEquipmentWarrantyLine(proposal: ProposalWithPricing): boolean {
+  return (
+    proposal.poolSpecs?.poolType !== 'fiberglass' &&
+    isProposalCreatedOnOrAfter(proposal, SHOTCRETE_EQUIPMENT_WARRANTY_EFFECTIVE_AT)
+  );
+}
+
+function buildCustomAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
   return normalizeCustomFeatures(proposal.customFeatures).features
     .filter((feature) => hasCustomFeatureContent(feature))
     .map((feature, index) => {
@@ -440,8 +455,21 @@ function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): strin
           : '';
       const base = groupedLabel || name || description || `Custom Feature #${index + 1}`;
       return isOffContractCustomFeature(feature) ? `${base} (OFF CONTRACT)` : base;
-    })
-    .slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);
+    });
+}
+
+function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
+  const customLines = buildCustomAdditionalSpecificationLines(proposal);
+  const lines = shouldIncludeShotcreteEquipmentWarrantyLine(proposal)
+    ? [
+        SHOTCRETE_EQUIPMENT_WARRANTY_TEXT,
+        ...customLines.filter(
+          (line) => line.trim().toLowerCase() !== SHOTCRETE_EQUIPMENT_WARRANTY_TEXT.toLowerCase()
+        ),
+      ]
+    : customLines;
+
+  return lines.slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);
 }
 
 function parseZipFromAddress(address?: string | null): string {

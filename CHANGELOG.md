@@ -1,8 +1,12 @@
-## [2.4.1] - 6/4/26
+## [2.4.2] - 6/24/26
+### Contract Update
+- Line 73 now populates as "5 Year Warranty on Equipment" by default on Shotcrete pools
+-----
+## [2.4.1] - 6/14/26
 ### Tax Unification
 - Adjusted all Tax values to a single exposed input in the Admin Pricing Menu (Misc)
     - Default 7.25%
-----
+-----
 ## [2.4.0] - 6/4/26
 ### Tiered Pricing
 - Introduced a new pricing structure accomodating for different 'Pricing Tiers'
@@ -11,7 +15,7 @@
     - Default Bronze Pricing values are modeled from the Excel Workbook
     - Variables that differ from the Normal Tier will be highlighted in Red
     - A few options (like Microglass) are disabled for selection in the Bronze Tier
----
+-----
 ## [2.3.13] - 6/4/26
 ### Warranty Defaults
 - Travertine & Pavers now include a 1 Year Warranty. Concrete remains blank
