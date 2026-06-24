@@ -10,6 +10,7 @@ export type WaterFeatureItem = {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
+  addCost3?: number;
   note?: string;
   needsPoolLight?: boolean;
 };
@@ -77,6 +78,11 @@ const normalizeZoneCategory = (category?: string) => {
   return normalized;
 };
 
+const isFireWokCategory = (category?: string) => {
+  const normalized = normalizeCategory(category);
+  return normalized === 'Wok Pots - Fire Only' || normalized === 'Wok Pots - Water & Fire';
+};
+
 export const waterFeatureNeedsGasRun = (item?: Pick<WaterFeatureItem, 'category' | 'name'> | null): boolean => {
   const normalized = normalizeCategory(item?.category || item?.name);
   return normalized === 'Wok Pots - Fire Only' || normalized === 'Wok Pots - Water & Fire';
@@ -92,6 +98,7 @@ export function getWaterFeatureCogs(item?: WaterFeatureItem | null): number {
     (item.basePrice ?? 0) +
     (item.addCost1 ?? 0) +
     (item.addCost2 ?? 0) +
+    (item.addCost3 ?? 0) +
     (item.needsPoolLight ? getDefaultPoolLightCost() : 0)
   );
 }
@@ -129,6 +136,7 @@ export function flattenWaterFeatures(
         basePrice: item.basePrice ?? 0,
         addCost1: item.addCost1 ?? 0,
         addCost2: item.addCost2 ?? 0,
+        addCost3: item.addCost3,
         note: item.note,
         needsPoolLight: Boolean(item.needsPoolLight),
       });
@@ -152,6 +160,7 @@ export function flattenWaterFeatures(
         basePrice: item.unitPrice ?? item.basePrice ?? 0,
         addCost1: item.addCost1 ?? 0,
         addCost2: item.addCost2 ?? 0,
+        addCost3: item.addCost3,
         note: item.note,
         needsPoolLight: Boolean(item.needsPoolLight),
       };
@@ -277,15 +286,21 @@ export function countSelectedWaterFeatureZones(
   const catalog = flattenWaterFeatures(config);
   const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
   const zones = new Set<string>();
+  let fireWokControllerCount = 0;
 
   selections.forEach((selection) => {
     if (!selection || (selection.quantity ?? 0) <= 0 || selection.includeValveActuator === false) return;
     const feature = lookup.get(selection.featureId) || catalog.find((entry) => entry.name === selection.featureId);
+    if (isFireWokCategory(feature?.category)) {
+      fireWokControllerCount += Math.max(0, Number(selection.quantity) || 0);
+      return;
+    }
+
     const zone = normalizeZoneCategory(feature?.category);
     if (zone) {
       zones.add(zone);
     }
   });
 
-  return zones.size;
+  return zones.size + fireWokControllerCount;
 }

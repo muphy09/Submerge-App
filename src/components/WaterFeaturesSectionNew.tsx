@@ -40,6 +40,7 @@ type WaterFeatureOption = {
   basePrice?: number;
   addCost1?: number;
   addCost2?: number;
+  addCost3?: number;
   note?: string;
   needsPoolLight?: boolean;
 };

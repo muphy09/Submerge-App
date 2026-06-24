@@ -20,6 +20,7 @@ import {
   normalizeCustomFeatures,
 } from '../utils/customFeatures';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
+import { NORMAL_PRICING_TIER_ID, getProposalPricingTierId } from './pricingTiers';
 
 export type ContractOverrides = Record<string, string | number | null>;
 
@@ -55,8 +56,8 @@ const ADDITIONAL_SPEC_FIELD_IDS = [
   'p2_additional_spec_82',
 ] as const;
 const ADDITIONAL_SPEC_FIELD_ID_SET = new Set<string>(ADDITIONAL_SPEC_FIELD_IDS);
-const SHOTCRETE_EQUIPMENT_WARRANTY_TEXT = '5 Year Warranty on Equipment';
-const SHOTCRETE_EQUIPMENT_WARRANTY_EFFECTIVE_AT = '2026-06-24T00:00:00.000-04:00';
+const EQUIPMENT_WARRANTY_TEXT = '5 Year Warranty on Equipment';
+const EQUIPMENT_WARRANTY_EFFECTIVE_AT = '2026-06-24T00:00:00.000-04:00';
 const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set([
   'p1_39',
   'p1_40',
@@ -435,10 +436,14 @@ function isProposalCreatedOnOrAfter(proposal: ProposalWithPricing, effectiveDate
   return Number.isFinite(createdAt) && Number.isFinite(effectiveAt) && createdAt >= effectiveAt;
 }
 
-function shouldIncludeShotcreteEquipmentWarrantyLine(proposal: ProposalWithPricing): boolean {
+function shouldApplyEquipmentWarrantyLineRule(proposal: ProposalWithPricing): boolean {
+  return isProposalCreatedOnOrAfter(proposal, EQUIPMENT_WARRANTY_EFFECTIVE_AT);
+}
+
+function shouldIncludeEquipmentWarrantyLine(proposal: ProposalWithPricing): boolean {
   return (
-    proposal.poolSpecs?.poolType !== 'fiberglass' &&
-    isProposalCreatedOnOrAfter(proposal, SHOTCRETE_EQUIPMENT_WARRANTY_EFFECTIVE_AT)
+    shouldApplyEquipmentWarrantyLineRule(proposal) &&
+    getProposalPricingTierId(proposal) === NORMAL_PRICING_TIER_ID
   );
 }
 
@@ -460,13 +465,15 @@ function buildCustomAdditionalSpecificationLines(proposal: ProposalWithPricing):
 
 function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
   const customLines = buildCustomAdditionalSpecificationLines(proposal);
-  const lines = shouldIncludeShotcreteEquipmentWarrantyLine(proposal)
+  const lines = shouldIncludeEquipmentWarrantyLine(proposal)
     ? [
-        SHOTCRETE_EQUIPMENT_WARRANTY_TEXT,
+        EQUIPMENT_WARRANTY_TEXT,
         ...customLines.filter(
-          (line) => line.trim().toLowerCase() !== SHOTCRETE_EQUIPMENT_WARRANTY_TEXT.toLowerCase()
+          (line) => line.trim().toLowerCase() !== EQUIPMENT_WARRANTY_TEXT.toLowerCase()
         ),
       ]
+    : shouldApplyEquipmentWarrantyLineRule(proposal)
+    ? ['', ...customLines]
     : customLines;
 
   return lines.slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);

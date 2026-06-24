@@ -1,3 +1,12 @@
+## [2.4.3] - 6/24/26
+### Contract Update
+- Line 73 now populates "5 Year Warranty on Equipment" by default on all Standard Price Tier pools
+    - Does not populate for Bronze Tier pools
+### Water Features
+- Admin Price Menu now includes a new column for 'Shipping' in the Water Features category
+    - Fire Pots & Water/Fire Pots default to $350 in the Shipping column
+- Fire Pit Valve Actuator (and Water/Fire pit) now charges 1 per quantity of Fire Bowls instead of per zone
+-----
 ## [2.4.2] - 6/24/26
 ### Contract Update
 - Line 73 now populates as "5 Year Warranty on Equipment" by default on Shotcrete pools

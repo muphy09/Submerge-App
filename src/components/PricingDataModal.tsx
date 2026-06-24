@@ -841,6 +841,15 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
       { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
       { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+      {
+        key: 'addCost3',
+        label: 'Add. Cost 3',
+        type: 'number',
+        placeholder: '0',
+        prefix: '$',
+        allowBlank: true,
+        tooltip: 'Optional additional cost, such as shipping.',
+      },
     ],
     []
   );
@@ -2032,7 +2041,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 label: 'Valve Actuator',
                 path: ['plumbing', 'valveActuator'],
                 type: 'number',
-                tooltip: 'Added once per unique selected water feature zone/subcategory. Duplicate quantities in the same zone do not add extra actuators.',
+                tooltip: 'Added once per unique selected water feature zone/subcategory. Fire-only and water/fire wok pots add one controller per selected quantity.',
                 prefix: '$',
               },
               {
