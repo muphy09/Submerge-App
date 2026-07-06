@@ -40,3 +40,9 @@ export const getAdditionalPumpSelections = (equipment?: Partial<Equipment> | nul
 
   return Array.from({ length: legacyCount }, () => ({ ...basePump }));
 };
+
+export const normalizePumpSelectionState = <T extends Partial<Equipment>>(equipment: T): T => ({
+  ...equipment,
+  pumpQuantity: Math.max(getBasePumpQuantity(equipment), 0),
+  additionalPumps: getAdditionalPumpSelections(equipment),
+});

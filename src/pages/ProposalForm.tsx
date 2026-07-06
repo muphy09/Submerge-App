@@ -1111,7 +1111,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ...prev,
         equipment: {
           ...baseEquipment,
-          pumpQuantity: normalizedPumpQuantity > 0 ? normalizedPumpQuantity : baseEquipment.pumpQuantity,
+          pumpQuantity: normalizedPumpQuantity,
           additionalPumps: [],
           auxiliaryPumps: [],
           auxiliaryPump: undefined,

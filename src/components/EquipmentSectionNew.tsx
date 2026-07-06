@@ -698,7 +698,10 @@ function EquipmentSectionNew({
   };
 
   const setAdditionalPumps = (pumps: PumpSelection[]) => {
-    updateData({ additionalPumps: pumps });
+    updateData({
+      pumpQuantity: Math.max(getBasePumpQuantity(safeData), 0),
+      additionalPumps: pumps,
+    });
   };
 
   const poolLightOptions = pricingData.equipment.lights.poolLights || [];

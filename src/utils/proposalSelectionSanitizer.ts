@@ -3,7 +3,7 @@ import { getVersionRecordStatus } from '../services/proposalWorkflow';
 import { HeaterSelection, Proposal, PumpSelection, WaterFeatureSelection } from '../types/proposal-new';
 import { getDefaultPoolSpecs } from './proposalDefaults';
 import { flattenWaterFeatures } from './waterFeatureCost';
-import { getAdditionalPumpSelections } from './pumpSelections';
+import { getAdditionalPumpSelections, normalizePumpSelectionState } from './pumpSelections';
 import { normalizeEquipmentLighting } from './lighting';
 import { getEquipmentItemCost } from './equipmentCost';
 
@@ -508,14 +508,16 @@ export function sanitizeProposalSelectionState(
     poolSpecs.spaType !== 'none'
   );
 
-  const nextEquipment = normalizeEquipmentLighting(
-    equipmentWithDependencies,
-    {
-      poolSpecs,
-      hasPool: hasPoolDefinition(poolSpecs),
-      hasSpa: poolSpecs.spaType !== 'none',
-      preserveEmpty: true,
-    }
+  const nextEquipment = normalizePumpSelectionState(
+    normalizeEquipmentLighting(
+      equipmentWithDependencies,
+      {
+        poolSpecs,
+        hasPool: hasPoolDefinition(poolSpecs),
+        hasSpa: poolSpecs.spaType !== 'none',
+        preserveEmpty: true,
+      }
+    )
   );
 
   const nextProposal = {
