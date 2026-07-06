@@ -1,3 +1,11 @@
+## [2.4.6] - 7/6/26
+### PMF03 Logic
+- Adjusted the logic of Additional Pumps in package PMF03
+    - Categorized the Water Features into 'Groups'
+        - An Additional Pump is required when 2 unique water feature 'Groups' are added
+        - Quantity added in a single group no longer impacts an Additional Pump
+- Added tooltip helpers to explain why the pump was added & cannot be removed
+-----
 ## [2.4.4] - 7/6/26
 ### PMF03 Hotfix
 - Corrected an issue with package PMF03 where an additional pump was injected accidentally

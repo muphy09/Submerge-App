@@ -112,7 +112,7 @@ import {
   resetWorkflowAfterVersionEdit,
   submitProposalForWorkflow,
 } from '../services/proposalWorkflow';
-import { sanitizeWaterFeatureSelections } from '../utils/waterFeatureCost';
+import { countSelectedWaterFeatureCategories, sanitizeWaterFeatureSelections } from '../utils/waterFeatureCost';
 import { sanitizeProposalSelectionState } from '../utils/proposalSelectionSanitizer';
 import {
   BRONZE_PRICING_TIER_ID,
@@ -1148,9 +1148,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             autoAddedReason: 'waterFeature' as const,
           }
         : null;
-    const selectedWaterFeatureCount = (proposal.waterFeatures?.selections || []).filter(
-      (selection) => Math.max(selection?.quantity ?? 0, 0) > 0
-    ).length;
+    const selectedWaterFeatureCategoryCount = countSelectedWaterFeatureCategories(
+      proposal.waterFeatures?.selections || [],
+      pricingData.waterFeatures
+    );
 
     const equipment = proposal.equipment || getDefaultEquipment();
     const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
@@ -1179,7 +1180,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     }
 
     const allowance = getPackageWaterFeaturesWithoutExtraPump(selectedPackage);
-    const needsAdditionalPump = selectedWaterFeatureCount > allowance;
+    const needsAdditionalPump = selectedWaterFeatureCategoryCount > allowance;
 
     if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0) {
       const selection = buildWaterFeaturePump(
@@ -2073,7 +2074,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       (pump) => pump?.autoAddedReason === 'waterFeature'
     )
       ? waterFeatureAllowance > 0
-        ? `This equipment package supports ${waterFeatureAllowance} water feature${waterFeatureAllowance === 1 ? '' : 's'} before another pump is required. An additional pump has been added automatically.`
+        ? `This equipment package supports ${waterFeatureAllowance} water feature categor${waterFeatureAllowance === 1 ? 'y' : 'ies'} before another pump is required. An additional pump has been added automatically.`
         : 'An additional pump has been added automatically for the selected water features.'
       : undefined;
 

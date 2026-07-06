@@ -304,3 +304,26 @@ export function countSelectedWaterFeatureZones(
 
   return zones.size + fireWokControllerCount;
 }
+
+export function countSelectedWaterFeatureCategories(
+  selections: WaterFeatureSelection[] = [],
+  config?: any
+): number {
+  if (!Array.isArray(selections) || selections.length === 0) return 0;
+
+  const catalog = flattenWaterFeatures(config ?? pricingData.waterFeatures);
+  const lookup = new Map(catalog.map((entry) => [entry.id, entry]));
+  const categories = new Set<string>();
+
+  selections.forEach((selection) => {
+    if (!selection || (selection.quantity ?? 0) <= 0) return;
+
+    const feature = lookup.get(selection.featureId) || catalog.find((entry) => entry.name === selection.featureId);
+    const category = normalizeZoneCategory(feature?.category || selection.featureId);
+    if (category && !isWaterFeaturePlaceholderLabel(category)) {
+      categories.add(category);
+    }
+  });
+
+  return categories.size;
+}

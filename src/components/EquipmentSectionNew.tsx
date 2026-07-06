@@ -38,6 +38,7 @@ import { TooltipAnchor } from './AppTooltip';
 import CustomOptionsSection from './CustomOptionsSection';
 import ProposalNote from './ProposalNote';
 import RetiredEquipmentIndicator from './RetiredEquipmentIndicator';
+import { useToast } from './Toast';
 import './SectionStyles.css';
 
 interface Props {
@@ -98,6 +99,8 @@ const LabelWithRetired = ({ text, showRetired }: { text: string; showRetired?: b
   </div>
 );
 
+const WATER_FEATURE_PUMP_LOCKED_MESSAGE = 'Cannot be modified - Required with chosen Water Features';
+
 function EquipmentSectionNew({
   data,
   onChange,
@@ -108,6 +111,8 @@ function EquipmentSectionNew({
   hasPool,
   noteOverrides,
 }: Props) {
+  const { showToast } = useToast();
+
   const autoFillSelectionRequiresElectric = (selection?: { name?: string; requiresElectricRun?: boolean }) => {
     const selectionName = selection?.name?.trim() || '';
     const normalizedName = selectionName.toLowerCase();
@@ -2171,27 +2176,53 @@ function EquipmentSectionNew({
             {additionalPumps.map((pump, idx) => {
               const isEditing = activeAdditionalPumpIndex === idx;
               const title = pump?.name || selectableDefaults.pump?.name || 'Additional Pump';
+              const isRequiredByWaterFeatures = pump?.autoAddedReason === 'waterFeature';
+              const showRequiredPumpMessage = () => {
+                showToast({
+                  type: 'warning',
+                  message: WATER_FEATURE_PUMP_LOCKED_MESSAGE,
+                });
+              };
 
               return (
                 <div key={`additional-pump-card-${idx}`} className="spec-subcard">
                   <div className="spec-subcard-header">
                     <div>
                       <div className="spec-subcard-title">{`Additional Pump ${idx + 1}: ${title}`}</div>
-                      <div className="spec-subcard-subtitle">*Main Drain automatically doubled</div>
+                      <div className="spec-subcard-subtitle">
+                        *Main Drain automatically doubled
+                        {isRequiredByWaterFeatures && (
+                          <span className="spec-subcard-subtitle-note">
+                            Automatically added to support Water Features
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="spec-subcard-actions stacked-actions">
                       <div className="stacked-primary-actions">
                         <button
                           type="button"
                           className="link-btn"
-                          onClick={() => setActiveAdditionalPumpIndex(isEditing ? null : idx)}
+                          onClick={() => {
+                            if (isRequiredByWaterFeatures) {
+                              showRequiredPumpMessage();
+                              return;
+                            }
+                            setActiveAdditionalPumpIndex(isEditing ? null : idx);
+                          }}
                         >
                           {isEditing ? 'Collapse' : 'Edit'}
                         </button>
                         <button
                           type="button"
                           className="link-btn danger"
-                          onClick={() => removeAdditionalPump(idx)}
+                          onClick={() => {
+                            if (isRequiredByWaterFeatures) {
+                              showRequiredPumpMessage();
+                              return;
+                            }
+                            removeAdditionalPump(idx);
+                          }}
                         >
                           Remove
                         </button>
@@ -2199,7 +2230,7 @@ function EquipmentSectionNew({
                     </div>
                   </div>
 
-                  {isEditing && (
+                  {isEditing && !isRequiredByWaterFeatures && (
                     <>
                       <div className="spec-grid spec-grid-2">
                         <div className="spec-field">

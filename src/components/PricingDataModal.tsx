@@ -1551,7 +1551,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       {renderPackageCheckbox(pkg, index, 'allowSanitationAccessoryUpgrade', 'Sanitation Accessories')}
                     </div>
                     <label className="pricing-input-block pricing-package-water-feature-limit">
-                      <span className="pricing-input-block__label">Water Features Allowed Before Another Pump</span>
+                      <span className="pricing-input-block__label">Water Feature Categories Allowed Before Another Pump</span>
                       <input
                         type="number"
                         className="pricing-input"

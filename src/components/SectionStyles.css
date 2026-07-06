@@ -1015,6 +1015,14 @@ select.compact-input {
   color: #b91c1c;
 }
 
+.spec-subcard-subtitle-note {
+  display: block;
+  margin-top: 2px;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .pill-row {
   display: flex;
   flex-wrap: wrap;

@@ -86,7 +86,7 @@ const defaultPackageOptions: EquipmentPackageOption[] = [
     defaultCleanerName: '7240 Sport',
     defaultCleanerQuantity: 1,
     notes:
-      'Supports one water feature without adding another pump. A second water feature will auto-add an additional pump.',
+      'Supports one water feature category without adding another pump. A second category will auto-add an additional pump.',
   },
   {
     id: CUSTOM_PACKAGE_ID,
