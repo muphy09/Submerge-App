@@ -71,6 +71,7 @@ function HomePage({
         getDefaultWaterFeatures,
         getDefaultInteriorFinish,
         getDefaultManualAdjustments,
+        mergePlumbingRuns,
         mergeRetailAdjustments,
       } = proposalDefaultsModule;
 
@@ -109,7 +110,7 @@ function HomePage({
           plumbing: {
             ...defaultPlumbing,
             ...inputPlumbing,
-            runs: { ...defaultPlumbing.runs, ...(inputPlumbing.runs || {}) },
+            runs: mergePlumbingRuns(inputPlumbing.runs),
           },
           electrical: {
             ...defaultElectrical,

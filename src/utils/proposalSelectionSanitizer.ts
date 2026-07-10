@@ -1,7 +1,7 @@
 import pricingData from '../services/pricingData';
 import { getVersionRecordStatus } from '../services/proposalWorkflow';
 import { HeaterSelection, Proposal, PumpSelection, WaterFeatureSelection } from '../types/proposal-new';
-import { getDefaultPoolSpecs } from './proposalDefaults';
+import { getDefaultPoolSpecs, mergePlumbingRuns } from './proposalDefaults';
 import { flattenWaterFeatures } from './waterFeatureCost';
 import { getAdditionalPumpSelections, normalizePumpSelectionState } from './pumpSelections';
 import { normalizeEquipmentLighting } from './lighting';
@@ -447,7 +447,7 @@ export function sanitizeProposalSelectionState(
   const poolSpecs = { ...(proposal.poolSpecs || poolDefaults) };
   const plumbing = {
     ...(proposal.plumbing || {}),
-    runs: { ...(proposal.plumbing?.runs || {}) },
+    runs: mergePlumbingRuns(proposal.plumbing?.runs),
   } as Proposal['plumbing'];
   const tileCopingDecking = {
     ...(proposal.tileCopingDecking || {}),

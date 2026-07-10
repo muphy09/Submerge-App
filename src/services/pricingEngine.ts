@@ -868,14 +868,14 @@ export class ElectricalCalculations {
     const requiresElectricAutoFill =
       Boolean((equipment as any)?.autoFillSystem?.requiresElectricRun) ||
       Boolean(pricingData.equipment?.autoFillSystem?.find((system: any) => system.name === autoFillSystemName)?.requiresElectricRun);
-    const autoFillRun = plumbing?.runs?.autoFillRun ?? 0;
-    if (requiresElectricAutoFill && autoFillRun > 0) {
+    const autoFillElectricRun = plumbing?.runs?.autoFillElectricRun ?? plumbing?.runs?.autoFillRun ?? 0;
+    if (requiresElectricAutoFill && autoFillElectricRun > 0) {
       items.push({
         category: 'Electrical',
         description: 'Auto-Fill Run',
         unitPrice: prices.autoFillPerFt,
-        quantity: autoFillRun,
-        total: prices.autoFillPerFt * autoFillRun,
+        quantity: autoFillElectricRun,
+        total: prices.autoFillPerFt * autoFillElectricRun,
       });
     }
 

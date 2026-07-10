@@ -48,6 +48,7 @@ import {
   getDefaultWaterFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
+  mergePlumbingRuns,
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { normalizeEquipmentLighting } from '../utils/lighting';
@@ -912,7 +913,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       plumbing: {
         ...defaultPlumbing,
         ...inputPlumbing,
-        runs: { ...defaultPlumbing.runs, ...(inputPlumbing.runs || {}) },
+        runs: mergePlumbingRuns(inputPlumbing.runs),
       },
       electrical: {
         ...defaultElectrical,

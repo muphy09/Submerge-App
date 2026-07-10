@@ -92,6 +92,7 @@ const MIRRORED_CONTRACT_FIELD_GROUPS = [
   ['p1_1', 'p1_body_buyer_name', 'p2_45', 'p3_customer_name', 'p4_customer_name', 'p5_customer_name', 'p6_customer_name'],
   ['p1_1b', 'p1_body_job_site_address', 'p2_45b'],
   ['p1_2', 'p2_46'],
+  ['p1_2b', 'p2_46b'],
   ['p1_3', 'p2_47'],
   ['p1_4', 'p2_48'],
   ['p1_5', 'p2_49'],
@@ -100,6 +101,7 @@ const MIRRORED_CONTRACT_FIELD_GROUPS = [
 const MIRRORED_CONTRACT_FIELD_ID_MAP = new Map<string, readonly string[]>(
   MIRRORED_CONTRACT_FIELD_GROUPS.flatMap((group) => group.map((fieldId) => [fieldId, group] as const))
 );
+const MANUAL_ONLY_CONTRACT_FIELD_IDS = new Set(['p1_2b', 'p2_46b']);
 
 type MirroredContractOverride = {
   hasOverride: boolean;
@@ -582,6 +584,7 @@ function isMeaningfulAutoValue(value: string | number | null | undefined): boole
 }
 
 function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPricing): string {
+  if (MANUAL_ONLY_CONTRACT_FIELD_IDS.has(field.id)) return '';
   if (SANITATION_NONE_FIELD_IDS.has(field.id)) return 'None';
 
   const label = field.label.toLowerCase();

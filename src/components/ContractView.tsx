@@ -53,6 +53,8 @@ const ADDITIONAL_SPEC_FIELD_IDS = [
   'p2_additional_spec_82',
 ];
 const OPTIONAL_FIELD_IDS = new Set([
+  'p1_2b', // optional: secondary phone entered by designer
+  'p2_46b',
   'p1_16', // optional: freeform depth note
   'p1_37_size',
   'p1_38_qty',

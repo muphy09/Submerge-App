@@ -19,6 +19,7 @@ import {
   PAPDiscounts,
   ManualAdjustments,
   RetailAdjustment,
+  PlumbingRuns,
 } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
 import { CURRENT_CONTRACT_TEMPLATE_REVISION } from '../services/contractTemplateUpgrade';
@@ -96,23 +97,41 @@ export function getDefaultExcavation(): Excavation {
   };
 }
 
+export function getDefaultPlumbingRuns(): PlumbingRuns {
+  return {
+    skimmerRun: 0,
+    additionalSkimmers: 0,
+    mainDrainRun: 0,
+    cleanerRun: 0,
+    autoFillRun: 0,
+    autoFillElectricRun: 0,
+    waterFeature1Run: 0,
+    waterFeature2Run: 0,
+    waterFeature3Run: 0,
+    waterFeature4Run: 0,
+    infloorValveToEQ: 0,
+    infloorValveToPool: 0,
+    gasRun: 0,
+    spaRun: 0,
+  };
+}
+
+export function mergePlumbingRuns(input?: Partial<PlumbingRuns>): PlumbingRuns {
+  const defaultRuns = getDefaultPlumbingRuns();
+  if (!input) return defaultRuns;
+
+  const hasAutoFillElectricRun = Object.prototype.hasOwnProperty.call(input, 'autoFillElectricRun');
+
+  return {
+    ...defaultRuns,
+    ...input,
+    autoFillElectricRun: hasAutoFillElectricRun ? input.autoFillElectricRun ?? 0 : input.autoFillRun ?? 0,
+  };
+}
+
 export function getDefaultPlumbing(): Plumbing {
   return {
-    runs: {
-      skimmerRun: 0,
-      additionalSkimmers: 0,
-      mainDrainRun: 0,
-      cleanerRun: 0,
-      autoFillRun: 0,
-      waterFeature1Run: 0,
-      waterFeature2Run: 0,
-      waterFeature3Run: 0,
-      waterFeature4Run: 0,
-      infloorValveToEQ: 0,
-      infloorValveToPool: 0,
-      gasRun: 0,
-      spaRun: 0,
-    },
+    runs: getDefaultPlumbingRuns(),
     customOptions: [],
     cost: 0,
   };

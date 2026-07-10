@@ -481,7 +481,14 @@ function EquipmentSectionNew({
     safeData.autoFillSystemQuantity ?? (includeAutoFill ? 1 : 0),
     0
   );
-  const autoFillRequiresElectric = includeAutoFill && autoFillSelectionRequiresElectric(safeData.autoFillSystem);
+  const selectedAutoFillForRun =
+    safeData.autoFillSystem?.name
+      ? safeData.autoFillSystem
+      : selectedPackage?.includedAutoFillSystemName
+      ? { name: selectedPackage.includedAutoFillSystemName }
+      : undefined;
+  const autoFillRequiresElectric =
+    (includeAutoFill || packageIncludesAutoFill) && autoFillSelectionRequiresElectric(selectedAutoFillForRun);
   const automationHasIncludedSaltCell =
     includeAutomation &&
     hasRealSelection(safeData.automation?.name, 'no automation') &&
@@ -1440,6 +1447,7 @@ function EquipmentSectionNew({
     setIncludeAutoFill(false);
     updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
     handleRunChange('autoFillRun', 0);
+    handleRunChange('autoFillElectricRun', 0);
   };
 
   const handlePumpSelect = (name: string) => {
@@ -1734,11 +1742,15 @@ function EquipmentSectionNew({
   const handleAutoFillSystemChange = (name?: string) => {
     if (!name) {
       updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
+      handleRunChange('autoFillRun', 0);
+      handleRunChange('autoFillElectricRun', 0);
       return;
     }
     const system = pricingData.equipment.autoFillSystem.find(s => s.name === name);
     if (!system) {
       updateData({ autoFillSystem: undefined, autoFillSystemQuantity: 0, hasAutoFill: false });
+      handleRunChange('autoFillRun', 0);
+      handleRunChange('autoFillElectricRun', 0);
       return;
     }
     const nextQuantity = Math.max(safeData.autoFillSystemQuantity ?? 1, 1);
@@ -3368,7 +3380,7 @@ function EquipmentSectionNew({
 
             {autoFillEditing && (
               <>
-                <div className="spec-grid-3-split auto-fill-grid">
+                <div className={`spec-grid-3-split auto-fill-grid ${autoFillRequiresElectric ? 'auto-fill-grid-electric' : ''}`}>
                   {packageIncludesAutoFill
                     ? renderReadOnlySelection(
                         'Auto-Fill System',
@@ -3414,12 +3426,24 @@ function EquipmentSectionNew({
 
                   {(includeAutoFill || packageIncludesAutoFill) && (
                     <div className="spec-field">
-                      <label className="spec-label">
-                        {autoFillRequiresElectric ? 'Auto-Fill Run & Electric' : 'Auto-Fill Run'}
-                      </label>
+                      <label className="spec-label">{autoFillRequiresElectric ? 'Plumbing Run' : 'Auto-Fill Run'}</label>
                       <CompactInput
                         value={plumbingRuns.autoFillRun ?? 0}
                         onChange={(e) => handleRunChange('autoFillRun', parseFloat(e.target.value) || 0)}
+                        unit="LNFT"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                      />
+                    </div>
+                  )}
+
+                  {(includeAutoFill || packageIncludesAutoFill) && autoFillRequiresElectric && (
+                    <div className="spec-field">
+                      <label className="spec-label">Conduit Run</label>
+                      <CompactInput
+                        value={plumbingRuns.autoFillElectricRun ?? 0}
+                        onChange={(e) => handleRunChange('autoFillElectricRun', parseFloat(e.target.value) || 0)}
                         unit="LNFT"
                         min="0"
                         step="1"

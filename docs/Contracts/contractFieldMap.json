@@ -37,7 +37,7 @@
       "proposalPath": null,
       "formatter": "phone",
       "fallback": "",
-      "notes": "No secondary phone in proposal; mirror Phone I or leave blank."
+      "notes": "Designer-entered secondary phone; do not autofill from proposal data."
     },
     {
       "cell": "I5",

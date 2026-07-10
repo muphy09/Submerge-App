@@ -21,6 +21,7 @@ import {
   getDefaultWaterFeatures,
   getDefaultInteriorFinish,
   getDefaultManualAdjustments,
+  mergePlumbingRuns,
   mergeRetailAdjustments,
 } from '../utils/proposalDefaults';
 import { getEquipmentItemCost } from '../utils/equipmentCost';
@@ -290,7 +291,7 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
     plumbing: {
       ...defaultPlumbing,
       ...inputPlumbing,
-      runs: { ...defaultPlumbing.runs, ...(inputPlumbing.runs || {}) },
+      runs: mergePlumbingRuns(inputPlumbing.runs),
     },
     electrical: {
       ...defaultElectrical,
@@ -1502,11 +1503,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ...prev,
         plumbing: {
           ...existingPlumbing,
-          runs: {
-            ...defaultPlumbing.runs,
+          runs: mergePlumbingRuns({
             ...(existingPlumbing.runs || {}),
             ...runUpdates,
-          },
+          }),
         },
         lastModified: new Date().toISOString(),
       } as Proposal);
@@ -1594,6 +1594,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ...existingPlumbing.runs,
         cleanerRun: 0,
         autoFillRun: 0,
+        autoFillElectricRun: 0,
       };
       WATER_FEATURE_RUN_FIELDS.forEach((field) => {
         nextRuns[field] = 0;

@@ -541,6 +541,10 @@ select.compact-input {
   grid-template-columns: minmax(0, 1fr) minmax(0, 220px) minmax(0, 220px);
 }
 
+.auto-fill-grid-electric {
+  grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(0, 200px));
+}
+
 .spec-grid-4 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

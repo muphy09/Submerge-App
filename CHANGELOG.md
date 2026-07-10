@@ -1,3 +1,9 @@
+## [2.4.7] - 7/10/26
+### Contract Changes
+- Line item for Phone II can now be edited properly
+### Autofill Systems
+- Electric Autofill now separates Conduit run and Plumbing run instead of using the same value
+-----
 ## [2.4.6] - 7/6/26
 ### PMF03 Logic
 - Adjusted the logic of Additional Pumps in package PMF03

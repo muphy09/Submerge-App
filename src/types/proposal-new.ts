@@ -153,6 +153,7 @@ export interface PlumbingRuns {
   mainDrainRun: number; // Main drain to EQ (LNFT)
   cleanerRun: number; // Pool center to EQ (LNFT)
   autoFillRun: number; // Hose bibb to AWL (LNFT)
+  autoFillElectricRun: number; // Electric/conduit run for powered auto-fill systems (LNFT)
 
   // Water features
   waterFeature1Run: number; // LNFT

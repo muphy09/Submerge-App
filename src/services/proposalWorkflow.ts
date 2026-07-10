@@ -604,6 +604,7 @@ function extractPlumbingFields(
     { key: 'mainDrainRun', label: 'Main Drain Run', value: formatNumber(runs.mainDrainRun, ' LF') },
     { key: 'cleanerRun', label: 'Cleaner Run', value: formatNumber(runs.cleanerRun, ' LF') },
     { key: 'autoFillRun', label: 'Auto-Fill Run', value: formatNumber(runs.autoFillRun, ' LF') },
+    { key: 'autoFillElectricRun', label: 'Auto-Fill Conduit Run', value: formatNumber(runs.autoFillElectricRun, ' LF') },
     { key: 'waterFeature1Run', label: 'Water Feature 1 Run', value: formatNumber(runs.waterFeature1Run, ' LF') },
     { key: 'waterFeature2Run', label: 'Water Feature 2 Run', value: formatNumber(runs.waterFeature2Run, ' LF') },
     { key: 'waterFeature3Run', label: 'Water Feature 3 Run', value: formatNumber(runs.waterFeature3Run, ' LF') },
