@@ -11,7 +11,12 @@ import {
   getResolvedProposalPrimaryDeckingArea,
 } from '../utils/decking';
 import { getCopingOptionLabel, hasTileSelection } from '../utils/tileCopingCatalogs';
-import { ContractTemplateId, getContractTemplate, getContractTemplateIdForProposal } from './contractTemplates';
+import {
+  ContractTemplate,
+  ContractTemplateId,
+  getContractTemplate,
+  getContractTemplateIdForProposal,
+} from './contractTemplates';
 import {
   getGroupedCustomFeatureSubcategory,
   hasCustomFeatureContent,
@@ -933,11 +938,12 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
 export async function getEditableContractFields(
   proposal: Proposal,
   overrides?: ContractOverrides,
-  templateId?: ContractTemplateId
+  templateId?: ContractTemplateId,
+  templateOverride?: ContractTemplate
 ): Promise<ContractFieldRender[]> {
   const normalized = normalizeProposal(proposal);
   const resolvedTemplateId = templateId || getContractTemplateIdForProposal(proposal);
-  const templateFields = getContractTemplate(resolvedTemplateId).fields;
+  const templateFields = (templateOverride || getContractTemplate(resolvedTemplateId)).fields;
   const depositSourceValue = resolveContractDepositSourceValue(overrides);
   const totalCashPrice = getRetailPrice(normalized);
   const schedulePercentages = getContractDepositSchedulePercentages(normalized);

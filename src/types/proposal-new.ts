@@ -809,6 +809,27 @@ export interface ProposalWorkflowState {
   history?: ProposalWorkflowEvent[];
 }
 
+export type PricingRevisionReviewDecision = 'pending' | 'declined' | 'upgraded' | 'not_affected';
+
+export interface PricingRevisionReviewState {
+  latestRevisionId: string;
+  latestRevisionNumber?: number | null;
+  decision: PricingRevisionReviewDecision;
+  detectedAt: string;
+  decidedAt?: string | null;
+  decidedBy?: ProposalWorkflowActor | null;
+  underlyingStatus?: ProposalWorkflowStatus | null;
+}
+
+export interface ContractRevisionReviewState {
+  latestRevisionId: string;
+  latestRevisionNumber?: number | null;
+  decision: 'pending' | 'declined' | 'upgraded';
+  detectedAt: string;
+  decidedAt?: string | null;
+  decidedBy?: ProposalWorkflowActor | null;
+}
+
 // ============================================================================
 // COMPLETE PROPOSAL
 // ============================================================================
@@ -835,6 +856,9 @@ export interface Proposal {
   pricingModelName?: string;
   pricingModelFranchiseId?: string;
   pricingModelIsDefault?: boolean;
+  pricingModelRevisionId?: string;
+  pricingModelRevisionNumber?: number;
+  pricingRevisionReview?: PricingRevisionReviewState | null;
   pricingTierId?: string;
   pricingTierName?: string;
   syncStatus?: 'synced' | 'pending' | 'error';
@@ -882,6 +906,10 @@ export interface Proposal {
 
   // Designer overrides for contract cells (cell address -> value)
   contractOverrides?: Record<string, string | number | null>;
+  contractTemplateId?: string;
+  contractTemplateRevisionId?: string;
+  contractTemplateRevisionNumber?: number;
+  contractRevisionReview?: ContractRevisionReviewState | null;
   contractTemplateRevision?: string;
   warrantySections?: WarrantySection[] | null;
 }

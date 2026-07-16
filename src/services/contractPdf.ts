@@ -1,6 +1,11 @@
 import { PDFDocument, PDFFont, rgb, StandardFonts, TextAlignment } from 'pdf-lib';
 import { ContractFieldRender } from './contractGenerator';
-import { ContractStaticPatch, ContractTemplateId, getContractTemplate } from './contractTemplates';
+import {
+  ContractStaticPatch,
+  ContractTemplate,
+  ContractTemplateId,
+  getContractTemplate,
+} from './contractTemplates';
 
 export type ContractPdfFieldLayout = {
   name: string;
@@ -24,6 +29,7 @@ type ContractPdfBuildOptions = {
   flatten?: boolean;
   includeFormFields?: boolean;
   templateId?: ContractTemplateId;
+  template?: ContractTemplate;
 };
 
 const DEFAULT_FONT_SIZE = 10;
@@ -70,8 +76,8 @@ function resolvePatchFillColor(fill: ContractStaticPatch['fill']) {
   return WHITE_FILL;
 }
 
-async function loadTemplateBytes(templateId?: ContractTemplateId): Promise<Uint8Array> {
-  const template = getContractTemplate(templateId);
+async function loadTemplateBytes(templateId?: ContractTemplateId, templateOverride?: ContractTemplate): Promise<Uint8Array> {
+  const template = templateOverride || getContractTemplate(templateId);
   // Browser
   if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
     const res = await fetch(template.pdfUrl);
@@ -133,9 +139,9 @@ export async function buildContractPdf(
   fields: ContractFieldRender[],
   options: ContractPdfBuildOptions = {}
 ): Promise<ContractPdfResult> {
-  const { flatten = false, includeFormFields = true, templateId } = options;
-  const template = getContractTemplate(templateId);
-  const templateBytes = await loadTemplateBytes(templateId);
+  const { flatten = false, includeFormFields = true, templateId, template: templateOverride } = options;
+  const template = templateOverride || getContractTemplate(templateId);
+  const templateBytes = await loadTemplateBytes(templateId, templateOverride);
   const pdf = await PDFDocument.load(templateBytes);
   const form = pdf.getForm();
   const font = await pdf.embedFont(StandardFonts.Helvetica);

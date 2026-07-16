@@ -26,8 +26,10 @@ import {
 } from '../services/pricingFieldLabels';
 import {
   listPricingModels,
+  listPricingModelRevisions,
   setDefaultPricingModel,
   deletePricingModel as deletePricingModelRemote,
+  type PricingModelRevisionSummary,
 } from '../services/pricingModelsAdapter';
 import { getDefaultCleanerIndex } from '../utils/cleanerDefaults';
 import { normalizeEquipmentPackageOptions } from '../utils/equipmentPackages';
@@ -176,6 +178,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [activeListFieldRename, setActiveListFieldRename] = useState<ActiveListFieldRename | null>(null);
   const [activeListFieldRenameDraft, setActiveListFieldRenameDraft] = useState('');
   const [pricingModels, setPricingModels] = useState<any[]>([]);
+  const [pricingModelRevisions, setPricingModelRevisions] = useState<PricingModelRevisionSummary[]>([]);
+  const [viewingHistoricalRevision, setViewingHistoricalRevision] = useState<PricingModelRevisionSummary | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() => {
     const meta = getActivePricingModelMeta();
     return meta.pricingModelId || null;
@@ -237,6 +241,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setModelName('');
     setHideModelFromView(false);
     setSelectedModelId(null);
+    setPricingModelRevisions([]);
+    setViewingHistoricalRevision(null);
     setHasChanges(false);
     setSelectedListItem(null);
     setContextHelp(null);
@@ -291,9 +297,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       const activeMeta = getActivePricingModelMeta();
       setSelectedPricingTierId(activeMeta.pricingTierId || getActivePricingTierId());
       if (rows?.length) {
+        let historyModelId: string | null = null;
         if (activeMeta.pricingModelId) {
           const activeModel = rows.find((model) => model.id === activeMeta.pricingModelId);
           setSelectedModelId(activeMeta.pricingModelId);
+          historyModelId = activeMeta.pricingModelId;
           setModelName(
             activeMeta.pricingModelName ||
               activeModel?.name ||
@@ -303,15 +311,23 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         } else {
           const fallback = rows.find((m) => m.isDefault) || rows[0];
           setSelectedModelId(fallback?.id ?? null);
+          historyModelId = fallback?.id ?? null;
           setModelName(fallback?.name || '');
           setHideModelFromView(Boolean(fallback?.isHiddenFromView));
+        }
+        if (historyModelId) {
+          setPricingModelRevisions(await listPricingModelRevisions(idToUse, historyModelId));
+        } else {
+          setPricingModelRevisions([]);
         }
       } else {
         // New franchise: keep name empty, no selected model
         setSelectedModelId(null);
         setModelName('');
         setHideModelFromView(false);
+        setPricingModelRevisions([]);
       }
+      setViewingHistoricalRevision(null);
       setHasChanges(false);
     } catch (error) {
       console.warn('Unable to load pricing models', error);
@@ -323,6 +339,12 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setIsInitializing(true);
     try {
       await setActivePricingModel(modelId, undefined, selectedPricingTierId);
+      setViewingHistoricalRevision(null);
+      const revisions = await listPricingModelRevisions(
+        franchiseId || getActiveFranchiseId(),
+        modelId
+      );
+      setPricingModelRevisions(revisions);
       const meta = getActivePricingModelMeta();
       const selectedRow = pricingModels.find((model) => model.id === modelId);
       setModelName(meta.pricingModelName || selectedRow?.name || '');
@@ -367,6 +389,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const handleSaveModel = async () => {
+    if (viewingHistoricalRevision) {
+      setSaveError('Historical pricing revisions are read-only. Return to the current revision to make changes.');
+      return;
+    }
     if (!modelName.trim()) {
       setSaveError('Please provide a model name.');
       return;
@@ -399,6 +425,33 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     } finally {
       setSavingModel(false);
     }
+  };
+
+  const handleViewHistoricalRevision = async (revision: PricingModelRevisionSummary) => {
+    if (!selectedModelId) return;
+    setIsInitializing(true);
+    setSaveError(null);
+    try {
+      await setActivePricingModel(
+        selectedModelId,
+        franchiseId || getActiveFranchiseId(),
+        selectedPricingTierId,
+        revision.id
+      );
+      setData(getPricingDataSnapshot());
+      setNormalData(getNormalPricingDataSnapshot());
+      setViewingHistoricalRevision(revision);
+      setHasChanges(false);
+      setSelectedListItem(null);
+      setContextHelp(null);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  const handleReturnToCurrentRevision = async () => {
+    if (!selectedModelId) return;
+    await handleLoadModel(selectedModelId);
   };
 
   const handleCreateNewModel = async () => {
@@ -691,6 +744,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const selectedModel = selectedModelId ? pricingModels.find((m) => m.id === selectedModelId) : null;
   const selectedModelIsDefault = Boolean(selectedModel?.isDefault);
   const selectedModelIsHiddenFromView = Boolean(hideModelFromView);
+  const currentPricingRevision = pricingModelRevisions[0] || null;
   const getSectionGlyph = (title: string) => {
     const parts = title.split(' ').filter(Boolean);
     const abbreviation = ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).trim();
@@ -4425,6 +4479,14 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             <div className="pricing-model-summary-card__content">
               <span className="pricing-label muted">Current Model:</span>
               <span className="pricing-model-panel__name">{displayModelName}</span>
+              {currentPricingRevision && (
+                <span className="pricing-pill">Revision {currentPricingRevision.revisionNumber}</span>
+              )}
+              {viewingHistoricalRevision && (
+                <span className="pricing-pill warning">
+                  Viewing Revision {viewingHistoricalRevision.revisionNumber} — Read-only
+                </span>
+              )}
               {selectedModelIsDefault && <span className="pricing-pill success">Active</span>}
               {selectedModelIsHiddenFromView && <span className="pricing-pill">Hidden</span>}
             </div>
@@ -4433,7 +4495,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           {saveError && <div className="pricing-model-error">{saveError}</div>}
 
           <div className="pricing-workspace">
-            <div className="pricing-workspace__center">
+            <div
+              className={`pricing-workspace__center${viewingHistoricalRevision ? ' is-read-only-revision' : ''}`}
+              aria-readonly={viewingHistoricalRevision ? 'true' : undefined}
+            >
               {isInitializing ? (
                 <div className="pricing-empty">Loading pricing model data...</div>
               ) : !activeSection ? (
@@ -4503,6 +4568,35 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             <aside className="pricing-workspace__rail">
               {renderSelectedListEditor()}
               {renderContextHelpPanel()}
+              {selectedModelId && pricingModelRevisions.length > 0 && (
+                <div className="pricing-rail-card pricing-revision-history">
+                  <div className="pricing-rail-card__header">
+                    <h3>Revision History</h3>
+                  </div>
+                  <div className="pricing-revision-history__list">
+                    {pricingModelRevisions.map((revision, index) => {
+                      const isCurrent = index === 0;
+                      const isViewing = viewingHistoricalRevision?.id === revision.id;
+                      return (
+                        <button
+                          key={revision.id}
+                          type="button"
+                          className={`pricing-revision-history__item${isCurrent ? ' is-current' : ''}${isViewing ? ' is-viewing' : ''}`}
+                          onClick={() =>
+                            isCurrent
+                              ? void handleReturnToCurrentRevision()
+                              : void handleViewHistoricalRevision(revision)
+                          }
+                          disabled={isInitializing}
+                        >
+                          <span>Revision {revision.revisionNumber}</span>
+                          <small>{isCurrent ? 'Current' : revision.publishedAt ? new Date(revision.publishedAt).toLocaleDateString() : 'Historical'}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="pricing-rail-card pricing-rail-card--actions">
                 <div className="pricing-rail-card__header">
                   <h3>Model Actions</h3>
@@ -4511,7 +4605,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   <button
                     className={`pricing-chip-button ${!hasChanges || isInitializing ? 'disabled' : ''}`}
                     type="button"
-                    disabled={!selectedModelId || !hasChanges || isInitializing}
+                    disabled={!selectedModelId || !hasChanges || isInitializing || Boolean(viewingHistoricalRevision)}
                     onClick={() => selectedModelId && void handleLoadModel(selectedModelId)}
                   >
                     Reset Changes
@@ -4519,9 +4613,15 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   <button
                     className={`pricing-chip-button primary ${!hasChanges || isInitializing ? 'disabled' : ''}`}
                     onClick={handleSaveModel}
-                    disabled={!hasChanges || savingModel || isInitializing}
+                    disabled={!hasChanges || savingModel || isInitializing || Boolean(viewingHistoricalRevision)}
                   >
-                    {savingModel ? 'Saving...' : 'Save Changes'}
+                    {savingModel
+                      ? 'Publishing...'
+                      : viewingHistoricalRevision
+                        ? 'Historical Revision — Read-only'
+                        : currentPricingRevision
+                          ? `Publish Revision ${currentPricingRevision.revisionNumber + 1}`
+                          : 'Publish Revision 1'}
                   </button>
                 </div>
               </div>

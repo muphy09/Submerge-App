@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
 
 permissions:
   contents: write
@@ -12,9 +13,31 @@ env:
   VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
   VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
   VITE_SUPABASE_ONLY: true
+  RELEASE_TAG: ${{ github.ref_name }}
 
 jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+
+      - name: Create deterministic GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_TAG"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            exit 0
+          fi
+          args=("$tag" --verify-tag --title "${tag#v}" --notes "Automated Submerge release ${tag#v}")
+          if [[ "$tag" == *-* ]]; then args+=(--prerelease); fi
+          gh release create "${args[@]}"
+
   release-windows:
+    needs: prepare-release
     runs-on: windows-latest
 
     steps:
@@ -42,15 +65,52 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Set isolated channel build version
+        run: node scripts/set-build-version.js
+
       - name: Build renderer
         run: npm run build:renderer
 
       - name: Build and release (Windows)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_PRE_RELEASE: ${{ contains(github.ref_name, '-') && 'true' || 'false' }}
+          EP_GH_IGNORE_TIME: true
         run: npx electron-builder --win nsis --publish always
 
+      - name: Publish fixed franchise update endpoint (Windows)
+        if: contains(github.ref_name, '-')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = $env:RELEASE_TAG -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+-(franchise-[A-Za-z0-9-]+|master)\.\d+$') {
+            throw "Unsupported channel release tag: $version"
+          }
+          $channel = $Matches[1].ToLower()
+          $fixedTag = "updates-$channel"
+          gh release view $fixedTag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $fixedTag --prerelease --title "Update endpoint: $channel" --notes "Managed automatically. Do not delete this release."
+            if ($LASTEXITCODE -ne 0) {
+              Start-Sleep -Seconds 3
+              gh release view $fixedTag *> $null
+              if ($LASTEXITCODE -ne 0) { throw "Unable to create or find fixed update endpoint $fixedTag." }
+            }
+          }
+          $output = "portable builds"
+          $sourceManifest = Join-Path $output "$channel.yml"
+          if (-not (Test-Path $sourceManifest)) { throw "Missing update manifest: $sourceManifest" }
+          $staging = Join-Path $output "fixed-update-assets"
+          node scripts/stage-update-assets.js $sourceManifest $staging
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to stage Windows update assets.' }
+          $assets = Get-ChildItem $staging -File
+          if (-not $assets) { throw 'No Windows update assets were produced.' }
+          gh release upload $fixedTag @($assets.FullName) --clobber
+
   release-mac:
+    needs: prepare-release
     runs-on: macos-latest
 
     steps:
@@ -78,12 +138,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Set isolated channel build version
+        run: node scripts/set-build-version.js
+
       - name: Build renderer
         run: npm run build:renderer
 
       - name: Build and release (macOS)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_PRE_RELEASE: ${{ contains(github.ref_name, '-') && 'true' || 'false' }}
+          EP_GH_IGNORE_TIME: true
         run: |
           set -euo pipefail
 
@@ -111,3 +176,35 @@ jobs:
 
           # Build DMG on the current macOS runner.
           npx electron-builder --mac dmg --publish always
+
+      - name: Publish fixed franchise update endpoint (macOS)
+        if: contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(franchise-[A-Za-z0-9-]+|master)\.[0-9]+$ ]]; then
+            echo "Unsupported channel release tag: $version" >&2
+            exit 1
+          fi
+          channel="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+          fixed_tag="updates-$channel"
+          if ! gh release view "$fixed_tag" >/dev/null 2>&1; then
+            if ! gh release create "$fixed_tag" --prerelease --title "Update endpoint: $channel" --notes "Managed automatically. Do not delete this release."; then
+              sleep 3
+              gh release view "$fixed_tag" >/dev/null 2>&1 || { echo "Unable to create or find fixed update endpoint $fixed_tag." >&2; exit 1; }
+            fi
+          fi
+          output="portable builds"
+          source_manifest="$output/$channel-mac.yml"
+          if [ ! -f "$source_manifest" ]; then
+            echo "Missing update manifest: $source_manifest" >&2
+            exit 1
+          fi
+          staging="$output/fixed-update-assets"
+          node scripts/stage-update-assets.js "$source_manifest" "$staging"
+          assets=()
+          while IFS= read -r -d '' file; do assets+=("$file"); done < <(find "$staging" -maxdepth 1 -type f -print0)
+          if [ "${#assets[@]}" -eq 0 ]; then echo 'No macOS update assets were produced.' >&2; exit 1; fi
+          gh release upload "$fixed_tag" "${assets[@]}" --clobber

@@ -18,6 +18,12 @@ import {
   updateFranchiseUserRole,
 } from '../services/franchiseUsersAdapter';
 import { listProposals } from '../services/proposalsAdapter';
+import {
+  loadFranchiseConfiguration,
+  publishFranchiseConfiguration,
+  type FranchiseConfiguration,
+  type LoadedFranchiseConfiguration,
+} from '../services/franchiseConfiguration';
 
 type StatusMessage = {
   type: 'success' | 'error';
@@ -104,6 +110,12 @@ function MasterFranchiseEditorModal({
   const [proposalCountsByUserId, setProposalCountsByUserId] = useState<Record<string, number>>({});
   const [loadingProposalCounts, setLoadingProposalCounts] = useState(false);
   const [transferTargetsByUserId, setTransferTargetsByUserId] = useState<Record<string, string>>({});
+  const [loadedConfiguration, setLoadedConfiguration] = useState<LoadedFranchiseConfiguration | null>(null);
+  const [pendingConfiguration, setPendingConfiguration] = useState<FranchiseConfiguration | null>(null);
+  const [configurationSummary, setConfigurationSummary] = useState('');
+  const [configurationLoading, setConfigurationLoading] = useState(true);
+  const [configurationSaving, setConfigurationSaving] = useState(false);
+  const [configurationStatus, setConfigurationStatus] = useState<StatusMessage>(null);
 
   useEffect(() => {
     setPendingName(franchise.name || '');
@@ -115,6 +127,60 @@ function MasterFranchiseEditorModal({
     setNewUserRole('designer');
     setTransferTargetsByUserId({});
   }, [disableSignedWorkflow, franchise.franchiseCode, franchise.id, franchise.name]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setConfigurationLoading(true);
+    setConfigurationStatus(null);
+    void loadFranchiseConfiguration(franchise.id, { force: true })
+      .then((loaded) => {
+        if (cancelled) return;
+        setLoadedConfiguration(loaded);
+        setPendingConfiguration({
+          ...loaded.configuration,
+          capabilities: { ...loaded.configuration.capabilities },
+        });
+      })
+      .catch((error: any) => {
+        if (!cancelled) {
+          setConfigurationStatus({ type: 'error', message: error?.message || 'Unable to load franchise configuration.' });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setConfigurationLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [franchise.id]);
+
+  const handlePublishConfiguration = async () => {
+    if (!pendingConfiguration || configurationSaving) return;
+    setConfigurationSaving(true);
+    setConfigurationStatus(null);
+    try {
+      const published = await publishFranchiseConfiguration({
+        franchiseId: franchise.id,
+        configuration: pendingConfiguration,
+        changeSummary: configurationSummary.trim() || 'Franchise configuration updated from Master UI',
+        publishedBy: updatedBy || null,
+      });
+      setLoadedConfiguration(published);
+      setPendingConfiguration({
+        ...published.configuration,
+        capabilities: { ...published.configuration.capabilities },
+      });
+      setConfigurationSummary('');
+      setConfigurationStatus({
+        type: 'success',
+        message: `Configuration revision ${published.revisionNumber} published.`,
+      });
+    } catch (error: any) {
+      setConfigurationStatus({ type: 'error', message: error?.message || 'Unable to publish franchise configuration.' });
+    } finally {
+      setConfigurationSaving(false);
+    }
+  };
 
   useEffect(() => {
     setTransferTargetsByUserId((current) => {
@@ -174,6 +240,11 @@ function MasterFranchiseEditorModal({
     normalizedPendingName !== normalizedCurrentName || normalizedPendingCode !== normalizedCurrentCode;
   const hasSettingsChange =
     hasCoreSettingsChange || pendingDisableSignedWorkflow !== (disableSignedWorkflow === true);
+  const hasConfigurationChanges = Boolean(
+    pendingConfiguration &&
+    loadedConfiguration &&
+    JSON.stringify(pendingConfiguration) !== JSON.stringify(loadedConfiguration.configuration)
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -728,6 +799,117 @@ function MasterFranchiseEditorModal({
             </label>
             {signedWorkflowSettingLoading && (
               <div className="master-editor-inline-note">Loading workflow settings...</div>
+            )}
+          </div>
+
+          <div className="master-editor-section">
+            <div className="master-editor-section-header">
+              <div>
+                <h3>Franchise Configuration</h3>
+                <p className="master-editor-inline-note">
+                  Current revision {loadedConfiguration?.revisionNumber || 0}. Publishing creates an immutable new revision for this franchise only.
+                </p>
+              </div>
+              <button
+                className="master-primary-btn master-small-btn"
+                type="button"
+                onClick={() => void handlePublishConfiguration()}
+                disabled={!hasConfigurationChanges || configurationLoading || configurationSaving}
+              >
+                {configurationSaving ? 'Publishing...' : 'Publish Configuration'}
+              </button>
+            </div>
+            {configurationStatus && (
+              <div className={configurationStatus.type === 'error' ? 'master-error' : 'master-success'}>
+                {configurationStatus.message}
+              </div>
+            )}
+            {configurationLoading || !pendingConfiguration ? (
+              <div className="master-empty">Loading franchise configuration...</div>
+            ) : (
+              <>
+                <div className="master-editor-field-grid">
+                  <label className="master-editor-field">
+                    <span>Theme Profile</span>
+                    <input
+                      value={pendingConfiguration.themeProfile}
+                      onChange={(event) => setPendingConfiguration({ ...pendingConfiguration, themeProfile: event.target.value })}
+                      disabled={configurationSaving}
+                    />
+                  </label>
+                  <label className="master-editor-field">
+                    <span>Proposal Layout</span>
+                    <input
+                      value={pendingConfiguration.proposalLayout}
+                      onChange={(event) => setPendingConfiguration({ ...pendingConfiguration, proposalLayout: event.target.value })}
+                      disabled={configurationSaving}
+                    />
+                  </label>
+                  <label className="master-editor-field">
+                    <span>Location Input</span>
+                    <select
+                      value={pendingConfiguration.locationInputMode}
+                      onChange={(event) => setPendingConfiguration({
+                        ...pendingConfiguration,
+                        locationInputMode: event.target.value === 'county' ? 'county' : 'state',
+                      })}
+                      disabled={configurationSaving}
+                    >
+                      <option value="state">State</option>
+                      <option value="county">County</option>
+                    </select>
+                  </label>
+                  <label className="master-editor-field">
+                    <span>Contract Resolution</span>
+                    <select
+                      value={pendingConfiguration.contractResolutionMode}
+                      onChange={(event) => setPendingConfiguration({
+                        ...pendingConfiguration,
+                        contractResolutionMode: event.target.value === 'pool_type_only' ? 'pool_type_only' : 'state_and_pool_type',
+                      })}
+                      disabled={configurationSaving}
+                    >
+                      <option value="state_and_pool_type">State + Pool Type</option>
+                      <option value="pool_type_only">Pool Type Only</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="master-editor-capabilities">
+                  {[
+                    ['pricingRevisionReview', 'Pricing revision review'],
+                    ['contractTemplateLibrary', 'Contract template library'],
+                    ['offlineDraftRecovery', 'Offline draft recovery'],
+                    ['signedWorkflow', 'Signed workflow'],
+                    ['offContractItems', 'Off-contract items'],
+                    ['financingSection', 'Financing section'],
+                  ].map(([key, label]) => (
+                    <label className="master-editor-toggle compact" key={key}>
+                      <input
+                        type="checkbox"
+                        checked={pendingConfiguration.capabilities[key] === true}
+                        onChange={(event) => setPendingConfiguration({
+                          ...pendingConfiguration,
+                          capabilities: {
+                            ...pendingConfiguration.capabilities,
+                            [key]: event.target.checked,
+                          },
+                        })}
+                        disabled={configurationSaving}
+                      />
+                      <div className="master-editor-toggle-copy"><span>{label}</span></div>
+                    </label>
+                  ))}
+                </div>
+                <label className="master-editor-field master-editor-config-summary">
+                  <span>Change Summary</span>
+                  <input
+                    value={configurationSummary}
+                    onChange={(event) => setConfigurationSummary(event.target.value)}
+                    placeholder="Describe what this revision changes"
+                    disabled={configurationSaving}
+                  />
+                </label>
+              </>
             )}
           </div>
 

@@ -28,8 +28,8 @@ export type ContractStaticPatch = {
   texts?: ContractTextOverlay[];
 };
 
-type ContractTemplate = {
-  id: ContractTemplateId;
+export type ContractTemplate = {
+  id: string;
   label: string;
   pdfUrl: string;
   pdfPath: string;
@@ -473,6 +473,10 @@ export const VERSION_RESETTABLE_CONTRACT_OVERRIDE_FIELD_IDS = new Set<string>(
 
 export function getContractTemplate(id?: ContractTemplateId): ContractTemplate {
   return CONTRACT_TEMPLATES[id || DEFAULT_CONTRACT_TEMPLATE_ID];
+}
+
+export function listBundledContractTemplates(): ContractTemplate[] {
+  return Object.values(CONTRACT_TEMPLATES);
 }
 
 export function getContractTemplateIdForProposal(proposal: Proposal): ContractTemplateId {

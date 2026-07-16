@@ -5,198 +5,135 @@
       "label": "Test App",
       "type": "shell",
       "command": "npm run dev",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "test",
       "problemMatcher": [],
-      "detail": "Runs the app via npm run dev (starts Vite + Electron). Stop the task to clean up processes."
+      "detail": "Runs the normal local app. Use the master account's Act as Owner workflow to verify a franchise."
+    },
+    {
+      "label": "Test App - Staging (Recommended)",
+      "type": "shell",
+      "command": "node dev-start.js --env .env.staging.local",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Runs against the isolated staging Supabase project configured in .env.staging.local."
+    },
+    {
+      "label": "Test App - PPAS West (5555)",
+      "type": "shell",
+      "command": "node dev-start.js --env .env.staging.local",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "VITE_TEST_FRANCHISE_CODE": "5555" }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Runs a local test build labeled for PPAS West. Sign in as master and Act as Owner for franchise 5555."
+    },
+    {
+      "label": "Test App - PPAS East (6666)",
+      "type": "shell",
+      "command": "node dev-start.js --env .env.staging.local",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "VITE_TEST_FRANCHISE_CODE": "6666" }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Runs a local test build labeled for PPAS East. Sign in as master and Act as Owner for franchise 6666."
+    },
+    {
+      "label": "Verify Release",
+      "type": "shell",
+      "command": "npx tsc --noEmit; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run build:renderer",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Runs TypeScript and production renderer build checks without publishing anything."
     },
     {
       "label": "Create Installer",
       "type": "shell",
       "command": "npm run build:installer",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true
-      },
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Builds a Windows installer EXE for Submerge Proposal Builder in the 'portable builds' folder. Close any running Submerge/Electron app instances first."
+      "detail": "Creates a local Windows installer without publishing it."
     },
     {
-      "label": "_release:version:patch",
+      "label": "Release - One-Time Migration Bootstrap",
       "type": "shell",
-      "command": "npm version patch",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": [],
-      "hide": true
-    },
-    {
-      "label": "_release:version:minor",
-      "type": "shell",
-      "command": "npm version minor",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": [],
-      "hide": true
-    },
-    {
-      "label": "_release:version:major",
-      "type": "shell",
-      "command": "npm version major",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
-      "problemMatcher": [],
-      "hide": true
-    },
-    {
-      "label": "_release:git:push",
-      "type": "shell",
-      "command": "git push",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": false
-      },
-      "problemMatcher": [],
-      "hide": true
-    },
-    {
-      "label": "_release:git:push-tags",
-      "type": "shell",
-      "command": "git push --tags",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": false
-      },
-      "problemMatcher": [],
-      "hide": true
-    },
-    {
-      "label": "Release Patch",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "_release:version:patch",
-        "_release:git:push",
-        "_release:git:push-tags"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
+      "command": "node scripts/release-channel.js bootstrap",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Increments the patch version (1.0.9 -> 1.0.10), pushes the release commit, and pushes the vX.Y.Z tag so GitHub Actions can publish the release."
+      "detail": "ONE TIME ONLY: verifies, creates the bridge/global build plus initial West, East, and master channels, then pushes their tags. Requires a clean committed worktree."
     },
     {
-      "label": "Release Minor",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "_release:version:minor",
-        "_release:git:push",
-        "_release:git:push-tags"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
+      "label": "Release - PPAS West Only (5555)",
+      "type": "shell",
+      "command": "node scripts/release-channel.js franchise --target 5555",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Increments the minor version (1.0.9 -> 1.1.0), pushes the release commit, and pushes the vX.Y.Z tag so GitHub Actions can publish the release."
+      "detail": "Verifies and publishes only the PPAS West channel plus the master channel. PPAS East does not receive this update."
     },
     {
-      "label": "Release Major",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "_release:version:major",
-        "_release:git:push",
-        "_release:git:push-tags"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
+      "label": "Release - PPAS East Only (6666)",
+      "type": "shell",
+      "command": "node scripts/release-channel.js franchise --target 6666",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Increments the major version (1.0.9 -> 2.0.0), pushes the release commit, and pushes the vX.Y.Z tag so GitHub Actions can publish the release."
+      "detail": "Verifies and publishes only the PPAS East channel plus the master channel. PPAS West does not receive this update."
     },
     {
-      "label": "Release Patch x.x.0",
-      "dependsOn": [
-        "Release Patch"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
+      "label": "Release - Global (All Franchises)",
+      "type": "shell",
+      "command": "node scripts/release-channel.js global",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "build",
       "problemMatcher": [],
-      "hide": true
+      "detail": "Verifies and publishes West, East, master, and the stable bridge. Resets every franchise release counter to 1."
     },
     {
-      "label": "Release Minor x.0.x",
-      "dependsOn": [
-        "Release Minor"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
+      "label": "Release - Register New Franchise Channel",
+      "type": "shell",
+      "command": "node scripts/register-franchise-release.js --target ${input:franchiseCode}",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "build",
       "problemMatcher": [],
-      "hide": true
+      "detail": "Adds a new franchise code to release-state.json at counter 1. Commit the resulting state before publishing."
     },
     {
-      "label": "Release Major 0.x.x",
-      "dependsOn": [
-        "Release Major"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared",
-        "clear": true
-      },
+      "label": "Release - Selected Franchise Only",
+      "type": "shell",
+      "command": "node scripts/release-channel.js franchise --target ${input:franchiseCode}",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "build",
       "problemMatcher": [],
-      "hide": true
+      "detail": "Publishes only the registered franchise code entered below plus the master channel."
+    }
+  ],
+  "inputs": [
+    {
+      "id": "franchiseCode",
+      "type": "promptString",
+      "description": "Franchise code (for example 5555)",
+      "default": "5555"
     }
   ]
 }

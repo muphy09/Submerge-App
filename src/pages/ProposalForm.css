@@ -253,6 +253,78 @@
   opacity: 1;
 }
 
+.form-header-pricing-upgrade {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  position: relative;
+}
+
+.form-header-pricing-upgrade-current {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #d4b483;
+  border-radius: 8px;
+  background: #fffaf2;
+  color: #4b3826;
+}
+
+.form-header-pricing-upgrade-current span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.form-header-pricing-upgrade-current small {
+  font-size: 0.7rem;
+  color: #7c654e;
+}
+
+.form-header-pricing-upgrade-button,
+.form-header-pricing-change-button {
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.form-header-pricing-upgrade-button {
+  border: 1px solid #9a6b35;
+  background: #9a6b35;
+  color: #fff;
+}
+
+.form-header-pricing-change-button {
+  border: 1px solid #cab99f;
+  background: #fff;
+  color: #5c4935;
+}
+
+.form-header-pricing-chooser {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  min-width: 280px;
+  padding: 0.35rem;
+  border: 1px solid #d7dce3;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+@media (max-width: 1200px) {
+  .form-header-pricing-upgrade {
+    grid-template-columns: 1fr;
+  }
+}
+
 .form-header-pricing-arrow::before {
   content: '';
   width: 6px;

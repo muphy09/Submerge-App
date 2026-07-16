@@ -76,6 +76,7 @@ const UPDATE_FEED = {
   owner: 'muphy09',
   repo: 'Submerge-App',
 };
+const UPDATE_DOWNLOAD_BASE = 'https://github.com/muphy09/Submerge-App/releases/download';
 const CSP_DIRECTIVES = [
   "default-src 'self'",
   isDev
@@ -480,13 +481,9 @@ function setupAutoUpdater() {
     cleanupAppResources();
   });
 
-  // Check for updates when app starts (after a delay to let the window load)
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(err => {
-      console.error('Failed to check for updates:', err);
-      sendUpdateError();
-    });
-  }, 3000);
+  // The renderer starts the check only after login, when the correct franchise
+  // release channel is known. Checking the generic feed here could deliver a
+  // different franchise's build before the user is identified.
 }
 
 function createWindow() {
@@ -1515,7 +1512,7 @@ ipcMain.handle('delete-pricing-model', async (_, payload) => {
 });
 
 // Auto-updater IPC handlers
-ipcMain.handle('check-for-updates', async () => {
+ipcMain.handle('check-for-updates', async (_event, payload = {}) => {
   if (isDev) {
     return { message: 'Updates are disabled in development mode' };
   }
@@ -1523,6 +1520,21 @@ ipcMain.handle('check-for-updates', async () => {
     const autoUpdater = getAutoUpdater();
     if (!autoUpdater) {
       return { message: 'Error checking for updates' };
+    }
+
+    const requestedChannel = String(payload?.channel || '').trim().toLowerCase();
+    if (requestedChannel) {
+      if (!/^(master|franchise-[a-z0-9-]+)$/.test(requestedChannel)) {
+        throw new Error('Invalid update channel.');
+      }
+      autoUpdater.setFeedURL({
+        provider: 'generic',
+        url: `${UPDATE_DOWNLOAD_BASE}/updates-${requestedChannel}/`,
+      });
+      autoUpdater.channel = 'latest';
+      autoUpdater.allowPrerelease = true;
+      autoUpdater.allowDowngrade = false;
+      console.log(`Auto-update channel configured: updates-${requestedChannel}`);
     }
 
     const result = await autoUpdater.checkForUpdates();

@@ -7,10 +7,15 @@ import DashboardProposalsPanel from '../components/DashboardProposalsPanel';
 import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
 import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, isMasterActingAsOwnerSession, type UserSession } from '../services/session';
-import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
+import { getSessionFranchiseId, type UserSession } from '../services/session';
+import { loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
+import {
+  buildPricingRevisionComparison,
+  markPricingRevisionPending,
+} from '../services/pricingRevisionReview';
+import { isVersionPermanentlyLocked } from '../services/proposalWorkflow';
 import {
   acknowledgeFeedbackReply,
   isFeedbackFeatureUnavailableError,
@@ -37,7 +42,7 @@ function HomePage({
   const [acknowledgingFeedbackId, setAcknowledgingFeedbackId] = useState<string | null>(null);
   const { showToast } = useToast();
   const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
-  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const isProposalEditingRestricted = false;
   const proposalEditingRestrictedReason =
     'Master accounts acting as owner can view proposals but cannot create or edit them.';
 
@@ -138,19 +143,20 @@ function HomePage({
       };
 
       const recalculated: Proposal[] = [];
-      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForExistingProposal>>>();
       for (const raw of filtered) {
         try {
           const targetFranchiseId = raw.franchiseId || sessionFranchiseId;
           const pricingTierId = normalizePricingTierId(raw.pricingTierId || raw.pricingTierName);
-          const pricingCacheKey = `${targetFranchiseId}::${raw.pricingModelFranchiseId || targetFranchiseId}::${raw.pricingModelId || 'default'}::${pricingTierId}`;
+          const pricingCacheKey = `${targetFranchiseId}::${raw.pricingModelFranchiseId || targetFranchiseId}::${raw.pricingModelId || 'default'}::${raw.pricingModelRevisionId || 'current'}::${pricingTierId}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
-            pricingSnapshot = await loadPricingSnapshotForFranchise(
+            pricingSnapshot = await loadPricingSnapshotForExistingProposal(
               targetFranchiseId,
               raw.pricingModelId || undefined,
               raw.pricingModelFranchiseId || undefined,
-              pricingTierId
+              pricingTierId,
+              raw.pricingModelRevisionId || undefined
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }
@@ -158,13 +164,28 @@ function HomePage({
           const calculated = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () =>
             MasterPricingEngine.calculateCompleteProposal(merged, (merged as any).papDiscounts)
           );
-          recalculated.push({
+          let nextProposal = {
             ...(merged as Proposal),
+            pricingModelId: raw.pricingModelId || pricingSnapshot.pricingModelId || undefined,
+            pricingModelName: raw.pricingModelName || pricingSnapshot.pricingModelName || undefined,
+            pricingModelFranchiseId:
+              raw.pricingModelFranchiseId || pricingSnapshot.pricingModelFranchiseId || undefined,
+            pricingModelRevisionId:
+              raw.pricingModelRevisionId || pricingSnapshot.pricingModelRevisionId || undefined,
+            pricingModelRevisionNumber:
+              raw.pricingModelRevisionNumber || pricingSnapshot.pricingModelRevisionNumber || undefined,
             pricing: calculated.pricing,
             costBreakdown: calculated.costBreakdown,
             subtotal: calculated.subtotal,
             totalCost: calculated.totalCost,
-          } as Proposal);
+          } as Proposal;
+          if (!isVersionPermanentlyLocked(nextProposal) && nextProposal.pricingModelRevisionId) {
+            const comparison = await buildPricingRevisionComparison(nextProposal);
+            if (comparison) {
+              nextProposal = markPricingRevisionPending(nextProposal, comparison);
+            }
+          }
+          recalculated.push(nextProposal);
         } catch (error) {
           console.warn(`Unable to recalc pricing for proposal ${raw.proposalNumber}`, error);
           recalculated.push(raw as Proposal);

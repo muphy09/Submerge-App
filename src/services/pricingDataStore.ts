@@ -3,6 +3,8 @@ import { removeHardcodedPapDiscountsFromPricing } from '../utils/papDiscounts';
 import { DEFAULT_TAX_RATE, normalizeTaxRate, syncLegacyTaxRateAliases } from './taxRate';
 import {
   loadPricingModel as loadPricingModelRemote,
+  loadInitialPricingModelRevisionId,
+  listPricingModels as listPricingModelsRemote,
   loadDefaultFranchisePricing,
   savePricingModel as savePricingModelRemote,
 } from './pricingModelsAdapter';
@@ -33,6 +35,8 @@ type PricingLoadState = {
   pricingModelId: string | null;
   pricingModelName: string | null;
   pricingModelFranchiseId: string | null;
+  pricingModelRevisionId: string | null;
+  pricingModelRevisionNumber: number | null;
   isDefault: boolean;
 };
 
@@ -47,6 +51,8 @@ let activeFranchiseId = DEFAULT_FRANCHISE_ID;
 let activePricingModelId: string | null = null;
 let activePricingModelName: string | null = null;
 let activePricingModelFranchiseId: string | null = null;
+let activePricingModelRevisionId: string | null = null;
+let activePricingModelRevisionNumber: number | null = null;
 let activePricingModelIsDefault = true;
 let activePricingTierId: PricingTierId = NORMAL_PRICING_TIER_ID;
 const defaultSnapshot: PricingData = deepClone(pricingData);
@@ -526,6 +532,8 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
   pricingModelId: string | null;
   pricingModelName: string | null;
   pricingModelFranchiseId: string | null;
+  pricingModelRevisionId: string | null;
+  pricingModelRevisionNumber: number | null;
   isDefault: boolean;
 }> {
   try {
@@ -536,6 +544,8 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
         pricingModelId: result.pricingModelId || null,
         pricingModelName: result.pricingModelName || null,
         pricingModelFranchiseId: result.pricingModelId ? result.franchiseId || franchiseId : null,
+        pricingModelRevisionId: result.revisionId || null,
+        pricingModelRevisionNumber: result.revisionNumber || null,
         isDefault: Boolean(result.isDefault),
       };
     }
@@ -560,6 +570,8 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
           pricingModelId: null,
           pricingModelName: null,
           pricingModelFranchiseId: null,
+          pricingModelRevisionId: null,
+          pricingModelRevisionNumber: null,
           isDefault: true,
         };
       }
@@ -573,6 +585,8 @@ async function fetchPersistedPricing(franchiseId: string): Promise<{
     pricingModelId: null,
     pricingModelName: null,
     pricingModelFranchiseId: null,
+    pricingModelRevisionId: null,
+    pricingModelRevisionNumber: null,
     isDefault: true,
   };
 }
@@ -586,13 +600,14 @@ async function resolvePricingState(
   franchiseId: string,
   pricingModelId?: string,
   pricingModelFranchiseId?: string,
-  pricingTierId?: string | null
+  pricingTierId?: string | null,
+  pricingModelRevisionId?: string | null
 ): Promise<PricingLoadState> {
   const resolvedTierId = normalizePricingTierId(pricingTierId);
   try {
     if (pricingModelId) {
       const sourceFranchiseId = pricingModelFranchiseId || franchiseId;
-      const result = await loadPricingModelRemote(sourceFranchiseId, pricingModelId);
+      const result = await loadPricingModelRemote(sourceFranchiseId, pricingModelId, pricingModelRevisionId);
       if (result?.pricing) {
         const basePricing = normalizePricingState(
           mergeDeep(defaultSnapshot, result.pricing ?? {}),
@@ -607,6 +622,8 @@ async function resolvePricingState(
           pricingModelId: result.pricingModelId || pricingModelId,
           pricingModelName: result.pricingModelName || null,
           pricingModelFranchiseId: result.franchiseId || sourceFranchiseId,
+          pricingModelRevisionId: result.revisionId || null,
+          pricingModelRevisionNumber: result.revisionNumber || null,
           isDefault: Boolean(result.isDefault),
         };
       }
@@ -626,6 +643,8 @@ async function resolvePricingState(
     pricingModelId: saved.pricingModelId,
     pricingModelName: saved.pricingModelName,
     pricingModelFranchiseId: saved.pricingModelFranchiseId,
+    pricingModelRevisionId: saved.pricingModelRevisionId,
+    pricingModelRevisionNumber: saved.pricingModelRevisionNumber,
     isDefault: saved.isDefault,
   };
 }
@@ -637,6 +656,8 @@ function applyPricingState(state: PricingLoadState) {
   activePricingModelId = state.pricingModelId;
   activePricingModelName = state.pricingModelName;
   activePricingModelFranchiseId = state.pricingModelFranchiseId;
+  activePricingModelRevisionId = state.pricingModelRevisionId;
+  activePricingModelRevisionNumber = state.pricingModelRevisionNumber;
   activePricingModelIsDefault = state.isDefault;
   activePricingTierId = state.pricingTierId;
   syncBaseFromState();
@@ -647,10 +668,17 @@ async function loadPricingForFranchise(
   franchiseId: string,
   pricingModelId?: string,
   pricingModelFranchiseId?: string,
-  pricingTierId?: string | null
+  pricingTierId?: string | null,
+  pricingModelRevisionId?: string | null
 ) {
   const requestId = ++latestLoadRequestId;
-  const resolved = await resolvePricingState(franchiseId, pricingModelId, pricingModelFranchiseId, pricingTierId);
+  const resolved = await resolvePricingState(
+    franchiseId,
+    pricingModelId,
+    pricingModelFranchiseId,
+    pricingTierId,
+    pricingModelRevisionId
+  );
   if (requestId !== latestLoadRequestId) {
     return resolved;
   }
@@ -662,13 +690,14 @@ export async function initPricingDataStore(
   franchiseId?: string,
   pricingModelId?: string,
   pricingModelFranchiseId?: string,
-  pricingTierId?: string | null
+  pricingTierId?: string | null,
+  pricingModelRevisionId?: string | null
 ) {
-  if (loadingPromise && !franchiseId && !pricingModelId && !pricingModelFranchiseId && !pricingTierId) return loadingPromise;
+  if (loadingPromise && !franchiseId && !pricingModelId && !pricingModelFranchiseId && !pricingTierId && !pricingModelRevisionId) return loadingPromise;
 
   const currentPromise = (async () => {
     const targetId = await resolveTargetFranchiseId(franchiseId);
-    await loadPricingForFranchise(targetId, pricingModelId, pricingModelFranchiseId, pricingTierId);
+    await loadPricingForFranchise(targetId, pricingModelId, pricingModelFranchiseId, pricingTierId, pricingModelRevisionId);
   })();
 
   loadingPromise = currentPromise;
@@ -702,6 +731,8 @@ export function getActivePricingModelMeta() {
     pricingModelId: activePricingModelId,
     pricingModelName: activePricingModelName,
     pricingModelFranchiseId: activePricingModelFranchiseId,
+    pricingModelRevisionId: activePricingModelRevisionId,
+    pricingModelRevisionNumber: activePricingModelRevisionNumber,
     isDefault: activePricingModelIsDefault,
     pricingTierId: activePricingTierId,
     pricingTierName: getPricingTierName(activePricingTierId),
@@ -711,10 +742,17 @@ export function getActivePricingModelMeta() {
 export async function setActivePricingModel(
   pricingModelId: string,
   pricingModelFranchiseId?: string,
-  pricingTierId?: string | null
+  pricingTierId?: string | null,
+  pricingModelRevisionId?: string | null
 ) {
   if (!pricingModelId) return;
-  await loadPricingForFranchise(activeFranchiseId, pricingModelId, pricingModelFranchiseId, pricingTierId ?? activePricingTierId);
+  await loadPricingForFranchise(
+    activeFranchiseId,
+    pricingModelId,
+    pricingModelFranchiseId,
+    pricingTierId ?? activePricingTierId,
+    pricingModelRevisionId
+  );
 }
 
 export async function setActivePricingTier(pricingTierId: string | null | undefined) {
@@ -729,15 +767,57 @@ export async function loadPricingSnapshotForFranchise(
   franchiseId?: string,
   pricingModelId?: string,
   pricingModelFranchiseId?: string,
-  pricingTierId?: string | null
+  pricingTierId?: string | null,
+  pricingModelRevisionId?: string | null
 ) {
   const targetId = await resolveTargetFranchiseId(franchiseId);
-  const resolved = await resolvePricingState(targetId, pricingModelId, pricingModelFranchiseId, pricingTierId);
+  const resolved = await resolvePricingState(
+    targetId,
+    pricingModelId,
+    pricingModelFranchiseId,
+    pricingTierId,
+    pricingModelRevisionId
+  );
   return {
     ...resolved,
     pricing: deepClone(resolved.pricing),
     basePricing: deepClone(resolved.basePricing),
   };
+}
+
+// Existing records that predate revision metadata must always fall back to the
+// model's first immutable revision, never whatever happens to be current now.
+export async function loadPricingSnapshotForExistingProposal(
+  franchiseId?: string,
+  pricingModelId?: string,
+  pricingModelFranchiseId?: string,
+  pricingTierId?: string | null,
+  pricingModelRevisionId?: string | null
+) {
+  const sourceFranchiseId = pricingModelFranchiseId || franchiseId || DEFAULT_FRANCHISE_ID;
+  let resolvedModelId = pricingModelId || null;
+  let resolvedRevisionId = pricingModelRevisionId || null;
+  if (!resolvedModelId) {
+    try {
+      const models = await listPricingModelsRemote(sourceFranchiseId);
+      resolvedModelId = models.find((model) => model.isDefault)?.id || models[0]?.id || null;
+    } catch (error) {
+      console.warn('Unable to resolve legacy proposal pricing model:', error);
+    }
+  }
+  if (!resolvedRevisionId && resolvedModelId) {
+    resolvedRevisionId = await loadInitialPricingModelRevisionId(
+      sourceFranchiseId,
+      resolvedModelId
+    );
+  }
+  return loadPricingSnapshotForFranchise(
+    franchiseId,
+    resolvedModelId || undefined,
+    pricingModelFranchiseId,
+    pricingTierId,
+    resolvedRevisionId
+  );
 }
 
 export function withTemporaryPricingSnapshot<T>(snapshot: PricingData, callback: () => T): T {
@@ -754,6 +834,8 @@ export function clearActivePricingModelMeta() {
   activePricingModelId = null;
   activePricingModelName = null;
   activePricingModelFranchiseId = null;
+  activePricingModelRevisionId = null;
+  activePricingModelRevisionNumber = null;
   activePricingModelIsDefault = false;
   activePricingTierId = NORMAL_PRICING_TIER_ID;
 }

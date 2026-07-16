@@ -68,6 +68,22 @@ function getVersionCount(proposal: Proposal, viewerRole?: string | null) {
   return listAllVersions(proposal).length;
 }
 
+function requiresPricingUserReview(proposal: Proposal) {
+  const status = String(proposal.status || '').toLowerCase();
+  return (
+    proposal.pricingRevisionReview?.decision === 'pending' &&
+    status !== 'draft' &&
+    status !== 'signed' &&
+    status !== 'completed'
+  );
+}
+
+function getDashboardStatus(proposal: Proposal) {
+  return requiresPricingUserReview(proposal)
+    ? 'user_review'
+    : String(proposal.status || 'draft').toLowerCase();
+}
+
 function getSortValue(proposal: Proposal, field: SortField, viewerRole?: string | null) {
   switch (field) {
     case 'customerName':
@@ -75,7 +91,7 @@ function getSortValue(proposal: Proposal, field: SortField, viewerRole?: string 
     case 'lastModified':
       return new Date(proposal.lastModified || proposal.createdDate || 0).getTime();
     case 'status':
-      return String(proposal.status || '').toLowerCase();
+      return getDashboardStatus(proposal);
     case 'pricingModel':
       return String(proposal.pricingModelName || '').toLowerCase();
     case 'pricingTier':
@@ -107,6 +123,8 @@ function getStatusBadgeClass(status: string) {
       return 'dashboard-status-pill is-rejected';
     case 'modified':
       return 'dashboard-status-pill is-modified';
+    case 'user_review':
+      return 'dashboard-status-pill is-user-review';
     case 'sent':
       return 'dashboard-status-pill is-sent';
     case 'draft':
@@ -119,6 +137,7 @@ function formatStatusLabel(status?: string | null) {
   const normalized = String(status || '').trim().toLowerCase();
   if (!normalized) return 'Draft';
   if (normalized === 'changes_requested') return 'Returned';
+  if (normalized === 'user_review') return 'User Review*';
   return normalized.replace(/_/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
@@ -254,7 +273,7 @@ function DashboardProposalsPanel({
   }, [contextMenu]);
 
   const statusOptions = Array.from(
-    new Set(proposals.map((proposal) => String(proposal.status || '').trim()).filter(Boolean))
+    new Set(proposals.map((proposal) => getDashboardStatus(proposal)).filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
   const pricingModelOptions = Array.from(
@@ -272,7 +291,7 @@ function DashboardProposalsPanel({
       const contractTypeLabel = getContractTypeLabel(proposal);
 
       const matchesSearch = !searchValue || customerName.includes(searchValue);
-      const matchesStatus = statusFilter === 'all' || proposal.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || getDashboardStatus(proposal) === statusFilter;
       const matchesPricingModel =
         pricingModelFilter === 'all' || (proposal.pricingModelName || '') === pricingModelFilter;
       const matchesContractType = contractTypeFilter === 'all' || contractTypeLabel === contractTypeFilter;
@@ -516,6 +535,7 @@ function DashboardProposalsPanel({
                   <tbody>
                     {filteredProposals.map((proposal) => {
                       const showApprovalMarker = isApprovedButNotSigned(proposal);
+                      const dashboardStatus = getDashboardStatus(proposal);
                       const contractTypeLabel = getContractTypeLabel(proposal);
                       const versionCount = getVersionCount(proposal, viewerRole);
                       const pricingModelClass = getPricingModelClass(
@@ -550,11 +570,17 @@ function DashboardProposalsPanel({
                           </td>
                           <td>
                             <span
-                              className={getStatusBadgeClass(proposal.status)}
-                              data-tooltip={showApprovalMarker ? 'Proposal Approved but not Signed' : undefined}
+                              className={getStatusBadgeClass(dashboardStatus)}
+                              data-tooltip={
+                                dashboardStatus === 'user_review'
+                                  ? 'Pricing Model has been modified. User review needed'
+                                  : showApprovalMarker
+                                    ? 'Proposal Approved but not Signed'
+                                    : undefined
+                              }
                             >
-                              {formatStatusLabel(proposal.status)}
-                              {showApprovalMarker ? '*' : ''}
+                              {formatStatusLabel(dashboardStatus)}
+                              {showApprovalMarker && dashboardStatus !== 'user_review' ? '*' : ''}
                             </span>
                           </td>
                           <td>

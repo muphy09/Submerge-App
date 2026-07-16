@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   Suspense,
   lazy,
@@ -14,6 +14,11 @@ import UpdateNotification from './components/UpdateNotification';
 import ChangelogModal from './components/ChangelogModal';
 import UserProfileModal from './components/UserProfileModal';
 import { setActiveFranchiseId } from './services/pricingDataStore';
+import {
+  applyFranchiseConfigurationToDocument,
+  loadFranchiseConfiguration,
+  type LoadedFranchiseConfiguration,
+} from './services/franchiseConfiguration';
 import { ToastProvider, useToast } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import { getSupabaseClient, getSupabaseReachability, isSupabaseEnabled } from './services/supabaseClient';
@@ -52,6 +57,11 @@ import {
   recordAppLaunch,
 } from './services/changelogPrompt';
 import { reportCurrentUserAppVersion } from './services/appVersionReporter';
+import {
+  formatFranchiseAppVersion,
+  getUpdateChannel,
+  loadFranchiseReleaseAssignment,
+} from './services/franchiseRelease';
 import type { MasterFranchise } from './services/masterAdminAdapter';
 import AdminPinModal from './components/AdminPinModal';
 import { useFranchiseAppName } from './hooks/useFranchiseAppName';
@@ -166,6 +176,7 @@ function AppContent() {
   const sessionRef = useRef<UserSession | null>(null);
   const feedbackLauncherRef = useRef<HTMLButtonElement | null>(null);
   const appVersion = getCurrentAppVersion();
+  const displayAppVersion = formatFranchiseAppVersion(appVersion);
   const { feedbackEnabled: globalFeedbackEnabled, isLoading: globalFeedbackEnabledLoading } =
     useGlobalFeedbackEnabled({ poll: Boolean(session) });
 
@@ -255,6 +266,34 @@ function AppContent() {
       version: appVersion,
     });
   }, [appVersion, session?.userId]);
+
+  useEffect(() => {
+    if (!session?.userId || !window.electron?.checkForUpdates) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const isMasterAccount = String(session.role || '').toLowerCase() === 'master';
+          const assignment = isMasterAccount
+            ? null
+            : await loadFranchiseReleaseAssignment(session.franchiseId);
+          if (cancelled || assignment?.updateEnabled === false || assignment?.releaseChannel === 'paused') return;
+          const channel = getUpdateChannel(session.role, session.franchiseCode);
+          if (!channel) {
+            console.warn('Update check skipped because the franchise release channel is unavailable.');
+            return;
+          }
+          await window.electron.checkForUpdates({ channel });
+        } catch (error) {
+          if (!cancelled) console.warn('Unable to start the franchise update check:', error);
+        }
+      })();
+    }, 1200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [session?.franchiseCode, session?.franchiseId, session?.role, session?.userId]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -418,6 +457,29 @@ function AppContent() {
     Boolean(effectiveSession?.franchiseId) &&
     (!isMaster || Boolean(masterImpersonation?.franchiseId));
   const isContractPrintPreviewRoute = location.pathname === '/contract-print-preview';
+
+  useEffect(() => {
+    const franchiseId = effectiveSession?.franchiseId;
+    let cancelled = false;
+    if (!franchiseId) {
+      applyFranchiseConfigurationToDocument(null);
+      return;
+    }
+    const handleConfiguration = (event: Event) => {
+      const record = (event as CustomEvent<LoadedFranchiseConfiguration>).detail;
+      if (record?.franchiseId === franchiseId) applyFranchiseConfigurationToDocument(record);
+    };
+    window.addEventListener('submerge:franchise-configuration', handleConfiguration);
+    void loadFranchiseConfiguration(franchiseId)
+      .then((record) => {
+        if (!cancelled) applyFranchiseConfigurationToDocument(record);
+      });
+    return () => {
+      cancelled = true;
+      window.removeEventListener('submerge:franchise-configuration', handleConfiguration);
+    };
+  }, [effectiveSession?.franchiseId]);
+
   const isProposalBuilderRoute =
     location.pathname === '/proposal/new' || location.pathname.startsWith('/proposal/edit/');
   const isProposalSummaryRoute = location.pathname.startsWith('/proposal/view/');
@@ -725,7 +787,7 @@ function AppContent() {
   // Show navigation bar on main pages, hide it on proposal form/view pages
   const showNavigation = !location.pathname.startsWith('/proposal/') && !isContractPrintPreviewRoute;
   const isAdminPanelUnlocked = adminPanelAccessFranchiseId === (effectiveSession?.franchiseId || null);
-  const canRenderAdminPanel = !adminPanelRequiresPin || isAdminPanelUnlocked;
+  const canRenderAdminPanel = isAdmin && (!adminPanelRequiresPin || isAdminPanelUnlocked);
   const isAdminPanelLocked = Boolean(adminPanelLockoutUntil && adminPanelLockoutUntil > Date.now());
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const actingLabel = isMaster && masterImpersonation
@@ -1027,12 +1089,12 @@ function AppContent() {
                   session={effectiveSession}
                   offsetSettingsLauncher={Boolean(actingLabel)}
                 />
-              ) : null
+              ) : <Navigate to="/" replace />
             }
           />
           <Route
             path="/admin/pricing"
-            element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : null}
+            element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : <Navigate to="/" replace />}
           />
           <Route
             path="/admin/notes"
@@ -1043,21 +1105,21 @@ function AppContent() {
                   franchiseName={effectiveSession?.franchiseName}
                   franchiseCode={effectiveSession?.franchiseCode}
                 />
-              ) : null
+              ) : <Navigate to="/" replace />
             }
           />
-          <Route path="/workflow" element={<WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} />} />
-          <Route path="/workflow/:proposalNumber" element={<WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} />} />
+          <Route path="/workflow" element={canAccessWorkflow ? <WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} /> : <Navigate to="/" replace />} />
+          <Route path="/workflow/:proposalNumber" element={canAccessWorkflow ? <WorkflowPage session={effectiveSession} cloudIssue={cloudIssue} /> : <Navigate to="/" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/master"
             element={
-              <MasterPage
+              isMaster ? <MasterPage
                 session={session}
                 onActAsFranchise={handleActAsFranchise}
                 actingFranchiseId={masterImpersonation?.franchiseId}
                 onFranchiseUpdated={handleMasterFranchiseUpdated}
-              />
+              /> : <Navigate to="/" replace />
             }
           />
           <Route
@@ -1097,7 +1159,7 @@ function AppContent() {
             </div>
           )}
           {location.pathname === '/' && (
-            <div className="app-version">v{window.electron?.appVersion || '1.0.5'}</div>
+            <div className="app-version">v{displayAppVersion}</div>
           )}
         </div>
       )}

@@ -422,6 +422,12 @@
   color: #6e4a2f;
 }
 
+.dashboard-status-pill.is-user-review {
+  background: #f1dfc8;
+  border-color: #c89f70;
+  color: #69451f;
+}
+
 .dashboard-status-pill.is-changes-requested {
   background: #fde0df;
   border-color: #f0a8a6;

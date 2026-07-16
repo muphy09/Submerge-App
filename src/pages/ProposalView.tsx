@@ -16,6 +16,10 @@ import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SubmitProposalModal from '../components/SubmitProposalModal';
+import PricingRevisionPromptModal from '../components/PricingRevisionPromptModal';
+import PricingRevisionComparisonModal from '../components/PricingRevisionComparisonModal';
+import ContractRevisionPromptModal from '../components/ContractRevisionPromptModal';
+import AddendumPricingChoiceModal from '../components/AddendumPricingChoiceModal';
 import './ProposalView.css';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
@@ -30,12 +34,26 @@ import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } 
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import {
   initPricingDataStore,
+  loadPricingSnapshotForExistingProposal,
   loadPricingSnapshotForFranchise,
   subscribeToPricingData,
   withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
-import { getSessionRole, isMasterActingAsOwnerSession, readSession } from '../services/session';
+import { getSessionRole, readSession } from '../services/session';
+import {
+  buildPricingRevisionComparison,
+  markPricingRevisionDeclined,
+  upgradeProposalPricingRevision,
+  type PricingRevisionComparison,
+} from '../services/pricingRevisionReview';
 import { getContractTemplateIdForProposal } from '../services/contractTemplates';
+import {
+  adoptContractRevision,
+  checkProposalContractRevision,
+  declineContractRevision,
+  type ContractRevisionCheck,
+  type ContractRevisionDescriptor,
+} from '../services/contractTemplateRegistry';
 import {
   getDefaultProposal,
   getDefaultPoolSpecs,
@@ -777,6 +795,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [showCogsBreakdown, setShowCogsBreakdown] = useState(false);
   const [offContractVersionId, setOffContractVersionId] = useState<string | null>(null);
   const [contractVersionId, setContractVersionId] = useState<string | null>(null);
+  const [activeContractRevision, setActiveContractRevision] = useState<ContractRevisionDescriptor | null>(null);
+  const [pendingContractRevision, setPendingContractRevision] = useState<{
+    version: Proposal;
+    check: ContractRevisionCheck;
+  } | null>(null);
+  const [contractRevisionPromptOpen, setContractRevisionPromptOpen] = useState(false);
+  const [contractRevisionBusy, setContractRevisionBusy] = useState(false);
+  const [contractRevisionError, setContractRevisionError] = useState<string | null>(null);
   const [customerBreakdownEditor, setCustomerBreakdownEditor] = useState<CustomerBreakdownEditorState | null>(null);
   const [pendingUnsavedCloseTarget, setPendingUnsavedCloseTarget] = useState<'contract' | 'customer' | null>(null);
   const [breakdownExportOpen, setBreakdownExportOpen] = useState(false);
@@ -799,6 +825,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [submitTargetVersionId, setSubmitTargetVersionId] = useState<string | null>(null);
   const [submitManualReviewRequested, setSubmitManualReviewRequested] = useState(false);
   const [showModifySignedConfirm, setShowModifySignedConfirm] = useState(false);
+  const [addendumPricingComparison, setAddendumPricingComparison] = useState<PricingRevisionComparison | null>(null);
+  const [addendumPricingBusy, setAddendumPricingBusy] = useState(false);
   const [showMarkSignedConfirm, setShowMarkSignedConfirm] = useState(false);
   const [signTargetVersionId, setSignTargetVersionId] = useState<string | null>(null);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
@@ -810,6 +838,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [workflowMessageDraft, setWorkflowMessageDraft] = useState('');
   const [workflowMessageSaving, setWorkflowMessageSaving] = useState(false);
   const [reviewerActionSaving, setReviewerActionSaving] = useState(false);
+  const [pricingRevisionComparison, setPricingRevisionComparison] = useState<PricingRevisionComparison | null>(null);
+  const [pricingRevisionPromptOpen, setPricingRevisionPromptOpen] = useState(false);
+  const [pricingRevisionComparisonOpen, setPricingRevisionComparisonOpen] = useState(false);
+  const [pricingRevisionBusy, setPricingRevisionBusy] = useState(false);
+  const [pricingRevisionError, setPricingRevisionError] = useState<string | null>(null);
   const [versionSyncMeta, setVersionSyncMeta] = useState<Record<string, ProposalVersionSyncMeta>>({});
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
@@ -825,7 +858,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   }, []);
   const locationState = (location.state as ProposalViewLocationState | null) ?? null;
   const sessionRole = getSessionRole();
-  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const isProposalEditingRestricted = false;
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
   const isReviewerWorkspaceView = Boolean(locationState?.reviewerReturnTo || locationState?.reviewerReturnPath);
   const isReadOnlyReviewerView = isReviewerRole && isReviewerWorkspaceView;
@@ -945,7 +978,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     entries: Proposal[],
     container: Proposal
   ): Promise<Record<string, ProposalVersionSyncMeta>> => {
-    const pricingSnapshotCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+    const pricingSnapshotCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForExistingProposal>>>();
     const pricingDirectoryCache = new Map<string, PricingModelDirectory>();
 
     const results = await Promise.all(
@@ -974,15 +1007,17 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         const resolvedFranchiseId = entry.franchiseId || container.franchiseId || 'default';
         const pricingModelId = entry.pricingModelId || undefined;
         const pricingModelFranchiseId = entry.pricingModelFranchiseId || undefined;
+        const pricingModelRevisionId = entry.pricingModelRevisionId || undefined;
         const pricingTierId = normalizePricingTierId(entry.pricingTierId || entry.pricingTierName);
-        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingTierId}`;
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingModelRevisionId || 'current'}::${pricingTierId}`;
         let pricingSnapshot = pricingSnapshotCache.get(pricingCacheKey);
         if (!pricingSnapshot) {
-          pricingSnapshot = await loadPricingSnapshotForFranchise(
+          pricingSnapshot = await loadPricingSnapshotForExistingProposal(
             resolvedFranchiseId,
             pricingModelId,
             pricingModelFranchiseId,
-            pricingTierId
+            pricingTierId,
+            pricingModelRevisionId
           );
           pricingSnapshotCache.set(pricingCacheKey, pricingSnapshot);
         }
@@ -1098,24 +1133,36 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           console.warn('Failed to persist workflow version cleanup', cleanupError);
         }
       }
-      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForExistingProposal>>>();
       const mergeWithPricingSnapshot = async (input: Partial<Proposal>): Promise<Partial<Proposal>> => {
         const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || 'default';
         const pricingModelId = input.pricingModelId || undefined;
         const pricingModelFranchiseId = input.pricingModelFranchiseId || undefined;
+        const pricingModelRevisionId = input.pricingModelRevisionId || undefined;
         const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
-        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingTierId}`;
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingModelRevisionId || 'current'}::${pricingTierId}`;
         let pricingSnapshot = pricingCache.get(pricingCacheKey);
         if (!pricingSnapshot) {
-          pricingSnapshot = await loadPricingSnapshotForFranchise(
+          pricingSnapshot = await loadPricingSnapshotForExistingProposal(
             resolvedFranchiseId,
             pricingModelId,
             pricingModelFranchiseId,
-            pricingTierId
+            pricingTierId,
+            pricingModelRevisionId
           );
           pricingCache.set(pricingCacheKey, pricingSnapshot);
         }
-        return withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(input));
+        const merged = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeProposalWithDefaults(input));
+        return {
+          ...merged,
+          pricingModelId: input.pricingModelId || pricingSnapshot.pricingModelId || undefined,
+          pricingModelName: input.pricingModelName || pricingSnapshot.pricingModelName || undefined,
+          pricingModelFranchiseId:
+            input.pricingModelFranchiseId || pricingSnapshot.pricingModelFranchiseId || undefined,
+          pricingModelRevisionId: input.pricingModelRevisionId || pricingSnapshot.pricingModelRevisionId || undefined,
+          pricingModelRevisionNumber:
+            input.pricingModelRevisionNumber || pricingSnapshot.pricingModelRevisionNumber || undefined,
+        };
       };
 
       const activeApplied = ensureProposalWorkflow(applyActiveVersion(sourceProposal));
@@ -1163,7 +1210,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         activeVersion.franchiseId,
         activeVersion.pricingModelId || undefined,
         activeVersion.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(activeVersion.pricingTierId || activeVersion.pricingTierName)
+        normalizePricingTierId(activeVersion.pricingTierId || activeVersion.pricingTierName),
+        activeVersion.pricingModelRevisionId || undefined
       );
       if (requestId !== loadRequestRef.current) return;
 
@@ -1332,6 +1380,224 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     });
   };
 
+  const getPricingRevisionActor = (): ProposalWorkflowActor => {
+    const session = readSession();
+    return {
+      userId: session?.userId,
+      name: session?.userName || null,
+      email: session?.userEmail || null,
+      role: getSessionRole(),
+    };
+  };
+
+  const persistPricingRevisionVersion = async (updatedVersion: Proposal) => {
+    if (!proposal) return;
+    const targetVersionId = updatedVersion.versionId || activeVersionId || 'original';
+    const all = versions.length ? versions : listAllVersions(proposal);
+    const updatedVersions = all.map((entry) =>
+      (entry.versionId || 'original') === targetVersionId
+        ? { ...updatedVersion, versions: [] }
+        : { ...entry, versions: [] }
+    );
+    const builtContainer = buildContainerFromVersions(
+      updatedVersions,
+      activeVersionId || targetVersionId,
+      updatedVersion.status
+    );
+    if (!builtContainer) return;
+    const container = ensureProposalWorkflow({
+      ...builtContainer,
+      status: updatedVersion.status,
+      workflow: updatedVersion.workflow || builtContainer.workflow,
+    });
+    const saved = await saveProposalRemote(container);
+    const savedVersions = listAllVersions(saved as Proposal).map((entry) => ({
+      ...(mergeProposalWithDefaults(entry) as Proposal),
+      versionId: entry.versionId || 'original',
+      versionName: entry.versionName || (entry.isOriginalVersion ? 'Original Version' : 'Version'),
+      isOriginalVersion: entry.isOriginalVersion,
+      activeVersionId: entry.activeVersionId,
+      versions: [],
+    }));
+    const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+    setVersions(savedVersions);
+    setProposal(activeApplied as Proposal);
+    setVersionSyncMeta(await resolveVersionSyncMetaEntries(savedVersions, saved as Proposal));
+  };
+
+  const handleDeclinePricingRevision = async () => {
+    if (!proposal || !pricingRevisionComparison) return;
+    setPricingRevisionBusy(true);
+    setPricingRevisionError(null);
+    try {
+      const declined = markPricingRevisionDeclined(
+        proposal,
+        pricingRevisionComparison,
+        getPricingRevisionActor()
+      );
+      await persistPricingRevisionVersion(declined);
+      setPricingRevisionPromptOpen(false);
+      setPricingRevisionComparisonOpen(false);
+      showToast({ type: 'success', message: 'Original pricing retained. You can upgrade later in the Proposal Builder.' });
+    } catch (error: any) {
+      setPricingRevisionError(error?.message || 'Unable to save the pricing review decision.');
+    } finally {
+      setPricingRevisionBusy(false);
+    }
+  };
+
+  const handleUpgradePricingRevision = async () => {
+    if (!proposal || !pricingRevisionComparison) return;
+    setPricingRevisionBusy(true);
+    setPricingRevisionError(null);
+    try {
+      const upgraded = await upgradeProposalPricingRevision(
+        proposal,
+        pricingRevisionComparison,
+        getPricingRevisionActor()
+      );
+      await persistPricingRevisionVersion(upgraded);
+      await initPricingDataStore(
+        upgraded.franchiseId,
+        upgraded.pricingModelId,
+        upgraded.pricingModelFranchiseId,
+        normalizePricingTierId(upgraded.pricingTierId || upgraded.pricingTierName),
+        upgraded.pricingModelRevisionId
+      );
+      setPricingRevisionPromptOpen(false);
+      setPricingRevisionComparisonOpen(false);
+      setPricingRevisionComparison(null);
+      showToast({
+        type: 'success',
+        message:
+          getWorkflowStatus(upgraded) === 'needs_approval'
+            ? 'Pricing upgraded. This proposal requires approval again.'
+            : 'Pricing upgraded to the newest revision.',
+      });
+    } catch (error: any) {
+      setPricingRevisionError(error?.message || 'Unable to upgrade the pricing model.');
+    } finally {
+      setPricingRevisionBusy(false);
+    }
+  };
+
+  const openContractWithRevision = (version: Proposal, revision: ContractRevisionDescriptor) => {
+    setActiveContractRevision(revision);
+    setContractVersionId(version.versionId || 'original');
+  };
+
+  const handleOpenContract = async (version: Proposal) => {
+    if (contractRevisionBusy) return;
+    setContractRevisionBusy(true);
+    setContractRevisionError(null);
+    try {
+      const check = await checkProposalContractRevision(version);
+      if (!check) {
+        showToast({
+          type: 'warning',
+          message: 'A contract template has not been published for this franchise and proposal type yet.',
+        });
+        return;
+      }
+      const locked = isVersionPermanentlyLocked(version);
+      if (locked) {
+        openContractWithRevision(version, check.pinned);
+        return;
+      }
+      if (check.canAdoptInitialRevisionSilently || !version.contractTemplateRevisionId) {
+        const initialRevision = check.canAdoptInitialRevisionSilently ? check.latest : check.pinned;
+        const pinned = adoptContractRevision(version, initialRevision, getPricingRevisionActor());
+        await persistPricingRevisionVersion(pinned);
+        openContractWithRevision(pinned, initialRevision);
+        return;
+      }
+      if (check.requiresReview) {
+        setPendingContractRevision({ version, check });
+        setContractRevisionPromptOpen(true);
+        return;
+      }
+      openContractWithRevision(version, check.pinned);
+    } catch (error: any) {
+      showToast({ type: 'error', message: error?.message || 'Could not load this contract template.' });
+    } finally {
+      setContractRevisionBusy(false);
+    }
+  };
+
+  const handleKeepCurrentContract = async () => {
+    if (!pendingContractRevision) return;
+    setContractRevisionBusy(true);
+    setContractRevisionError(null);
+    try {
+      const { version, check } = pendingContractRevision;
+      const declined = declineContractRevision(version, check.pinned, check.latest, getPricingRevisionActor());
+      await persistPricingRevisionVersion(declined);
+      setContractRevisionPromptOpen(false);
+      setPendingContractRevision(null);
+      openContractWithRevision(declined, check.pinned);
+    } catch (error: any) {
+      setContractRevisionError(error?.message || 'Unable to keep the current contract revision.');
+    } finally {
+      setContractRevisionBusy(false);
+    }
+  };
+
+  const handleUpgradeContract = async () => {
+    if (!pendingContractRevision) return;
+    setContractRevisionBusy(true);
+    setContractRevisionError(null);
+    try {
+      const { version, check } = pendingContractRevision;
+      const upgraded = adoptContractRevision(version, check.latest, getPricingRevisionActor());
+      await persistPricingRevisionVersion(upgraded);
+      setContractRevisionPromptOpen(false);
+      setPendingContractRevision(null);
+      openContractWithRevision(upgraded, check.latest);
+    } catch (error: any) {
+      setContractRevisionError(error?.message || 'Unable to upgrade the contract revision.');
+    } finally {
+      setContractRevisionBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const detectPricingRevision = async () => {
+      if (!proposal?.pricingModelId || !proposal.pricingModelRevisionId) {
+        setPricingRevisionComparison(null);
+        setPricingRevisionPromptOpen(false);
+        return;
+      }
+      if (isVersionPermanentlyLocked(proposal)) {
+        setPricingRevisionComparison(null);
+        setPricingRevisionPromptOpen(false);
+        return;
+      }
+      try {
+        const comparison = await buildPricingRevisionComparison(proposal);
+        if (cancelled) return;
+        setPricingRevisionComparison(comparison);
+        if (!comparison) {
+          setPricingRevisionPromptOpen(false);
+          return;
+        }
+        const alreadyDeclined =
+          proposal.pricingRevisionReview?.decision === 'declined' &&
+          proposal.pricingRevisionReview.latestRevisionId === comparison.latestRevisionId;
+        const alreadyUpgraded =
+          proposal.pricingRevisionReview?.decision === 'upgraded' &&
+          proposal.pricingRevisionReview.latestRevisionId === comparison.latestRevisionId;
+        setPricingRevisionPromptOpen(!alreadyDeclined && !alreadyUpgraded);
+      } catch (error) {
+        if (!cancelled) console.warn('Unable to compare pricing model revisions:', error);
+      }
+    };
+    void detectPricingRevision();
+    return () => {
+      cancelled = true;
+    };
+  }, [proposal?.pricingModelId, proposal?.pricingModelRevisionId, proposal?.lastModified]);
+
   const handleEdit = (version?: Proposal, options?: { readOnly?: boolean }) => {
     if (!canManageVersionDrafts && !canOpenReadOnlyBuilder && !options?.readOnly) return;
     if (!version) return;
@@ -1382,7 +1648,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName),
+        container.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(container);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1484,7 +1751,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return `Proposal Addendum ${existingSignedAddendums + 1}`;
   };
 
-  const createEditableVersion = async (explicitName?: string, sourceId?: string) => {
+  const createEditableVersion = async (
+    explicitName?: string,
+    sourceId?: string,
+    useLatestAddendumPricing?: PricingRevisionComparison | null
+  ) => {
     if (!canManageVersionDrafts) return;
     if (!proposal) return;
     try {
@@ -1527,12 +1798,28 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         creationSource,
         resolvedVersionName
       );
-      const nextContainer = createdContainer;
+      let nextContainer = createdContainer;
+      if (isAddendumDraft && useLatestAddendumPricing) {
+        const upgradedAddendum = await upgradeProposalPricingRevision(
+          newVersion,
+          useLatestAddendumPricing,
+          getPricingRevisionActor()
+        );
+        const createdVersions = listAllVersions(createdContainer).map((entry) =>
+          (entry.versionId || 'original') === (newVersion.versionId || 'original')
+            ? { ...upgradedAddendum, status: 'draft' as const, versions: [] }
+            : { ...entry, versions: [] }
+        );
+        nextContainer =
+          buildContainerFromVersions(createdVersions, createdContainer.activeVersionId || activeVersionId, 'signed') ||
+          createdContainer;
+      }
       await initPricingDataStore(
         nextContainer.franchiseId,
         nextContainer.pricingModelId || undefined,
         nextContainer.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(nextContainer.pricingTierId || nextContainer.pricingTierName)
+        normalizePricingTierId(nextContainer.pricingTierId || nextContainer.pricingTierName),
+        nextContainer.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(nextContainer);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1572,7 +1859,26 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleConfirmModifySignedProposal = async () => {
     setShowModifySignedConfirm(false);
-    await createEditableVersion();
+    if (!proposal) return;
+    setAddendumPricingBusy(true);
+    try {
+      const container = { ...proposal, versions, activeVersionId } as Proposal;
+      const signedId = getLatestSignedBaselineVersionId(container) || getSignedVersionId(container);
+      const signedVersion = listAllVersions(container).find(
+        (entry) => (entry.versionId || 'original') === (signedId || 'original')
+      );
+      const comparison = signedVersion ? await buildPricingRevisionComparison(signedVersion) : null;
+      if (comparison) {
+        setAddendumPricingComparison(comparison);
+        return;
+      }
+      await createEditableVersion();
+    } catch (error) {
+      console.warn('Unable to check addendum pricing revision:', error);
+      showToast({ type: 'error', message: 'Could not check the signed proposal pricing model.' });
+    } finally {
+      setAddendumPricingBusy(false);
+    }
   };
 
   const renameVersion = async (versionId: string, nextName: string) => {
@@ -1614,7 +1920,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName),
+        container.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(container);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1692,7 +1999,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName),
+        container.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(container);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -1803,7 +2111,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         containerToSave.franchiseId,
         containerToSave.pricingModelId || undefined,
         containerToSave.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(containerToSave.pricingTierId || containerToSave.pricingTierName)
+        normalizePricingTierId(containerToSave.pricingTierId || containerToSave.pricingTierName),
+        containerToSave.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(containerToSave);
       const isPending = (saved as any).syncStatus === 'pending';
@@ -2254,7 +2563,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName),
+        container.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(
         payload,
@@ -2443,7 +2753,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName),
+        container.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(payload, { requireOnline: true });
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
@@ -2504,7 +2815,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName),
+        container.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(payload, { requireOnline: true });
       const updatedVersions = listAllVersions(saved as Proposal).map((version) => ({
@@ -2597,7 +2909,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         container.franchiseId,
         container.pricingModelId || undefined,
         container.pricingModelFranchiseId || undefined,
-        normalizePricingTierId(container.pricingTierId || container.pricingTierName)
+        normalizePricingTierId(container.pricingTierId || container.pricingTierName),
+        container.pricingModelRevisionId || undefined
       );
       const saved = await saveProposalRemote(
         markProposalAsSigned(container, undefined, signTargetVersionId || undefined),
@@ -3330,6 +3643,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     setPendingUnsavedCloseTarget(null);
     setContractExportOpen(false);
     setContractVersionId(null);
+    setActiveContractRevision(null);
   };
   const closeCustomerBreakdownModal = () => {
     setPendingUnsavedCloseTarget(null);
@@ -3905,7 +4219,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           </button>
         )}
 
-        <button className="summary-tile contract-tile" type="button" onClick={() => setContractVersionId(versionId)}>
+        <button
+          className="summary-tile contract-tile"
+          type="button"
+          onClick={() => void handleOpenContract(vm.proposal)}
+          disabled={contractRevisionBusy}
+        >
           <div className="tile-header">
             <div className="tile-icon contract-icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4927,6 +5246,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                     handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)
                   }
                   readOnly={!canEditContractVersion}
+                  contractTemplate={activeContractRevision?.contractTemplate}
                   onDirtyChange={setContractDirty}
                   onExportingChange={setContractExporting}
                   onSavingChange={setContractSaving}
@@ -5452,6 +5772,66 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           </div>
         </div>
       )}
+
+      <PricingRevisionPromptModal
+        isOpen={pricingRevisionPromptOpen && Boolean(pricingRevisionComparison)}
+        pricingModelName={pricingRevisionComparison?.pricingModelName}
+        busy={pricingRevisionBusy}
+        onUpgrade={() => void handleUpgradePricingRevision()}
+        onDecline={() => void handleDeclinePricingRevision()}
+        onCompare={() => {
+          setPricingRevisionPromptOpen(false);
+          setPricingRevisionComparisonOpen(true);
+        }}
+      />
+
+      <PricingRevisionComparisonModal
+        isOpen={pricingRevisionComparisonOpen}
+        comparison={pricingRevisionComparison}
+        loading={pricingRevisionBusy}
+        error={pricingRevisionError}
+        onConfirm={() => void handleUpgradePricingRevision()}
+        onDecline={() => void handleDeclinePricingRevision()}
+        onClose={() => {
+          setPricingRevisionComparisonOpen(false);
+          if (
+            pricingRevisionComparison &&
+            proposal?.pricingRevisionReview?.latestRevisionId !== pricingRevisionComparison.latestRevisionId
+          ) {
+            setPricingRevisionPromptOpen(true);
+          }
+        }}
+      />
+      <ContractRevisionPromptModal
+        isOpen={contractRevisionPromptOpen && Boolean(pendingContractRevision)}
+        currentRevision={pendingContractRevision?.check.pinned.revisionNumber}
+        latestRevision={pendingContractRevision?.check.latest.revisionNumber}
+        busy={contractRevisionBusy}
+        error={contractRevisionError}
+        onUpgrade={() => void handleUpgradeContract()}
+        onKeepCurrent={() => void handleKeepCurrentContract()}
+        onClose={() => {
+          if (contractRevisionBusy) return;
+          setContractRevisionPromptOpen(false);
+          setPendingContractRevision(null);
+          setContractRevisionError(null);
+        }}
+      />
+      <AddendumPricingChoiceModal
+        isOpen={Boolean(addendumPricingComparison)}
+        comparison={addendumPricingComparison}
+        busy={addendumPricingBusy}
+        onUseUpdated={() => {
+          const comparison = addendumPricingComparison;
+          setAddendumPricingComparison(null);
+          void createEditableVersion(undefined, undefined, comparison);
+        }}
+        onUseOriginal={() => {
+          setAddendumPricingComparison(null);
+          void createEditableVersion();
+        }}
+        onCancel={() => setAddendumPricingComparison(null)}
+      />
 
     </div>
   );

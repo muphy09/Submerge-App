@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "bootstrapped": false,
+  "coreVersion": "2.4.7",
+  "masterBuild": 1,
+  "franchises": {
+    "5555": 1,
+    "6666": 1
+  }
+}

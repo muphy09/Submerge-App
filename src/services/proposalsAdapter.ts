@@ -25,6 +25,7 @@ type SyncStatus = 'synced' | 'pending' | 'error';
 type SaveProposalOptions = {
   ledgerAction?: 'proposal_submitted';
   requireOnline?: boolean;
+  localOnly?: boolean;
 };
 type Tombstone = { proposalNumber: string; removedAt: string };
 type StoredProposalRow = {
@@ -49,6 +50,18 @@ const ONLINE_SYNC_MESSAGE = 'Synced with cloud';
 const PENDING_DELETE_STORAGE_KEY = 'submerge.pendingProposalDeletes';
 const DELETED_TOMBSTONES_STORAGE_KEY = 'submerge.deletedProposalTombstones';
 const LOCAL_PROPOSAL_OWNERS_STORAGE_KEY = 'submerge.localProposalOwners.v1';
+const RECOVERY_SNAPSHOTS_STORAGE_KEY = 'submerge.proposalRecoverySnapshots.v1';
+const MAX_RECOVERY_SNAPSHOTS = 12;
+
+export type ProposalRecoverySnapshot = {
+  id: string;
+  proposalNumber: string;
+  losingLastModified?: string | null;
+  winnerLastModified?: string | null;
+  reason: 'cloud_newer' | 'local_newer';
+  archivedAt: string;
+  proposal: Proposal;
+};
 
 type PendingDelete = { proposalNumber: string; franchiseId?: string | null };
 type LocalProposalOwner = {
@@ -66,6 +79,44 @@ function nowIso() {
 function coerceTimestamp(value?: string | null): number {
   const ts = value ? Date.parse(value) : NaN;
   return Number.isFinite(ts) ? ts : 0;
+}
+
+export function listProposalRecoverySnapshots(): ProposalRecoverySnapshot[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECOVERY_SNAPSHOTS_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function archiveLosingProposalSnapshot(
+  proposal: Proposal,
+  reason: ProposalRecoverySnapshot['reason'],
+  winner?: Proposal | null
+) {
+  if (typeof localStorage === 'undefined' || !proposal?.proposalNumber) return;
+  try {
+    const losingLastModified = proposal.lastModified || proposal.createdDate || null;
+    const id = `${proposal.proposalNumber}:${losingLastModified || 'unknown'}:${reason}`;
+    const existing = listProposalRecoverySnapshots().filter((entry) => entry.id !== id);
+    const snapshot: ProposalRecoverySnapshot = {
+      id,
+      proposalNumber: proposal.proposalNumber,
+      losingLastModified,
+      winnerLastModified: winner?.lastModified || winner?.createdDate || null,
+      reason,
+      archivedAt: nowIso(),
+      proposal: { ...proposal },
+    };
+    localStorage.setItem(
+      RECOVERY_SNAPSHOTS_STORAGE_KEY,
+      JSON.stringify([snapshot, ...existing].slice(0, MAX_RECOVERY_SNAPSHOTS))
+    );
+  } catch (error) {
+    console.warn('Unable to preserve proposal recovery snapshot:', error);
+  }
 }
 
 function normalizeIdentity(value?: string | null) {
@@ -582,9 +633,11 @@ export async function syncPendingProposals() {
         const remoteTs = coerceTimestamp(remote?.lastModified || remote?.createdDate);
         const localTs = coerceTimestamp(proposal.lastModified || proposal.createdDate);
         if (remote && remoteTs >= localTs) {
+          archiveLosingProposalSnapshot(proposal, 'cloud_newer', remote);
           await persistLocalProposal(withSyncStatus(remote, 'synced', ONLINE_SYNC_MESSAGE));
           continue;
         }
+        if (remote) archiveLosingProposalSnapshot(remote, 'local_newer', proposal);
         const synced = await upsertToSupabase(proposal);
         await persistLocalProposal(synced);
       } catch (error) {
@@ -806,6 +859,7 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
 
   if (supabaseOnline && local && canAttemptProposalWrite(local, session) && shouldSyncLocal(local, cloud)) {
     try {
+      if (cloud) archiveLosingProposalSnapshot(cloud, 'local_newer', local);
       const synced = await upsertToSupabase(local);
       await persistLocalProposal(synced);
       return synced;
@@ -815,6 +869,9 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
   }
 
   if (supabaseOnline && cloud && local && !shouldSyncLocal(local, cloud)) {
+    if (coerceTimestamp(local.lastModified || local.createdDate) !== coerceTimestamp(cloud.lastModified || cloud.createdDate)) {
+      archiveLosingProposalSnapshot(local, 'cloud_newer', cloud);
+    }
     await persistLocalProposal(cloud);
   }
 
@@ -855,6 +912,16 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
 
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  }
+
+  if (options.localOnly) {
+    const pending = withSyncStatus(
+      { ...persistenceReady, franchiseId, lastModified: persistenceReady.lastModified || now },
+      'pending',
+      PENDING_MESSAGE
+    );
+    await persistLocalProposal(pending);
+    return { ...pending, lastModified: pending.lastModified || now };
   }
 
   const supabaseOnline = await hasSupabaseConnection(true);

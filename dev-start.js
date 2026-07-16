@@ -3,6 +3,28 @@ const waitOn = require('wait-on');
 const path = require('path');
 const fs = require('fs');
 
+function loadRequestedEnvironmentFile() {
+  const flagIndex = process.argv.indexOf('--env');
+  if (flagIndex < 0) return;
+  const requested = String(process.argv[flagIndex + 1] || '').trim();
+  if (!/^\.env\.[a-z0-9-]+\.local$/i.test(requested)) {
+    throw new Error('Only workspace .env.<name>.local files can be loaded by the dev task.');
+  }
+  const envPath = path.resolve(__dirname, requested);
+  if (!fs.existsSync(envPath)) {
+    throw new Error(`Environment file not found: ${requested}. Copy .env.staging.example to .env.staging.local first.`);
+  }
+  fs.readFileSync(envPath, 'utf8').split(/\r?\n/).forEach((line) => {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!match) return;
+    const value = match[2].replace(/^['"]|['"]$/g, '');
+    process.env[match[1]] = value;
+  });
+  console.log(`Loaded development environment: ${requested}`);
+}
+
+loadRequestedEnvironmentFile();
+
 console.log('Starting Vite dev server...');
 
 let vite = null;

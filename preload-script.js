@@ -60,7 +60,7 @@ contextBridge.exposeInMainWorld('electron', {
   enterFranchiseCode: (payload) => ipcRenderer.invoke('enter-franchise-code', payload),
 
   // Update operations
-  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  checkForUpdates: (payload) => ipcRenderer.invoke('check-for-updates', payload),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   onUpdateAvailable: (callback) => setIpcListener('update-available', callback),
   onUpdateNotAvailable: (callback) => setIpcListener('update-not-available', callback),

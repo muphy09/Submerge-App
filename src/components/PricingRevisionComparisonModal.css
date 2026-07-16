@@ -1,0 +1,172 @@
+.pricing-revision-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.pricing-revision-modal {
+  width: min(920px, 100%);
+  max-height: min(820px, calc(100vh - 3rem));
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+}
+
+.pricing-revision-modal--prompt {
+  width: min(680px, 100%);
+}
+
+.pricing-revision-actions--prompt {
+  padding-top: 1.35rem;
+}
+
+.pricing-revision-header,
+.pricing-revision-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.35rem;
+}
+
+.pricing-revision-header {
+  border-bottom: 1px solid #dfe5ec;
+}
+
+.pricing-revision-header h2 {
+  margin: 0.15rem 0 0.35rem;
+  color: #172033;
+  font-size: 1.25rem;
+}
+
+.pricing-revision-header p {
+  margin: 0;
+  color: #5c6879;
+}
+
+.pricing-revision-kicker {
+  color: #7a5520 !important;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.pricing-revision-close {
+  border: 0;
+  background: transparent;
+  color: #667085;
+  font-size: 1.7rem;
+  cursor: pointer;
+}
+
+.pricing-revision-body {
+  max-height: 560px;
+  overflow: auto;
+  padding: 1.25rem 1.35rem;
+}
+
+.pricing-revision-message {
+  padding: 1rem;
+  border: 1px solid #d8e0e9;
+  border-radius: 9px;
+  background: #f7f9fc;
+  color: #344054;
+}
+
+.pricing-revision-message.is-error {
+  border-color: #efb8b8;
+  background: #fff1f1;
+  color: #8b2525;
+}
+
+.pricing-revision-table-wrap {
+  overflow-x: auto;
+}
+
+.pricing-revision-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #1f2937;
+}
+
+.pricing-revision-table th,
+.pricing-revision-table td {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #bfc8d3;
+  text-align: left;
+}
+
+.pricing-revision-table thead th {
+  background: #eaf4e4;
+  font-weight: 800;
+}
+
+.pricing-revision-table tbody th {
+  width: 52%;
+  font-weight: 650;
+}
+
+.pricing-revision-table small {
+  display: block;
+  margin-top: 0.18rem;
+  color: #667085;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.pricing-revision-table td.is-increase {
+  background: #fde8e8;
+  color: #9a2525;
+  font-weight: 750;
+}
+
+.pricing-revision-table td.is-decrease {
+  background: #e7f6e9;
+  color: #216f35;
+  font-weight: 750;
+}
+
+.pricing-revision-actions {
+  justify-content: flex-end;
+  border-top: 1px solid #dfe5ec;
+}
+
+.pricing-revision-btn {
+  padding: 0.65rem 0.95rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.pricing-revision-btn.is-secondary {
+  border-color: #cbd3dd;
+  background: #fff;
+  color: #344054;
+}
+
+.pricing-revision-btn.is-primary {
+  background: #1f6f8b;
+  color: #fff;
+}
+
+.pricing-revision-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 680px) {
+  .pricing-revision-actions {
+    flex-direction: column-reverse;
+  }
+
+  .pricing-revision-btn {
+    width: 100%;
+  }
+}

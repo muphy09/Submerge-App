@@ -5,7 +5,7 @@ import { Proposal } from '../types/proposal-new';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import { listPricingModels, setDefaultPricingModel } from '../services/pricingModelsAdapter';
 import { listProposals as listProposalsRemote } from '../services/proposalsAdapter';
-import { loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
+import { loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import './AdminPanelPage.css';
 import {
   createFranchiseUser,
@@ -43,11 +43,19 @@ import {
   getReviewerPrimaryVersionId,
   getReviewerVisibleVersions,
   isApprovedButNotSigned,
+  isVersionPermanentlyLocked,
 } from '../services/proposalWorkflow';
+import { buildPricingRevisionComparison, markPricingRevisionPending } from '../services/pricingRevisionReview';
 import TempPasswordModal from '../components/TempPasswordModal';
 import AdminSettingsModal from '../components/AdminSettingsModal';
+import FranchiseConfigurationModal from '../components/FranchiseConfigurationModal';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
+import {
+  listContractTemplatesForFranchise,
+  loadContractTemplatePreview,
+  type ContractTemplateSummary,
+} from '../services/contractTemplateRegistry';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 type SessionInfo = {
@@ -164,24 +172,59 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
   const [savingApprovalSettingsUserId, setSavingApprovalSettingsUserId] = useState<string | null>(null);
   const [designerFilter, setDesignerFilter] = useState('all');
   const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [showFranchiseConfiguration, setShowFranchiseConfiguration] = useState(false);
+  const [contractTemplates, setContractTemplates] = useState<ContractTemplateSummary[]>([]);
+  const [loadingContractTemplates, setLoadingContractTemplates] = useState(true);
+  const [contractPreview, setContractPreview] = useState<{ name: string; revisionNumber: number; pdfUrl: string } | null>(null);
+  const [contractPreviewLoadingId, setContractPreviewLoadingId] = useState<string | null>(null);
+  const [contractTemplateError, setContractTemplateError] = useState<string | null>(null);
   const userListRef = useRef<HTMLDivElement | null>(null);
   const userWheelLockRef = useRef<number>(0);
 
   const franchiseId = session?.franchiseId || DEFAULT_FRANCHISE_ID;
   const normalizedRole = (session?.role || '').toLowerCase();
   const isAdmin = normalizedRole === 'admin' || normalizedRole === 'owner';
+  const canOpenAdminSettings = normalizedRole === 'owner';
 
   useEffect(() => {
     if (!isAdmin) {
       setLoadingProposals(false);
       setLoadingModels(false);
       setLoadingUsers(false);
+      setLoadingContractTemplates(false);
       return;
     }
     void loadProposals(franchiseId);
     void loadPricingModels(franchiseId);
     void loadUsers(franchiseId);
-  }, [franchiseId, isAdmin]);
+    void loadContractTemplatesForCurrentFranchise();
+  }, [franchiseId, isAdmin, session?.franchiseCode]);
+
+  const loadContractTemplatesForCurrentFranchise = async () => {
+    setLoadingContractTemplates(true);
+    setContractTemplateError(null);
+    try {
+      setContractTemplates(
+        await listContractTemplatesForFranchise(franchiseId, session?.franchiseCode)
+      );
+    } catch (error: any) {
+      setContractTemplateError(error?.message || 'Unable to load contract templates.');
+    } finally {
+      setLoadingContractTemplates(false);
+    }
+  };
+
+  const handlePreviewContractTemplate = async (template: ContractTemplateSummary) => {
+    setContractPreviewLoadingId(template.id);
+    setContractTemplateError(null);
+    try {
+      setContractPreview(await loadContractTemplatePreview(template));
+    } catch (error: any) {
+      setContractTemplateError(error?.message || 'Unable to open this contract template.');
+    } finally {
+      setContractPreviewLoadingId(null);
+    }
+  };
 
   useEffect(() => {
     const handleModelsUpdated = () => {
@@ -196,7 +239,7 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
     try {
       const data = await listProposalsRemote(targetFranchiseId);
       const enriched: Proposal[] = [];
-      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForExistingProposal>>>();
 
       const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
         const base = getDefaultProposal();
@@ -264,14 +307,15 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
         try {
           const resolvedFranchiseId = raw.franchiseId || targetFranchiseId || DEFAULT_FRANCHISE_ID;
           const pricingTierId = normalizePricingTierId(raw.pricingTierId || raw.pricingTierName);
-          const pricingCacheKey = `${resolvedFranchiseId}::${raw.pricingModelFranchiseId || resolvedFranchiseId}::${raw.pricingModelId || 'default'}::${pricingTierId}`;
+          const pricingCacheKey = `${resolvedFranchiseId}::${raw.pricingModelFranchiseId || resolvedFranchiseId}::${raw.pricingModelId || 'default'}::${raw.pricingModelRevisionId || 'current'}::${pricingTierId}`;
           let pricingSnapshot = pricingCache.get(pricingCacheKey);
           if (!pricingSnapshot) {
-            pricingSnapshot = await loadPricingSnapshotForFranchise(
+            pricingSnapshot = await loadPricingSnapshotForExistingProposal(
               resolvedFranchiseId,
               raw.pricingModelId || undefined,
               raw.pricingModelFranchiseId || undefined,
-              pricingTierId
+              pricingTierId,
+              raw.pricingModelRevisionId || undefined
             );
             pricingCache.set(pricingCacheKey, pricingSnapshot);
           }
@@ -284,13 +328,26 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                 (merged as any).papDiscounts
               )
           );
-          enriched.push({
+          let enrichedProposal = {
             ...(merged as Proposal),
+            pricingModelId: raw.pricingModelId || pricingSnapshot.pricingModelId || undefined,
+            pricingModelName: raw.pricingModelName || pricingSnapshot.pricingModelName || undefined,
+            pricingModelFranchiseId:
+              raw.pricingModelFranchiseId || pricingSnapshot.pricingModelFranchiseId || undefined,
+            pricingModelRevisionId:
+              raw.pricingModelRevisionId || pricingSnapshot.pricingModelRevisionId || undefined,
+            pricingModelRevisionNumber:
+              raw.pricingModelRevisionNumber || pricingSnapshot.pricingModelRevisionNumber || undefined,
             pricing: calculated.pricing,
             costBreakdown: calculated.costBreakdown,
             subtotal: calculated.subtotal,
             totalCost: calculated.totalCost,
-          } as Proposal);
+          } as Proposal;
+          if (enrichedProposal.pricingModelRevisionId && !isVersionPermanentlyLocked(enrichedProposal)) {
+            const comparison = await buildPricingRevisionComparison(enrichedProposal);
+            if (comparison) enrichedProposal = markPricingRevisionPending(enrichedProposal, comparison);
+          }
+          enriched.push(enrichedProposal);
         } catch (error) {
           console.warn(`Unable to recalc pricing for proposal ${raw.proposalNumber}`, error);
           enriched.push(raw as Proposal);
@@ -1161,6 +1218,13 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
               >
                 Edit Notes
               </button>
+              <button
+                className="admin-primary-btn ghost"
+                type="button"
+                onClick={() => setShowFranchiseConfiguration(true)}
+              >
+                Franchise Config
+              </button>
             </div>
           </div>
           <div className="admin-divider" />
@@ -1223,6 +1287,41 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                 })}
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="admin-card">
+          <div className="admin-card-header">
+            <div>
+              <h2 className="admin-card-title">Contract Templates</h2>
+              <p className="admin-kicker">View current blank templates</p>
+            </div>
+          </div>
+          <div className="admin-divider" />
+          {contractTemplateError && <div className="admin-empty is-error">{contractTemplateError}</div>}
+          <div className="admin-models-list" role="list">
+            {loadingContractTemplates ? (
+              <div className="admin-empty">Loading contract templates...</div>
+            ) : contractTemplates.length === 0 ? (
+              <div className="admin-empty">No contract templates have been published for this franchise yet.</div>
+            ) : (
+              contractTemplates.map((template) => (
+                <div className="admin-model-row" key={template.id} role="listitem">
+                  <div className="admin-model-name">
+                    {template.name}
+                    <small>{template.jurisdiction_key} / {template.pool_type}</small>
+                  </div>
+                  <button
+                    className="admin-primary-btn ghost"
+                    type="button"
+                    disabled={contractPreviewLoadingId === template.id}
+                    onClick={() => void handlePreviewContractTemplate(template)}
+                  >
+                    {contractPreviewLoadingId === template.id ? 'Opening...' : 'View blank template'}
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -1381,9 +1480,14 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                     : isRemoved
                     ? 'proposal-model-pill removed'
                     : 'proposal-model-pill inactive';
-                  const normalizedStatus = normalizeStatus(proposal.status) || 'draft';
+                  const pricingReviewNeeded =
+                    displayProposal.pricingRevisionReview?.decision === 'pending' &&
+                    !['draft', 'signed', 'completed'].includes(normalizeStatus(proposal.status));
+                  const normalizedStatus = pricingReviewNeeded ? 'user_review' : normalizeStatus(proposal.status) || 'draft';
                   const showApprovalMarker = isApprovedButNotSigned(proposal);
-                  const statusLabel = `${formatStatusLabel(proposal.status)}${showApprovalMarker ? '*' : ''}`;
+                  const statusLabel = pricingReviewNeeded
+                    ? 'User Review*'
+                    : `${formatStatusLabel(proposal.status)}${showApprovalMarker ? '*' : ''}`;
                   const statusClassName = `status-badge-table is-${normalizedStatus}`;
 
                   return (
@@ -1406,7 +1510,13 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                         <div className="proposal-status-cell">
                           <span
                             className={statusClassName}
-                            data-tooltip={showApprovalMarker ? 'Proposal Approved but not Signed' : undefined}
+                            data-tooltip={
+                              pricingReviewNeeded
+                                ? 'Pricing Model has been modified. User review needed'
+                                : showApprovalMarker
+                                ? 'Proposal Approved but not Signed'
+                                : undefined
+                            }
                           >
                             {statusLabel}
                           </span>
@@ -1445,7 +1555,7 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
         )}
       </div>
 
-      <button
+      {canOpenAdminSettings && <button
         type="button"
         className={`admin-settings-launcher${offsetSettingsLauncher ? ' is-offset' : ''}`}
         onClick={() => setShowAdminSettings(true)}
@@ -1458,11 +1568,13 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
           </svg>
         </span>
         <span className="admin-settings-launcher-tooltip">Admin Settings</span>
-      </button>
+      </button>}
 
       {addUserModal}
       {selectedUserModal}
-      <AdminSettingsModal isOpen={showAdminSettings} onClose={() => setShowAdminSettings(false)} />
+      {canOpenAdminSettings && (
+        <AdminSettingsModal isOpen={showAdminSettings} onClose={() => setShowAdminSettings(false)} />
+      )}
 
       {false && showAddUserForm && (
         <div className="admin-user-modal-backdrop" onClick={handleCloseAddUserForm}>
@@ -1659,6 +1771,29 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
           onClose={() => setTempPassword(null)}
           title="Temporary Password"
           description="Copy this password now. It will only be shown once."
+        />
+      )}
+      {contractPreview && (
+        <div className="admin-contract-preview-backdrop" role="dialog" aria-modal="true" aria-label="Blank contract template">
+          <div className="admin-contract-preview-modal">
+            <div className="admin-contract-preview-header">
+              <div>
+                <h2>{contractPreview.name}</h2>
+                <p>Current revision {contractPreview.revisionNumber} - blank template</p>
+              </div>
+              <button type="button" className="admin-primary-btn ghost" onClick={() => setContractPreview(null)}>
+                Close
+              </button>
+            </div>
+            <iframe title={`${contractPreview.name} blank template`} src={contractPreview.pdfUrl} />
+          </div>
+        </div>
+      )}
+      {showFranchiseConfiguration && (
+        <FranchiseConfigurationModal
+          franchiseId={franchiseId}
+          updatedBy={session?.userEmail || session?.userName || null}
+          onClose={() => setShowFranchiseConfiguration(false)}
         />
       )}
     </div>

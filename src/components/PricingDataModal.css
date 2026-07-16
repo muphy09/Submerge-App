@@ -304,6 +304,61 @@
   min-width: 0;
 }
 
+.pricing-workspace__center.is-read-only-revision input,
+.pricing-workspace__center.is-read-only-revision select,
+.pricing-workspace__center.is-read-only-revision textarea,
+.pricing-workspace__center.is-read-only-revision button {
+  pointer-events: none;
+}
+
+.pricing-workspace__center.is-read-only-revision {
+  position: relative;
+}
+
+.pricing-workspace__center.is-read-only-revision::before {
+  content: 'Historical revision — read-only';
+  display: block;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #d7a550;
+  border-radius: 8px;
+  background: #fff8e7;
+  color: #76520f;
+  font-weight: 700;
+}
+
+.pricing-revision-history__list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pricing-revision-history__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fff;
+  color: #243246;
+  cursor: pointer;
+}
+
+.pricing-revision-history__item.is-current {
+  border-color: #85ae92;
+  background: #eff8f1;
+}
+
+.pricing-revision-history__item.is-viewing {
+  border-color: #d7a550;
+  background: #fff8e7;
+}
+
+.pricing-revision-history__item small {
+  color: #687487;
+}
+
 .pricing-workspace__rail {
   position: sticky;
   top: 16px;

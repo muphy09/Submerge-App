@@ -58,13 +58,14 @@ import costBreakIconImg from '../../docs/img/costbreak.png';
 import { useToast } from '../components/Toast';
 import { useProposalNotes } from '../hooks/useProposalNotes';
 import ConfirmDialog from '../components/ConfirmDialog';
+import PricingRevisionComparisonModal from '../components/PricingRevisionComparisonModal';
 import { normalizeEquipmentLighting } from '../utils/lighting';
 import { getTileSelectionId } from '../utils/tileCopingCatalogs';
 import {
   getActivePricingModelMeta,
   initPricingDataStore,
   getPricingDataSnapshot,
-  loadPricingSnapshotForFranchise,
+  loadPricingSnapshotForExistingProposal,
   setActivePricingModel,
   setActivePricingTier,
   subscribeToPricingData,
@@ -93,9 +94,14 @@ import {
   getSessionFranchiseId,
   getSessionRole,
   getSessionUserName,
-  isMasterActingAsOwnerSession,
   isMasterSession,
+  readSession,
 } from '../services/session';
+import {
+  buildPricingRevisionComparison,
+  upgradeProposalPricingRevision,
+  type PricingRevisionComparison,
+} from '../services/pricingRevisionReview';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
@@ -395,7 +401,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const location = useLocation();
   const sessionRole = getSessionRole();
   const isMasterUser = isMasterSession();
-  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const isProposalEditingRestricted = false;
   const isExplicitReadOnlyVersionView = Boolean((location.state as any)?.readOnlyVersion);
   const isReadOnlyBuilderView =
     (isProposalEditingRestricted && Boolean(proposalNumber)) || isExplicitReadOnlyVersionView;
@@ -450,6 +456,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [defaultPricingModelId, setDefaultPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
+  const [declinedPricingComparison, setDeclinedPricingComparison] = useState<PricingRevisionComparison | null>(null);
+  const [showDeclinedPricingComparison, setShowDeclinedPricingComparison] = useState(false);
+  const [showDeclinedModelChooser, setShowDeclinedModelChooser] = useState(false);
+  const [pricingRevisionBusy, setPricingRevisionBusy] = useState(false);
+  const [pricingRevisionError, setPricingRevisionError] = useState<string | null>(null);
   const [selectedPricingTierId, setSelectedPricingTierId] = useState<string>(NORMAL_PRICING_TIER_ID);
   const [pendingPricingTierId, setPendingPricingTierId] = useState<string | null>(null);
   const [versionList, setVersionList] = useState<Proposal[]>([]);
@@ -524,6 +535,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     if (modelId && !skipRemote) {
       await setActivePricingModel(modelId, modelFranchiseId || undefined, activeTierId);
     }
+    const activeModelMeta = getActivePricingModelMeta();
     syncPapDiscountsFromModel();
 
     const nextModelAdjustments = readManualAdjustmentsFromModel();
@@ -548,6 +560,15 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       pricingModelFranchiseId:
         modelId ? modelFranchiseId || prev.pricingModelFranchiseId || prev.franchiseId || getSessionFranchiseId() : undefined,
       pricingModelIsDefault: isDefault ?? undefined,
+      pricingModelRevisionId:
+        modelId && !skipRemote
+          ? activeModelMeta.pricingModelRevisionId || undefined
+          : prev.pricingModelRevisionId,
+      pricingModelRevisionNumber:
+        modelId && !skipRemote
+          ? activeModelMeta.pricingModelRevisionNumber || undefined
+          : prev.pricingModelRevisionNumber,
+      pricingRevisionReview: modelId && !skipRemote ? null : prev.pricingRevisionReview,
       pricingTierId: activeTierId,
       pricingTierName: getPricingTierName(activeTierId),
       franchiseId: prev.franchiseId || getSessionFranchiseId(),
@@ -779,6 +800,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       pricingModelName: shouldUseActiveDefault ? modelMeta.pricingModelName || undefined : undefined,
       pricingModelFranchiseId: shouldUseActiveDefault ? modelMeta.pricingModelFranchiseId || franchiseId : undefined,
       pricingModelIsDefault: shouldUseActiveDefault ? modelMeta.isDefault : undefined,
+      pricingModelRevisionId: shouldUseActiveDefault ? modelMeta.pricingModelRevisionId || undefined : undefined,
+      pricingModelRevisionNumber: shouldUseActiveDefault
+        ? modelMeta.pricingModelRevisionNumber || undefined
+        : undefined,
       pricingTierId: NORMAL_PRICING_TIER_ID,
       pricingTierName: getPricingTierName(NORMAL_PRICING_TIER_ID),
       equipment: buildStartingEquipment(base.poolSpecs),
@@ -795,6 +820,46 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   useEffect(() => {
     latestProposalRef.current = proposal;
   }, [proposal]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const review = proposal.pricingRevisionReview;
+    if (
+      isLoading ||
+      !proposalNumber ||
+      review?.decision !== 'declined' ||
+      !proposal.pricingModelRevisionId ||
+      isVersionPermanentlyLocked(proposal as Proposal)
+    ) {
+      setDeclinedPricingComparison(null);
+      setShowDeclinedModelChooser(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void buildPricingRevisionComparison(proposal as Proposal)
+      .then((comparison) => {
+        if (cancelled) return;
+        setDeclinedPricingComparison(
+          comparison?.latestRevisionId === review.latestRevisionId ? comparison : null
+        );
+      })
+      .catch((error) => {
+        if (!cancelled) console.warn('Unable to check declined pricing revision:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isLoading,
+    proposal.pricingModelId,
+    proposal.pricingModelRevisionId,
+    proposal.pricingRevisionReview,
+    proposal.status,
+    proposal.workflow?.status,
+    proposalNumber,
+  ]);
 
   useEffect(() => {
     if (restrictedRedirectHandledRef.current) return;
@@ -1271,13 +1336,20 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const desiredModelId = proposal.pricingModelId || null;
     const desiredModelFranchiseId = proposal.pricingModelFranchiseId || null;
     const desiredPricingTierId = normalizePricingTierId(proposal.pricingTierId || proposal.pricingTierName);
-    void initPricingDataStore(franchiseId, desiredModelId || undefined, desiredModelFranchiseId || undefined, desiredPricingTierId);
+    void initPricingDataStore(
+      franchiseId,
+      desiredModelId || undefined,
+      desiredModelFranchiseId || undefined,
+      desiredPricingTierId,
+      proposal.pricingModelRevisionId || undefined
+    );
     void loadPricingModels(franchiseId, desiredModelId, desiredModelFranchiseId);
   }, [
     isProposalEditingRestricted,
     proposal.franchiseId,
     proposal.pricingModelId,
     proposal.pricingModelFranchiseId,
+    proposal.pricingModelRevisionId,
     proposal.pricingTierId,
     proposal.pricingTierName,
     proposalNumber,
@@ -1301,24 +1373,36 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         return;
       }
       const sourceProposal = JSON.parse(JSON.stringify(data)) as Proposal;
-      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForFranchise>>>();
+      const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForExistingProposal>>>();
       const mergeWithPricingSnapshot = async (input: Partial<Proposal>): Promise<Partial<Proposal>> => {
         const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || getSessionFranchiseId();
         const pricingModelId = input.pricingModelId || undefined;
         const pricingModelFranchiseId = input.pricingModelFranchiseId || undefined;
+        const pricingModelRevisionId = input.pricingModelRevisionId || undefined;
         const pricingTierId = normalizePricingTierId(input.pricingTierId || input.pricingTierName);
-        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingTierId}`;
+        const pricingCacheKey = `${resolvedFranchiseId}::${pricingModelFranchiseId || resolvedFranchiseId}::${pricingModelId || 'default'}::${pricingModelRevisionId || 'current'}::${pricingTierId}`;
         let pricingSnapshot = pricingCache.get(pricingCacheKey);
         if (!pricingSnapshot) {
-          pricingSnapshot = await loadPricingSnapshotForFranchise(
+          pricingSnapshot = await loadPricingSnapshotForExistingProposal(
             resolvedFranchiseId,
             pricingModelId,
             pricingModelFranchiseId,
-            pricingTierId
+            pricingTierId,
+            pricingModelRevisionId
           );
           pricingCache.set(pricingCacheKey, pricingSnapshot);
         }
-        return withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(input));
+        const merged = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(input));
+        return {
+          ...merged,
+          pricingModelId: input.pricingModelId || pricingSnapshot.pricingModelId || undefined,
+          pricingModelName: input.pricingModelName || pricingSnapshot.pricingModelName || undefined,
+          pricingModelFranchiseId:
+            input.pricingModelFranchiseId || pricingSnapshot.pricingModelFranchiseId || undefined,
+          pricingModelRevisionId: input.pricingModelRevisionId || pricingSnapshot.pricingModelRevisionId || undefined,
+          pricingModelRevisionNumber:
+            input.pricingModelRevisionNumber || pricingSnapshot.pricingModelRevisionNumber || undefined,
+        };
       };
 
       const freshData = markPersistedPackageSelectionTouched(await mergeWithPricingSnapshot(sourceProposal));
@@ -1777,6 +1861,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               : proposalToSave.pricingModelFranchiseId,
           pricingModelIsDefault:
             activeModelMeta.pricingModelId ? activeModelMeta.isDefault : proposalToSave.pricingModelIsDefault,
+          pricingModelRevisionId:
+            activeModelMeta.pricingModelId
+              ? activeModelMeta.pricingModelRevisionId || undefined
+              : proposalToSave.pricingModelRevisionId,
+          pricingModelRevisionNumber:
+            activeModelMeta.pricingModelId
+              ? activeModelMeta.pricingModelRevisionNumber || undefined
+              : proposalToSave.pricingModelRevisionNumber,
         };
       }
 
@@ -1874,6 +1966,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         workflowReady,
         effectiveMode === 'submit'
           ? { ledgerAction: 'proposal_submitted', requireOnline: true }
+          : isSilentDraftAutosave && isOffline
+          ? { localOnly: true }
           : undefined
       );
 
@@ -1982,7 +2076,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       window.clearTimeout(autosaveTimeoutRef.current);
       autosaveTimeoutRef.current = null;
     }
-    if (isCreationRestricted || isReadOnlyBuilderView || isLoading || isSaving || isAutosaving || !hasEdits) {
+    if (!isOffline || isCreationRestricted || isReadOnlyBuilderView || isLoading || isSaving || isAutosaving || !hasEdits) {
       return;
     }
 
@@ -2001,7 +2095,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         autosaveTimeoutRef.current = null;
       }
     };
-  }, [hasEdits, isAutosaving, isCreationRestricted, isLoading, isReadOnlyBuilderView, isSaving, proposal]);
+  }, [hasEdits, isAutosaving, isCreationRestricted, isLoading, isOffline, isReadOnlyBuilderView, isSaving, proposal]);
 
   const handleHome = () => {
     if (isReadOnlyBuilderView) {
@@ -2026,6 +2120,44 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       true,
       model?.franchiseId
     );
+    setDeclinedPricingComparison(null);
+    setShowDeclinedModelChooser(false);
+  };
+
+  const handleUpgradeDeclinedPricing = async () => {
+    if (!declinedPricingComparison || pricingRevisionBusy || isReadOnlyBuilderView) return;
+    setPricingRevisionBusy(true);
+    setPricingRevisionError(null);
+    try {
+      const session = readSession();
+      const upgraded = await upgradeProposalPricingRevision(proposal as Proposal, declinedPricingComparison, {
+        userId: session?.userId,
+        name: session?.userName || null,
+        email: session?.userEmail || null,
+        role: session?.role,
+      });
+      await setActivePricingModel(
+        upgraded.pricingModelId || declinedPricingComparison.pricingModelId,
+        upgraded.pricingModelFranchiseId || upgraded.franchiseId,
+        normalizePricingTierId(upgraded.pricingTierId || selectedPricingTierId),
+        upgraded.pricingModelRevisionId
+      );
+      setProposal(upgraded);
+      setSelectedPricingModelId(upgraded.pricingModelId || null);
+      setSelectedPricingModelName(upgraded.pricingModelName || null);
+      setHasEdits(true);
+      setDeclinedPricingComparison(null);
+      setShowDeclinedPricingComparison(false);
+      setShowDeclinedModelChooser(false);
+      showToast({
+        type: 'success',
+        message: 'Pricing model upgraded. Save the proposal to keep this revision.',
+      });
+    } catch (error) {
+      setPricingRevisionError(error instanceof Error ? error.message : 'Unable to upgrade the pricing model.');
+    } finally {
+      setPricingRevisionBusy(false);
+    }
   };
 
   const handleSelectPricingTier = (tierValue: string) => {
@@ -2328,7 +2460,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     ? 'form-header-pricing--active'
     : 'form-header-pricing--empty';
   const proposalFormStyle = { ['--form-header-height' as any]: `${formHeaderHeight}px` };
-  const pricingModelControl = (
+  const pricingModelSelect = (
     <label
       className={`form-header-pricing ${pricingModelHeaderStateClass}`}
       data-tooltip={
@@ -2376,6 +2508,32 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       </span>
     </label>
   );
+  const pricingModelControl = declinedPricingComparison && !isReadOnlyBuilderView ? (
+    <div className="form-header-pricing-upgrade">
+      <div className="form-header-pricing-upgrade-current">
+        <span>{pricingModelDisplayName}</span>
+        <small>Revision {proposal.pricingModelRevisionNumber || declinedPricingComparison.pinnedRevisionNumber || 'Current'}</small>
+      </div>
+      <button
+        type="button"
+        className="form-header-pricing-upgrade-button"
+        onClick={() => {
+          setPricingRevisionError(null);
+          setShowDeclinedPricingComparison(true);
+        }}
+      >
+        Upgrade to newest version
+      </button>
+      <button
+        type="button"
+        className="form-header-pricing-change-button"
+        onClick={() => setShowDeclinedModelChooser((current) => !current)}
+      >
+        Choose a different pricing model
+      </button>
+      {showDeclinedModelChooser && <div className="form-header-pricing-chooser">{pricingModelSelect}</div>}
+    </div>
+  ) : pricingModelSelect;
   const normalizedSelectedPricingTierId = normalizePricingTierId(proposal.pricingTierId || selectedPricingTierId);
   const pricingTierDisplayName = getPricingTierName(normalizedSelectedPricingTierId);
   const pricingTierControl = (
@@ -2663,6 +2821,19 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         cancelLabel="No"
         onConfirm={handleConfirmBronzePricingTier}
         onCancel={() => setPendingPricingTierId(null)}
+      />
+      <PricingRevisionComparisonModal
+        isOpen={showDeclinedPricingComparison}
+        comparison={declinedPricingComparison}
+        loading={pricingRevisionBusy}
+        error={pricingRevisionError}
+        showDecline={false}
+        onConfirm={() => void handleUpgradeDeclinedPricing()}
+        onClose={() => {
+          if (pricingRevisionBusy) return;
+          setShowDeclinedPricingComparison(false);
+          setPricingRevisionError(null);
+        }}
       />
     </div>
   );

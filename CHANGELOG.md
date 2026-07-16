@@ -1,3 +1,14 @@
+## [3.0.0] - 7/15/26
+### Revision Storage and Workflow
+- When an Admin updates a Pricing Model or Contract Template:
+    - A new immutable revision is created
+    - Existing proposals continue using their pinned revision in every workflow state
+    - New proposals use the newest published revision
+    - Opening an older proposal presents: “Your Admin has made changes to this Pricing Model. Upgrade to the newest version?”
+        - 'No' keeps the old prices permanently and asks again next time
+        - 'Yes' previews the recalculated proposal before committing the upgrade
+    - The previous proposal version remains recoverable
+-----
 ## [2.4.7] - 7/10/26
 ### Contract Changes
 - Line item for Phone II can now be edited properly
