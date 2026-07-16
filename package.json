@@ -10,6 +10,8 @@
     "build:renderer": "vite build",
     "check:dead-exports": "npx --yes ts-prune",
     "verify:multi-franchise": "node scripts/verify-multi-franchise-foundation.js",
+    "supabase:login": "supabase login",
+    "supabase:functions:staging": "node scripts/deploy-edge-functions-staging.js",
     "test:electron": "cross-env NODE_ENV=production npx electron .",
     "build": "tsc && vite build && electron-builder",
     "build:win": "npm run build -- --win",
@@ -49,6 +51,7 @@
     "electron": "^29.4.6",
     "electron-builder": "^24.13.3",
     "png-to-ico": "^3.0.1",
+    "supabase": "2.109.1",
     "typescript": "^5.4.2",
     "vite": "^5.1.6",
     "wait-on": "^7.2.0"

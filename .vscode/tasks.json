@@ -35,17 +35,17 @@
       "detail": "Runs a local test build labeled for PPAS West. Sign in as master and Act as Owner for franchise 5555."
     },
     {
-      "label": "Test App - PPAS East (6666)",
+      "label": "Test App - PPAS East (9724)",
       "type": "shell",
       "command": "node dev-start.js --env .env.staging.local",
       "options": {
         "cwd": "${workspaceFolder}",
-        "env": { "VITE_TEST_FRANCHISE_CODE": "6666" }
+        "env": { "VITE_TEST_FRANCHISE_CODE": "9724" }
       },
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "test",
       "problemMatcher": [],
-      "detail": "Runs a local test build labeled for PPAS East. Sign in as master and Act as Owner for franchise 6666."
+      "detail": "Runs a local test build labeled for PPAS East. Sign in as master and Act as Owner for franchise 9724."
     },
     {
       "label": "Verify Release",
@@ -68,6 +68,25 @@
       "detail": "Creates a local Windows installer without publishing it."
     },
     {
+      "label": "Supabase - Login CLI",
+      "type": "shell",
+      "command": "npm run supabase:login",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": [],
+      "detail": "Authenticates the local Supabase CLI through the browser. This does not deploy or change a project."
+    },
+    {
+      "label": "Supabase - Deploy All Edge Functions to Staging",
+      "type": "shell",
+      "command": "npm run supabase:functions:staging",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Deploys every repository Edge Function to the project in .env.staging.local after proving it differs from production. Ignores the existing CLI project link."
+    },
+    {
       "label": "Release - One-Time Migration Bootstrap",
       "type": "shell",
       "command": "node scripts/release-channel.js bootstrap",
@@ -88,9 +107,9 @@
       "detail": "Verifies and publishes only the PPAS West channel plus the master channel. PPAS East does not receive this update."
     },
     {
-      "label": "Release - PPAS East Only (6666)",
+      "label": "Release - PPAS East Only (9724)",
       "type": "shell",
-      "command": "node scripts/release-channel.js franchise --target 6666",
+      "command": "node scripts/release-channel.js franchise --target 9724",
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "build",

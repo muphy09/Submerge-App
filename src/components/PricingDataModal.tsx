@@ -1468,7 +1468,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         <div className="pricing-package-builder__intro">
           <p>
             Package options are specific to this pricing model, so each franchise can bundle equipment differently or
-            offer only the Custom option.
+            offer only the Custom option. When the cost of included equipment changes, affected fixed package prices
+            are adjusted by the same cost difference automatically.
           </p>
           <button type="button" className="pricing-chip-button" onClick={addEquipmentPackageOption}>
             Add Package
@@ -1484,7 +1485,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   <p>
                     {isCustom
                       ? 'Custom keeps normal itemized pricing. Keep this option available for franchises that do not use fixed bundles.'
-                      : 'Fixed package price replaces the bundled equipment COGS and leaves extras as upgrades.'}
+                      : 'Fixed package price replaces the bundled equipment COGS, tracks included equipment cost changes, and leaves extras as upgrades.'}
                   </p>
                 </div>
                 {!isCustom && (

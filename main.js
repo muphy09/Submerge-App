@@ -62,6 +62,19 @@ let iconPath = path.join(__dirname, 'icon.ico');
 const APP_NAME = 'Submerge Proposal Builder';
 const DEFAULT_WINDOW_TITLE = 'Proposal Builder';
 const PROPOSAL_FILE_EXTENSION = '.submerge';
+const DATA_PARTITION = String(process.env.SUBMERGE_DATA_PARTITION || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9-]/g, '');
+const WINDOW_TITLE = DATA_PARTITION
+  ? `${DEFAULT_WINDOW_TITLE} [${DATA_PARTITION.toUpperCase()}]`
+  : DEFAULT_WINDOW_TITLE;
+
+if (DATA_PARTITION) {
+  const isolatedUserDataPath = path.join(app.getPath('appData'), `${APP_NAME}-${DATA_PARTITION}`);
+  app.setPath('userData', isolatedUserDataPath);
+  console.log(`Using isolated ${DATA_PARTITION} application data.`);
+}
 
 let mainWindow = null;
 let db = null;
@@ -145,8 +158,9 @@ function sendUpdateError(message = 'Error checking for updates') {
 
 // Initialize proposals directory
 function initializeProposalsDirectory() {
-  const documentsPath = app.getPath('documents');
-  proposalsDir = path.join(documentsPath, APP_NAME);
+  proposalsDir = DATA_PARTITION
+    ? path.join(app.getPath('userData'), 'proposals')
+    : path.join(app.getPath('documents'), APP_NAME);
 
   // Create directory if it doesn't exist
   if (!fs.existsSync(proposalsDir)) {
@@ -490,7 +504,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: DEFAULT_WINDOW_TITLE,
+    title: WINDOW_TITLE,
     icon: iconPath,
     show: false,
     webPreferences: {

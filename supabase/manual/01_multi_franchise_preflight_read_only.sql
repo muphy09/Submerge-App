@@ -21,8 +21,8 @@ begin
 
   select data_type into v_type from information_schema.columns
   where table_schema = 'public' and table_name = 'franchise_pricing_models' and column_name = 'id';
-  if v_type not in ('text', 'character varying') then
-    raise exception 'franchise_pricing_models.id must be text-compatible; found %', coalesce(v_type, 'missing');
+  if v_type <> 'uuid' then
+    raise exception 'franchise_pricing_models.id must be uuid; found %', coalesce(v_type, 'missing');
   end if;
 
   select udt_name into v_type from information_schema.columns
@@ -69,8 +69,8 @@ begin
 
   select count(*) into v_count from public.franchises where franchise_code = '5555';
   if v_count <> 1 then raise exception 'Expected exactly one PPAS West franchise code 5555; found %', v_count; end if;
-  select count(*) into v_count from public.franchises where franchise_code = '6666';
-  if v_count <> 1 then raise exception 'Expected exactly one PPAS East franchise code 6666; found %', v_count; end if;
+  select count(*) into v_count from public.franchises where franchise_code = '9724';
+  if v_count <> 1 then raise exception 'Expected exactly one PPAS East franchise code 9724; found %', v_count; end if;
 
   select count(*) into v_count
   from public.franchise_pricing_models model
@@ -103,7 +103,7 @@ from public.franchises franchise
 left join public.franchise_users app_user on app_user.franchise_id = franchise.id
 left join public.franchise_proposals proposal on proposal.franchise_id = franchise.id
 left join public.franchise_pricing_models model on model.franchise_id = franchise.id
-where franchise.franchise_code in ('5555', '6666')
+where franchise.franchise_code in ('5555', '9724')
 group by franchise.franchise_code, franchise.name, franchise.id
 order by franchise.franchise_code;
 

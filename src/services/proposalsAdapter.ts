@@ -18,6 +18,8 @@ import { upgradeProposalContractTemplateRevision } from './contractTemplateUpgra
 import { countUnreadWorkflowEvents, ensureProposalWorkflow, getWorkflowStatus } from './proposalWorkflow';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
+const STAGING_DIAGNOSTICS =
+  String(import.meta.env.VITE_SUBMERGE_ENVIRONMENT || '').trim().toLowerCase() === 'staging';
 const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
 
 type SaveResult = Proposal & { lastModified: string };
@@ -782,16 +784,36 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
     }
   });
 
-  return Array.from(merged.values()).sort(
+  const result = Array.from(merged.values()).sort(
     (a, b) => coerceTimestamp(b.lastModified || b.createdDate) - coerceTimestamp(a.lastModified || a.createdDate)
   );
+  if (STAGING_DIAGNOSTICS) {
+    console.info('[STAGING] Proposal sources', {
+      franchiseId: targetFranchiseId,
+      supabaseRows: supabaseRows.length,
+      localRows: localRows.length,
+      mergedRows: result.length,
+      hiddenByLocalTombstone: hiddenProposals.size,
+    });
+  }
+  return result;
 }
 
 export async function listDashboardProposals(franchiseId?: string): Promise<Proposal[]> {
   const session = readSession();
   if (!session) return [];
   const proposals = await listProposals(franchiseId);
-  return proposals.filter((proposal) => isOwnProposal(proposal, session));
+  const visible = proposals.filter((proposal) => isOwnProposal(proposal, session));
+  if (STAGING_DIAGNOSTICS) {
+    console.info('[STAGING] Dashboard proposal visibility', {
+      franchiseId: franchiseId || getSessionFranchiseId(),
+      loadedRows: proposals.length,
+      visibleRows: visible.length,
+      hiddenByDesignerMatch: proposals.length - visible.length,
+      sessionHasUserName: Boolean(normalizeIdentity(session.userName)),
+    });
+  }
+  return visible;
 }
 
 export async function getWorkflowUnreadCount(franchiseId: string, userId?: string | null): Promise<number> {

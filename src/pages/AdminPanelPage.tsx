@@ -56,6 +56,7 @@ import {
   loadContractTemplatePreview,
   type ContractTemplateSummary,
 } from '../services/contractTemplateRegistry';
+import PdfCanvasViewer from '../components/PdfCanvasViewer';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 type SessionInfo = {
@@ -185,6 +186,15 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
   const normalizedRole = (session?.role || '').toLowerCase();
   const isAdmin = normalizedRole === 'admin' || normalizedRole === 'owner';
   const canOpenAdminSettings = normalizedRole === 'owner';
+
+  useEffect(() => {
+    const previewUrl = contractPreview?.pdfUrl;
+    return () => {
+      if (previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [contractPreview?.pdfUrl]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -1785,7 +1795,10 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                 Close
               </button>
             </div>
-            <iframe title={`${contractPreview.name} blank template`} src={contractPreview.pdfUrl} />
+            <PdfCanvasViewer
+              src={contractPreview.pdfUrl}
+              ariaLabel={`${contractPreview.name} blank template`}
+            />
           </div>
         </div>
       )}

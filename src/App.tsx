@@ -537,7 +537,11 @@ function AppContent() {
   }, [canAccessWorkflow, effectiveSession?.franchiseId, effectiveSession?.userId]);
 
   useEffect(() => {
-    document.title = `${displayName} Proposal Builder`;
+    const environmentLabel = String(import.meta.env.VITE_SUBMERGE_ENVIRONMENT || '')
+      .trim()
+      .toUpperCase();
+    const environmentSuffix = environmentLabel ? ` [${environmentLabel}]` : '';
+    document.title = `${displayName} Proposal Builder${environmentSuffix}`;
   }, [displayName]);
 
   useEffect(() => {

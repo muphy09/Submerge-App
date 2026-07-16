@@ -45,6 +45,63 @@ const LEGACY_STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
 const DEFAULT_FRANCHISE_ID = 'default';
 const EXCAVATION_RBB_HEIGHTS = [6, 12, 18, 24, 30, 36];
 
+const FIXED_PACKAGE_CATALOG_DEPENDENCIES: Record<
+  string,
+  { nameKey: string; quantityKey: string; usesPumpOverhead?: boolean }
+> = {
+  'equipment.pumps': {
+    nameKey: 'includedPumpName',
+    quantityKey: 'includedPumpQuantity',
+    usesPumpOverhead: true,
+  },
+  'equipment.filters': {
+    nameKey: 'includedFilterName',
+    quantityKey: 'includedFilterQuantity',
+  },
+  'equipment.cleaners': {
+    nameKey: 'includedCleanerName',
+    quantityKey: 'includedCleanerQuantity',
+  },
+  'equipment.heaters': {
+    nameKey: 'includedHeaterName',
+    quantityKey: 'includedHeaterQuantity',
+  },
+  'equipment.automation': {
+    nameKey: 'includedAutomationName',
+    quantityKey: 'includedAutomationQuantity',
+  },
+  'equipment.saltSystem': {
+    nameKey: 'includedSaltSystemName',
+    quantityKey: 'includedSaltSystemQuantity',
+  },
+  'equipment.autoFillSystem': {
+    nameKey: 'includedAutoFillSystemName',
+    quantityKey: 'includedAutoFillSystemQuantity',
+  },
+  'equipment.lights.poolLights': {
+    nameKey: 'includedPoolLightName',
+    quantityKey: 'includedPoolLightQuantity',
+  },
+  'equipment.lights.spaLights': {
+    nameKey: 'includedSpaLightName',
+    quantityKey: 'includedSpaLightQuantity',
+  },
+  'equipment.sanitationAccessories': {
+    nameKey: 'includedSanitationAccessoryName',
+    quantityKey: 'includedSanitationAccessoryQuantity',
+  },
+};
+
+const PACKAGE_DEPENDENCY_COST_FIELDS = new Set([
+  'basePrice',
+  'addCost1',
+  'addCost2',
+  'addCost3',
+  'price',
+  'percentIncrease',
+  'overheadMultiplier',
+]);
+
 let loadingPromise: Promise<void> | null = null;
 let latestLoadRequestId = 0;
 let activeFranchiseId = DEFAULT_FRANCHISE_ID;
@@ -473,6 +530,88 @@ function deepClone<T>(obj: T): T {
 
 function getDeep(target: any, path: (string | number)[]) {
   return path.reduce((acc, key) => (acc ? acc[key] : undefined), target);
+}
+
+function normalizeCatalogName(value: unknown) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function calculateCatalogItemCost(
+  item: any,
+  dependency: { usesPumpOverhead?: boolean },
+  equipmentPricing: any
+) {
+  if (!item) return 0;
+  const hasParts = ['basePrice', 'addCost1', 'addCost2', 'addCost3'].some(
+    (field) => item[field] !== undefined
+  );
+  let cost = hasParts
+    ? ['basePrice', 'addCost1', 'addCost2', 'addCost3'].reduce(
+        (total, field) => total + (Number(item[field]) || 0),
+        0
+      )
+    : Number(item.price) || 0;
+  if (hasParts && Number.isFinite(Number(item.percentIncrease))) {
+    const divisor = Number(item.percentIncrease) / 100;
+    if (divisor !== 0) cost /= divisor;
+  }
+  if (dependency.usesPumpOverhead) {
+    const itemOverhead = Number(item.overheadMultiplier);
+    const fallbackOverhead = Number(equipmentPricing?.pumpOverheadMultiplier);
+    const overhead =
+      Number.isFinite(itemOverhead) && itemOverhead > 0
+        ? itemOverhead
+        : Number.isFinite(fallbackOverhead) && fallbackOverhead > 0
+          ? fallbackOverhead
+          : 1;
+    cost *= overhead;
+  }
+  return Number.isFinite(cost) ? cost : 0;
+}
+
+function cascadeCatalogCostChangeToFixedPackages(
+  path: (string | number)[],
+  index: number,
+  key: string,
+  value: any
+) {
+  if (!PACKAGE_DEPENDENCY_COST_FIELDS.has(key)) return;
+  const dependency = FIXED_PACKAGE_CATALOG_DEPENDENCIES[path.join('.')];
+  if (!dependency) return;
+  const catalog = getDeep(pricingState, path);
+  const currentItem = Array.isArray(catalog) ? catalog[index] : null;
+  if (!currentItem?.name) return;
+  const nextItem = { ...currentItem, [key]: value };
+  const equipmentPricing = (pricingState as any)?.equipment || {};
+  const previousCost = calculateCatalogItemCost(currentItem, dependency, equipmentPricing);
+  const nextCost = calculateCatalogItemCost(nextItem, dependency, equipmentPricing);
+  const unitDelta = nextCost - previousCost;
+  if (!Number.isFinite(unitDelta) || Math.abs(unitDelta) < 0.000001) return;
+
+  const packages = Array.isArray(equipmentPricing.packageOptions)
+    ? equipmentPricing.packageOptions
+    : [];
+  let changed = false;
+  const nextPackages = packages.map((option: any) => {
+    if (!option || (option.mode || 'fixed') !== 'fixed') return option;
+    const includedName = normalizeCatalogName(option[dependency.nameKey]);
+    if (!includedName || includedName !== normalizeCatalogName(currentItem.name)) return option;
+    const quantity = Math.max(Number(option[dependency.quantityKey]) || 0, 0);
+    if (quantity <= 0) return option;
+    changed = true;
+    return {
+      ...option,
+      basePrice: Math.round(((Number(option.basePrice) || 0) + unitDelta * quantity) * 100) / 100,
+    };
+  });
+  if (!changed) return;
+
+  basePricingState = upsertPricingTierOverride(
+    basePricingState,
+    activePricingTierId,
+    ['equipment', 'packageOptions'],
+    nextPackages
+  );
 }
 
 function syncBaseFromSnapshot(snapshot: PricingData) {
@@ -919,6 +1058,7 @@ export function updatePricingListItem(
 ) {
   const list = getDeep(pricingState, path);
   if (!Array.isArray(list) || !list[index]) return;
+  cascadeCatalogCostChangeToFixedPackages(path, index, key, value);
   basePricingState = upsertPricingTierOverride(basePricingState, activePricingTierId, [...path, index, key], value);
   if (isExcavationAdminTablePath(path)) {
     syncExcavationAdminTables(basePricingState, basePricingState);

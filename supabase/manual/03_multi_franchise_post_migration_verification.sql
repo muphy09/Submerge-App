@@ -4,6 +4,22 @@ do $$
 declare
   v_missing integer;
 begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'franchise_proposals'
+      and policyname = 'allow updates for franchise proposals'
+  ) then raise exception 'Legacy unconditional proposal UPDATE policy still exists'; end if;
+
+  if exists (
+    select 1
+    from information_schema.table_privileges
+    where table_schema = 'public'
+      and table_name = 'franchise_proposals'
+      and upper(grantee) in ('PUBLIC', 'ANON')
+      and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+  ) then raise exception 'PUBLIC/anon still has a direct proposal-table privilege'; end if;
+
   if to_regclass('public.franchise_pricing_model_revisions') is null then raise exception 'Missing pricing revisions table'; end if;
   if to_regclass('public.franchise_configuration_revisions') is null then raise exception 'Missing configuration revisions table'; end if;
   if to_regclass('public.franchise_configuration_assignments') is null then raise exception 'Missing configuration assignments table'; end if;
@@ -86,7 +102,7 @@ left join public.franchise_pricing_model_revisions pricing_revision on pricing_r
 left join public.franchise_configuration_assignments config_assignment on config_assignment.franchise_id = franchise.id
 left join public.franchise_configuration_revisions config_revision on config_revision.id = config_assignment.current_revision_id
 left join public.franchise_release_assignments release_assignment on release_assignment.franchise_id = franchise.id
-where franchise.franchise_code in ('5555', '6666')
+where franchise.franchise_code in ('5555', '9724')
 group by franchise.franchise_code, franchise.name, release_assignment.core_version,
   release_assignment.franchise_release_number, release_assignment.release_channel,
   release_assignment.update_enabled

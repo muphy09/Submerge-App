@@ -3,9 +3,19 @@ const waitOn = require('wait-on');
 const path = require('path');
 const fs = require('fs');
 
+function readEnvironmentFile(envPath) {
+  const values = {};
+  fs.readFileSync(envPath, 'utf8').split(/\r?\n/).forEach((line) => {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!match) return;
+    values[match[1]] = match[2].replace(/^['"]|['"]$/g, '');
+  });
+  return values;
+}
+
 function loadRequestedEnvironmentFile() {
   const flagIndex = process.argv.indexOf('--env');
-  if (flagIndex < 0) return;
+  if (flagIndex < 0) return null;
   const requested = String(process.argv[flagIndex + 1] || '').trim();
   if (!/^\.env\.[a-z0-9-]+\.local$/i.test(requested)) {
     throw new Error('Only workspace .env.<name>.local files can be loaded by the dev task.');
@@ -14,16 +24,56 @@ function loadRequestedEnvironmentFile() {
   if (!fs.existsSync(envPath)) {
     throw new Error(`Environment file not found: ${requested}. Copy .env.staging.example to .env.staging.local first.`);
   }
-  fs.readFileSync(envPath, 'utf8').split(/\r?\n/).forEach((line) => {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (!match) return;
-    const value = match[2].replace(/^['"]|['"]$/g, '');
-    process.env[match[1]] = value;
-  });
+  Object.assign(process.env, readEnvironmentFile(envPath));
   console.log(`Loaded development environment: ${requested}`);
+  return requested;
 }
 
-loadRequestedEnvironmentFile();
+function validateStagingEnvironment(requested) {
+  if (requested !== '.env.staging.local') return;
+
+  const stagingUrl = String(process.env.VITE_SUPABASE_URL || '').trim().replace(/\/$/, '');
+  const stagingKey = String(process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  const supabaseOnly = /^(1|true|yes|on)$/i.test(String(process.env.VITE_SUPABASE_ONLY || '').trim());
+  if (!stagingUrl || /YOUR-STAGING-PROJECT/i.test(stagingUrl)) {
+    throw new Error('Staging safety stop: replace VITE_SUPABASE_URL in .env.staging.local.');
+  }
+  if (!stagingKey || /YOUR-STAGING-(ANON-)?KEY/i.test(stagingKey)) {
+    throw new Error('Staging safety stop: replace VITE_SUPABASE_ANON_KEY in .env.staging.local.');
+  }
+  if (!supabaseOnly) {
+    throw new Error('Staging safety stop: VITE_SUPABASE_ONLY must be true.');
+  }
+
+  let stagingHost;
+  try {
+    stagingHost = new URL(stagingUrl).hostname;
+  } catch (_) {
+    throw new Error('Staging safety stop: VITE_SUPABASE_URL is not a valid URL.');
+  }
+
+  const productionEnvPath = path.resolve(__dirname, '.env.local');
+  if (fs.existsSync(productionEnvPath)) {
+    const production = readEnvironmentFile(productionEnvPath);
+    const productionUrl = String(production.VITE_SUPABASE_URL || '').trim().replace(/\/$/, '');
+    const productionKey = String(production.VITE_SUPABASE_ANON_KEY || '').trim();
+    if (productionUrl && productionUrl.toLowerCase() === stagingUrl.toLowerCase()) {
+      throw new Error('Staging safety stop: staging and production Supabase URLs are identical.');
+    }
+    if (productionKey && productionKey === stagingKey) {
+      throw new Error('Staging safety stop: staging and production Supabase keys are identical.');
+    }
+  }
+
+  console.log(`Staging safety check passed. Supabase host: ${stagingHost}`);
+}
+
+const requestedEnvironment = loadRequestedEnvironmentFile();
+if (requestedEnvironment === '.env.staging.local') {
+  process.env.SUBMERGE_DATA_PARTITION = 'staging';
+  process.env.VITE_SUBMERGE_ENVIRONMENT = 'staging';
+}
+validateStagingEnvironment(requestedEnvironment);
 
 console.log('Starting Vite dev server...');
 

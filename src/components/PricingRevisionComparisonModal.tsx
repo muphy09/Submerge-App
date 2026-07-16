@@ -98,6 +98,10 @@ export default function PricingRevisionComparisonModal({
                   ))}
                 </tbody>
               </table>
+              <p className="pricing-revision-derived-note">
+                Only the pricing values changed directly by your admin are shown. Package, tax, and retail totals will
+                be recalculated automatically if you upgrade.
+              </p>
             </div>
           )}
         </div>
@@ -124,4 +128,3 @@ export default function PricingRevisionComparisonModal({
     </div>
   );
 }
-

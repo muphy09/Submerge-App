@@ -26,14 +26,22 @@ Run these files in this exact order:
 
 Each file can be opened in VS Code, selected with **Ctrl+A**, copied with **Ctrl+C**, and pasted directly into the browser SQL Editor. The first and third scripts are read-only. Stop if either script raises an error or does not show its final PASSED result.
 
+The migration also removes the legacy unconditional `public` proposal-update policy, revokes direct proposal-table access from `PUBLIC`/`anon`, and explicitly grants it to authenticated users. For a staging project migrated before this hardening was added, run `supabase/manual/05_staging_harden_proposal_access.sql` once and rerun the post-migration verification.
+
 ## Point the local app at staging
 
 1. Copy `.env.staging.example` to `.env.staging.local`.
-2. In the staging Supabase dashboard, open **Project Settings > API**.
-3. Paste the staging Project URL and staging anon/publishable key into `.env.staging.local`.
+2. In the staging Supabase dashboard, use **Connect** or open **Project Settings > API Keys**.
+3. Paste the staging Project URL and staging publishable key into `.env.staging.local` (the legacy anon key also works).
 4. Never put the service-role/secret key in this file.
 5. Run the VS Code task **Test App - Staging (Recommended)**.
 6. The West/East test tasks use this same staging file and add a visible test target. Sign in as the master account and use **Act as Owner** to get the exact franchise-owner UI.
+
+The staging task refuses to start when placeholders remain, Supabase-only mode is disabled, or the staging URL/key matches `.env.local`. It prints only the selected Supabase hostname after the safety check; it never prints the key.
+
+The staging task also uses a separate Electron `userData` directory and proposal-file directory. This isolates its SQLite database, browser storage, offline queue, deleted-proposal tombstones, recovery snapshots, and `.submerge` files from the normal/production Test App. The window title includes `[STAGING]`. Never remove this partitioning: without it, local production-side proposals could be merged into the staging project by the offline sync layer.
+
+Database restores do not deploy Edge Functions. Authenticate once with the VS Code task **Supabase - Login CLI**, then use **Supabase - Deploy All Edge Functions to Staging**. The deploy task derives the staging project reference from `.env.staging.local`, proves its URL/key differ from production, explicitly supplies that project reference, and ignores any previously linked CLI project. It deploys every directory under `supabase/functions` except `_shared`; never deploy the functions one by one for a normal staging refresh.
 
 The production `.env.local` is not changed, so switching back is simply a matter of running the original **Test App** task.
 
@@ -41,7 +49,7 @@ The production `.env.local` is not changed, so switching back is simply a matter
 
 ### Compatibility and isolation
 
-- PPAS West code is `5555`; PPAS East code is `6666`.
+- PPAS West code is `5555`; PPAS East code is `9724`.
 - Existing users and sanitized proposals load for both franchises.
 - West shows its four blank bundled contract templates. East says no templates are published.
 - Editing a West pricing model does not change East models, proposals, or configuration.
@@ -99,7 +107,7 @@ The production `.env.local` is not changed, so switching back is simply a matter
 10. In the Master user list, verify every active user has reported the new revision-capable version before ending the temporary pricing-edit freeze. A user who has not opened the app since release remains on the old baseline and cannot be silently repriced because new RPC revisions no longer overwrite the legacy `pricing_json` snapshot.
 11. For later releases use exactly one of:
    - **Release - PPAS West Only (5555)**
-   - **Release - PPAS East Only (6666)**
+   - **Release - PPAS East Only (9724)**
    - **Release - Global (All Franchises)**
 
 Every release task type-checks and production-builds first, refuses a dirty worktree, creates intentional Git tags, and then lets GitHub Actions update only the selected fixed endpoint. Global releases reset franchise counters to 1. Franchise releases increment only that franchise counter. Master receives every authorized build.

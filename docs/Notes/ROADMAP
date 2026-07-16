@@ -7,6 +7,9 @@ Immediate Changes -
 - *Stamped and Dyed concrete
 
 --- Admin color options for status bubbles
+- Logic for when too many items fill a table, visually
+- Resolution scaling fixes
+- clicking a designer from the admin list should filter and focus thier proposals in the table
 
 warrnaty section custom items (and off contract)
 

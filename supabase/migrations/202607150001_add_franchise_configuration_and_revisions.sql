@@ -2,7 +2,17 @@
 -- This migration intentionally leaves all legacy columns and tables in place so
 -- the currently published desktop client continues to operate during rollout.
 
+begin;
+
 create extension if not exists pgcrypto;
+
+-- Remove a legacy permissive policy that made every proposal row updateable
+-- whenever the table privilege was inherited through PUBLIC. Current clients
+-- authenticate before proposal access and retain access through the scoped
+-- authenticated policies below/existing on the project.
+drop policy if exists "allow updates for franchise proposals" on public.franchise_proposals;
+revoke select, insert, update, delete on public.franchise_proposals from public, anon;
+grant select, insert, update, delete on public.franchise_proposals to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Immutable pricing revisions
@@ -10,7 +20,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.franchise_pricing_model_revisions (
   id uuid primary key default gen_random_uuid(),
-  pricing_model_id text not null references public.franchise_pricing_models(id) on delete restrict,
+  pricing_model_id uuid not null references public.franchise_pricing_models(id) on delete restrict,
   franchise_id text not null references public.franchises(id) on delete cascade,
   revision_number integer not null check (revision_number > 0),
   pricing_json jsonb not null,
@@ -97,7 +107,7 @@ begin
       select * into selected_model
       from public.franchise_pricing_models model
       where model.franchise_id = model_franchise_id
-        and model.id = requested_model_id
+        and model.id::text = requested_model_id
       limit 1;
     end if;
 
@@ -321,7 +331,7 @@ create trigger initialize_new_franchise_foundation
 after insert on public.franchises
 for each row execute function public.initialize_new_franchise_foundation();
 
--- PPAS East (code 6666) will eventually use pool-type-only contract resolution
+-- PPAS East (code 9724) will eventually use pool-type-only contract resolution
 -- and county input. Those changes are intentionally NOT enabled by this migration.
 
 -- ---------------------------------------------------------------------------
@@ -432,7 +442,7 @@ as $$
 $$;
 
 create or replace function public.publish_pricing_model_revision(
-  p_pricing_model_id text,
+  p_pricing_model_id uuid,
   p_pricing_json jsonb,
   p_source_version text default null,
   p_change_summary jsonb default '[]'::jsonb,
@@ -464,7 +474,7 @@ begin
     raise exception 'You are not authorized to publish pricing for this franchise.';
   end if;
 
-  perform pg_advisory_xact_lock(hashtext('pricing-model:' || p_pricing_model_id));
+  perform pg_advisory_xact_lock(hashtext('pricing-model:' || p_pricing_model_id::text));
 
   select coalesce(max(revision_number), 0) + 1
     into v_next_revision
@@ -572,7 +582,7 @@ end;
 $$;
 
 create or replace function public.save_pricing_model_revision(
-  p_pricing_model_id text,
+  p_pricing_model_id uuid,
   p_franchise_id text,
   p_name text,
   p_pricing_json jsonb,
@@ -596,7 +606,7 @@ begin
     raise exception 'You are not authorized to publish pricing for this franchise.';
   end if;
 
-  perform pg_advisory_xact_lock(hashtext('pricing-model:' || p_pricing_model_id));
+  perform pg_advisory_xact_lock(hashtext('pricing-model:' || p_pricing_model_id::text));
 
   if p_create_new then
     insert into public.franchise_pricing_models (
@@ -788,18 +798,18 @@ $$;
 revoke all on function public.current_user_is_master() from public, anon;
 revoke all on function public.current_user_can_manage_franchise(text) from public, anon;
 revoke all on function public.current_user_belongs_to_franchise(text) from public, anon;
-revoke all on function public.publish_pricing_model_revision(text, jsonb, text, jsonb, text) from public, anon;
+revoke all on function public.publish_pricing_model_revision(uuid, jsonb, text, jsonb, text) from public, anon;
 revoke all on function public.publish_franchise_configuration(text, jsonb, integer, text, text) from public, anon;
-revoke all on function public.save_pricing_model_revision(text, text, text, jsonb, text, boolean, boolean, jsonb, text, boolean) from public, anon;
+revoke all on function public.save_pricing_model_revision(uuid, text, text, jsonb, text, boolean, boolean, jsonb, text, boolean) from public, anon;
 revoke all on function public.publish_contract_template_revision(text, text, text, text, text, text, text, jsonb, jsonb, text, uuid, text) from public, anon;
 revoke all on function public.initialize_new_franchise_foundation() from public, anon, authenticated;
 
 grant execute on function public.current_user_is_master() to authenticated;
 grant execute on function public.current_user_can_manage_franchise(text) to authenticated;
 grant execute on function public.current_user_belongs_to_franchise(text) to authenticated;
-grant execute on function public.publish_pricing_model_revision(text, jsonb, text, jsonb, text) to authenticated;
+grant execute on function public.publish_pricing_model_revision(uuid, jsonb, text, jsonb, text) to authenticated;
 grant execute on function public.publish_franchise_configuration(text, jsonb, integer, text, text) to authenticated;
-grant execute on function public.save_pricing_model_revision(text, text, text, jsonb, text, boolean, boolean, jsonb, text, boolean) to authenticated;
+grant execute on function public.save_pricing_model_revision(uuid, text, text, jsonb, text, boolean, boolean, jsonb, text, boolean) to authenticated;
 grant execute on function public.publish_contract_template_revision(text, text, text, text, text, text, text, jsonb, jsonb, text, uuid, text) to authenticated;
 
 drop policy if exists "franchise members read pricing revisions" on public.franchise_pricing_model_revisions;
@@ -890,3 +900,5 @@ create policy "master manages contract template files"
     bucket_id = 'franchise-contract-templates'
     and public.current_user_is_master()
   );
+
+commit;
