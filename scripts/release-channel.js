@@ -129,6 +129,9 @@ run('git', ['add', 'release-state.json', 'package.json', 'package-lock.json']);
 run('git', ['commit', '-m', `chore(release): ${mode}${target ? ` ${target}` : ''} ${state.coreVersion}`]);
 tags.forEach((tag) => run('git', ['tag', '-a', tag, '-m', `Release ${tag}`]));
 
-console.log(`Pushing ${branch} to ${remote} with tags: ${tags.join(', ')}`);
-run('git', ['push', '--atomic', remote, `HEAD:${branch}`, ...tags]);
+console.log(`Pushing ${branch} to ${remote}, then publishing tags individually: ${tags.join(', ')}`);
+run('git', ['push', remote, `HEAD:${branch}`]);
+// GitHub suppresses tag-push workflow events when more than three tags are
+// pushed together. Publish one at a time so every isolated channel is built.
+tags.forEach((tag) => run('git', ['push', remote, tag]));
 console.log('Release tags pushed. GitHub Actions will build each isolated update channel.');

@@ -162,7 +162,7 @@ requireText(settings, /checkForUpdates\(channel\s*\?\s*\{\s*channel\s*\}/, 'The 
 const releaseScript = read('scripts/release-channel.js');
 requireText(releaseScript, /stableTag\s*=\s*bumpMajor\(state\.coreVersion\)/, 'The one-time bootstrap does not create a major-version stable bridge.');
 requireText(releaseScript, /rev-parse[\s\S]{0,100}@\{upstream\}/, 'The release script does not resolve the configured upstream remote.');
-requireText(releaseScript, /git[\s\S]{0,100}push[\s\S]{0,100}--atomic[\s\S]{0,100}remote/, 'The release script does not atomically push to the resolved remote.');
+requireText(releaseScript, /tags\.forEach\(\(tag\)\s*=>\s*run\('git',\s*\['push',\s*remote,\s*tag\]\)\)/, 'The release script does not publish tags individually for GitHub Actions.');
 
 const productionDeploy = read('scripts/deploy-edge-functions-production.js');
 requireText(productionDeploy, /\.env\.local/, 'The production Edge Function deploy does not derive its target from .env.local.');
