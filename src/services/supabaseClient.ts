@@ -66,7 +66,8 @@ function cacheReachability(
 
 /**
  * Lightweight connectivity check to confirm we can talk to Supabase.
- * Uses a HEAD request against the proposals table with a short timeout.
+ * Uses the public Auth health endpoint so this remains valid before login and
+ * after logout without probing a protected application table.
  */
 export async function getSupabaseReachability(forceRefresh = false): Promise<SupabaseReachability> {
   const now = Date.now();
@@ -86,32 +87,13 @@ export async function getSupabaseReachability(forceRefresh = false): Promise<Sup
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REACHABILITY_TIMEOUT_MS);
-  const supabase = getSupabaseClient();
-  let authHeader = '';
-  if (supabase) {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.access_token) {
-        authHeader = `Bearer ${data.session.access_token}`;
-      }
-    } catch (error) {
-      authHeader = '';
-    }
-  }
-
   try {
-    const response = await fetch(
-      `${url}/rest/v1/franchise_proposals?select=proposal_number&limit=1`,
-      {
-        method: 'HEAD',
-        headers: {
-          apikey: key,
-          Authorization: authHeader || `Bearer ${key}`,
-        },
-        signal: controller.signal,
-      }
-    );
-    const reachable = response.ok || response.status === 401 || response.status === 403;
+    const response = await fetch(`${url}/auth/v1/health`, {
+      method: 'GET',
+      headers: { apikey: key },
+      signal: controller.signal,
+    });
+    const reachable = response.ok;
     return cacheReachability(reachable, reachable ? null : 'server-issue');
   } catch (error) {
     const offline = typeof navigator !== 'undefined' && navigator.onLine === false;

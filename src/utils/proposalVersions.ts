@@ -66,6 +66,15 @@ const inheritSharedVersionMetadata = (container: Proposal, version: Proposal): P
     pricingModelIsDefault:
       version.pricingModelIsDefault ??
       (canReuseContainerPricingMeta ? container.pricingModelIsDefault : undefined),
+    pricingModelRevisionId:
+      version.pricingModelRevisionId ||
+      (canReuseContainerPricingMeta ? container.pricingModelRevisionId : undefined),
+    pricingModelRevisionNumber:
+      version.pricingModelRevisionNumber ??
+      (canReuseContainerPricingMeta ? container.pricingModelRevisionNumber : undefined),
+    pricingRevisionReview:
+      version.pricingRevisionReview ??
+      (canReuseContainerPricingMeta ? container.pricingRevisionReview : undefined),
     pricingTierId: resolvedPricingTierId,
     pricingTierName: getPricingTierName(resolvedPricingTierId),
   };

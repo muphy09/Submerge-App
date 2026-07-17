@@ -11,7 +11,7 @@
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: file: blob:;
         font-src 'self' data:;
-        connect-src 'self' http://localhost:5173 ws://localhost:5173 https://*.supabase.co;
+        connect-src 'self' blob: http://localhost:5173 ws://localhost:5173 https://*.supabase.co;
         media-src 'self' blob: file:;
         object-src 'none';
       "

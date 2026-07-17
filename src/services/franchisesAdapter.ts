@@ -41,16 +41,11 @@ async function updateSupabaseFranchiseCode(payload: { franchiseId: string; franc
     throw new Error('Supabase not configured');
   }
 
-  const { error } = await supabase
-    .from('franchises')
-    .upsert(
-      {
-        id: payload.franchiseId,
-        name: payload.franchiseName || payload.franchiseId,
-        franchise_code: payload.franchiseCode,
-      },
-      { onConflict: 'id' }
-    );
+  const { error } = await supabase.rpc('save_franchise_code_owner_setting', {
+    p_franchise_id: payload.franchiseId,
+    p_franchise_code: payload.franchiseCode,
+    p_franchise_name: payload.franchiseName || null,
+  });
   if (error) throw error;
 }
 

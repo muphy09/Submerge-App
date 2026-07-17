@@ -15,6 +15,7 @@ import {
   saveFranchiseAdminPanelPin,
   subscribeToFranchiseAdminPanelPinUpdates,
 } from './franchiseBranding';
+import { getSupabaseClient } from './supabaseClient';
 
 const LEGACY_ADMIN_PANEL_PIN_STORAGE_PREFIX = 'submerge.adminPanelPin';
 const ADMIN_PANEL_PIN_SECURITY_STORAGE_PREFIX = 'submerge.adminPanelPinSecurity';
@@ -293,4 +294,20 @@ export function isAdminPanelPinValid(franchiseId: string, pin: string) {
   const normalizedInput = sanitizeAdminPanelPinInput(pin);
   if (!normalizedInput) return false;
   return normalizedInput === getStoredAdminPanelPin(franchiseId);
+}
+
+export async function verifyAdminPanelPin(franchiseId: string, pin: string) {
+  const normalizedPin = sanitizeAdminPanelPinInput(pin);
+  if (!franchiseId || normalizedPin.length !== ADMIN_PANEL_PIN_LENGTH) return false;
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    throw new Error('Supabase is required to verify the Admin Panel PIN.');
+  }
+  const { data, error } = await supabase.rpc('verify_franchise_admin_panel_pin', {
+    p_franchise_id: franchiseId,
+    p_pin: normalizedPin,
+  });
+  if (error) throw error;
+  clearLegacyStoredAdminPanelPin(franchiseId);
+  return data === true;
 }

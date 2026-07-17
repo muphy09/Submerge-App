@@ -65,16 +65,15 @@ import {
 import type { MasterFranchise } from './services/masterAdminAdapter';
 import AdminPinModal from './components/AdminPinModal';
 import { useFranchiseAppName } from './hooks/useFranchiseAppName';
-import { useAdminPanelPin } from './hooks/useAdminPanelPin';
 import { useGlobalFeedbackEnabled } from './hooks/useGlobalFeedbackEnabled';
 import {
   ADMIN_PANEL_PIN_LENGTH,
   ADMIN_PANEL_PIN_LOCKOUT_MESSAGE,
   clearAdminPanelPinFailures,
   getAdminPanelPinLockout,
-  isAdminPanelPinValid,
   recordFailedAdminPanelPinAttempt,
   sanitizeAdminPanelPinInput,
+  verifyAdminPanelPin,
 } from './services/adminPanelPin';
 import {
   FEEDBACK_FEATURE_UNAVAILABLE_MESSAGE,
@@ -88,7 +87,12 @@ import { hasSeenFeedbackTutorial, markFeedbackTutorialSeen } from './services/fe
 import FeedbackLauncher from './components/FeedbackLauncher';
 import FeedbackTutorialOverlay, { type FeedbackTutorialTargetRect } from './components/FeedbackTutorialOverlay';
 import FeedbackSubmissionModal from './components/FeedbackSubmissionModal';
-import { getWorkflowUnreadCount } from './services/proposalsAdapter';
+import {
+  getWorkflowUnreadCount,
+  PROPOSAL_CLOUD_SYNC_EVENT,
+  syncPendingDeletes,
+  syncPendingProposals,
+} from './services/proposalsAdapter';
 import './App.css';
 
 const ProposalForm = lazy(() => import('./pages/ProposalForm'));
@@ -149,6 +153,7 @@ function AppContent() {
   const [showSessionEndedNotice, setShowSessionEndedNotice] = useState(false);
   const [adminPanelPin, setAdminPanelPin] = useState('');
   const [adminPanelPinError, setAdminPanelPinError] = useState('');
+  const [adminPanelPinLoading, setAdminPanelPinLoading] = useState(false);
   const [adminPanelPinPrompt, setAdminPanelPinPrompt] = useState<{
     isOpen: boolean;
     targetPath: string | null;
@@ -170,6 +175,7 @@ function AppContent() {
   const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
   const [feedbackLauncherRect, setFeedbackLauncherRect] = useState<FeedbackTutorialTargetRect | null>(null);
   const [workflowUnreadCount, setWorkflowUnreadCount] = useState(0);
+  const adminPanelPinVerificationInFlightRef = useRef(false);
   const forcingRemoteLogoutRef = useRef(false);
   const expectedLocalSignOutRef = useRef(false);
   const expectedLocalSignOutTimeoutRef = useRef<number | null>(null);
@@ -204,9 +210,9 @@ function AppContent() {
     setAdminPanelLockoutUntil(null);
     setAdminPanelPin('');
     setAdminPanelPinError('');
+    setAdminPanelPinLoading(false);
     setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
-    void loadPricingForFranchise(DEFAULT_FRANCHISE_ID);
-  }, [loadPricingForFranchise]);
+  }, []);
 
   const markExpectedLocalSignOut = useCallback(() => {
     expectedLocalSignOutRef.current = true;
@@ -487,10 +493,7 @@ function AppContent() {
     isAdmin &&
     Boolean(effectiveSession?.franchiseId) &&
     !isMasterActingAsOwner;
-  const { displayName } = useFranchiseAppName(effectiveSession?.franchiseId);
-  const { adminPanelPin: storedAdminPanelPin, isLoading: adminPanelPinLoading } = useAdminPanelPin(
-    adminPanelRequiresPin ? effectiveSession?.franchiseId : undefined
-  );
+  const { displayName } = useFranchiseAppName(effectiveSession?.franchiseId ?? null);
 
   useEffect(() => {
     if (effectiveSession?.franchiseId) {
@@ -679,6 +682,9 @@ function AppContent() {
     setShowLoggedOutElsewhereNotice(false);
     setShowSessionEndedNotice(false);
     setShowProfileSettings(false);
+    // Unmount authenticated pages before clearing the token so their listeners
+    // cannot issue requests with a session that is in the process of ending.
+    setShowLogin(true);
     try {
       markExpectedLocalSignOut();
       await signOut();
@@ -755,18 +761,28 @@ function AppContent() {
   useEffect(() => {
     if (!isSupabaseEnabled()) return;
     let cancelled = false;
+    let cloudWasUnavailable = false;
 
     const updateCloudStatus = async (forceRefresh = false) => {
       const reachability = await getSupabaseReachability(forceRefresh);
       if (cancelled) return;
       if (!reachability.reachable && (reachability.reason === 'no-internet' || reachability.reason === 'server-issue')) {
+        cloudWasUnavailable = true;
         setCloudIssue(reachability.reason);
       } else {
         setCloudIssue(null);
+        if (cloudWasUnavailable) {
+          cloudWasUnavailable = false;
+          await Promise.allSettled([syncPendingProposals(), syncPendingDeletes()]);
+          if (!cancelled) window.dispatchEvent(new Event(PROPOSAL_CLOUD_SYNC_EVENT));
+        }
       }
     };
 
-    const handleOffline = () => setCloudIssue('no-internet');
+    const handleOffline = () => {
+      cloudWasUnavailable = true;
+      setCloudIssue('no-internet');
+    };
     const handleOnline = () => void updateCloudStatus(true);
 
     void updateCloudStatus(true);
@@ -789,7 +805,11 @@ function AppContent() {
   const showOfflineGate = isOffline && !session;
 
   // Show navigation bar on main pages, hide it on proposal form/view pages
-  const showNavigation = !location.pathname.startsWith('/proposal/') && !isContractPrintPreviewRoute;
+  const showNavigation =
+    Boolean(session) &&
+    !showLogin &&
+    !location.pathname.startsWith('/proposal/') &&
+    !isContractPrintPreviewRoute;
   const isAdminPanelUnlocked = adminPanelAccessFranchiseId === (effectiveSession?.franchiseId || null);
   const canRenderAdminPanel = isAdmin && (!adminPanelRequiresPin || isAdminPanelUnlocked);
   const isAdminPanelLocked = Boolean(adminPanelLockoutUntil && adminPanelLockoutUntil > Date.now());
@@ -853,6 +873,7 @@ function AppContent() {
   const closeAdminPanelPrompt = useCallback(() => {
     const cancelDestination = adminPanelPinPrompt.cancelDestination;
     setAdminPanelPin('');
+    setAdminPanelPinLoading(false);
     setAdminPanelPinError((current) => (current === ADMIN_PANEL_PIN_LOCKOUT_MESSAGE ? current : ''));
     setAdminPanelPinPrompt({ isOpen: false, targetPath: null, cancelDestination: null });
     if (cancelDestination) {
@@ -928,10 +949,10 @@ function AppContent() {
     }
   }, [appVersion, effectiveRole, effectiveSession?.franchiseId, feedbackMessage, showToast]);
 
-  const submitAdminPanelPin = useCallback(() => {
+  const submitAdminPanelPin = useCallback(async () => {
     const franchiseId = effectiveSession?.franchiseId;
     if (!franchiseId) return;
-    if (adminPanelPinLoading) return;
+    if (adminPanelPinLoading || adminPanelPinVerificationInFlightRef.current) return;
 
     const lockout = getAdminPanelPinLockout(franchiseId);
     if (lockout.locked) {
@@ -947,7 +968,23 @@ function AppContent() {
       return;
     }
 
-    if (normalizedPin !== storedAdminPanelPin && !isAdminPanelPinValid(franchiseId, normalizedPin)) {
+    adminPanelPinVerificationInFlightRef.current = true;
+    setAdminPanelPinLoading(true);
+    setAdminPanelPinError('');
+    let pinIsValid = false;
+    try {
+      pinIsValid = await verifyAdminPanelPin(franchiseId, normalizedPin);
+    } catch (error) {
+      console.error('Unable to verify Admin Panel PIN:', error);
+      setAdminPanelPinError('Unable to verify PIN. Check your connection and try again.');
+      adminPanelPinVerificationInFlightRef.current = false;
+      setAdminPanelPinLoading(false);
+      return;
+    }
+    adminPanelPinVerificationInFlightRef.current = false;
+    setAdminPanelPinLoading(false);
+
+    if (!pinIsValid) {
       const failedAttempt = recordFailedAdminPanelPinAttempt(franchiseId);
       setAdminPanelPin('');
       setAdminPanelLockoutUntil(failedAttempt.lockedUntil ?? null);
@@ -971,7 +1008,6 @@ function AppContent() {
     adminPanelPinPrompt.targetPath,
     effectiveSession?.franchiseId,
     navigate,
-    storedAdminPanelPin,
   ]);
 
   useEffect(() => {
@@ -979,6 +1015,7 @@ function AppContent() {
     setAdminPanelLockoutUntil(null);
     setAdminPanelPin('');
     setAdminPanelPinError('');
+    setAdminPanelPinLoading(false);
     setAdminPanelPinPrompt((current) => (current.isOpen ? { isOpen: false, targetPath: null, cancelDestination: null } : current));
   }, [effectiveSession?.userId, effectiveSession?.franchiseId]);
 
@@ -1004,7 +1041,7 @@ function AppContent() {
   useEffect(() => {
     if (!adminPanelPinPrompt.isOpen || isAdminPanelLocked || adminPanelPinLoading) return;
     if (adminPanelPin.length !== ADMIN_PANEL_PIN_LENGTH) return;
-    submitAdminPanelPin();
+    void submitAdminPanelPin();
   }, [adminPanelPin, adminPanelPinLoading, adminPanelPinPrompt.isOpen, isAdminPanelLocked, submitAdminPanelPin]);
 
   useEffect(() => {
@@ -1071,8 +1108,9 @@ function AppContent() {
           onAdminPanelClick={handleAdminPanelTabClick}
         />
       )}
-      <Suspense fallback={<RouteLoading />}>
-        <Routes>
+      {(isContractPrintPreviewRoute || (session && !showLogin)) && (
+        <Suspense fallback={<RouteLoading />}>
+          <Routes>
           <Route
             path="/"
             element={
@@ -1150,8 +1188,9 @@ function AppContent() {
           />
           <Route path="/proposal/view/:proposalNumber" element={<ProposalView cloudIssue={cloudIssue} />} />
           <Route path="/contract-print-preview" element={<ContractPrintPreviewPage />} />
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      )}
       {!isContractPrintPreviewRoute && (actingLabel || location.pathname === '/') && (
         <div className="app-bottom-left-meta">
           {actingLabel && (
@@ -1284,7 +1323,7 @@ function AppContent() {
           isOpen={adminPanelPinPrompt.isOpen}
           pin={adminPanelPin}
           error={adminPanelPinError}
-          statusMessage={adminPanelPinLoading ? 'Loading current franchise PIN...' : ''}
+          statusMessage={adminPanelPinLoading ? 'Verifying PIN...' : ''}
           isDisabled={isAdminPanelLocked || adminPanelPinLoading}
           onPinChange={(value) => {
             setAdminPanelPin(value);

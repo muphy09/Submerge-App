@@ -240,7 +240,16 @@ export async function checkProposalContractRevision(proposal: Proposal): Promise
   const latest = latestRemote || bundled;
   if (!pinned) return null;
   const changed = pinned.revisionId !== latest.revisionId;
-  const silentInitial = !proposal.contractTemplateRevisionId && latest.source === 'remote' && latest.revisionNumber === 1;
+  const proposalCreatedAt = Date.parse(String(proposal.createdDate || ''));
+  const latestPublishedAt = Date.parse(String(latest.publishedAt || ''));
+  const proposalWasCreatedAfterLatestPublication =
+    Number.isFinite(proposalCreatedAt) &&
+    Number.isFinite(latestPublishedAt) &&
+    proposalCreatedAt >= latestPublishedAt;
+  const silentInitial =
+    !proposal.contractTemplateRevisionId &&
+    latest.source === 'remote' &&
+    (latest.revisionNumber === 1 || proposalWasCreatedAfterLatestPublication);
   return {
     pinned,
     latest,
@@ -294,6 +303,7 @@ export function declineContractRevision(
 
 export async function listContractTemplatesForFranchise(franchiseId: string, franchiseCode?: string | null) {
   const supabase = getSupabaseClient();
+  let remoteTemplates: RemoteTemplateRow[] = [];
   if (supabase) {
     const { data, error } = await supabase
       .from('franchise_contract_templates')
@@ -301,11 +311,11 @@ export async function listContractTemplatesForFranchise(franchiseId: string, fra
       .eq('franchise_id', franchiseId)
       .eq('is_active', true)
       .order('name');
-    if (!error && data?.length) return data as RemoteTemplateRow[];
+    if (!error && data?.length) remoteTemplates = data as RemoteTemplateRow[];
     if (error && !schemaUnavailable(error)) throw error;
   }
-  if (String(franchiseCode || '').trim() !== '5555') return [];
-  return listBundledContractTemplates().map((template) => ({
+  if (String(franchiseCode || '').trim() !== '5555') return remoteTemplates;
+  const bundledTemplates = listBundledContractTemplates().map((template) => ({
     id: `bundled:${franchiseId}:${template.id}`,
     franchise_id: franchiseId,
     name: template.label,
@@ -313,6 +323,17 @@ export async function listContractTemplatesForFranchise(franchiseId: string, fra
     pool_type: template.id.endsWith('fiberglass') ? 'fiberglass' : 'shotcrete',
     current_revision_id: `bundled:${franchiseId}:${template.id}:r1`,
   })) as RemoteTemplateRow[];
+  const remoteResolutionKeys = new Set(
+    remoteTemplates.map((template) =>
+      `${String(template.jurisdiction_key || '*').toUpperCase()}:${template.pool_type}`
+    )
+  );
+  return [
+    ...remoteTemplates,
+    ...bundledTemplates.filter((template) =>
+      !remoteResolutionKeys.has(`${template.jurisdiction_key.toUpperCase()}:${template.pool_type}`)
+    ),
+  ].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function getBundledTemplateForRegistryId(templateId: string): ContractTemplate | null {

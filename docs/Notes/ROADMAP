@@ -10,11 +10,15 @@ Immediate Changes -
 - Logic for when too many items fill a table, visually
 - Resolution scaling fixes
 - clicking a designer from the admin list should filter and focus thier proposals in the table
+- local file saves that can be clicked to open, or sent
+- full ledger full per owner (and master)
+- app name defaulting to submerge
 
 warrnaty section custom items (and off contract)
 
 "No profit items" (mark as no profit)
 
+- 'insights' on bk can display if proposal is on an old price revision model
 
 add cost of fiber shell
 

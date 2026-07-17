@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import ChangelogModal from '../components/ChangelogModal';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
-import { getSessionFranchiseId, getSessionRole } from '../services/session';
+import { getSessionFranchiseCode, getSessionFranchiseId, getSessionRole } from '../services/session';
+import { getUpdateChannel } from '../services/franchiseRelease';
 import './SettingsPage.css';
 
 type UpdateStatusMessage = {
@@ -25,7 +26,8 @@ const SettingsPage: React.FC = () => {
     setMessage({ text: 'Checking for updates...', tone: 'info' });
 
     try {
-      const result = await window.electron.checkForUpdates();
+      const channel = getUpdateChannel(sessionRole, getSessionFranchiseCode());
+      const result = await window.electron.checkForUpdates(channel ? { channel } : undefined);
 
       if (result.message) {
         setMessage({ text: result.message, tone: 'error' });

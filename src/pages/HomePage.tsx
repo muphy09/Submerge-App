@@ -6,7 +6,11 @@ import FeedbackReplyInboxModal from '../components/FeedbackReplyInboxModal';
 import DashboardProposalsPanel from '../components/DashboardProposalsPanel';
 import './HomePage.css';
 import heroImage from '../../docs/img/newback.jpg';
-import { listDashboardProposals, deleteProposal } from '../services/proposalsAdapter';
+import {
+  deleteProposal,
+  listDashboardProposals,
+  PROPOSAL_CLOUD_SYNC_EVENT,
+} from '../services/proposalsAdapter';
 import { getSessionFranchiseId, type UserSession } from '../services/session';
 import { loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
@@ -47,6 +51,11 @@ function HomePage({
     'Master accounts acting as owner can view proposals but cannot create or edit them.';
 
   const loadProposals = useCallback(async () => {
+    if (!session?.userId) {
+      setProposals([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [
@@ -198,7 +207,7 @@ function HomePage({
     } finally {
       setLoading(false);
     }
-  }, [sessionFranchiseId]);
+  }, [session?.userId, sessionFranchiseId]);
 
   useEffect(() => {
     void loadProposals();
@@ -207,7 +216,11 @@ function HomePage({
   useEffect(() => {
     const handleOnline = () => void loadProposals();
     window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
+    window.addEventListener(PROPOSAL_CLOUD_SYNC_EVENT, handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener(PROPOSAL_CLOUD_SYNC_EVENT, handleOnline);
+    };
   }, [loadProposals]);
 
   const loadFeedbackReplies = useCallback(async () => {

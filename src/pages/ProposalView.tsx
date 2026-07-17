@@ -1390,6 +1390,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     };
   };
 
+  const refreshPricingRevisionComparison = async () => {
+    if (!proposal) return null;
+    const latestComparison = await buildPricingRevisionComparison(proposal);
+    setPricingRevisionComparison(latestComparison);
+    return latestComparison;
+  };
+
   const persistPricingRevisionVersion = async (updatedVersion: Proposal) => {
     if (!proposal) return;
     const targetVersionId = updatedVersion.versionId || activeVersionId || 'original';
@@ -1430,9 +1437,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
     try {
+      const currentComparison = await refreshPricingRevisionComparison();
+      if (!currentComparison) {
+        setPricingRevisionPromptOpen(false);
+        setPricingRevisionComparisonOpen(false);
+        return;
+      }
       const declined = markPricingRevisionDeclined(
         proposal,
-        pricingRevisionComparison,
+        currentComparison,
         getPricingRevisionActor()
       );
       await persistPricingRevisionVersion(declined);
@@ -1451,9 +1464,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
     try {
+      const currentComparison = await refreshPricingRevisionComparison();
+      if (!currentComparison) {
+        setPricingRevisionPromptOpen(false);
+        setPricingRevisionComparisonOpen(false);
+        return;
+      }
       const upgraded = await upgradeProposalPricingRevision(
         proposal,
-        pricingRevisionComparison,
+        currentComparison,
         getPricingRevisionActor()
       );
       await persistPricingRevisionVersion(upgraded);
@@ -1504,16 +1523,21 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         openContractWithRevision(version, check.pinned);
         return;
       }
-      if (check.canAdoptInitialRevisionSilently || !version.contractTemplateRevisionId) {
-        const initialRevision = check.canAdoptInitialRevisionSilently ? check.latest : check.pinned;
-        const pinned = adoptContractRevision(version, initialRevision, getPricingRevisionActor());
+      if (check.canAdoptInitialRevisionSilently) {
+        const pinned = adoptContractRevision(version, check.latest, getPricingRevisionActor());
         await persistPricingRevisionVersion(pinned);
-        openContractWithRevision(pinned, initialRevision);
+        openContractWithRevision(pinned, check.latest);
         return;
       }
       if (check.requiresReview) {
         setPendingContractRevision({ version, check });
         setContractRevisionPromptOpen(true);
+        return;
+      }
+      if (!version.contractTemplateRevisionId) {
+        const pinned = adoptContractRevision(version, check.pinned, getPricingRevisionActor());
+        await persistPricingRevisionVersion(pinned);
+        openContractWithRevision(pinned, check.pinned);
         return;
       }
       openContractWithRevision(version, check.pinned);
@@ -5780,8 +5804,18 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         onUpgrade={() => void handleUpgradePricingRevision()}
         onDecline={() => void handleDeclinePricingRevision()}
         onCompare={() => {
-          setPricingRevisionPromptOpen(false);
-          setPricingRevisionComparisonOpen(true);
+          setPricingRevisionBusy(true);
+          setPricingRevisionError(null);
+          void refreshPricingRevisionComparison()
+            .then((currentComparison) => {
+              if (!currentComparison) return;
+              setPricingRevisionPromptOpen(false);
+              setPricingRevisionComparisonOpen(true);
+            })
+            .catch((error: any) => {
+              setPricingRevisionError(error?.message || 'Unable to load the newest pricing comparison.');
+            })
+            .finally(() => setPricingRevisionBusy(false));
         }}
       />
 

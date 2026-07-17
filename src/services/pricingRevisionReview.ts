@@ -552,10 +552,23 @@ export async function buildPricingRevisionComparison(
 ): Promise<PricingRevisionComparison | null> {
   if (!proposal.pricingModelId || !proposal.pricingModelRevisionId) return null;
   const franchiseId = proposal.pricingModelFranchiseId || proposal.franchiseId || 'default';
+  const review = proposal.pricingRevisionReview;
+  const canReuseReviewBaseline =
+    review?.decision !== 'upgraded' &&
+    review?.pricingModelId === proposal.pricingModelId &&
+    Boolean(review.baselineRevisionId);
+  const baselineRevisionId = canReuseReviewBaseline
+    ? review?.baselineRevisionId || proposal.pricingModelRevisionId
+    : proposal.pricingModelRevisionId;
   const [pinned, latest] = await Promise.all([
-    loadPricingModel(franchiseId, proposal.pricingModelId, proposal.pricingModelRevisionId),
+    loadPricingModel(franchiseId, proposal.pricingModelId, baselineRevisionId),
     loadPricingModel(franchiseId, proposal.pricingModelId),
   ]);
+  if (pinned?.revisionId && pinned.revisionId !== baselineRevisionId) {
+    throw new Error(
+      'The proposal\'s pinned pricing revision could not be loaded exactly. Reconnect and try again.'
+    );
+  }
   if (!pinned?.revisionId || !latest?.revisionId || pinned.revisionId === latest.revisionId) return null;
 
   // Pricing calculations temporarily swap a process-wide pricing snapshot, so
@@ -633,6 +646,9 @@ export function markPricingRevisionDeclined(
   return {
     ...proposal,
     pricingRevisionReview: {
+      pricingModelId: comparison.pricingModelId,
+      baselineRevisionId: comparison.pinnedRevisionId,
+      baselineRevisionNumber: comparison.pinnedRevisionNumber,
       latestRevisionId: comparison.latestRevisionId,
       latestRevisionNumber: comparison.latestRevisionNumber,
       decision: 'declined',
@@ -656,9 +672,21 @@ export function markPricingRevisionPending(
   ) {
     return proposal;
   }
+  const existingReview = proposal.pricingRevisionReview;
+  const preserveExistingBaseline =
+    existingReview?.decision !== 'upgraded' &&
+    existingReview?.pricingModelId === comparison.pricingModelId &&
+    Boolean(existingReview.baselineRevisionId);
   return {
     ...proposal,
     pricingRevisionReview: {
+      pricingModelId: comparison.pricingModelId,
+      baselineRevisionId: preserveExistingBaseline
+        ? existingReview?.baselineRevisionId
+        : comparison.pinnedRevisionId,
+      baselineRevisionNumber: preserveExistingBaseline
+        ? existingReview?.baselineRevisionNumber ?? comparison.pinnedRevisionNumber
+        : comparison.pinnedRevisionNumber,
       latestRevisionId: comparison.latestRevisionId,
       latestRevisionNumber: comparison.latestRevisionNumber,
       decision: comparison.affectsProposal ? 'pending' : 'not_affected',
@@ -683,6 +711,10 @@ export async function upgradeProposalPricingRevision(
     comparison.latestRevisionId
   );
   if (!latest?.revisionId) throw new Error('The latest pricing revision is unavailable.');
+  const current = await loadPricingModel(franchiseId, comparison.pricingModelId);
+  if (current?.revisionId && current.revisionId !== comparison.latestRevisionId) {
+    throw new Error('A newer pricing revision was just published. Review the refreshed comparison before upgrading.');
+  }
   const recalculated = await calculateWithModel(proposal, latest);
   const currentStatus = getWorkflowStatus(proposal);
   const needsReapproval = comparison.affectsProposal && currentStatus === 'approved';
@@ -695,6 +727,9 @@ export async function upgradeProposalPricingRevision(
     pricingModelRevisionId: latest.revisionId,
     pricingModelRevisionNumber: latest.revisionNumber || undefined,
     pricingRevisionReview: {
+      pricingModelId: comparison.pricingModelId,
+      baselineRevisionId: latest.revisionId,
+      baselineRevisionNumber: latest.revisionNumber || null,
       latestRevisionId: latest.revisionId,
       latestRevisionNumber: latest.revisionNumber || null,
       decision: 'upgraded',

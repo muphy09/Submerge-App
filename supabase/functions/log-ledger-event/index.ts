@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
     const { profile, user } = await getRequesterProfile(req, supabase);
     const requesterRole = String(profile.role || '').trim().toLowerCase();
 
-    if (!['master', 'owner', 'admin', 'designer'].includes(requesterRole)) {
+    if (!['master', 'owner', 'admin', 'bookkeeper', 'designer'].includes(requesterRole)) {
       return new Response(JSON.stringify({ error: 'Forbidden.' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

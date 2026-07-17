@@ -812,6 +812,9 @@ export interface ProposalWorkflowState {
 export type PricingRevisionReviewDecision = 'pending' | 'declined' | 'upgraded' | 'not_affected';
 
 export interface PricingRevisionReviewState {
+  pricingModelId?: string | null;
+  baselineRevisionId?: string | null;
+  baselineRevisionNumber?: number | null;
   latestRevisionId: string;
   latestRevisionNumber?: number | null;
   decision: PricingRevisionReviewDecision;
@@ -849,6 +852,7 @@ export interface Proposal {
   versions?: Proposal[];
   isOriginalVersion?: boolean;
   franchiseId?: string;
+  designerAuthUserId?: string;
   designerName?: string;
   designerRole?: ProposalActorRole;
   designerCode?: string;

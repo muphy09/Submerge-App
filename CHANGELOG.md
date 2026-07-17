@@ -1,13 +1,31 @@
-## [3.0.0] - 7/15/26
+## [3.0.1] - 7/17/26
 ### Revision Storage and Workflow
 - When an Admin updates a Pricing Model or Contract Template:
     - A new immutable revision is created
-    - Existing proposals continue using their pinned revision in every workflow state
+    - Existing proposals continue using their (old) pinned revision in every workflow state
     - New proposals use the newest published revision
     - Opening an older proposal presents: “Your Admin has made changes to this Pricing Model. Upgrade to the newest version?”
         - 'No' keeps the old prices permanently and asks again next time
         - 'Yes' previews the recalculated proposal before committing the upgrade
+        - 'Compare' breaks down all changes that affect the current proposal
     - The previous proposal version remains recoverable
+    - Actions are logged in the Ledger
+### Offline Functionality
+- Hardened offline operation and synchronization when reconnecting
+- Admin settings can no longer be accessed while offline
+### Permission Matrix
+- Restructured backend roles to align with franchise isolation
+    - RLS updated to prevent unauthorized access to designer permissions
+- Added explicit proposal ownership and routed sensitive data through permission checks
+    - Foundation added for future proposal transfers
+- Restructured Admin Settings to verify the correct PIN online
+    - Admin Settings cannot be accessed while offline
+### Franchise Segregation
+- Restructured framework of the backend to support updating franchises independently (or globally)
+    - New app version extension indicates which version of your franchise branch you are running
+    - Patch Notes appear per franchise & global (if updated globally)
+- Contract Uploads, Pricing Models, UI, Calculations/Formulas, and roles can be independently updated
+- Staging sandbox introduced for controlled testing between sanitized environments
 -----
 ## [2.4.7] - 7/10/26
 ### Contract Changes

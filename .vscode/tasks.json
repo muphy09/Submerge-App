@@ -22,6 +22,22 @@
       "detail": "Runs against the isolated staging Supabase project configured in .env.staging.local."
     },
     {
+      "label": "Test App - Production Migration (Isolated)",
+      "type": "shell",
+      "command": "node dev-start.js",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "SUBMERGE_DATA_PARTITION": "production-migration-test",
+          "VITE_SUBMERGE_ENVIRONMENT": "production"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "test",
+      "problemMatcher": [],
+      "detail": "Runs the new local code against production Supabase using isolated Electron storage so development data cannot merge into production."
+    },
+    {
       "label": "Test App - PPAS West (5555)",
       "type": "shell",
       "command": "node dev-start.js --env .env.staging.local",
@@ -85,6 +101,16 @@
       "group": "build",
       "problemMatcher": [],
       "detail": "Deploys every repository Edge Function to the project in .env.staging.local after proving it differs from production. Ignores the existing CLI project link."
+    },
+    {
+      "label": "Supabase - Deploy All Edge Functions to Production",
+      "type": "shell",
+      "command": "npm run supabase:functions:production",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Deploys every repository Edge Function to the production project in .env.local after proving it differs from staging. Ignores the existing CLI project link."
     },
     {
       "label": "Release - One-Time Migration Bootstrap",

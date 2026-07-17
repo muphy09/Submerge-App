@@ -5,6 +5,7 @@ node_modules/
 dist/
 release/
 portable builds/
+output/
 *.tsbuildinfo
 
 # Database files

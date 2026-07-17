@@ -33,6 +33,9 @@ export async function getRequesterProfile(req: Request, supabase: ReturnType<typ
   if (!profile) {
     throw new Error('No franchise profile found.');
   }
+  if (profile.is_active === false) {
+    throw new Error('This user account is inactive.');
+  }
 
   return { user: userData.user, profile };
 }

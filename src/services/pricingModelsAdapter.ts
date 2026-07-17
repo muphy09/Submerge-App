@@ -1,4 +1,4 @@
-import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
+import { getSupabaseClient, hasSupabaseConnection, isSupabaseEnabled } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
 import { logLedgerEventSafe } from './ledger';
 import { readSession } from './session';
@@ -165,6 +165,11 @@ async function loadRemotePricingRevision(options: {
 export async function listPricingModels(franchiseId: string): Promise<PricingModelSummary[]> {
   return withFallback<PricingModelSummary[]>(async () => {
     try {
+      if (!(await hasSupabaseConnection())) {
+        const cached = readPricingModelListCache(franchiseId);
+        if (cached.length) return cached;
+        return await window.electron.listPricingModels(franchiseId);
+      }
       const supabase = getSupabaseClient();
       if (!supabase) return [];
       const { data, error } = await supabase
@@ -229,6 +234,14 @@ export async function loadPricingModel(
 ): Promise<LoadedPricingModel | null> {
   return withFallback<LoadedPricingModel | null>(async () => {
     try {
+      if (!(await hasSupabaseConnection())) {
+        const cached = readPricingModelSnapshotCache(franchiseId, pricingModelId, revisionId);
+        if (cached?.pricing) return cached;
+        return await window.electron.loadPricingModel({
+          franchiseId,
+          pricingModelId: pricingModelId || undefined,
+        });
+      }
       const supabase = getSupabaseClient();
       if (!supabase) return null;
       let query = supabase
@@ -305,6 +318,7 @@ export async function loadInitialPricingModelRevisionId(
   };
   const supabase = getSupabaseClient();
   if (!supabase) return readCache();
+  if (!(await hasSupabaseConnection())) return readCache();
   try {
     const { data, error } = await supabase
       .from('franchise_pricing_model_revisions')

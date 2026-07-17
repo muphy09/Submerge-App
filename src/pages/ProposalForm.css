@@ -254,21 +254,25 @@
 }
 
 .form-header-pricing-upgrade {
-  display: grid;
-  grid-template-columns: minmax(140px, auto) auto auto;
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.65rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0.35rem;
+  border: 1px solid #d8bb8c;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffdf8 0%, #fff7e9 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
   position: relative;
 }
 
 .form-header-pricing-upgrade-current {
   display: flex;
   flex-direction: column;
+  flex: 1 1 145px;
   min-width: 0;
-  padding: 0.45rem 0.65rem;
-  border: 1px solid #d4b483;
-  border-radius: 8px;
-  background: #fffaf2;
+  padding: 0.35rem 0.55rem;
   color: #4b3826;
 }
 
@@ -284,13 +288,24 @@
   color: #7c654e;
 }
 
+.form-header-pricing-upgrade-actions {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
 .form-header-pricing-upgrade-button,
 .form-header-pricing-change-button {
   border-radius: 8px;
-  padding: 0.55rem 0.7rem;
+  min-height: 40px;
+  padding: 0.5rem 0.75rem;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -306,6 +321,22 @@
   color: #5c4935;
 }
 
+.form-header-pricing-upgrade-button:hover:not(:disabled) {
+  background: #855923;
+  border-color: #855923;
+}
+
+.form-header-pricing-change-button:hover:not(:disabled) {
+  background: #f8efe2;
+  border-color: #bda47f;
+}
+
+.form-header-pricing-upgrade-button:focus-visible,
+.form-header-pricing-change-button:focus-visible {
+  outline: 3px solid rgba(217, 164, 65, 0.32);
+  outline-offset: 1px;
+}
+
 .form-header-pricing-chooser {
   position: absolute;
   z-index: 20;
@@ -317,12 +348,6 @@
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
-}
-
-@media (max-width: 1200px) {
-  .form-header-pricing-upgrade {
-    grid-template-columns: 1fr;
-  }
 }
 
 .form-header-pricing-arrow::before {
@@ -1137,6 +1162,28 @@
   gap: 8px;
 }
 
+.section-title-row.has-pricing-upgrade {
+  grid-template-rows: auto auto;
+}
+
+.section-title-row.has-pricing-upgrade .section-title-pricing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-title-row.has-pricing-upgrade .section-title {
+  grid-row: 2;
+}
+
+.section-title-row.has-pricing-upgrade .section-title-actions {
+  grid-row: 2;
+}
+
 .section-title {
   color: #1f2937;
   font-size: clamp(1.4rem, 2vw, 1.8rem);
@@ -1517,6 +1564,18 @@
     justify-items: stretch;
   }
 
+  .section-title-row.has-pricing-upgrade {
+    grid-template-rows: auto auto auto;
+  }
+
+  .section-title-row.has-pricing-upgrade .section-title {
+    grid-row: 2;
+  }
+
+  .section-title-row.has-pricing-upgrade .section-title-actions {
+    grid-row: 3;
+  }
+
   .section-title-pricing {
     width: 100%;
     align-items: flex-start;
@@ -1558,6 +1617,29 @@
 }
 
 @media (max-width: 640px) {
+  .section-title-row.has-pricing-upgrade .section-title-pricing {
+    grid-template-columns: 1fr;
+  }
+
+  .section-title-row.has-pricing-upgrade .form-header-pricing--tier {
+    width: min(100%, 190px);
+  }
+
+  .form-header-pricing-upgrade {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .form-header-pricing-upgrade-actions {
+    width: 100%;
+  }
+
+  .form-header-pricing-upgrade-button,
+  .form-header-pricing-change-button {
+    flex: 1 1 0;
+    white-space: normal;
+  }
+
   .progress-bar {
     padding-inline: 10px;
   }

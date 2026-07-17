@@ -99,8 +99,8 @@ const CSP_DIRECTIVES = [
   "img-src 'self' data: file: blob:",
   "font-src 'self' data:",
   isDev
-    ? "connect-src 'self' http://localhost:5173 ws://localhost:5173 https://*.supabase.co"
-    : "connect-src 'self' https://*.supabase.co",
+    ? "connect-src 'self' blob: http://localhost:5173 ws://localhost:5173 https://*.supabase.co"
+    : "connect-src 'self' blob: https://*.supabase.co",
   "media-src 'self' blob: file:",
   "object-src 'none'",
   "frame-ancestors 'none'",
@@ -744,10 +744,69 @@ if (!gotSingleInstanceLock) {
 }
 
 // IPC Handlers - Proposals
+const PROPOSAL_RECOVERY_SUFFIX = '.recovery';
+
+function readProposalFileWithRecovery(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  } catch (primaryError) {
+    const recoveryPath = `${filePath}${PROPOSAL_RECOVERY_SUFFIX}`;
+    if (!fs.existsSync(recoveryPath)) throw primaryError;
+    try {
+      const recovered = JSON.parse(fs.readFileSync(recoveryPath, 'utf-8'));
+      console.warn(`Recovered proposal from ${path.basename(recoveryPath)} after the primary file could not be read.`);
+      return recovered;
+    } catch (_) {
+      throw primaryError;
+    }
+  }
+}
+
+function writeProposalFileAtomically(filePath, proposal) {
+  const serialized = JSON.stringify(proposal, null, 2);
+  JSON.parse(serialized);
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const recoveryPath = `${filePath}${PROPOSAL_RECOVERY_SUFFIX}`;
+  let handle = null;
+
+  try {
+    handle = fs.openSync(temporaryPath, 'w');
+    fs.writeFileSync(handle, serialized, 'utf-8');
+    fs.fsyncSync(handle);
+    fs.closeSync(handle);
+    handle = null;
+
+    if (fs.existsSync(filePath)) {
+      try {
+        JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        fs.copyFileSync(filePath, recoveryPath);
+      } catch (_) {
+        // Keep the last known-good recovery file when the current file is unreadable.
+      }
+    }
+
+    fs.renameSync(temporaryPath, filePath);
+  } catch (error) {
+    if (handle !== null) {
+      try {
+        fs.closeSync(handle);
+      } catch (_) {
+        // Ignore cleanup errors and surface the original save failure.
+      }
+    }
+    try {
+      if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+    } catch (_) {
+      // Ignore cleanup errors and surface the original save failure.
+    }
+    throw error;
+  }
+}
+
 ipcMain.handle('save-proposal', async (_, proposal) => {
   if (!proposalsDir) throw new Error('Proposals directory not initialized');
 
-  console.log('save-proposal called with:', JSON.stringify(proposal, null, 2));
+  console.log('save-proposal called for:', proposal?.proposalNumber || 'unknown proposal');
 
   try {
     // Check if this proposal already exists (editing existing proposal)
@@ -759,8 +818,7 @@ ipcMain.handle('save-proposal', async (_, proposal) => {
       if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         try {
           const filePath = path.join(proposalsDir, file);
-          const data = fs.readFileSync(filePath, 'utf-8');
-          const existingProposal = JSON.parse(data);
+          const existingProposal = readProposalFileWithRecovery(filePath);
           if (existingProposal.proposalNumber === proposal.proposalNumber) {
             existingFilePath = filePath;
             console.log('Found existing file:', filePath);
@@ -791,8 +849,8 @@ ipcMain.handle('save-proposal', async (_, proposal) => {
       console.log('Creating new file:', filePath);
     }
 
-    // Write the proposal to a JSON file
-    fs.writeFileSync(filePath, JSON.stringify(proposal, null, 2), 'utf-8');
+    // Commit through a same-directory temporary file so a crash cannot leave partial JSON.
+    writeProposalFileAtomically(filePath, proposal);
 
     console.log('Proposal saved successfully:', filePath);
     return filePath;
@@ -816,13 +874,12 @@ ipcMain.handle('get-proposal', async (_, proposalNumber) => {
       if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         try {
           const filePath = path.join(proposalsDir, file);
-          const data = fs.readFileSync(filePath, 'utf-8');
-          const proposal = JSON.parse(data);
+          const proposal = readProposalFileWithRecovery(filePath);
 
           console.log('Checking file:', file, 'proposalNumber:', proposal.proposalNumber);
 
           if (proposal.proposalNumber === proposalNumber) {
-            console.log('FOUND proposal, returning:', JSON.stringify(proposal, null, 2));
+            console.log('FOUND proposal:', proposal.proposalNumber);
             return proposal;
           }
         } catch (error) {
@@ -851,8 +908,7 @@ ipcMain.handle('get-all-proposals', async () => {
       if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         const filePath = path.join(proposalsDir, file);
         try {
-          const data = fs.readFileSync(filePath, 'utf-8');
-          const proposal = JSON.parse(data);
+          const proposal = readProposalFileWithRecovery(filePath);
           proposals.push(proposal);
         } catch (error) {
           console.error(`Failed to read proposal file ${file}:`, error);
@@ -881,11 +937,12 @@ ipcMain.handle('delete-proposal', async (_, proposalNumber) => {
       if (file.endsWith(PROPOSAL_FILE_EXTENSION)) {
         try {
           const filePath = path.join(proposalsDir, file);
-          const data = fs.readFileSync(filePath, 'utf-8');
-          const proposal = JSON.parse(data);
+          const proposal = readProposalFileWithRecovery(filePath);
 
           if (proposal.proposalNumber === proposalNumber) {
             fs.unlinkSync(filePath);
+            const recoveryPath = `${filePath}${PROPOSAL_RECOVERY_SUFFIX}`;
+            if (fs.existsSync(recoveryPath)) fs.unlinkSync(recoveryPath);
             console.log('Proposal deleted:', filePath);
             return;
           }

@@ -7,8 +7,10 @@ import {
   subscribeToFranchiseAppNameUpdates,
 } from '../services/franchiseBranding';
 
-export function useFranchiseAppName(franchiseId?: string) {
-  const resolvedId = franchiseId || getSessionFranchiseId();
+export function useFranchiseAppName(franchiseId?: string | null) {
+  // `null` explicitly means signed out. Keep `undefined` as the legacy
+  // "use the saved session franchise" behavior for existing callers.
+  const resolvedId = franchiseId === null ? '' : franchiseId || getSessionFranchiseId();
   const cached = resolvedId ? getCachedFranchiseAppName(resolvedId) : undefined;
   const [appName, setAppName] = useState<string | null>(() => cached ?? null);
   const [isLoading, setIsLoading] = useState<boolean>(cached === undefined);

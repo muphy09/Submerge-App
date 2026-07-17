@@ -224,15 +224,12 @@ export async function updateFranchiseUserApprovalSettings(
     .maybeSingle();
   if (currentUserError) throw currentUserError;
 
-  const { error } = await supabase
-    .from('franchise_users')
-    .update({
-      approval_margin_threshold_percent: nextApprovalMarginThresholdPercent,
-      discount_allowance_threshold_percent: nextDiscountAllowanceThresholdPercent,
-      always_require_approval: nextAlwaysRequireApproval,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', userId);
+  const { error } = await supabase.rpc('update_franchise_user_approval_settings', {
+    p_user_id: userId,
+    p_approval_margin_threshold_percent: nextApprovalMarginThresholdPercent,
+    p_discount_allowance_threshold_percent: nextDiscountAllowanceThresholdPercent,
+    p_always_require_approval: nextAlwaysRequireApproval,
+  });
   if (error) throw error;
 
   await logLedgerEventSafe({
@@ -278,14 +275,11 @@ export async function updateFranchiseUserCommissionRates(
     .eq('id', userId)
     .maybeSingle();
   if (currentUserError) throw currentUserError;
-  const { error } = await supabase
-    .from('franchise_users')
-    .update({
-      dig_commission_rate: normalizedRates.digCommissionRate,
-      closeout_commission_rate: normalizedRates.closeoutCommissionRate,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', userId);
+  const { error } = await supabase.rpc('update_franchise_user_commission_rates', {
+    p_user_id: userId,
+    p_dig_commission_rate: normalizedRates.digCommissionRate,
+    p_closeout_commission_rate: normalizedRates.closeoutCommissionRate,
+  });
   if (error) throw error;
   await logLedgerEventSafe({
     franchiseId: currentUser?.franchise_id || null,

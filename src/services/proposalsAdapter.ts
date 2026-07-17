@@ -33,6 +33,7 @@ type Tombstone = { proposalNumber: string; removedAt: string };
 type StoredProposalRow = {
   proposal_json?: Proposal;
   franchise_id?: string | null;
+  designer_auth_user_id?: string | null;
   designer_name?: string | null;
   designer_role?: UserSession['role'] | null;
   designer_code?: string | null;
@@ -54,6 +55,18 @@ const DELETED_TOMBSTONES_STORAGE_KEY = 'submerge.deletedProposalTombstones';
 const LOCAL_PROPOSAL_OWNERS_STORAGE_KEY = 'submerge.localProposalOwners.v1';
 const RECOVERY_SNAPSHOTS_STORAGE_KEY = 'submerge.proposalRecoverySnapshots.v1';
 const MAX_RECOVERY_SNAPSHOTS = 12;
+export const PROPOSAL_CLOUD_SYNC_EVENT = 'submerge:proposal-cloud-sync';
+
+function proposalOwnershipColumnUnavailable(error: any) {
+  const code = String(error?.code || '').toUpperCase();
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    code === '42703' ||
+    code === 'PGRST204' ||
+    (message.includes('designer_auth_user_id') &&
+      (message.includes('column') || message.includes('schema cache')))
+  );
+}
 
 export type ProposalRecoverySnapshot = {
   id: string;
@@ -379,6 +392,7 @@ function ensureProposalReadMetadata(
   const currentSession = session ?? readSession();
   const franchiseId = proposal.franchiseId || stored?.franchise_id || currentSession?.franchiseId || DEFAULT_FRANCHISE_ID;
   const status = getWorkflowStatus(proposal) || (stored?.status as any) || 'draft';
+  const designerAuthUserId = proposal.designerAuthUserId || stored?.designer_auth_user_id || undefined;
   const designerName = (proposal as any).designerName || stored?.designer_name || undefined;
   const designerRole = (proposal as any).designerRole || stored?.designer_role || undefined;
   const designerCode = (proposal as any).designerCode || stored?.designer_code || undefined;
@@ -387,6 +401,7 @@ function ensureProposalReadMetadata(
     ...proposal,
     franchiseId,
     status,
+    ...(designerAuthUserId ? { designerAuthUserId } : {}),
     ...(designerName ? { designerName } : {}),
     ...(designerRole ? { designerRole } : {}),
     ...(designerCode ? { designerCode } : {}),
@@ -397,12 +412,21 @@ function ensureProposalWriteMetadata(proposal: Proposal, session?: UserSession |
   const currentSession = session ?? readSession();
   const franchiseId = proposal.franchiseId || currentSession?.franchiseId || DEFAULT_FRANCHISE_ID;
   const designerName = (proposal as any).designerName || currentSession?.userName || currentSession?.userEmail || 'Designer';
+  const proposalDesignerIdentity = normalizeIdentity(designerName);
+  const currentUserOwnsDesignerIdentity = [currentSession?.userName, currentSession?.userEmail]
+    .map(normalizeIdentity)
+    .filter(Boolean)
+    .includes(proposalDesignerIdentity);
+  const designerAuthUserId =
+    proposal.designerAuthUserId ||
+    (currentUserOwnsDesignerIdentity ? currentSession?.userId : undefined);
   const designerRole = (proposal as any).designerRole || currentSession?.role || 'designer';
   const designerCode = (proposal as any).designerCode || currentSession?.franchiseCode;
 
   return {
     ...proposal,
     franchiseId,
+    ...(designerAuthUserId ? { designerAuthUserId } : {}),
     designerName,
     designerRole,
     designerCode,
@@ -485,11 +509,22 @@ async function loadLocalProposal(proposalNumber: string, session?: UserSession |
 async function fetchSupabaseProposals(franchiseId: string, session: UserSession | null): Promise<Proposal[]> {
   const supabase = getSupabaseClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
+  const initialResult = await supabase
     .from('franchise_proposals')
-    .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
+    .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status')
     .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
     .order('updated_at', { ascending: false });
+  let data = initialResult.data as StoredProposalRow[] | null;
+  let error = initialResult.error;
+  if (error && proposalOwnershipColumnUnavailable(error)) {
+    const legacyResult = await supabase
+      .from('franchise_proposals')
+      .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
+      .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
+      .order('updated_at', { ascending: false });
+    data = legacyResult.data as StoredProposalRow[] | null;
+    error = legacyResult.error;
+  }
   if (error) throw error;
   return (data || []).map((row: StoredProposalRow) => withSyncStatus(
     normalizeForConsumption((row?.proposal_json || {}) as Proposal, session, row),
@@ -501,11 +536,22 @@ async function fetchSupabaseProposals(franchiseId: string, session: UserSession 
 async function fetchSupabaseProposal(proposalNumber: string, session: UserSession | null): Promise<Proposal | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
-  const { data, error } = await supabase
+  const initialResult = await supabase
     .from('franchise_proposals')
-    .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
+    .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status')
     .eq('proposal_number', proposalNumber)
     .maybeSingle();
+  let data = initialResult.data as StoredProposalRow | null;
+  let error = initialResult.error;
+  if (error && proposalOwnershipColumnUnavailable(error)) {
+    const legacyResult = await supabase
+      .from('franchise_proposals')
+      .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
+      .eq('proposal_number', proposalNumber)
+      .maybeSingle();
+    data = legacyResult.data as StoredProposalRow | null;
+    error = legacyResult.error;
+  }
   if (error) throw error;
   if (!(data as StoredProposalRow | null)?.proposal_json) return null;
   return withSyncStatus(
@@ -542,29 +588,38 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
   );
   const now = nowIso();
 
-  const { error } = await supabase
+  const proposalRow = {
+    proposal_number: normalized.proposalNumber,
+    franchise_id: normalized.franchiseId || DEFAULT_FRANCHISE_ID,
+    designer_auth_user_id: normalized.designerAuthUserId || null,
+    designer_name: normalized.designerName,
+    designer_role: normalized.designerRole,
+    designer_code: normalized.designerCode,
+    status: getWorkflowStatus(normalized),
+    pricing_model_id: normalized.pricingModelId || null,
+    pricing_model_name: normalized.pricingModelName || null,
+    last_modified: normalized.lastModified || now,
+    created_date: normalized.createdDate || now,
+    updated_at: normalized.lastModified || now,
+    proposal_json: {
+      ...normalized,
+      syncStatus: 'synced',
+      syncMessage: ONLINE_SYNC_MESSAGE,
+    },
+  };
+  let { error } = await supabase
     .from('franchise_proposals')
     .upsert(
-      {
-        proposal_number: normalized.proposalNumber,
-        franchise_id: normalized.franchiseId || DEFAULT_FRANCHISE_ID,
-        designer_name: normalized.designerName,
-        designer_role: normalized.designerRole,
-        designer_code: normalized.designerCode,
-        status: getWorkflowStatus(normalized),
-        pricing_model_id: normalized.pricingModelId || null,
-        pricing_model_name: normalized.pricingModelName || null,
-        last_modified: normalized.lastModified || now,
-        created_date: normalized.createdDate || now,
-        updated_at: normalized.lastModified || now,
-        proposal_json: {
-          ...normalized,
-          syncStatus: 'synced',
-          syncMessage: ONLINE_SYNC_MESSAGE,
-        },
-      },
+      proposalRow,
       { onConflict: 'proposal_number', ignoreDuplicates: false }
     );
+  if (error && proposalOwnershipColumnUnavailable(error)) {
+    const { designer_auth_user_id: _designerAuthUserId, ...legacyProposalRow } = proposalRow;
+    const legacyResult = await supabase
+      .from('franchise_proposals')
+      .upsert(legacyProposalRow, { onConflict: 'proposal_number', ignoreDuplicates: false });
+    error = legacyResult.error;
+  }
 
   if (error) {
     console.error('Supabase proposal upsert failed', {

@@ -12,6 +12,7 @@
     "verify:multi-franchise": "node scripts/verify-multi-franchise-foundation.js",
     "supabase:login": "supabase login",
     "supabase:functions:staging": "node scripts/deploy-edge-functions-staging.js",
+    "supabase:functions:production": "node scripts/deploy-edge-functions-production.js",
     "test:electron": "cross-env NODE_ENV=production npx electron .",
     "build": "tsc && vite build && electron-builder",
     "build:win": "npm run build -- --win",

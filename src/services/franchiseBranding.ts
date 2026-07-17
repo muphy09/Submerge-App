@@ -40,6 +40,10 @@ export const DEFAULT_APP_NAME = 'Submerge';
 export const DISABLED_SIGNED_WORKFLOW_MESSAGE = 'Admin has temporarily disabled the Signed workflow';
 
 const memoryCache = new Map<string, FranchiseBrandingRecord | null>();
+// The protected PIN is never written to localStorage or included in the
+// general branding query. Owners/masters may hold it in memory while the
+// Admin Settings dialog is open.
+const adminPanelPinMemoryCache = new Map<string, string | null>();
 const pendingLoads = new Map<string, Promise<FranchiseBrandingRecord | null>>();
 
 function requireSupabase() {
@@ -165,7 +169,8 @@ export function subscribeToFranchiseSignedWorkflowUpdates(
 }
 
 function persistFranchiseBrandingCache(franchiseId: string, record: FranchiseBrandingRecord | null) {
-  memoryCache.set(franchiseId, record);
+  const publicRecord = record ? { ...record, adminPanelPin: null } : null;
+  memoryCache.set(franchiseId, publicRecord);
   if (typeof localStorage === 'undefined') return;
   const key = storageKey(franchiseId);
   try {
@@ -173,7 +178,7 @@ function persistFranchiseBrandingCache(franchiseId: string, record: FranchiseBra
       localStorage.removeItem(key);
       return;
     }
-    localStorage.setItem(key, JSON.stringify(record));
+    localStorage.setItem(key, JSON.stringify(publicRecord));
   } catch (error) {
     console.warn('Unable to persist franchise branding cache:', error);
   }
@@ -183,7 +188,7 @@ function buildBrandingRecord(raw?: Partial<FranchiseBrandingRecord> | null): Fra
   return {
     logoUrl: normalizeLogoUrl(raw?.logoUrl),
     appName: normalizeAppName(raw?.appName),
-    adminPanelPin: normalizeAdminPanelPin(raw?.adminPanelPin),
+    adminPanelPin: null,
     disableSignedWorkflow: normalizeDisableSignedWorkflow(raw?.disableSignedWorkflow),
     updatedAt: typeof raw?.updatedAt === 'string' ? raw?.updatedAt : null,
     fetchedAt: typeof raw?.fetchedAt === 'number' ? raw?.fetchedAt : 0,
@@ -205,6 +210,10 @@ export function getCachedFranchiseBranding(
     const parsed = JSON.parse(raw) as Partial<FranchiseBrandingRecord> | null;
     if (!parsed) return undefined;
     const record = buildBrandingRecord(parsed);
+    // Remove PINs cached by older app versions as soon as the cache is read.
+    if (Object.prototype.hasOwnProperty.call(parsed, 'adminPanelPin')) {
+      localStorage.setItem(key, JSON.stringify(record));
+    }
     memoryCache.set(franchiseId, record);
     return record;
   } catch (error) {
@@ -230,9 +239,8 @@ export function getCachedFranchiseAppName(
 export function getCachedFranchiseAdminPanelPin(
   franchiseId: string
 ): string | null | undefined {
-  const cached = getCachedFranchiseBranding(franchiseId);
-  if (cached === undefined) return undefined;
-  return cached?.adminPanelPin ?? null;
+  if (!franchiseId || !adminPanelPinMemoryCache.has(franchiseId)) return undefined;
+  return adminPanelPinMemoryCache.get(franchiseId) ?? null;
 }
 
 export function getCachedFranchiseSignedWorkflowDisabled(
@@ -270,7 +278,7 @@ export async function loadFranchiseBranding(
 
     const { data, error } = await supabase
       .from(BRANDING_TABLE)
-      .select('franchise_id, logo_url, app_name, admin_panel_pin, disable_signed_workflow, updated_at, updated_by')
+      .select('franchise_id, logo_url, app_name, disable_signed_workflow, updated_at, updated_by')
       .eq('franchise_id', franchiseId)
       .maybeSingle();
 
@@ -281,7 +289,7 @@ export async function loadFranchiseBranding(
     const record: FranchiseBrandingRecord = {
       logoUrl: normalizeLogoUrl(data?.logo_url),
       appName: normalizeAppName(data?.app_name),
-      adminPanelPin: normalizeAdminPanelPin(data?.admin_panel_pin),
+      adminPanelPin: null,
       disableSignedWorkflow: normalizeDisableSignedWorkflow(data?.disable_signed_workflow),
       updatedAt: data?.updated_at ?? null,
       fetchedAt: Date.now(),
@@ -322,8 +330,22 @@ export async function loadFranchiseAdminPanelPin(
   franchiseId: string,
   options: { force?: boolean } = {}
 ): Promise<string | null> {
-  const record = await loadFranchiseBranding(franchiseId, options);
-  return record?.adminPanelPin ?? null;
+  if (!franchiseId) return null;
+  if (!options.force && adminPanelPinMemoryCache.has(franchiseId)) {
+    return adminPanelPinMemoryCache.get(franchiseId) ?? null;
+  }
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    requireSupabase();
+    return adminPanelPinMemoryCache.get(franchiseId) ?? null;
+  }
+  const { data, error } = await supabase.rpc('get_franchise_admin_panel_pin', {
+    p_franchise_id: franchiseId,
+  });
+  if (error) throw error;
+  const pin = normalizeAdminPanelPin(data);
+  adminPanelPinMemoryCache.set(franchiseId, pin);
+  return pin;
 }
 
 export async function loadFranchiseSignedWorkflowDisabled(
@@ -362,18 +384,16 @@ export async function saveFranchiseBranding(
   if (!supabase) {
     requireSupabase();
   } else {
-    const update: Record<string, any> = {
-      franchise_id: payload.franchiseId,
-      updated_at: nowIso,
-      updated_by: payload.updatedBy ?? null,
-    };
-    if (hasLogo) update.logo_url = logoUrl;
-    if (hasAppName) update.app_name = appName;
-    if (hasAdminPanelPin) update.admin_panel_pin = adminPanelPin;
-    if (hasDisableSignedWorkflow) update.disable_signed_workflow = disableSignedWorkflow;
-    const { error } = await supabase
-      .from(BRANDING_TABLE)
-      .upsert(update, { onConflict: 'franchise_id', ignoreDuplicates: false });
+    const changes: Record<string, unknown> = {};
+    if (hasLogo) changes.logoUrl = logoUrl;
+    if (hasAppName) changes.appName = appName;
+    if (hasAdminPanelPin) changes.adminPanelPin = adminPanelPin;
+    if (hasDisableSignedWorkflow) changes.disableSignedWorkflow = disableSignedWorkflow;
+    const { error } = await supabase.rpc('save_franchise_branding_owner_settings', {
+      p_franchise_id: payload.franchiseId,
+      p_changes: changes,
+      p_updated_by: payload.updatedBy ?? null,
+    });
     if (error) throw error;
   }
 
@@ -397,6 +417,7 @@ export async function saveFranchiseBranding(
     emitAppNameUpdate(payload.franchiseId, record.appName ?? null);
   }
   if (hasAdminPanelPin) {
+    adminPanelPinMemoryCache.set(payload.franchiseId, adminPanelPin ?? null);
     emitAdminPanelPinUpdate(payload.franchiseId, record.adminPanelPin ?? null);
   }
   if (hasDisableSignedWorkflow) {

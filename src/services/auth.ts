@@ -196,11 +196,8 @@ async function getUserProfileByAuthId(authUserId: string, email?: string | null)
 
 async function updateLastLogin(authUserId: string) {
   const supabase = assertSupabaseReady();
-  const now = new Date().toISOString();
-  await supabase
-    .from('franchise_users')
-    .update({ last_login_at: now })
-    .eq('auth_user_id', authUserId);
+  if (!authUserId) return;
+  await supabase.rpc('touch_current_user_last_login');
 }
 
 function buildSessionFromProfile(options: {
@@ -500,6 +497,17 @@ async function updateCurrentUserPasswordInternal(
     throw new Error('No internet connection. Please reconnect to continue.');
   }
 
+  // Updating a password through the guarded Admin API invalidates the access
+  // token used to authorize the request. Capture the identity first, then
+  // immediately replace that token with a session authenticated by the new
+  // password before the app-session heartbeat runs again.
+  const { data: currentAuth, error: currentAuthError } = await supabase.auth.getSession();
+  if (currentAuthError) throw currentAuthError;
+  const currentEmail = normalizeEmailAddress(currentAuth.session?.user?.email || '');
+  if (!currentEmail) {
+    throw new Error('Your authenticated email could not be verified. Please sign in again.');
+  }
+
   const { error } = await supabase.functions.invoke('change-current-user-password', {
     body: {
       newPassword: trimmed,
@@ -511,6 +519,16 @@ async function updateCurrentUserPasswordInternal(
   if (error) {
     const message = await extractFunctionErrorMessage(error);
     throw new Error(message || error.message || 'Unable to update password.');
+  }
+
+  const { error: refreshError } = await supabase.auth.signInWithPassword({
+    email: currentEmail,
+    password: trimmed,
+  });
+  if (refreshError) {
+    throw new Error(
+      'Your password was updated, but the app could not refresh your session. Sign in again using the new password.'
+    );
   }
 }
 

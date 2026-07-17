@@ -457,6 +457,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const [selectedPricingModelId, setSelectedPricingModelId] = useState<string | null>(null);
   const [selectedPricingModelName, setSelectedPricingModelName] = useState<string | null>(null);
   const [declinedPricingComparison, setDeclinedPricingComparison] = useState<PricingRevisionComparison | null>(null);
+  const [declinedPricingComparisonLoading, setDeclinedPricingComparisonLoading] = useState(false);
   const [showDeclinedPricingComparison, setShowDeclinedPricingComparison] = useState(false);
   const [showDeclinedModelChooser, setShowDeclinedModelChooser] = useState(false);
   const [pricingRevisionBusy, setPricingRevisionBusy] = useState(false);
@@ -673,14 +674,22 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       setPricingModels(selectableModels);
 
       if (targetModel) {
-        await applyPricingModelSelection(
-          targetModel.id,
-          targetModel.name,
-          Boolean(targetModel.isDefault),
-          Boolean(targetModel.removed),
-          false,
-          targetModel.franchiseId
-        );
+        if (desiredModelId) {
+          // Hydrating the directory for an existing proposal is not a pricing
+          // model selection. Preserve its immutable revision and any pending or
+          // declined review decision until the user explicitly changes/upgrades.
+          setSelectedPricingModelId(targetModel.id);
+          setSelectedPricingModelName(targetModel.name);
+        } else {
+          await applyPricingModelSelection(
+            targetModel.id,
+            targetModel.name,
+            Boolean(targetModel.isDefault),
+            Boolean(targetModel.removed),
+            false,
+            targetModel.franchiseId
+          );
+        }
       } else if (!desiredModelId && defaultModel) {
         await applyPricingModelSelection(
           defaultModel.id,
@@ -832,21 +841,35 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       isVersionPermanentlyLocked(proposal as Proposal)
     ) {
       setDeclinedPricingComparison(null);
+      setDeclinedPricingComparisonLoading(false);
       setShowDeclinedModelChooser(false);
       return () => {
         cancelled = true;
       };
     }
 
+    setDeclinedPricingComparisonLoading(true);
+    setPricingRevisionError(null);
     void buildPricingRevisionComparison(proposal as Proposal)
       .then((comparison) => {
         if (cancelled) return;
-        setDeclinedPricingComparison(
-          comparison?.latestRevisionId === review.latestRevisionId ? comparison : null
-        );
+        // A later revision may have been published after the user declined.
+        // Keep the upgrade path available and compare against the true latest
+        // revision instead of hiding the control because the IDs differ.
+        setDeclinedPricingComparison(comparison);
+        if (!comparison) {
+          setPricingRevisionError('The newest pricing revision is not available for comparison.');
+        }
       })
       .catch((error) => {
-        if (!cancelled) console.warn('Unable to check declined pricing revision:', error);
+        if (!cancelled) {
+          console.warn('Unable to check declined pricing revision:', error);
+          setDeclinedPricingComparison(null);
+          setPricingRevisionError('Unable to compare pricing revisions. Check your connection and try again.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDeclinedPricingComparisonLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1872,6 +1895,35 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         };
       }
 
+      // Every saved proposal must be pinned to an immutable pricing revision.
+      // New proposals normally receive this during initialization/selection;
+      // this guard closes any first-load race before persistence.
+      if (proposalToSave.pricingModelId && !proposalToSave.pricingModelRevisionId) {
+        await setActivePricingModel(
+          proposalToSave.pricingModelId,
+          proposalToSave.pricingModelFranchiseId || proposalToSave.franchiseId || getSessionFranchiseId(),
+          normalizePricingTierId(proposalToSave.pricingTierId || proposalToSave.pricingTierName)
+        );
+        const activeModelMeta = getActivePricingModelMeta();
+        if (
+          activeModelMeta.pricingModelId !== proposalToSave.pricingModelId ||
+          !activeModelMeta.pricingModelRevisionId
+        ) {
+          throw new Error('Unable to pin this proposal to a pricing revision. Reconnect and try saving again.');
+        }
+        proposalToSave = {
+          ...proposalToSave,
+          pricingModelName: proposalToSave.pricingModelName || activeModelMeta.pricingModelName || undefined,
+          pricingModelFranchiseId:
+            proposalToSave.pricingModelFranchiseId ||
+            activeModelMeta.pricingModelFranchiseId ||
+            proposalToSave.franchiseId ||
+            getSessionFranchiseId(),
+          pricingModelRevisionId: activeModelMeta.pricingModelRevisionId,
+          pricingModelRevisionNumber: activeModelMeta.pricingModelRevisionNumber || undefined,
+        };
+      }
+
       if (!proposalNumber && !proposalToSave.equipment?.hasBeenEdited) {
         proposalToSave = {
           ...proposalToSave,
@@ -2124,20 +2176,48 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     setShowDeclinedModelChooser(false);
   };
 
+  const handleOpenDeclinedPricingComparison = async () => {
+    if (isReadOnlyBuilderView) return;
+    setShowDeclinedPricingComparison(true);
+    setDeclinedPricingComparisonLoading(true);
+    setPricingRevisionError(null);
+    try {
+      const currentComparison = await buildPricingRevisionComparison(proposal as Proposal);
+      setDeclinedPricingComparison(currentComparison);
+      if (!currentComparison) {
+        setPricingRevisionError('The newest pricing revision is not available for comparison.');
+      }
+    } catch (error) {
+      setDeclinedPricingComparison(null);
+      setPricingRevisionError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to compare pricing revisions. Check your connection and try again.'
+      );
+    } finally {
+      setDeclinedPricingComparisonLoading(false);
+    }
+  };
+
   const handleUpgradeDeclinedPricing = async () => {
     if (!declinedPricingComparison || pricingRevisionBusy || isReadOnlyBuilderView) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
     try {
+      const currentComparison = await buildPricingRevisionComparison(proposal as Proposal);
+      if (!currentComparison) {
+        throw new Error('The newest pricing revision is not available. Refresh and try again.');
+      }
+      setDeclinedPricingComparison(currentComparison);
       const session = readSession();
-      const upgraded = await upgradeProposalPricingRevision(proposal as Proposal, declinedPricingComparison, {
+      const upgraded = await upgradeProposalPricingRevision(proposal as Proposal, currentComparison, {
         userId: session?.userId,
         name: session?.userName || null,
         email: session?.userEmail || null,
         role: session?.role,
       });
       await setActivePricingModel(
-        upgraded.pricingModelId || declinedPricingComparison.pricingModelId,
+        upgraded.pricingModelId || currentComparison.pricingModelId,
         upgraded.pricingModelFranchiseId || upgraded.franchiseId,
         normalizePricingTierId(upgraded.pricingTierId || selectedPricingTierId),
         upgraded.pricingModelRevisionId
@@ -2508,29 +2588,34 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       </span>
     </label>
   );
-  const pricingModelControl = declinedPricingComparison && !isReadOnlyBuilderView ? (
+  const hasDeclinedPricingUpgrade =
+    proposal.pricingRevisionReview?.decision === 'declined' &&
+    Boolean(proposal.pricingModelId) &&
+    Boolean(proposal.pricingModelRevisionId) &&
+    !isVersionPermanentlyLocked(proposal as Proposal);
+  const pricingModelControl = hasDeclinedPricingUpgrade && !isReadOnlyBuilderView ? (
     <div className="form-header-pricing-upgrade">
       <div className="form-header-pricing-upgrade-current">
         <span>{pricingModelDisplayName}</span>
-        <small>Revision {proposal.pricingModelRevisionNumber || declinedPricingComparison.pinnedRevisionNumber || 'Current'}</small>
+        <small>Revision {proposal.pricingModelRevisionNumber || declinedPricingComparison?.pinnedRevisionNumber || 'Current'}</small>
       </div>
-      <button
-        type="button"
-        className="form-header-pricing-upgrade-button"
-        onClick={() => {
-          setPricingRevisionError(null);
-          setShowDeclinedPricingComparison(true);
-        }}
-      >
-        Upgrade to newest version
-      </button>
-      <button
-        type="button"
-        className="form-header-pricing-change-button"
-        onClick={() => setShowDeclinedModelChooser((current) => !current)}
-      >
-        Choose a different pricing model
-      </button>
+      <div className="form-header-pricing-upgrade-actions">
+        <button
+          type="button"
+          className="form-header-pricing-upgrade-button"
+          onClick={() => void handleOpenDeclinedPricingComparison()}
+          disabled={declinedPricingComparisonLoading}
+        >
+          {declinedPricingComparisonLoading ? 'Checking newest version...' : 'Upgrade to newest version'}
+        </button>
+        <button
+          type="button"
+          className="form-header-pricing-change-button"
+          onClick={() => setShowDeclinedModelChooser((current) => !current)}
+        >
+          Change model
+        </button>
+      </div>
       {showDeclinedModelChooser && <div className="form-header-pricing-chooser">{pricingModelSelect}</div>}
     </div>
   ) : pricingModelSelect;
@@ -2687,7 +2772,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
           <div className={`form-container ${!showLeftNav ? 'no-left-nav' : ''} ${!showCostSidebar ? 'no-right-cost' : ''}`}>
           <div className="section-content" ref={sectionContentRef}>
-            <div className="section-title-row">
+            <div className={`section-title-row${hasDeclinedPricingUpgrade ? ' has-pricing-upgrade' : ''}`}>
               <div className="section-title-pricing">
                 {pricingModelControl}
                 {pricingTierControl}
@@ -2825,7 +2910,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       <PricingRevisionComparisonModal
         isOpen={showDeclinedPricingComparison}
         comparison={declinedPricingComparison}
-        loading={pricingRevisionBusy}
+        loading={pricingRevisionBusy || declinedPricingComparisonLoading}
         error={pricingRevisionError}
         showDecline={false}
         onConfirm={() => void handleUpgradeDeclinedPricing()}

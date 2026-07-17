@@ -46,6 +46,11 @@ function bumpMinor(version) {
   return `${major}.${minor + 1}.0`;
 }
 
+function bumpMajor(version) {
+  const [major] = parseVersion(version);
+  return `${major + 1}.0.0`;
+}
+
 function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
@@ -71,7 +76,10 @@ if (worktree) throw new Error('Release blocked: commit or stash all current chan
 
 const branch = capture('git', ['branch', '--show-current']);
 if (!branch) throw new Error('Release blocked: detached HEAD is not supported.');
-capture('git', ['remote', 'get-url', 'origin']);
+const upstream = capture('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']);
+const remote = upstream.split('/')[0];
+if (!remote) throw new Error('Release blocked: the current branch does not have an upstream remote.');
+capture('git', ['remote', 'get-url', remote]);
 
 console.log('Running release verification...');
 run('npx', ['tsc', '--noEmit']);
@@ -80,7 +88,7 @@ run('npm', ['run', 'build:renderer']);
 let stableTag = null;
 const tags = [];
 if (mode === 'bootstrap') {
-  stableTag = bumpMinor(state.coreVersion);
+  stableTag = bumpMajor(state.coreVersion);
   state.coreVersion = bumpPatch(stableTag);
   state.bootstrapped = true;
   state.masterBuild = 1;
@@ -117,6 +125,6 @@ run('git', ['add', 'release-state.json', 'package.json', 'package-lock.json']);
 run('git', ['commit', '-m', `chore(release): ${mode}${target ? ` ${target}` : ''} ${state.coreVersion}`]);
 tags.forEach((tag) => run('git', ['tag', '-a', tag, '-m', `Release ${tag}`]));
 
-console.log(`Pushing ${branch} and tags: ${tags.join(', ')}`);
-run('git', ['push', '--atomic', 'origin', `HEAD:${branch}`, ...tags]);
+console.log(`Pushing ${branch} to ${remote} with tags: ${tags.join(', ')}`);
+run('git', ['push', '--atomic', remote, `HEAD:${branch}`, ...tags]);
 console.log('Release tags pushed. GitHub Actions will build each isolated update channel.');
