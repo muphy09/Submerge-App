@@ -17,6 +17,7 @@ import {
   getContractTemplate,
   getContractTemplateIdForProposal,
 } from './contractTemplates';
+import { isPpasEastFranchiseId } from '../constants/franchises';
 import {
   getGroupedCustomFeatureSubcategory,
   hasCustomFeatureContent,
@@ -76,6 +77,32 @@ const PLUMBING_RESPONSIBILITY_FIELD_IDS = new Set([
   'p2_57',
 ]);
 const SANITATION_NONE_FIELD_IDS = new Set(['p1_24', 'p1_25']);
+const PPAS_EAST_GENERAL_CONSTRUCTION_DEFAULTS: Record<string, string> = {
+  p1_gc_1: 'BY BUILDER',
+  p1_gc_2: 'BY BUILDER',
+  p1_gc_3: 'BY BUILDER',
+  p1_gc_4: 'BY BUYER',
+  p1_gc_5: 'BY BUYER',
+  p1_gc_6: 'BY BUYER',
+  p1_gc_7: 'BY BUYER',
+  p1_gc_8: 'BY BUYER',
+  p1_gc_9: 'BY BUYER',
+};
+const PPAS_EAST_NO_SPA_VALUES: Record<string, string> = {
+  p2_52: 'No Spa',
+  p2_spa_dimension_2: '',
+  p2_spa_length: 'No Spa',
+  p2_spa_width: '',
+  p2_53: 'NONE',
+  p2_54: '0',
+  p2_56: 'NONE',
+  p2_58: 'NO',
+  p2_59: 'NONE',
+  p2_62: 'NO',
+  p2_65: 'NO',
+  p2_67: 'NO',
+  p2_69: 'NONE',
+};
 const WATER_FEATURE_CATALOG = flattenWaterFeatures(pricingData.waterFeatures);
 const WATER_FEATURE_NAME_BY_ID = new Map(WATER_FEATURE_CATALOG.map((item) => [item.id, item.name]));
 const WATER_FEATURE_CATEGORY_BY_ID = new Map(WATER_FEATURE_CATALOG.map((item) => [item.id, item.category]));
@@ -472,6 +499,9 @@ function buildCustomAdditionalSpecificationLines(proposal: ProposalWithPricing):
 
 function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
   const customLines = buildCustomAdditionalSpecificationLines(proposal);
+  if (isPpasEastFranchiseId(proposal.franchiseId)) {
+    return customLines.slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);
+  }
   const lines = shouldIncludeEquipmentWarrantyLine(proposal)
     ? [
         EQUIPMENT_WARRANTY_TEXT,
@@ -608,6 +638,29 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
 
   const overrideDefault = defaultFromLabel(field.label);
   const isPlumbingResponsibilityField = PLUMBING_RESPONSIBILITY_FIELD_IDS.has(field.id);
+  const isPpasEast = isPpasEastFranchiseId(proposal.franchiseId);
+
+  if (isPpasEast && Object.prototype.hasOwnProperty.call(PPAS_EAST_GENERAL_CONSTRUCTION_DEFAULTS, field.id)) {
+    return PPAS_EAST_GENERAL_CONSTRUCTION_DEFAULTS[field.id];
+  }
+
+  if (
+    isPpasEast &&
+    specs.spaType === 'none' &&
+    Object.prototype.hasOwnProperty.call(PPAS_EAST_NO_SPA_VALUES, field.id)
+  ) {
+    return PPAS_EAST_NO_SPA_VALUES[field.id];
+  }
+
+  if (isPpasEast && field.id === 'p2_59') {
+    return specs.spaType === 'none' ? 'NONE' : 'Same as Pool';
+  }
+
+  if (isPpasEast && (field.id === 'p2_53' || field.id === 'p2_54')) {
+    const spaLightGroups = groupLightSelections(proposal.equipment?.spaLights || []);
+    const primarySpaLight = spaLightGroups[0];
+    return field.id === 'p2_53' ? primarySpaLight?.name || 'NONE' : primarySpaLight ? String(primarySpaLight.count) : '0';
+  }
 
   if (isPlumbingResponsibilityField) {
     if (field.id === 'p1_40') return 'BY BUYER';
@@ -750,9 +803,28 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return stripParenSuffix(automationName) || 'None';
   }
 
+  if (
+    [
+      'p1_17',
+      'p1_18',
+      'p1_19',
+      'p1_20',
+      'p1_house_water_well',
+      'p1_house_water_municipal',
+      'p1_house_sewer_septic',
+      'p1_house_sewer_municipal',
+    ].includes(field.id)
+  ) {
+    return '';
+  }
+
+  if (field.id === 'p1_body_buyer_name') return info.customerName || '';
+  if (field.id === 'p1_body_job_site_address') return info.address || '';
   if (/job site/.test(label) || /address/.test(label)) return info.address || '';
   if (/customer/.test(label) && /name/.test(label)) return info.customerName || '';
   if (/buyer/.test(label) && /name/.test(label)) return info.customerName || '';
+  if (field.id === 'p1_county') return info.county || '';
+  if (field.id === 'p1_state') return info.state || 'NC';
   if (/city/.test(label) && !/surface/.test(label)) return info.city || '';
   if (/zip/.test(label)) return parseZipFromAddress(info.address) || '';
   if (/phone/.test(label)) return normalizePhone(info.phone);
@@ -764,6 +836,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
     return formatCurrency(pricing);
   }
 
+  if (field.id === 'p1_installment_count') return '4';
+
   // Payment schedule values are derived from the remaining cash price after subtracting the entered deposit.
   if (field.id.startsWith('p1_pay_')) return '';
   if (/non-refundable deposit/.test(label)) return '';
@@ -774,8 +848,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/construction to substanstially commence/.test(label)) return '';
   if (/construction to be substanstially complete/.test(label)) return '';
 
-  if (['p1_17', 'p1_18', 'p1_19', 'p1_20'].includes(field.id)) return '';
-
+  if (field.id === 'p2_spa_length') return specs.spaLength ? String(specs.spaLength) : '';
+  if (field.id === 'p2_spa_width') return specs.spaWidth ? String(specs.spaWidth) : '';
   if (/spa perimeter/.test(label)) return specs.spaPerimeter ? String(specs.spaPerimeter) : '';
   if (/perimeter/.test(label) && /surface area/.test(label)) return String(specs.surfaceArea || '');
   if (/perimeter/.test(label)) return String(specs.perimeter || '');
@@ -785,6 +859,8 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   if (/pool depth/.test(label) && field.id === 'p1_14') return String(specs.shallowDepth || '');
   if (/pool depth/.test(label) && field.id === 'p1_15') return String(specs.endDepth || '');
   if (/pool depth/.test(label) && field.id === 'p1_16') return '';
+  if (field.id === 'p1_pool_style') return specs.poolShape === 'freeform' ? 'Freeform' : 'Geometric';
+  if (field.id === 'p1_fiberglass_shell_name') return specs.fiberglassModelName || '';
 
   if (/hoa approval/.test(label)) return 'YES';
   if (/financing required/.test(label)) return 'NO';

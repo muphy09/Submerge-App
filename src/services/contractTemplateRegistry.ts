@@ -231,14 +231,17 @@ export async function checkProposalContractRevision(proposal: Proposal): Promise
   const latestRemote = await loadRemoteCurrent(proposal);
   const supportsBundled = await isWestFranchise(proposal.franchiseId);
   if (!latestRemote && !supportsBundled) return null;
-  const bundled = bundledRevision(proposal.franchiseId, proposal);
+  const bundled = supportsBundled ? bundledRevision(proposal.franchiseId, proposal) : null;
   const pinned = proposal.contractTemplateRevisionId
     ? proposal.contractTemplateRevisionId.startsWith('bundled:')
       ? bundled
       : await loadRemoteRevision(proposal, proposal.contractTemplateRevisionId)
-    : bundled;
+    : bundled || latestRemote;
   const latest = latestRemote || bundled;
-  if (!pinned) return null;
+  if (!pinned || !latest) return null;
+  if (pinned.franchiseId !== proposal.franchiseId || latest.franchiseId !== proposal.franchiseId) {
+    throw new Error('The selected contract revision does not belong to this proposal franchise.');
+  }
   const changed = pinned.revisionId !== latest.revisionId;
   const proposalCreatedAt = Date.parse(String(proposal.createdDate || ''));
   const latestPublishedAt = Date.parse(String(latest.publishedAt || ''));

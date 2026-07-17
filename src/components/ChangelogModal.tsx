@@ -1,11 +1,23 @@
-import { Fragment, useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { getSessionFranchiseCode, getSessionRole } from '../services/session';
+import { Fragment, useEffect, useLayoutEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { getSessionFranchiseCode, getSessionFranchiseName, getSessionRole } from '../services/session';
 import './ChangelogModal.css';
 
 interface ChangelogModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+type ChangelogTab = 'franchise' | 'global';
+
+type ChangelogContent = {
+  globalNotes: string;
+  franchiseNotes: string;
+};
+
+const EMPTY_CHANGELOG: ChangelogContent = {
+  globalNotes: '',
+  franchiseNotes: '',
+};
 
 type ChangelogListItem = {
   text: string;
@@ -226,9 +238,10 @@ function parseChangelog(content: string) {
 }
 
 function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState<ChangelogContent>(EMPTY_CHANGELOG);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<ChangelogTab>('franchise');
   const [expandedSectionIndex, setExpandedSectionIndex] = useState<number | null>(0);
 
   useEffect(() => {
@@ -239,7 +252,7 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
     const loadChangelog = async () => {
       setLoading(true);
       setError('');
-      setContent('');
+      setContent(EMPTY_CHANGELOG);
 
       if (!window.electron?.readChangelog) {
         if (cancelled) return;
@@ -254,12 +267,15 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
           franchiseCode: getSessionFranchiseCode(),
         });
         if (cancelled) return;
-        setContent(nextContent);
+        setContent({
+          globalNotes: String(nextContent?.globalNotes || ''),
+          franchiseNotes: String(nextContent?.franchiseNotes || ''),
+        });
       } catch (loadError) {
         console.error('Failed to load changelog:', loadError);
         if (cancelled) return;
         setError('Unable to load the changelog right now.');
-        setContent('');
+        setContent(EMPTY_CHANGELOG);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -289,15 +305,27 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
     };
   }, [isOpen, onClose]);
 
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    setActiveTab('franchise');
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
 
     setExpandedSectionIndex(0);
-  }, [content, isOpen]);
+  }, [activeTab, content, isOpen]);
 
   if (!isOpen) return null;
 
-  const { introBlocks, sections } = parseChangelog(content);
+  const sessionRole = getSessionRole();
+  const franchiseName = String(getSessionFranchiseName() || '').trim();
+  const franchiseCode = String(getSessionFranchiseCode() || '').trim();
+  const franchiseTabLabel = franchiseName || (sessionRole === 'master' ? 'All Franchises' : franchiseCode || 'Franchise');
+  const activeContent = activeTab === 'franchise' ? content.franchiseNotes : content.globalNotes;
+  const { introBlocks, sections } = parseChangelog(activeContent);
+  const hasContent = Boolean(activeContent.trim());
 
   const handleBackdropClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
@@ -327,10 +355,48 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
             X
           </button>
         </div>
-        <div className="patch-notes-body">
+        <div className="patch-notes-tabs" role="tablist" aria-label="Patch note categories">
+          <button
+            type="button"
+            id="patch-notes-franchise-tab"
+            className={`patch-notes-tab${activeTab === 'franchise' ? ' patch-notes-tab--active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'franchise'}
+            aria-controls="patch-notes-tab-panel"
+            tabIndex={activeTab === 'franchise' ? 0 : -1}
+            onClick={() => setActiveTab('franchise')}
+          >
+            {franchiseTabLabel}
+          </button>
+          <button
+            type="button"
+            id="patch-notes-global-tab"
+            className={`patch-notes-tab${activeTab === 'global' ? ' patch-notes-tab--active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === 'global'}
+            aria-controls="patch-notes-tab-panel"
+            tabIndex={activeTab === 'global' ? 0 : -1}
+            onClick={() => setActiveTab('global')}
+          >
+            Global
+          </button>
+        </div>
+        <div
+          id="patch-notes-tab-panel"
+          className="patch-notes-body"
+          role="tabpanel"
+          aria-labelledby={activeTab === 'franchise' ? 'patch-notes-franchise-tab' : 'patch-notes-global-tab'}
+        >
           {loading && <p className="patch-notes-status">Loading changelog...</p>}
           {!loading && error && <p className="patch-notes-error">{error}</p>}
-          {!loading && !error && (
+          {!loading && !error && !hasContent && (
+            <p className="patch-notes-empty">
+              {activeTab === 'franchise'
+                ? `No patch notes have been published for ${franchiseTabLabel} yet.`
+                : 'No global patch notes have been published yet.'}
+            </p>
+          )}
+          {!loading && !error && hasContent && (
             <div className="patch-notes-content">
               {sections.length > 0 ? (
                 <>

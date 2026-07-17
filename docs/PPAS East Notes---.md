@@ -4,7 +4,7 @@ Ability to transfer proposal to another user
 
 Windows blocks instances of app running on latest release
 
-Custom Contract for this franchise (2 contracts)
+** Custom Contract for this franchise (2 contracts)
     - County option for designer, pertains to a particular cost for the associated county - options to add/ remove subcategories for associated county
 
 Fiberglass dimensions autofill from list

@@ -34,6 +34,8 @@ type ContractPdfBuildOptions = {
 
 const DEFAULT_FONT_SIZE = 10;
 const MIN_FONT_SIZE = 6;
+const PPAS_EAST_FONT_SIZE = 9;
+const PPAS_EAST_MIN_FONT_SIZE = 4.5;
 const HEIGHT_MARGIN = 2; // leave more headroom so text sits cleanly inside shallow fields
 const HEIGHT_SCALE = 0.92; // reduce further to account for field padding/appearance
 const WIDTH_PADDING = 2;
@@ -119,9 +121,17 @@ function sanitizePdfText(value: string, font: PDFFont): string {
   return sanitized;
 }
 
-function fitFontSizeForField(field: ContractFieldRender, text: string, font: PDFFont): number {
+function fitFontSizeForField(
+  field: ContractFieldRender,
+  text: string,
+  font: PDFFont,
+  usePpasEastTypography: boolean
+): number {
+  const preferredFontSize = usePpasEastTypography ? PPAS_EAST_FONT_SIZE : DEFAULT_FONT_SIZE;
+  const minimumFontSize = usePpasEastTypography ? PPAS_EAST_MIN_FONT_SIZE : MIN_FONT_SIZE;
+  const heightScale = usePpasEastTypography ? 0.82 : HEIGHT_SCALE;
   const maxTextHeight = Math.max(4, field.height - HEIGHT_MARGIN);
-  let fontSize = Math.min(DEFAULT_FONT_SIZE, font.sizeAtHeight(maxTextHeight) * HEIGHT_SCALE);
+  let fontSize = Math.min(preferredFontSize, font.sizeAtHeight(maxTextHeight) * heightScale);
 
   if (text) {
     const usableWidth = Math.max(4, field.width - WIDTH_PADDING);
@@ -131,8 +141,8 @@ function fitFontSizeForField(field: ContractFieldRender, text: string, font: PDF
     }
   }
 
-  if (!Number.isFinite(fontSize) || fontSize <= 0) return MIN_FONT_SIZE;
-  return Math.max(MIN_FONT_SIZE, Math.min(DEFAULT_FONT_SIZE, fontSize));
+  if (!Number.isFinite(fontSize) || fontSize <= 0) return minimumFontSize;
+  return Math.max(minimumFontSize, Math.min(preferredFontSize, fontSize));
 }
 
 export async function buildContractPdf(
@@ -141,6 +151,7 @@ export async function buildContractPdf(
 ): Promise<ContractPdfResult> {
   const { flatten = false, includeFormFields = true, templateId, template: templateOverride } = options;
   const template = templateOverride || getContractTemplate(templateId);
+  const usePpasEastTypography = fields.some((field) => field.id === 'p1_house_water_well');
   const templateBytes = await loadTemplateBytes(templateId, templateOverride);
   const pdf = await PDFDocument.load(templateBytes);
   const form = pdf.getForm();
@@ -215,7 +226,7 @@ export async function buildContractPdf(
       const height = field.height;
       const x = field.x;
       const y = pageHeight - (field.y + height);
-      const fontSize = fitFontSizeForField(field, value, font);
+      const fontSize = fitFontSizeForField(field, value, font, usePpasEastTypography);
 
       pdfFields.push({
         name: field.id,
@@ -246,10 +257,11 @@ export async function buildContractPdf(
 
       if (shouldDrawText && value) {
         const availableWidth = Math.max(4, width - WIDTH_PADDING);
+        const minimumDrawFontSize = usePpasEastTypography ? PPAS_EAST_MIN_FONT_SIZE : MIN_FONT_SIZE;
         let drawFontSize = fontSize;
         const measuredWidth = font.widthOfTextAtSize(value, drawFontSize);
         if (measuredWidth > availableWidth) {
-          drawFontSize = Math.max(MIN_FONT_SIZE, (availableWidth / measuredWidth) * drawFontSize);
+          drawFontSize = Math.max(minimumDrawFontSize, (availableWidth / measuredWidth) * drawFontSize);
         }
         const textWidth = font.widthOfTextAtSize(value, drawFontSize);
         const textHeight = font.heightAtSize(drawFontSize);

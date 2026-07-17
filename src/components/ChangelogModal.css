@@ -27,7 +27,6 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #e5e7eb;
 }
 
 .patch-notes-title {
@@ -54,6 +53,59 @@
 .patch-notes-close-button:hover {
   background: #f3f4f6;
   color: #1f2937;
+}
+
+.patch-notes-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 0 20px;
+  border-bottom: 1px solid #dbe3ef;
+  background: #ffffff;
+}
+
+.patch-notes-tab {
+  position: relative;
+  min-width: 112px;
+  max-width: 260px;
+  padding: 11px 18px 12px;
+  overflow: hidden;
+  border: none;
+  border-radius: 9px 9px 0 0;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.patch-notes-tab:hover {
+  background: #f1f5f9;
+  color: #1e3a8a;
+}
+
+.patch-notes-tab:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.patch-notes-tab--active {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.patch-notes-tab--active::after {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #2563eb;
+  content: '';
 }
 
 .patch-notes-body {
@@ -227,6 +279,16 @@
   margin: 0;
 }
 
+.patch-notes-empty {
+  margin: 0;
+  padding: 28px 20px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.8);
+  color: #64748b;
+  text-align: center;
+}
+
 @media (max-width: 640px) {
   .patch-notes-backdrop {
     padding: 16px;
@@ -234,6 +296,16 @@
 
   .patch-notes-header {
     padding: 14px 16px;
+  }
+
+  .patch-notes-tabs {
+    padding: 0 16px;
+  }
+
+  .patch-notes-tab {
+    min-width: 0;
+    max-width: 55vw;
+    padding: 10px 14px 11px;
   }
 
   .patch-notes-body {

@@ -32,6 +32,7 @@ import {
 } from '../services/contractTemplates';
 import { useToast } from './Toast';
 import { TooltipAnchor } from './AppTooltip';
+import { isPpasEastFranchiseId } from '../constants/franchises';
 import './ContractView.css';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -76,6 +77,8 @@ const OPTIONAL_FIELD_IDS = new Set([
 const BINARY_FIELD_GROUPS = [
   { yesId: 'p1_17', noId: 'p1_18' }, // HOA approval required
   { yesId: 'p1_19', noId: 'p1_20' }, // Financing required
+  { yesId: 'p1_house_water_well', noId: 'p1_house_water_municipal' }, // House water source
+  { yesId: 'p1_house_sewer_septic', noId: 'p1_house_sewer_municipal' }, // House sewer system
 ] as const;
 const RESPONSIBILITY_FIELD_IDS = new Set([
   'p1_gc_1',
@@ -145,6 +148,26 @@ type DateParts = { year: number; month: number; day: number };
 function clampDisplayScale(value: number): number {
   const rounded = Math.round(value * 100) / 100;
   return Math.max(MIN_DISPLAY_SCALE, Math.min(MAX_DISPLAY_SCALE, rounded));
+}
+
+function getPpasEastAdaptiveFontSize(value: string, width: number, height: number): number {
+  const preferredSize = 9;
+  const minimumSize = 4.5;
+  const heightLimitedSize = Math.max(minimumSize, Math.min(preferredSize, (height - 2) * 0.72));
+  const normalized = String(value || '').trim();
+  if (!normalized) return heightLimitedSize;
+
+  const estimatedUnits = Array.from(normalized).reduce((total, character) => {
+    if (/\s/.test(character)) return total + 0.28;
+    if (/[MW@%&]/.test(character)) return total + 0.82;
+    if (/[A-Z]/.test(character)) return total + 0.62;
+    if (/[0-9]/.test(character)) return total + 0.55;
+    if (/[ilI1.,'|]/.test(character)) return total + 0.3;
+    return total + 0.52;
+  }, 0);
+  const widthLimitedSize = estimatedUnits > 0 ? Math.max(0, width - 5) / estimatedUnits : preferredSize;
+  const fittedSize = Math.max(minimumSize, Math.min(heightLimitedSize, widthLimitedSize));
+  return Math.floor(fittedSize * 4) / 4;
 }
 
 function sanitizeFileNameSegment(value?: string | null): string {
@@ -1047,6 +1070,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
 
   const pageCount = pageSizes.length || 0;
   const editableEnabled = !readOnly;
+  const isPpasEastContract = isPpasEastFranchiseId(proposal.franchiseId);
   const canZoomOut = displayScale > MIN_DISPLAY_SCALE;
   const canZoomIn = displayScale < MAX_DISPLAY_SCALE;
 
@@ -1064,7 +1088,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   );
 
   return (
-    <div className="contract-view">
+    <div className={`contract-view${isPpasEastContract ? ' ppas-east-contract' : ''}`}>
       {!fields.length ? (
         <div className="contract-view-empty">No contract data available.</div>
       ) : (
@@ -1155,7 +1179,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                           }
                           input.focus();
                         };
-                        const isTextArea = (fieldMeta?.height ?? field.height) > 24;
+                        const isTextArea = !isPpasEastContract && (fieldMeta?.height ?? field.height) > 24;
                         const isResponsibilitySelect = RESPONSIBILITY_FIELD_IDS.has(field.name);
                         const isGeneralConstructionResponsibility =
                           isResponsibilitySelect && GENERAL_CONSTRUCTION_RESPONSIBILITY_IDS.has(field.name);
@@ -1197,12 +1221,15 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                             height = GENERAL_CONSTRUCTION_MIN_HEIGHT;
                           }
                         }
+                        const fontSize = isPpasEastContract
+                          ? getPpasEastAdaptiveFontSize(normalizedDisplayValue, width, height)
+                          : field.fontSize || 10;
                         const style: CSSProperties = {
                           left: `${left}px`,
                           top: `${top}px`,
                           width: `${width}px`,
                           height: `${height}px`,
-                          fontSize: `${field.fontSize || 10}pt`,
+                          fontSize: `${fontSize}pt`,
                           textAlign: 'center',
                         };
                         const classNames = ['contract-input', colorClass];

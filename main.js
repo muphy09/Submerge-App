@@ -1014,8 +1014,9 @@ function readFranchiseReleaseNoteFiles(payload = {}) {
     .filter(Boolean);
 }
 
-// Changelog handler. Global notes are always returned. Franchise notes are
-// added only for the authenticated franchise; master users can review all.
+// Changelog handler. Keep global and franchise notes separate so the renderer
+// can present them as distinct tabs. Franchise notes are filtered to the
+// authenticated franchise; master users can review all franchise notes.
 ipcMain.handle('read-changelog', (_event, payload = {}) => {
   const possiblePaths = [
     path.join(appPath, 'CHANGELOG.md'),
@@ -1023,8 +1024,8 @@ ipcMain.handle('read-changelog', (_event, payload = {}) => {
     path.join(process.cwd(), 'CHANGELOG.md'),
   ];
   const globalNotes = readFirstExistingText(possiblePaths, 'CHANGELOG.md not found').trim();
-  const franchiseNotes = readFranchiseReleaseNoteFiles(payload);
-  return [...franchiseNotes, globalNotes].filter(Boolean).join('\n\n-----\n\n');
+  const franchiseNotes = readFranchiseReleaseNoteFiles(payload).join('\n\n-----\n\n');
+  return { globalNotes, franchiseNotes };
 });
 
 function ensurePdfExtension(filePath) {

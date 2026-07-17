@@ -171,6 +171,15 @@ export function getSessionFranchiseCode() {
   return session?.franchiseCode;
 }
 
+export function getSessionFranchiseName() {
+  const session = readSession();
+  if ((session?.role || '').toLowerCase() === 'master') {
+    const impersonation = readMasterImpersonation();
+    if (impersonation?.franchiseName) return impersonation.franchiseName;
+  }
+  return session?.franchiseName;
+}
+
 export function getSessionCommissionRates(): UserCommissionRates {
   return normalizeUserCommissionRates(readSession());
 }

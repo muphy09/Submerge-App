@@ -152,6 +152,23 @@
   white-space: pre-wrap;
 }
 
+.contract-view.ppas-east-contract .contract-input,
+.contract-view.ppas-east-contract .contract-readonly-value,
+.contract-view.ppas-east-contract .contract-select,
+.contract-view.ppas-east-contract .contract-input-wrapper textarea {
+  padding: 0 2px;
+  line-height: 1;
+  text-align: center;
+  text-align-last: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.contract-view.ppas-east-contract .contract-readonly-value {
+  align-items: center;
+  justify-content: center;
+}
+
 .contract-input.unmapped {
   border-color: #d97706;
   box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.2);
