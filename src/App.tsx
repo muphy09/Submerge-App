@@ -1197,7 +1197,7 @@ function AppContent() {
             <div className="app-acting">
               <span className="app-acting-text">Acting as Owner for Franchise {actingLabel}</span>
               <button className="app-acting-btn" type="button" onClick={handleStopActing}>
-                Sign Out
+                Stop Acting
               </button>
             </div>
           )}

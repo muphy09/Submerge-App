@@ -39,7 +39,7 @@ import {
   subscribeToPricingData,
   withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
-import { getSessionRole, readSession } from '../services/session';
+import { getSessionRole, isMasterActingAsOwnerSession, readSession } from '../services/session';
 import {
   buildPricingRevisionComparison,
   markPricingRevisionDeclined,
@@ -858,7 +858,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   }, []);
   const locationState = (location.state as ProposalViewLocationState | null) ?? null;
   const sessionRole = getSessionRole();
-  const isProposalEditingRestricted = false;
+  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
   const isReviewerWorkspaceView = Boolean(locationState?.reviewerReturnTo || locationState?.reviewerReturnPath);
   const isReadOnlyReviewerView = isReviewerRole && isReviewerWorkspaceView;
@@ -876,7 +876,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     !isReadOnlyReviewerView &&
     !isProposalCompleted;
   const activeVersionRecordStatus = getVersionRecordStatus(activeEditableVersion);
-  const canSendWorkflowMessages = Boolean(proposal?.workflow?.submittedAt) && !isProposalCompleted;
+  const canSendWorkflowMessages =
+    !isProposalEditingRestricted && Boolean(proposal?.workflow?.submittedAt) && !isProposalCompleted;
   const editDisabledReason =
     isProposalEditingRestricted
       ? 'Master accounts acting as owner can view proposals but cannot edit them.'
@@ -1118,15 +1119,20 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       const needsApprovedCleanup = JSON.stringify(approvedVersionCleanup) !== JSON.stringify(sourceProposal);
       sourceProposal = approvedVersionCleanup;
       const currentUserId = readSession()?.userId;
-      const readUpdated = markWorkflowRead(sourceProposal, currentUserId);
-      if (JSON.stringify(readUpdated.workflow?.history || []) !== JSON.stringify(sourceProposal.workflow?.history || [])) {
+      const readUpdated = isProposalEditingRestricted
+        ? sourceProposal
+        : markWorkflowRead(sourceProposal, currentUserId);
+      if (
+        !isProposalEditingRestricted &&
+        JSON.stringify(readUpdated.workflow?.history || []) !== JSON.stringify(sourceProposal.workflow?.history || [])
+      ) {
         try {
           sourceProposal = await saveProposalRemote(readUpdated);
         } catch (markReadError) {
           console.warn('Failed to persist workflow read state', markReadError);
           sourceProposal = readUpdated;
         }
-      } else if (needsVersionStateCleanup || needsApprovedCleanup) {
+      } else if (!isProposalEditingRestricted && (needsVersionStateCleanup || needsApprovedCleanup)) {
         try {
           sourceProposal = await saveProposalRemote(sourceProposal);
         } catch (cleanupError) {
@@ -1398,6 +1404,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const persistPricingRevisionVersion = async (updatedVersion: Proposal) => {
+    if (isProposalEditingRestricted) return;
     if (!proposal) return;
     const targetVersionId = updatedVersion.versionId || activeVersionId || 'original';
     const all = versions.length ? versions : listAllVersions(proposal);
@@ -1433,6 +1440,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleDeclinePricingRevision = async () => {
+    if (isProposalEditingRestricted) return;
     if (!proposal || !pricingRevisionComparison) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
@@ -1460,6 +1468,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleUpgradePricingRevision = async () => {
+    if (isProposalEditingRestricted) return;
     if (!proposal || !pricingRevisionComparison) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
@@ -1523,6 +1532,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         openContractWithRevision(version, check.pinned);
         return;
       }
+      if (isProposalEditingRestricted) {
+        if (check.requiresReview) {
+          setPendingContractRevision({ version, check });
+          setContractRevisionPromptOpen(true);
+          return;
+        }
+        openContractWithRevision(version, check.pinned);
+        return;
+      }
       if (check.canAdoptInitialRevisionSilently) {
         const pinned = adoptContractRevision(version, check.latest, getPricingRevisionActor());
         await persistPricingRevisionVersion(pinned);
@@ -1550,6 +1568,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleKeepCurrentContract = async () => {
     if (!pendingContractRevision) return;
+    if (isProposalEditingRestricted) {
+      const { version, check } = pendingContractRevision;
+      setContractRevisionPromptOpen(false);
+      setPendingContractRevision(null);
+      setContractRevisionError(null);
+      openContractWithRevision(version, check.pinned);
+      return;
+    }
     setContractRevisionBusy(true);
     setContractRevisionError(null);
     try {
@@ -1568,6 +1594,18 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleUpgradeContract = async () => {
     if (!pendingContractRevision) return;
+    if (isProposalEditingRestricted) {
+      const { version, check } = pendingContractRevision;
+      setContractRevisionPromptOpen(false);
+      setPendingContractRevision(null);
+      setContractRevisionError(null);
+      openContractWithRevision(version, check.latest);
+      showToast({
+        type: 'info',
+        message: 'Previewing the latest contract template. The proposal was not changed.',
+      });
+      return;
+    }
     setContractRevisionBusy(true);
     setContractRevisionError(null);
     try {
@@ -1587,6 +1625,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   useEffect(() => {
     let cancelled = false;
     const detectPricingRevision = async () => {
+      if (isProposalEditingRestricted) {
+        setPricingRevisionComparison(null);
+        setPricingRevisionPromptOpen(false);
+        setPricingRevisionComparisonOpen(false);
+        return;
+      }
       if (!proposal?.pricingModelId || !proposal.pricingModelRevisionId) {
         setPricingRevisionComparison(null);
         setPricingRevisionPromptOpen(false);
@@ -1620,7 +1664,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [proposal?.pricingModelId, proposal?.pricingModelRevisionId, proposal?.lastModified]);
+  }, [isProposalEditingRestricted, proposal?.pricingModelId, proposal?.pricingModelRevisionId, proposal?.lastModified]);
 
   const handleEdit = (version?: Proposal, options?: { readOnly?: boolean }) => {
     if (!canManageVersionDrafts && !canOpenReadOnlyBuilder && !options?.readOnly) return;
@@ -2669,6 +2713,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleOpenSignModal = (versionId?: string) => {
+    if (isProposalEditingRestricted) return;
     const preferredVersionId =
       versionId ||
       selectedVersionId ||
@@ -2691,13 +2736,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       autoOpenedSignModalRef.current = false;
       return;
     }
-    if (autoOpenedSignModalRef.current || loading || !proposal) return;
+    if (autoOpenedSignModalRef.current || loading || !proposal || isProposalEditingRestricted) return;
     autoOpenedSignModalRef.current = true;
     handleOpenSignModal(locationState.versionId);
-  }, [loading, locationState?.openSignModal, locationState?.versionId, proposal]);
+  }, [isProposalEditingRestricted, loading, locationState?.openSignModal, locationState?.versionId, proposal]);
 
   const handleSubmitProposal = async (versionId?: string) => {
-    if (!proposal || isOffline) return;
+    if (!proposal || isOffline || isProposalEditingRestricted) return;
     const targetId =
       versionId ||
       selectedVersionId ||
@@ -2812,6 +2857,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     successMessage: string,
     options?: { requiresNote?: boolean }
   ) => {
+    if (isProposalEditingRestricted) {
+      showToast({ type: 'warning', message: editDisabledReason || 'Master inspection mode is read-only.' });
+      return false;
+    }
     const trimmedMessage = workflowMessageDraft.trim();
     if (!proposal || reviewerActionSaving) return;
     if (options?.requiresNote && !trimmedMessage) {
@@ -2898,7 +2947,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleConfirmMarkProposalAsSigned = async () => {
-    if (!proposal || isOffline) return;
+    if (!proposal || isOffline || isProposalEditingRestricted) return;
     setReviewerActionSaving(true);
     try {
       const all = versions.length ? versions : listAllVersions(proposal as Proposal);
@@ -3491,8 +3540,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : proposalWorkflowStatus === 'approved'
       ? 'Approved'
       : formatSubmittedVersionLabel(submissionCount);
-  const activeVersionCanComplete = proposalWorkflowStatus === 'signed';
-  const completeActionDisabledReason = isOffline
+  const activeVersionCanComplete = !isProposalEditingRestricted && proposalWorkflowStatus === 'signed';
+  const completeActionDisabledReason = isProposalEditingRestricted
+    ? editDisabledReason
+    : isOffline
     ? offlineActionDisabledReason
     : activeVersionCanComplete
     ? undefined
@@ -4573,26 +4624,26 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         <div className="proposal-side-card-body">
           <div className="side-action-stack">
             {isReadOnlyReviewerView && proposalWorkflowStatus === 'needs_approval' && (
-              <TooltipAnchor tooltip={offlineActionDisabledReason}>
+              <TooltipAnchor tooltip={isProposalEditingRestricted ? editDisabledReason : offlineActionDisabledReason}>
                 <button
                   className="action-button primary side-action-button"
                   onClick={() => {
                     void handleReviewerApprove();
                   }}
-                  disabled={reviewerActionSaving || isOffline}
+                  disabled={reviewerActionSaving || isOffline || isProposalEditingRestricted}
                 >
                   Approve
                 </button>
               </TooltipAnchor>
             )}
             {isReadOnlyReviewerView && proposalWorkflowStatus !== 'signed' && (
-              <TooltipAnchor tooltip={offlineActionDisabledReason}>
+              <TooltipAnchor tooltip={isProposalEditingRestricted ? editDisabledReason : offlineActionDisabledReason}>
                 <button
                   className="action-button danger side-action-button"
                   onClick={() => {
                     void handleReviewerRequestChanges();
                   }}
-                  disabled={reviewerActionSaving || isOffline}
+                  disabled={reviewerActionSaving || isOffline || isProposalEditingRestricted}
                 >
                   Request Changes
                 </button>
@@ -5085,8 +5136,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         manualReviewRequested={submitManualReviewRequested}
         note={submitNote}
         isSubmitting={loading}
-        confirmDisabled={isOffline}
-        confirmDisabledReason={offlineActionDisabledReason}
+        confirmDisabled={isOffline || isProposalEditingRestricted}
+        confirmDisabledReason={isProposalEditingRestricted ? editDisabledReason : offlineActionDisabledReason}
         onVersionChange={setSubmitTargetVersionId}
         onNoteChange={setSubmitNote}
         onManualReviewToggle={() => setSubmitManualReviewRequested((current) => !current)}
@@ -5842,6 +5893,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         latestRevision={pendingContractRevision?.check.latest.revisionNumber}
         busy={contractRevisionBusy}
         error={contractRevisionError}
+        previewOnly={isProposalEditingRestricted}
         onUpgrade={() => void handleUpgradeContract()}
         onKeepCurrent={() => void handleKeepCurrentContract()}
         onClose={() => {

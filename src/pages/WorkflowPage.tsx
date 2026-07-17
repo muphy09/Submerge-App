@@ -40,7 +40,7 @@ import {
 } from '../utils/costBreakdownSubcategories';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { listAllVersions, ORIGINAL_VERSION_ID } from '../utils/proposalVersions';
-import type { UserSession } from '../services/session';
+import { isMasterActingAsOwnerSession, type UserSession } from '../services/session';
 import './WorkflowPage.css';
 
 type WorkflowPageProps = {
@@ -529,7 +529,15 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
   const navigate = useNavigate();
   const { proposalNumber } = useParams();
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
-  const offlineActionDisabledReason = isOffline ? 'Internet connection must be restored' : undefined;
+  const isMasterInspection = isMasterActingAsOwnerSession();
+  const inspectionDisabledReason = isMasterInspection
+    ? 'Master inspection mode is read-only.'
+    : undefined;
+  const offlineActionDisabledReason = isMasterInspection
+    ? inspectionDisabledReason
+    : isOffline
+    ? 'Internet connection must be restored'
+    : undefined;
   const { showToast } = useToast();
   const workflowLocationState = (location.state as WorkflowLocationState | null) ?? null;
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
@@ -607,10 +615,10 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
       }
 
       const normalized = ensureProposalWorkflow(loaded);
-      const readUpdated = markWorkflowRead(normalized, session?.userId);
+      const readUpdated = isMasterInspection ? normalized : markWorkflowRead(normalized, session?.userId);
       const didUpdateReadState =
         JSON.stringify(readUpdated.workflow?.history || []) !== JSON.stringify(normalized.workflow?.history || []);
-      const persisted = didUpdateReadState ? await saveProposal(readUpdated) : readUpdated;
+      const persisted = !isMasterInspection && didUpdateReadState ? await saveProposal(readUpdated) : readUpdated;
       const finalProposal = ensureProposalWorkflow(persisted as Proposal);
       setSelectedProposal(finalProposal);
 
@@ -860,9 +868,9 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
 
   const selectedCurrentStatus = selectedProposal ? getWorkflowStatus(selectedProposal) : 'draft';
   const selectedCanSendNotes =
-    Boolean(selectedProposal?.workflow?.submittedAt) && selectedCurrentStatus !== 'completed';
+    !isMasterInspection && Boolean(selectedProposal?.workflow?.submittedAt) && selectedCurrentStatus !== 'completed';
   const selectedCanRequestChanges =
-    selectedCurrentStatus !== 'completed' && selectedCurrentStatus !== 'signed';
+    !isMasterInspection && selectedCurrentStatus !== 'completed' && selectedCurrentStatus !== 'signed';
 
   const selectedVersionMap = useMemo(() => {
     const map = new Map<string, Proposal>();
@@ -1031,6 +1039,10 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
       : 'Select a proposal to review its workflow.';
 
   const persistSelectedProposal = async (nextProposal: Proposal, successMessage: string) => {
+    if (isMasterInspection) {
+      showToast({ type: 'warning', message: inspectionDisabledReason || 'Master inspection mode is read-only.' });
+      return;
+    }
     setSavingAction(successMessage);
     try {
       const saved = ensureProposalWorkflow((await saveProposal(nextProposal, { requireOnline: true })) as Proposal);
@@ -2192,7 +2204,7 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
                       <button
                         type="button"
                         className="workflow-success-btn workflow-sidebar-btn"
-                        disabled={Boolean(savingAction) || isOffline}
+                        disabled={Boolean(savingAction) || isOffline || isMasterInspection}
                         onClick={() => {
                           void handleApprove();
                         }}
@@ -2205,7 +2217,9 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
                   {selectedCurrentStatus === 'approved' && (
                     <TooltipAnchor
                       tooltip={
-                        isOffline
+                        isMasterInspection
+                          ? inspectionDisabledReason
+                          : isOffline
                           ? offlineActionDisabledReason
                           : disableSignedWorkflow
                           ? DISABLED_SIGNED_WORKFLOW_MESSAGE
@@ -2215,7 +2229,7 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
                       <button
                         type="button"
                         className="workflow-success-btn workflow-sidebar-btn"
-                        disabled={Boolean(savingAction) || disableSignedWorkflow || isOffline}
+                        disabled={Boolean(savingAction) || disableSignedWorkflow || isOffline || isMasterInspection}
                         onClick={() =>
                           openSelectedProposalVersion(selectedApprovedVersionId, { openSignModal: true })
                         }
@@ -2230,7 +2244,7 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
                       <button
                         type="button"
                         className="workflow-success-btn workflow-sidebar-btn"
-                        disabled={Boolean(savingAction) || isOffline}
+                        disabled={Boolean(savingAction) || isOffline || isMasterInspection}
                         onClick={() => setShowCompleteConfirm(true)}
                       >
                         Mark Complete
@@ -2243,7 +2257,7 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
                       <button
                         type="button"
                         className="workflow-secondary-btn workflow-sidebar-btn"
-                        disabled={Boolean(savingAction) || isOffline}
+                        disabled={Boolean(savingAction) || isOffline || isMasterInspection}
                         onClick={() => {
                           if (!noteDraft.trim()) {
                             setActiveDetailTab('notes_activity');
@@ -2473,7 +2487,7 @@ function WorkflowPage({ session, cloudIssue }: WorkflowPageProps) {
         confirmLabel="Yes, I'm sure"
         cancelLabel="No, take me back"
         isLoading={Boolean(savingAction)}
-        confirmDisabled={isOffline}
+        confirmDisabled={isOffline || isMasterInspection}
         confirmDisabledReason={offlineActionDisabledReason}
         onConfirm={() => {
           setShowCompleteConfirm(false);

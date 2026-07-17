@@ -11,7 +11,7 @@ import {
   listDashboardProposals,
   PROPOSAL_CLOUD_SYNC_EVENT,
 } from '../services/proposalsAdapter';
-import { getSessionFranchiseId, type UserSession } from '../services/session';
+import { getSessionFranchiseId, isMasterActingAsOwnerSession, type UserSession } from '../services/session';
 import { loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
@@ -46,7 +46,7 @@ function HomePage({
   const [acknowledgingFeedbackId, setAcknowledgingFeedbackId] = useState<string | null>(null);
   const { showToast } = useToast();
   const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
-  const isProposalEditingRestricted = false;
+  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const proposalEditingRestrictedReason =
     'Master accounts acting as owner can view proposals but cannot create or edit them.';
 
@@ -310,6 +310,10 @@ function HomePage({
   };
 
   const handleDeleteProposal = async (proposalNumber: string) => {
+    if (isProposalEditingRestricted) {
+      showToast({ type: 'warning', message: proposalEditingRestrictedReason });
+      return;
+    }
     try {
       await deleteProposal(proposalNumber, sessionFranchiseId);
       setProposals(prev => prev.filter(p => p.proposalNumber !== proposalNumber));
@@ -351,6 +355,7 @@ function HomePage({
           onOpenProposal={handleOpenProposal}
           disableCreateProposal={isProposalEditingRestricted}
           createProposalDisabledReason={proposalEditingRestrictedReason}
+          disableDeleteProposal={isProposalEditingRestricted}
           viewerRole={session?.role}
         />
       </div>

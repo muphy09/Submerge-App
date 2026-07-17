@@ -165,6 +165,25 @@ const changelogModal = read('src/components/ChangelogModal.tsx');
 requireText(changelogModal, /readChangelog\(\{[\s\S]*role:\s*getSessionRole\(\)[\s\S]*franchiseCode:\s*getSessionFranchiseCode\(\)/, 'The Patch Notes screen does not request notes for the signed-in franchise.');
 requireText(changelogModal, /role="tablist"[\s\S]*activeTab[\s\S]*franchiseTabLabel[\s\S]*Global/, 'The Patch Notes screen does not separate franchise and global notes into tabs.');
 
+const proposalHome = read('src/pages/HomePage.tsx');
+const proposalForm = read('src/pages/ProposalForm.tsx');
+const proposalView = read('src/pages/ProposalView.tsx');
+const proposalAdapter = read('src/services/proposalsAdapter.ts');
+for (const [name, content] of [
+  ['Dashboard', proposalHome],
+  ['Proposal Builder', proposalForm],
+  ['Proposal View', proposalView],
+]) {
+  requireText(content, /isProposalEditingRestricted\s*=\s*isMasterActingAsOwnerSession\(\)/, `${name} does not enforce read-only master inspection mode.`);
+  if (/isProposalEditingRestricted\s*=\s*false/.test(content)) {
+    failures.push(`${name} hardcodes master inspection editing to enabled.`);
+  }
+}
+requireText(proposalAdapter, /canAttemptProposalWrite[\s\S]{0,180}isMasterSession\(\)[\s\S]{0,40}return false/, 'Background proposal sync is not blocked for master inspection sessions.');
+requireText(proposalAdapter, /export async function saveProposal[\s\S]{0,220}MASTER_INSPECTION_READ_ONLY_MESSAGE/, 'Proposal saves are not blocked during master inspection.');
+requireText(proposalAdapter, /export async function deleteProposal[\s\S]{0,220}MASTER_INSPECTION_READ_ONLY_MESSAGE/, 'Proposal deletes are not blocked during master inspection.');
+requireText(proposalView, /previewOnly=\{isProposalEditingRestricted\}/, 'Contract revision prompts are not preview-only during master inspection.');
+
 const packageJson = read('package.json');
 requireText(packageJson, /"release-notes\/\*\*\/\*"/, 'Franchise patch-note files are not included in packaged applications.');
 

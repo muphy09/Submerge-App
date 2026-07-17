@@ -16,6 +16,7 @@ type DashboardProposalsPanelProps = {
   onOpenProposal: (proposalNumber: string) => void;
   disableCreateProposal?: boolean;
   createProposalDisabledReason?: string;
+  disableDeleteProposal?: boolean;
   viewerRole?: string | null;
 };
 
@@ -209,6 +210,7 @@ function DashboardProposalsPanel({
   onOpenProposal,
   disableCreateProposal = false,
   createProposalDisabledReason,
+  disableDeleteProposal = false,
   viewerRole,
 }: DashboardProposalsPanelProps) {
   const [sortField, setSortField] = useState<SortField>('lastModified');
@@ -331,6 +333,7 @@ function DashboardProposalsPanel({
 
   const handleOpenContextMenu = (event: ReactMouseEvent<HTMLTableRowElement>, proposalNumber: string) => {
     event.preventDefault();
+    if (disableDeleteProposal) return;
     setContextMenu({
       proposalNumber,
       x: Math.min(event.clientX, Math.max(window.innerWidth - 188, 24)),
@@ -339,12 +342,14 @@ function DashboardProposalsPanel({
   };
 
   const handleDeleteRequest = () => {
+    if (disableDeleteProposal) return;
     if (!contextMenu?.proposalNumber) return;
     setProposalToDelete(contextMenu.proposalNumber);
     setContextMenu(null);
   };
 
   const handleConfirmDelete = async () => {
+    if (disableDeleteProposal) return;
     if (!proposalToDelete) return;
 
     try {

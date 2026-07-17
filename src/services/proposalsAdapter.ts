@@ -7,6 +7,8 @@ import {
   getSessionFranchiseId,
   getSessionRole,
   getSessionUserName,
+  isMasterActingAsOwnerSession,
+  isMasterSession,
   readSession,
 } from './session';
 import { isEnvFlagTrue } from './env';
@@ -21,6 +23,8 @@ const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 const STAGING_DIAGNOSTICS =
   String(import.meta.env.VITE_SUBMERGE_ENVIRONMENT || '').trim().toLowerCase() === 'staging';
 const OFFLINE_ERROR_MESSAGE = 'No internet connection. Please reconnect to continue.';
+export const MASTER_INSPECTION_READ_ONLY_MESSAGE =
+  'Master accounts have read-only access to franchise proposals. Sign in as an authorized franchise user to make changes.';
 
 type SaveResult = Proposal & { lastModified: string };
 type SyncStatus = 'synced' | 'pending' | 'error';
@@ -170,6 +174,7 @@ function isSubmittedStatus(status?: string | null) {
 }
 
 function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | null, franchiseId?: string) {
+  if (isMasterSession()) return false;
   const role = getEffectiveRole(session);
   const targetFranchiseId = proposal.franchiseId || franchiseId || session?.franchiseId || DEFAULT_FRANCHISE_ID;
   const activeFranchiseId = getSessionFranchiseId();
@@ -674,6 +679,7 @@ async function syncLocalCollectionToSupabase(
 let syncingPending = false;
 
 export async function syncPendingProposals() {
+  if (isMasterSession()) return;
   if (syncingPending) return;
   syncingPending = true;
   try {
@@ -709,6 +715,7 @@ export async function syncPendingProposals() {
 let syncingPendingDeletes = false;
 
 export async function syncPendingDeletes() {
+  if (isMasterSession()) return;
   if (syncingPendingDeletes) return;
   if (!isSupabaseEnabled()) return;
 
@@ -777,13 +784,14 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
   const session = readSession();
+  const isMasterInspection = isMasterActingAsOwnerSession();
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
   const supabaseOnline = await hasSupabaseConnection(true);
   if (supabaseOnline) {
     await syncPendingDeletes();
   }
-  const pendingDeletes = getPendingDeleteSet();
-  const deletedTombstones = getDeletedTombstoneSet();
+  const pendingDeletes = isMasterInspection ? new Set<string>() : getPendingDeleteSet();
+  const deletedTombstones = isMasterInspection ? new Set<string>() : getDeletedTombstoneSet();
   const hiddenProposals = new Set<string>([...pendingDeletes, ...deletedTombstones]);
 
   const supabasePromise = (async () => {
@@ -808,7 +816,7 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
     if (p?.proposalNumber) supabaseMap.set(p.proposalNumber, p);
   });
 
-  if (supabaseOnline && localRows.length) {
+  if (!isMasterInspection && supabaseOnline && localRows.length) {
     await syncPendingProposals();
     await syncLocalCollectionToSupabase(localRows, supabaseMap, targetFranchiseId, session);
   }
@@ -826,7 +834,8 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   };
 
   supabaseMap.forEach((p) => upsert(withSyncStatus(p, 'synced', ONLINE_SYNC_MESSAGE)));
-  localRows.forEach((local) => {
+  const visibleLocalRows = isMasterInspection && supabaseOnline ? [] : localRows;
+  visibleLocalRows.forEach((local) => {
     const cloud = supabaseMap.get(local.proposalNumber);
     if (supabaseOnline && shouldSyncLocal(local, cloud || null)) {
       upsert(withSyncStatus(local, 'pending', PENDING_MESSAGE));
@@ -907,13 +916,14 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
   }
-  if (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber)) return null;
+  const isMasterInspection = isMasterActingAsOwnerSession();
+  if (!isMasterInspection && (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber))) return null;
 
   const session = readSession();
   const supabaseOnline = await hasSupabaseConnection(true);
   if (supabaseOnline) {
     await syncPendingDeletes();
-    if (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber)) return null;
+    if (!isMasterInspection && (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber))) return null;
   }
 
   const supabasePromise = (async () => {
@@ -929,6 +939,16 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
   const localPromise = loadLocalProposal(proposalNumber, session);
 
   const [cloud, local] = await Promise.all([supabasePromise, localPromise]);
+
+  if (isMasterInspection) {
+    const inspectionCopy = cloud || local;
+    if (!inspectionCopy || !canReadProposal(inspectionCopy, session)) return null;
+    const status = cloud ? 'synced' : ((inspectionCopy as any).syncStatus || 'pending');
+    const message = cloud
+      ? ONLINE_SYNC_MESSAGE
+      : (inspectionCopy as any).syncMessage || PENDING_MESSAGE;
+    return withSyncStatus(inspectionCopy, status as SyncStatus, message);
+  }
 
   const best = pickNewest(cloud, local);
   if (!best) return null;
@@ -962,6 +982,9 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
 }
 
 export async function saveProposal(proposal: Proposal, options: SaveProposalOptions = {}): Promise<SaveResult> {
+  if (isMasterSession()) {
+    throw new Error(MASTER_INSPECTION_READ_ONLY_MESSAGE);
+  }
   const now = nowIso();
   const session = readSession();
   clearDeletedTombstone(proposal.proposalNumber);
@@ -1048,6 +1071,9 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
 }
 
 export async function deleteProposal(proposalNumber: string, franchiseId?: string) {
+  if (isMasterSession()) {
+    throw new Error(MASTER_INSPECTION_READ_ONLY_MESSAGE);
+  }
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');

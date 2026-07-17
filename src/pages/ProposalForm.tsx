@@ -94,6 +94,7 @@ import {
   getSessionFranchiseId,
   getSessionRole,
   getSessionUserName,
+  isMasterActingAsOwnerSession,
   isMasterSession,
   readSession,
 } from '../services/session';
@@ -401,7 +402,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const location = useLocation();
   const sessionRole = getSessionRole();
   const isMasterUser = isMasterSession();
-  const isProposalEditingRestricted = false;
+  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const isExplicitReadOnlyVersionView = Boolean((location.state as any)?.readOnlyVersion);
   const isReadOnlyBuilderView =
     (isProposalEditingRestricted && Boolean(proposalNumber)) || isExplicitReadOnlyVersionView;
