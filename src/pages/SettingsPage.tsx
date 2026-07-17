@@ -17,7 +17,8 @@ const SettingsPage: React.FC = () => {
 
   const franchiseId = getSessionFranchiseId();
   const sessionRole = getSessionRole();
-  const canViewChangelog = sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'master';
+  const canViewChangelog =
+    sessionRole === 'designer' || sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'master';
   const isChangelogDisabled = !canViewChangelog;
   const { displayName } = useFranchiseAppName(franchiseId);
 

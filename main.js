@@ -1018,12 +1018,16 @@ function readFranchiseReleaseNoteFiles(payload = {}) {
 // can present them as distinct tabs. Franchise notes are filtered to the
 // authenticated franchise; master users can review all franchise notes.
 ipcMain.handle('read-changelog', (_event, payload = {}) => {
+  const role = String(payload?.role || '').trim().toLowerCase();
+  const canViewGlobalNotes = role === 'master' || role === 'owner' || role === 'admin';
   const possiblePaths = [
     path.join(appPath, 'CHANGELOG.md'),
     path.join(__dirname, 'CHANGELOG.md'),
     path.join(process.cwd(), 'CHANGELOG.md'),
   ];
-  const globalNotes = readFirstExistingText(possiblePaths, 'CHANGELOG.md not found').trim();
+  const globalNotes = canViewGlobalNotes
+    ? readFirstExistingText(possiblePaths, 'CHANGELOG.md not found').trim()
+    : '';
   const franchiseNotes = readFranchiseReleaseNoteFiles(payload).join('\n\n-----\n\n');
   return { globalNotes, franchiseNotes };
 });

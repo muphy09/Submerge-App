@@ -1,3 +1,8 @@
+## [3.0.2] - 7/17/26
+### Patch Notes Permissions
+- Designers can now open Patch Notes and view notes published for their franchise
+- Global patch notes remain available only to franchise owners & admins
+-----
 ## [3.0.1] - 7/17/26
 ### Revision Storage and Workflow
 - When an Admin updates a Pricing Model or Contract Template:

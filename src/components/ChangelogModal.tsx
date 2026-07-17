@@ -320,6 +320,7 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
   if (!isOpen) return null;
 
   const sessionRole = getSessionRole();
+  const canViewGlobalNotes = sessionRole === 'admin' || sessionRole === 'owner' || sessionRole === 'master';
   const franchiseName = String(getSessionFranchiseName() || '').trim();
   const franchiseCode = String(getSessionFranchiseCode() || '').trim();
   const franchiseTabLabel = franchiseName || (sessionRole === 'master' ? 'All Franchises' : franchiseCode || 'Franchise');
@@ -368,18 +369,20 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
           >
             {franchiseTabLabel}
           </button>
-          <button
-            type="button"
-            id="patch-notes-global-tab"
-            className={`patch-notes-tab${activeTab === 'global' ? ' patch-notes-tab--active' : ''}`}
-            role="tab"
-            aria-selected={activeTab === 'global'}
-            aria-controls="patch-notes-tab-panel"
-            tabIndex={activeTab === 'global' ? 0 : -1}
-            onClick={() => setActiveTab('global')}
-          >
-            Global
-          </button>
+          {canViewGlobalNotes && (
+            <button
+              type="button"
+              id="patch-notes-global-tab"
+              className={`patch-notes-tab${activeTab === 'global' ? ' patch-notes-tab--active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === 'global'}
+              aria-controls="patch-notes-tab-panel"
+              tabIndex={activeTab === 'global' ? 0 : -1}
+              onClick={() => setActiveTab('global')}
+            >
+              Global
+            </button>
+          )}
         </div>
         <div
           id="patch-notes-tab-panel"
