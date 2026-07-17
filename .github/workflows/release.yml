@@ -100,7 +100,7 @@ jobs:
             }
           }
           $output = "portable builds"
-          $sourceManifest = Join-Path $output "$channel.yml"
+          $sourceManifest = Join-Path $output "latest.yml"
           if (-not (Test-Path $sourceManifest)) { throw "Missing update manifest: $sourceManifest" }
           $staging = Join-Path $output "fixed-update-assets"
           node scripts/stage-update-assets.js $sourceManifest $staging
@@ -197,7 +197,7 @@ jobs:
             fi
           fi
           output="portable builds"
-          source_manifest="$output/$channel-mac.yml"
+          source_manifest="$output/latest-mac.yml"
           if [ ! -f "$source_manifest" ]; then
             echo "Missing update manifest: $source_manifest" >&2
             exit 1

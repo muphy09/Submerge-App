@@ -148,6 +148,8 @@ const workflow = read('.github/workflows/release.yml');
 requireText(workflow, /EP_PRE_RELEASE:/, 'Release workflow does not isolate channel tags as prereleases.');
 requireText(workflow, /stage-update-assets\.js/, 'Release workflow does not stage manifest-matched asset names.');
 requireText(workflow, /updates-\$channel/, 'Release workflow does not publish fixed per-franchise endpoints.');
+requireText(workflow, /sourceManifest\s*=\s*Join-Path\s+\$output\s+"latest\.yml"/, 'Windows channel publishing does not use electron-builder\'s generated latest.yml manifest.');
+requireText(workflow, /source_manifest="\$output\/latest-mac\.yml"/, 'macOS channel publishing does not use electron-builder\'s generated latest-mac.yml manifest.');
 
 const main = read('main.js');
 requireText(main, /provider:\s*'generic'/, 'Electron updater is not using isolated generic endpoints.');
