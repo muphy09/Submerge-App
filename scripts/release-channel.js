@@ -11,10 +11,14 @@ const target = targetIndex >= 0 ? String(args[targetIndex + 1] || '').trim().toL
 const allowedModes = new Set(['bootstrap', 'global', 'franchise']);
 
 function run(command, commandArgs, options = {}) {
+  // Git accepts argv directly on Windows and must not be routed through cmd.exe,
+  // which otherwise splits commit messages containing spaces. npm/npx are .cmd
+  // shims on Windows, so those two commands still require the shell.
+  const requiresWindowsShell = process.platform === 'win32' && (command === 'npm' || command === 'npx');
   const result = spawnSync(command, commandArgs, {
     cwd: root,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell: requiresWindowsShell,
     ...options,
   });
   if (result.status !== 0) throw new Error(`${command} ${commandArgs.join(' ')} failed.`);
@@ -24,7 +28,7 @@ function capture(command, commandArgs) {
   const result = spawnSync(command, commandArgs, {
     cwd: root,
     encoding: 'utf8',
-    shell: process.platform === 'win32',
+    shell: false,
   });
   if (result.status !== 0) throw new Error(String(result.stderr || result.stdout || 'Command failed.').trim());
   return String(result.stdout || '').trim();
