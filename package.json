@@ -77,6 +77,7 @@
       "dist/**/*",
       "main.js",
       "CHANGELOG.md",
+      "release-notes/**/*",
       "preload-script.js",
       "src/database/**/*",
       "icon.ico",

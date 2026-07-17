@@ -156,6 +156,22 @@ requireText(main, /provider:\s*'generic'/, 'Electron updater is not using isolat
 requireText(main, /updates-\$\{requestedChannel\}/, 'Electron updater does not derive a fixed endpoint from the authenticated channel.');
 requireText(main, /app\.setPath\('userData',\s*isolatedUserDataPath\)/, 'Staging does not use an isolated Electron userData directory.');
 requireText(main, /DATA_PARTITION[\s\S]{0,180}app\.getPath\('userData'\),\s*'proposals'/, 'Staging proposal files are not isolated from production files.');
+requireText(main, /readFranchiseReleaseNoteFiles[\s\S]*role === 'master'[\s\S]*franchiseCode[\s\S]*franchiseNotes, globalNotes/, 'Patch notes are not filtered and composed by authenticated franchise.');
+
+const preload = read('preload-script.js');
+requireText(preload, /readChangelog:\s*\(payload\)\s*=>\s*ipcRenderer\.invoke\('read-changelog',\s*payload\)/, 'The changelog IPC bridge does not pass franchise context.');
+
+const changelogModal = read('src/components/ChangelogModal.tsx');
+requireText(changelogModal, /readChangelog\(\{[\s\S]*role:\s*getSessionRole\(\)[\s\S]*franchiseCode:\s*getSessionFranchiseCode\(\)/, 'The Patch Notes screen does not request notes for the signed-in franchise.');
+
+const packageJson = read('package.json');
+requireText(packageJson, /"release-notes\/\*\*\/\*"/, 'Franchise patch-note files are not included in packaged applications.');
+
+for (const code of ['5555', '9724']) {
+  if (!fs.existsSync(path.join(root, 'release-notes', 'franchises', `${code}.md`))) {
+    failures.push(`Franchise patch-note file is missing for ${code}.`);
+  }
+}
 
 const settings = read('src/pages/SettingsPage.tsx');
 requireText(settings, /getUpdateChannel\(sessionRole,\s*getSessionFranchiseCode\(\)\)/, 'The manual update check does not resolve the authenticated franchise channel.');

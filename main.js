@@ -972,21 +972,59 @@ ipcMain.handle('open-proposals-folder', async () => {
   }
 });
 
-// Changelog handler
-ipcMain.handle('read-changelog', () => {
+function readFirstExistingText(possiblePaths, missingMessage) {
+  for (const filePath of possiblePaths) {
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf-8');
+    }
+  }
+
+  throw new Error(missingMessage);
+}
+
+function findFranchiseReleaseNotesDirectory() {
+  const possibleDirectories = [
+    path.join(appPath, 'release-notes', 'franchises'),
+    path.join(__dirname, 'release-notes', 'franchises'),
+    path.join(process.cwd(), 'release-notes', 'franchises'),
+  ];
+
+  return possibleDirectories.find((directoryPath) => fs.existsSync(directoryPath)) || null;
+}
+
+function readFranchiseReleaseNoteFiles(payload = {}) {
+  const notesDirectory = findFranchiseReleaseNotesDirectory();
+  if (!notesDirectory) return [];
+
+  const role = String(payload?.role || '').trim().toLowerCase();
+  const franchiseCode = String(payload?.franchiseCode || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '');
+  const noteFileNames = role === 'master'
+    ? fs.readdirSync(notesDirectory).filter((fileName) => /^[a-z0-9-]+\.md$/i.test(fileName)).sort()
+    : franchiseCode
+      ? [`${franchiseCode}.md`]
+      : [];
+
+  return noteFileNames
+    .map((fileName) => path.join(notesDirectory, fileName))
+    .filter((filePath) => fs.existsSync(filePath))
+    .map((filePath) => fs.readFileSync(filePath, 'utf-8').trim())
+    .filter(Boolean);
+}
+
+// Changelog handler. Global notes are always returned. Franchise notes are
+// added only for the authenticated franchise; master users can review all.
+ipcMain.handle('read-changelog', (_event, payload = {}) => {
   const possiblePaths = [
     path.join(appPath, 'CHANGELOG.md'),
     path.join(__dirname, 'CHANGELOG.md'),
     path.join(process.cwd(), 'CHANGELOG.md'),
   ];
-
-  for (const changelogPath of possiblePaths) {
-    if (fs.existsSync(changelogPath)) {
-      return fs.readFileSync(changelogPath, 'utf-8');
-    }
-  }
-
-  throw new Error('CHANGELOG.md not found');
+  const globalNotes = readFirstExistingText(possiblePaths, 'CHANGELOG.md not found').trim();
+  const franchiseNotes = readFranchiseReleaseNoteFiles(payload);
+  return [...franchiseNotes, globalNotes].filter(Boolean).join('\n\n-----\n\n');
 });
 
 function ensurePdfExtension(filePath) {

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { getSessionFranchiseCode, getSessionRole } from '../services/session';
 import './ChangelogModal.css';
 
 interface ChangelogModalProps {
@@ -248,7 +249,10 @@ function ChangelogModal({ isOpen, onClose }: ChangelogModalProps) {
       }
 
       try {
-        const nextContent = await window.electron.readChangelog();
+        const nextContent = await window.electron.readChangelog({
+          role: getSessionRole(),
+          franchiseCode: getSessionFranchiseCode(),
+        });
         if (cancelled) return;
         setContent(nextContent);
       } catch (loadError) {
