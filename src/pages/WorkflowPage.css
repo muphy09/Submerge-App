@@ -17,7 +17,8 @@
   --wf-red-soft: #fdebed;
   --wf-yellow: #f4c14a;
   --wf-yellow-soft: #fff3d7;
-  min-height: calc(100vh - 80px);
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: calc(var(--header-offset, 96px) + 0.95rem) 1.25rem 1.25rem;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.1) 40%),

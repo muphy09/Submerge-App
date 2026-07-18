@@ -4,7 +4,7 @@ import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import './ContractPrintPreviewPage.css';
 
 const DEFAULT_DISPLAY_SCALE = 1.2;
-const MIN_DISPLAY_SCALE = 0.8;
+const MIN_DISPLAY_SCALE = 0.45;
 const MAX_DISPLAY_SCALE = 1.8;
 const DISPLAY_SCALE_STEP = 0.1;
 const MAX_RENDER_DPR = 3;
@@ -98,6 +98,8 @@ export default function ContractPrintPreviewPage() {
   const [nativePreviewUrl, setNativePreviewUrl] = useState<string | null>(null);
   const [useNativePreview, setUseNativePreview] = useState(false);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const previewPagesRef = useRef<HTMLDivElement | null>(null);
+  const userAdjustedDisplayScaleRef = useRef(false);
   const printResetTimeoutRef = useRef<number | null>(null);
   const renderTasksRef = useRef<Array<{ cancel: () => void; promise: Promise<unknown> }>>([]);
 
@@ -198,7 +200,33 @@ export default function ContractPrintPreviewPage() {
     setRendering(false);
     setUseNativePreview(false);
     canvasRefs.current = [];
+    userAdjustedDisplayScaleRef.current = false;
+    setDisplayScale(DEFAULT_DISPLAY_SCALE);
   }, [pdfBytes]);
+
+  useEffect(() => {
+    const pagesElement = previewPagesRef.current;
+    const firstPage = pageSizes[0];
+    if (!pagesElement || !firstPage?.width) return;
+
+    const fitPreviewToAvailableWidth = () => {
+      if (userAdjustedDisplayScaleRef.current) return;
+      const availableWidth = Math.max(0, pagesElement.clientWidth - 4);
+      if (!availableWidth) return;
+      const nextScale = clampDisplayScale(Math.min(DEFAULT_DISPLAY_SCALE, availableWidth / firstPage.width));
+      setDisplayScale((current) => (Math.abs(current - nextScale) < 0.01 ? current : nextScale));
+    };
+
+    fitPreviewToAvailableWidth();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', fitPreviewToAvailableWidth);
+      return () => window.removeEventListener('resize', fitPreviewToAvailableWidth);
+    }
+
+    const observer = new ResizeObserver(fitPreviewToAvailableWidth);
+    observer.observe(pagesElement);
+    return () => observer.disconnect();
+  }, [pageSizes]);
 
   useEffect(() => {
     if (!pdfBytes) {
@@ -326,10 +354,12 @@ export default function ContractPrintPreviewPage() {
   }, [cancelActiveRenderTasks, displayScale, nativePreviewUrl, pageCount, pageSizes, pdfBytes]);
 
   const handleZoomOut = useCallback(() => {
+    userAdjustedDisplayScaleRef.current = true;
     setDisplayScale((prev) => clampDisplayScale(prev - DISPLAY_SCALE_STEP));
   }, []);
 
   const handleZoomIn = useCallback(() => {
+    userAdjustedDisplayScaleRef.current = true;
     setDisplayScale((prev) => clampDisplayScale(prev + DISPLAY_SCALE_STEP));
   }, []);
 
@@ -428,6 +458,7 @@ export default function ContractPrintPreviewPage() {
             ) : null}
             <div
               className="contract-print-preview-pages"
+              ref={previewPagesRef}
               aria-hidden={!initialRenderComplete}
               style={
                 initialRenderComplete

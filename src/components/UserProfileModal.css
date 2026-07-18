@@ -12,6 +12,7 @@
 .user-profile-modal {
   width: min(720px, 100%);
   max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
   overflow-y: auto;
   background: #ffffff;
   border-radius: 20px;
@@ -217,6 +218,7 @@
 
   .user-profile-modal {
     max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
     border-radius: 18px;
   }
 

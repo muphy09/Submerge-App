@@ -119,6 +119,26 @@
 
 .contract-print-preview-content {
   padding: 28px 20px 40px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(41, 68, 109, 0.5) rgba(41, 68, 109, 0.08);
+}
+
+.contract-print-preview-content::-webkit-scrollbar {
+  height: 9px;
+}
+
+.contract-print-preview-content::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(41, 68, 109, 0.08);
+}
+
+.contract-print-preview-content::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(41, 68, 109, 0.5);
+  background-clip: padding-box;
 }
 
 .contract-print-preview-pages {
@@ -187,6 +207,45 @@
   .contract-print-preview-toolbar-actions {
     justify-content: space-between;
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .contract-print-preview-toolbar {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .contract-print-preview-title-group h1 {
+    overflow-wrap: anywhere;
+    font-size: 19px;
+  }
+
+  .contract-print-preview-toolbar-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+
+  .contract-print-preview-zoom-group {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .contract-print-preview-primary,
+  .contract-print-preview-secondary {
+    width: 100%;
+    padding-inline: 12px;
+  }
+
+  .contract-print-preview-content {
+    padding: 16px 10px 28px;
+  }
+
+  .contract-print-preview-native-shell {
+    width: calc(100vw - 20px);
+    height: calc(100dvh - 210px);
+    min-height: 360px;
   }
 }
 

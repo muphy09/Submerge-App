@@ -1,6 +1,9 @@
 .master-page {
-  padding: 32px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: calc(var(--header-offset) + clamp(16px, 2vw, 32px)) clamp(16px, 2vw, 32px) clamp(16px, 2vw, 32px);
   color: #0f2a4f;
+  overflow-x: hidden;
 }
 
 .master-header {

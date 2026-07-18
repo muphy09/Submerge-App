@@ -18,8 +18,29 @@
   flex-direction: column;
   gap: 16px;
   align-items: center;
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   padding: 4px 0 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 42, 79, 0.48) rgba(15, 42, 79, 0.08);
+}
+
+.contract-pages::-webkit-scrollbar {
+  height: 9px;
+}
+
+.contract-pages::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(15, 42, 79, 0.08);
+}
+
+.contract-pages::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(15, 42, 79, 0.48);
+  background-clip: padding-box;
 }
 
 .contract-page-shell {
@@ -315,6 +336,28 @@
 .contract-zoom-icon {
   width: 18px;
   height: 18px;
+}
+
+@media (max-width: 640px) {
+  .contract-pages {
+    align-items: flex-start;
+  }
+
+  .contract-zoom-controls {
+    bottom: 8px;
+    margin-top: -60px;
+    padding-right: 8px;
+  }
+
+  .contract-zoom-controls-inner {
+    gap: 5px;
+    padding: 5px;
+  }
+
+  .contract-zoom-button {
+    width: 38px;
+    height: 38px;
+  }
 }
 
 @media print {

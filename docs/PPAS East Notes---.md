@@ -18,5 +18,3 @@ Windows blocks instances of app running on latest release
     Pull breakdown from contract
 
 ** Confirm autocover cost
-
-Resolution fix for 2560 x 1600 125% for builder

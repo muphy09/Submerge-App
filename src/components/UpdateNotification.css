@@ -4,6 +4,7 @@
   right: 20px;
   z-index: 10000;
   animation: slideIn 0.3s ease-out;
+  max-width: calc(100vw - 40px);
 }
 
 @keyframes slideIn {
@@ -31,6 +32,27 @@
   font-weight: 600;
   line-height: 1.4;
   min-width: 320px;
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  .update-notification {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    max-width: none;
+  }
+
+  .update-notification-message {
+    min-width: 0;
+    padding: 13px 14px;
+    flex-wrap: wrap;
+  }
+
+  .update-notification-install-button {
+    width: 100%;
+    margin-left: 0;
+  }
 }
 
 .update-notification-message--ready {

@@ -1,52 +1,24 @@
 :root {
-  /* Responsive scaling based on viewport */
-  --scale-factor: 1;
+  /* Keep one source of truth for fixed chrome. Browser/OS scaling already
+     changes the CSS viewport, so applying a second height-based zoom here
+     makes breakpoints and reserved header space disagree. */
   --base-spacing: clamp(0.5rem, 1vw, 1.5rem);
-  --header-offset: 80px;
+  --app-header-height: 80px;
+  --header-offset: var(--app-header-height);
   --test-mode-banner-height: 30px;
 }
 
-/* Scale adjustments based on viewport height */
-@media (min-height: 900px) and (max-height: 1079px) {
-  :root {
-    --scale-factor: 1;
-  }
-}
-
-@media (min-height: 1080px) and (max-height: 1439px) {
-  :root {
-    --scale-factor: 1.02;
-  }
-}
-
-@media (min-height: 1440px) and (max-height: 2159px) {
-  :root {
-    --scale-factor: 1.15;
-  }
-}
-
-@media (min-height: 2160px) {
-  :root {
-    --scale-factor: 1.4;
-  }
-}
-
-/* Adjust header offset for smaller screens and wrapped nav */
+/* The compact navigation has two explicit rows. Its offset always matches
+   its rendered height, including when browser zoom crosses this breakpoint. */
 @media (max-width: 1100px) {
   :root {
-    --header-offset: 96px;
+    --app-header-height: 124px;
   }
 }
 
-@media (max-width: 820px) {
+@media (max-width: 600px) {
   :root {
-    --header-offset: 128px;
-  }
-}
-
-@media (max-width: 560px) {
-  :root {
-    --header-offset: 150px;
+    --app-header-height: 116px;
   }
 }
 
@@ -56,7 +28,7 @@
 }
 
 .app.app--test-mode {
-  --header-offset: calc(80px + var(--test-mode-banner-height));
+  --header-offset: calc(var(--app-header-height) + var(--test-mode-banner-height));
 }
 
 .app--test-mode .navigation-bar {
@@ -71,24 +43,6 @@
 .app--test-mode .proposal-view {
   box-sizing: border-box;
   padding-top: calc(24px + var(--test-mode-banner-height));
-}
-
-@media (max-width: 1100px) {
-  .app.app--test-mode {
-    --header-offset: calc(96px + var(--test-mode-banner-height));
-  }
-}
-
-@media (max-width: 820px) {
-  .app.app--test-mode {
-    --header-offset: calc(128px + var(--test-mode-banner-height));
-  }
-}
-
-@media (max-width: 560px) {
-  .app.app--test-mode {
-    --header-offset: calc(150px + var(--test-mode-banner-height));
-  }
 }
 
 .app-test-mode-banner {
@@ -252,4 +206,22 @@
   outline: 4px solid #f6d24a;
   outline-offset: 4px;
   font-weight: 800;
+}
+
+@media (max-width: 600px) {
+  .app-bottom-left-meta {
+    bottom: 6px;
+    left: 6px;
+    max-width: calc(100vw - 12px);
+  }
+
+  .app-session-meta {
+    display: none;
+  }
+
+  .app-feedback-anchor,
+  .app-feedback-anchor.has-session-meta {
+    right: 8px;
+    bottom: 10px;
+  }
 }

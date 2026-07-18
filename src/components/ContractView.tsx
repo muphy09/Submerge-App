@@ -38,7 +38,7 @@ import './ContractView.css';
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const DEFAULT_DISPLAY_SCALE = 1.85;
-const MIN_DISPLAY_SCALE = 1;
+const MIN_DISPLAY_SCALE = 0.4;
 const MAX_DISPLAY_SCALE = 2.5;
 const DISPLAY_SCALE_STEP = 0.05;
 const MAX_RENDER_DPR = 3;
@@ -666,6 +666,8 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   const [fields, setFields] = useState<ContractFieldRender[]>([]);
   const [displayScale, setDisplayScale] = useState(DEFAULT_DISPLAY_SCALE);
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const contractPagesRef = useRef<HTMLDivElement | null>(null);
+  const userAdjustedDisplayScaleRef = useRef(false);
   const latestSavePromiseRef = useRef<Promise<boolean> | null>(null);
   const previousIncomingOverridesRef = useRef<ContractOverrides>(incomingOverrides || {});
   const previousProposalVersionIdRef = useRef(proposal.versionId || 'original');
@@ -680,6 +682,10 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
 
     previousIncomingOverridesRef.current = nextIncomingOverrides;
     previousProposalVersionIdRef.current = nextProposalVersionId;
+    if (proposalVersionChanged) {
+      userAdjustedDisplayScaleRef.current = false;
+      setDisplayScale(DEFAULT_DISPLAY_SCALE);
+    }
     setOverrides(nextIncomingOverrides);
     setBaselineOverrides(nextIncomingOverrides);
   }, [incomingOverrides, proposal.versionId]);
@@ -767,6 +773,30 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       loadingTask.destroy();
     };
   }, [displayScale, pageSizes, pdfBytes]);
+
+  useEffect(() => {
+    const pagesElement = contractPagesRef.current;
+    const firstPage = pageSizes[0];
+    if (!pagesElement || !firstPage?.width) return;
+
+    const fitContractToAvailableWidth = () => {
+      if (userAdjustedDisplayScaleRef.current) return;
+      const availableWidth = Math.max(0, pagesElement.clientWidth - 8);
+      if (!availableWidth) return;
+      const nextScale = clampDisplayScale(Math.min(DEFAULT_DISPLAY_SCALE, availableWidth / firstPage.width));
+      setDisplayScale((current) => (Math.abs(current - nextScale) < 0.01 ? current : nextScale));
+    };
+
+    fitContractToAvailableWidth();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', fitContractToAvailableWidth);
+      return () => window.removeEventListener('resize', fitContractToAvailableWidth);
+    }
+
+    const observer = new ResizeObserver(fitContractToAvailableWidth);
+    observer.observe(pagesElement);
+    return () => observer.disconnect();
+  }, [pageSizes]);
 
   const unmappedIds = useMemo(
     () => new Set(fields.filter((f) => !f.value && f.color === 'blue' && !OPTIONAL_FIELD_IDS.has(f.id)).map((f) => f.id)),
@@ -1061,10 +1091,12 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   }, [buildFlattenedContractPdf, exportWarnings, exporting, fields, getContractPdfFileName, handleSave, showToast]);
 
   const handleZoomOut = useCallback(() => {
+    userAdjustedDisplayScaleRef.current = true;
     setDisplayScale((prev) => clampDisplayScale(prev - DISPLAY_SCALE_STEP));
   }, []);
 
   const handleZoomIn = useCallback(() => {
+    userAdjustedDisplayScaleRef.current = true;
     setDisplayScale((prev) => clampDisplayScale(prev + DISPLAY_SCALE_STEP));
   }, []);
 
@@ -1093,7 +1125,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
         <div className="contract-view-empty">No contract data available.</div>
       ) : (
         <>
-          <div className="contract-pages">
+          <div className="contract-pages" ref={contractPagesRef}>
             {!pdfBytes || !pageCount ? (
               <div className="contract-view-empty">Preparing contract PDF...</div>
             ) : (

@@ -10,6 +10,17 @@
   z-index: 11000;
   animation: toast-in 0.2s ease-out;
   min-width: 240px;
+  max-width: calc(100vw - 40px);
+}
+
+@media (max-width: 480px) {
+  .toast {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    min-width: 0;
+    max-width: none;
+  }
 }
 
 .toast-info {

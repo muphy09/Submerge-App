@@ -1,10 +1,11 @@
 .settings-page {
   background-color: #f5f5f5;
   min-height: 100vh;
+  min-height: 100dvh;
   padding: clamp(1.5rem, 3vh, 2rem);
   padding-top: calc(var(--header-offset) + clamp(1.5rem, 3vh, 2rem));
   animation: slideInFromLeft 0.3s ease-out;
-  zoom: var(--scale-factor);
+  overflow-x: hidden;
 }
 
 @keyframes slideInFromLeft {

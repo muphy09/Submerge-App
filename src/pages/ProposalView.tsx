@@ -4531,44 +4531,52 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           </div>
 
           <div className="hero-grid">
-            <p className="hero-section-title hero-section-title-specs">
-              <span>Pool Specifications</span>
-              <TooltipAnchor tooltip={getPricingModelStatusTooltip(vm.priceModelStatus)}>
-                <span className={`hero-price-model ${vm.priceModelStatus}`} aria-label={getPricingModelStatusTooltip(vm.priceModelStatus)}>
-                  {getPricingModelDisplayName(vm.priceModel, vm.priceModelStatus)}
-                </span>
-              </TooltipAnchor>
-            </p>
-            <p className="hero-section-title hero-section-title-equipment">
-              <span>Pool Equipment</span>
-              {vm.equipmentPackageLabel && <span className="hero-equipment-package-pill">{vm.equipmentPackageLabel}</span>}
-            </p>
-            <div className="hero-column">
-              <div className="hero-line"><span className="hero-label">Pool Type:</span><OverflowTooltipText>{vm.poolTypeLabel}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Max Width:</span><OverflowTooltipText>{vm.maxWidth}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Shallow Depth:</span><OverflowTooltipText>{vm.shallowDepth}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">{vm.spaLengthLabel}:</span><OverflowTooltipText>{vm.spaLength}</OverflowTooltipText></div>
-            </div>
-            <div className="hero-column">
-              <div className="hero-line"><span className="hero-label">Approx. Gallons:</span><OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Max Length:</span><OverflowTooltipText>{vm.maxLength}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">End Depth:</span><OverflowTooltipText>{vm.endDepth}</OverflowTooltipText></div>
-              {!vm.showFiberglassSpaSummary && (
-                <div className="hero-line"><span className="hero-label">{vm.spaWidthLabel}:</span><OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText></div>
-              )}
-            </div>
-            <div className="hero-column">
-              <div className="hero-line"><span className="hero-label">Pump:</span><OverflowTooltipText>{vm.pumpSummary}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Filter:</span><OverflowTooltipText>{vm.filterSummary}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Heater:</span><OverflowTooltipText>{vm.heaterSummary}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Cleaner:</span><OverflowTooltipText>{vm.cleanerSummary}</OverflowTooltipText></div>
-            </div>
-            <div className="hero-column">
-              <div className="hero-line"><span className="hero-label">Automation:</span><OverflowTooltipText>{vm.automationSummary}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Sanitation:</span><OverflowTooltipText>{vm.sanitationSummary}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Autofill:</span><OverflowTooltipText>{vm.autoFillSummary}</OverflowTooltipText></div>
-              <div className="hero-line"><span className="hero-label">Pool Light:</span><OverflowTooltipText>{vm.poolLightSummary}</OverflowTooltipText></div>
-            </div>
+            <section className="hero-summary-section" aria-labelledby="pool-specifications-heading">
+              <p id="pool-specifications-heading" className="hero-section-title hero-section-title-specs">
+                <span>Pool Specifications</span>
+                <TooltipAnchor tooltip={getPricingModelStatusTooltip(vm.priceModelStatus)}>
+                  <span className={`hero-price-model ${vm.priceModelStatus}`} aria-label={getPricingModelStatusTooltip(vm.priceModelStatus)}>
+                    {getPricingModelDisplayName(vm.priceModel, vm.priceModelStatus)}
+                  </span>
+                </TooltipAnchor>
+              </p>
+              <div className="hero-section-columns">
+                <div className="hero-column">
+                  <div className="hero-line"><span className="hero-label">Pool Type:</span><OverflowTooltipText>{vm.poolTypeLabel}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Max Width:</span><OverflowTooltipText>{vm.maxWidth}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Shallow Depth:</span><OverflowTooltipText>{vm.shallowDepth}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">{vm.spaLengthLabel}:</span><OverflowTooltipText>{vm.spaLength}</OverflowTooltipText></div>
+                </div>
+                <div className="hero-column">
+                  <div className="hero-line"><span className="hero-label">Approx. Gallons:</span><OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Max Length:</span><OverflowTooltipText>{vm.maxLength}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">End Depth:</span><OverflowTooltipText>{vm.endDepth}</OverflowTooltipText></div>
+                  {!vm.showFiberglassSpaSummary && (
+                    <div className="hero-line"><span className="hero-label">{vm.spaWidthLabel}:</span><OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText></div>
+                  )}
+                </div>
+              </div>
+            </section>
+            <section className="hero-summary-section" aria-labelledby="pool-equipment-heading">
+              <p id="pool-equipment-heading" className="hero-section-title hero-section-title-equipment">
+                <span>Pool Equipment</span>
+                {vm.equipmentPackageLabel && <span className="hero-equipment-package-pill">{vm.equipmentPackageLabel}</span>}
+              </p>
+              <div className="hero-section-columns">
+                <div className="hero-column">
+                  <div className="hero-line"><span className="hero-label">Pump:</span><OverflowTooltipText>{vm.pumpSummary}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Filter:</span><OverflowTooltipText>{vm.filterSummary}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Heater:</span><OverflowTooltipText>{vm.heaterSummary}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Cleaner:</span><OverflowTooltipText>{vm.cleanerSummary}</OverflowTooltipText></div>
+                </div>
+                <div className="hero-column">
+                  <div className="hero-line"><span className="hero-label">Automation:</span><OverflowTooltipText>{vm.automationSummary}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Sanitation:</span><OverflowTooltipText>{vm.sanitationSummary}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Autofill:</span><OverflowTooltipText>{vm.autoFillSummary}</OverflowTooltipText></div>
+                  <div className="hero-line"><span className="hero-label">Pool Light:</span><OverflowTooltipText>{vm.poolLightSummary}</OverflowTooltipText></div>
+                </div>
+              </div>
+            </section>
           </div>
 
           <div className="hero-total">

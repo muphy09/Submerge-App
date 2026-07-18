@@ -200,6 +200,25 @@
   min-height: 0;
   overflow: auto;
   padding: 0 1rem 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(31, 63, 99, 0.55) rgba(31, 63, 99, 0.08);
+}
+
+.dashboard-proposals-table-scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.dashboard-proposals-table-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(31, 63, 99, 0.08);
+}
+
+.dashboard-proposals-table-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(31, 63, 99, 0.5);
+  background-clip: padding-box;
 }
 
 .dashboard-proposals-table {

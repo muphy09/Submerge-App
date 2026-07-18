@@ -750,7 +750,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const handleResize = () => {
       const width = getViewportWidth();
       setViewportWidth(width);
-      const forceHideNav = width < 960;
+      const forceHideNav = width < 1024;
       if (forceHideNav && showLeftNav) {
         setShowLeftNav(false);
       } else if (!navManuallyToggled && width > 1200 && !showLeftNav) {
@@ -2756,7 +2756,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                   <button
                     key={section.key}
                     className={`nav-item ${section.key === 'poolSpecs' ? 'pool-specs-item' : ''} ${section.key === 'excavation' ? 'excavation-item' : ''} ${section.key === 'plumbing' ? 'plumbing-item' : ''} ${section.key === 'electrical' ? 'electrical-item' : ''} ${section.key === 'tileCopingDecking' ? 'tile-item' : ''} ${section.key === 'drainage' ? 'drainage-item' : ''} ${section.key === 'waterFeatures' ? 'water-item' : ''} ${section.key === 'interiorFinish' ? 'interior-item' : ''} ${section.key === 'equipment' ? 'equipment-item' : ''} ${section.key === 'customFeatures' ? 'custom-item' : ''} ${isActive ? 'active' : ''}`}
-                    onClick={() => setCurrentSection(index)}
+                    onClick={() => {
+                      setCurrentSection(index);
+                      if (isMobileLayout) setShowLeftNav(false);
+                    }}
                   >
                     <span className="nav-icon-wrapper" aria-hidden="true">
                       {sectionIcons[section.key]()}
@@ -2772,6 +2775,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         {!showLeftNav && (
           <button
             className="sidebar-show-button left-show"
+            type="button"
+            aria-label="Show proposal navigation"
             onClick={() => {
               setNavManuallyToggled(true);
               setShowLeftNav(true);

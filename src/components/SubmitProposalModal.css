@@ -7,14 +7,16 @@
   justify-content: center;
   padding: 1.25rem;
   z-index: 1400;
+  overflow-y: auto;
 }
 
 .submit-proposal-modal {
   width: min(640px, 100%);
+  max-height: calc(100dvh - 2.5rem);
   border-radius: 18px;
   background: #ffffff;
   box-shadow: 0 32px 80px rgba(8, 20, 38, 0.28);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .submit-proposal-header {

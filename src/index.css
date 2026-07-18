@@ -1,6 +1,9 @@
 html, body, #root {
   min-height: 100vh;
+  min-height: 100dvh;
   height: auto;
+  width: 100%;
+  max-width: 100%;
 }
 
 body {
@@ -12,6 +15,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: #f7f9fc;
   overflow: auto;
+  overflow-x: hidden;
 }
 
 code {
