@@ -805,6 +805,7 @@ function AppContent() {
 
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const showOfflineGate = isOffline && !session;
+  const showTestModeBanner = !isContractPrintPreviewRoute && effectiveSession?.isTestAccount === true;
 
   // Show navigation bar on main pages, hide it on proposal form/view pages
   const showNavigation =
@@ -1096,7 +1097,13 @@ function AppContent() {
   }, [canSubmitFeedback, effectiveSession?.franchiseId, location.pathname, updateStatus]);
 
   return (
-    <div className="app">
+    <div className={`app${showTestModeBanner ? ' app--test-mode' : ''}`}>
+      {showTestModeBanner && (
+        <div className="app-test-mode-banner" role="status">
+          TEST MODE · {effectiveSession.franchiseName || effectiveSession.franchiseCode || 'Franchise'} ·{' '}
+          {String(effectiveSession.role || 'designer').toUpperCase()} · Live franchise settings are read-only
+        </div>
+      )}
       {showNavigation && (
         <NavigationBar
           userName={session?.userName || session?.userEmail || 'User'}
@@ -1192,12 +1199,6 @@ function AppContent() {
           <Route path="/contract-print-preview" element={<ContractPrintPreviewPage />} />
           </Routes>
         </Suspense>
-      )}
-      {!isContractPrintPreviewRoute && effectiveSession?.isTestAccount && (
-        <div className="app-test-mode-banner" role="status">
-          TEST MODE · {effectiveSession.franchiseName || effectiveSession.franchiseCode || 'Franchise'} ·{' '}
-          {String(effectiveSession.role || 'designer').toUpperCase()} · Live franchise settings are read-only
-        </div>
       )}
       {!isContractPrintPreviewRoute && (actingLabel || location.pathname === '/') && (
         <div className="app-bottom-left-meta">

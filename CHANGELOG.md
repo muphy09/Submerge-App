@@ -3,6 +3,7 @@
 - Created isolated testing accounts for Designer, Book Keeper, Admin, and Owner roles
 - Testing proposals and workflow actions are stored separately and never appear in the franchise's live proposal workflow
 - Live franchise settings remain read-only in Test Mode
+-----
 ## [3.0.2] - 7/17/26
 ### Patch Notes Permissions
 - Designers can now open Patch Notes and view notes published for their franchise

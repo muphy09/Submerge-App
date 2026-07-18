@@ -246,8 +246,12 @@ const devStart = read('dev-start.js');
 requireText(devStart, /SUBMERGE_DATA_PARTITION\s*=\s*'staging'/, 'The staging task does not activate its isolated data partition.');
 
 const app = read('src/App.tsx');
+const appCss = read('src/App.css');
 requireText(app, /VITE_SUBMERGE_ENVIRONMENT[\s\S]{0,220}\[\$\{environmentLabel\}\]/, 'The staging environment is not visible in the window title.');
 requireText(app, /app-test-mode-banner[\s\S]{0,220}Live franchise settings are read-only/, 'Test sessions do not show a persistent safety banner.');
+requireText(app, /className=\{`app\$\{showTestModeBanner\s*\?\s*' app--test-mode'/, 'Test sessions do not activate the non-overlapping top-banner layout.');
+requireText(appCss, /\.app-test-mode-banner\s*\{[\s\S]{0,180}top:\s*0;/, 'The Test Mode banner is not anchored to the top of the app window.');
+requireText(appCss, /\.app--test-mode \.navigation-bar\s*\{[\s\S]{0,100}top:\s*var\(--test-mode-banner-height\)/, 'The navigation bar is not offset below the Test Mode banner.');
 requireText(app, /session\?\.isTestAccount !== true[\s\S]{0,180}canSubmitFeedback|canSubmitFeedback[\s\S]{0,180}session\?\.isTestAccount !== true/, 'Test sessions are not excluded from live franchise feedback.');
 
 if (failures.length) {

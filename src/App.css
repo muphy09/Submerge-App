@@ -3,6 +3,7 @@
   --scale-factor: 1;
   --base-spacing: clamp(0.5rem, 1vw, 1.5rem);
   --header-offset: 80px;
+  --test-mode-banner-height: 30px;
 }
 
 /* Scale adjustments based on viewport height */
@@ -54,14 +55,54 @@
   position: relative;
 }
 
+.app.app--test-mode {
+  --header-offset: calc(80px + var(--test-mode-banner-height));
+}
+
+.app--test-mode .navigation-bar {
+  top: var(--test-mode-banner-height);
+}
+
+.app--test-mode .proposal-form {
+  box-sizing: border-box;
+  padding-top: var(--test-mode-banner-height);
+}
+
+.app--test-mode .proposal-view {
+  box-sizing: border-box;
+  padding-top: calc(24px + var(--test-mode-banner-height));
+}
+
+@media (max-width: 1100px) {
+  .app.app--test-mode {
+    --header-offset: calc(96px + var(--test-mode-banner-height));
+  }
+}
+
+@media (max-width: 820px) {
+  .app.app--test-mode {
+    --header-offset: calc(128px + var(--test-mode-banner-height));
+  }
+}
+
+@media (max-width: 560px) {
+  .app.app--test-mode {
+    --header-offset: calc(150px + var(--test-mode-banner-height));
+  }
+}
+
 .app-test-mode-banner {
   position: fixed;
-  top: var(--header-offset);
+  top: 0;
   left: 0;
   right: 0;
   z-index: 9400;
-  padding: 7px 16px;
-  border-top: 1px solid #d99d19;
+  box-sizing: border-box;
+  height: var(--test-mode-banner-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 16px;
   border-bottom: 1px solid #b77800;
   background: #f5b82e;
   color: #3b2900;
