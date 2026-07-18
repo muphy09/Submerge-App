@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: clamp(420px, 48vh, 620px);
+  height: clamp(520px, 72dvh, 760px);
   border-radius: 24px;
   border: 1px solid rgba(27, 54, 93, 0.12);
   background:
@@ -191,6 +191,7 @@
 .dashboard-proposals-table-shell {
   position: relative;
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
 }
@@ -198,7 +199,8 @@
 .dashboard-proposals-table-scroll {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 0 1rem 1rem;
   scrollbar-width: thin;
   scrollbar-color: rgba(31, 63, 99, 0.55) rgba(31, 63, 99, 0.08);
@@ -595,7 +597,7 @@
 
 @media (max-width: 980px) {
   .dashboard-proposals-panel {
-    height: clamp(380px, 52vh, 560px);
+    height: clamp(560px, 78dvh, 760px);
   }
 
   .dashboard-proposals-header {
@@ -632,5 +634,10 @@
 
   .dashboard-proposals-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-proposals-table-shell {
+    flex: none;
+    height: clamp(270px, 52dvh, 460px);
   }
 }

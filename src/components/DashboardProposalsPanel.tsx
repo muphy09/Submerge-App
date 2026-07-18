@@ -6,7 +6,9 @@ import { getContractTemplateIdForProposal } from '../services/contractTemplates'
 import { getReviewerVisibleVersions, isApprovedButNotSigned } from '../services/proposalWorkflow';
 import { listAllVersions } from '../utils/proposalVersions';
 import { getPricingTierName } from '../services/pricingTiers';
+import { useAdaptiveTablePagination } from '../hooks/useAdaptiveTablePagination';
 import './DashboardProposalsPanel.css';
+import TablePagination from './TablePagination';
 
 type DashboardProposalsPanelProps = {
   proposals: Proposal[];
@@ -309,6 +311,35 @@ function DashboardProposalsPanel({
       return 0;
     });
 
+  const dashboardPaginationResetKey = [
+    searchTerm,
+    statusFilter,
+    pricingModelFilter,
+    contractTypeFilter,
+    sortField,
+    sortDirection,
+    collapsed,
+  ].join('|');
+  const {
+    viewportRef: proposalTableViewportRef,
+    currentPage: proposalPage,
+    pageSize: proposalPageSize,
+    totalPages: proposalTotalPages,
+    startIndex: proposalStartIndex,
+    endIndex: proposalEndIndex,
+    goToPage: goToProposalPage,
+  } = useAdaptiveTablePagination({
+    itemCount: filteredProposals.length,
+    maxPageSize: 5,
+    estimatedRowHeight: 64,
+    estimatedHeaderHeight: 52,
+    resetKey: dashboardPaginationResetKey,
+  });
+  const paginatedProposals = filteredProposals.slice(
+    proposalStartIndex,
+    proposalStartIndex + proposalPageSize
+  );
+
   const hasActiveFilters =
     searchTerm.trim().length > 0 ||
     statusFilter !== 'all' ||
@@ -489,8 +520,9 @@ function DashboardProposalsPanel({
                 </button>
               </div>
             ) : (
-              <div className="dashboard-proposals-table-scroll">
-                <table className="dashboard-proposals-table">
+              <>
+                <div ref={proposalTableViewportRef} className="dashboard-proposals-table-scroll">
+                  <table className="dashboard-proposals-table">
                   <thead>
                     <tr>
                       <th>
@@ -537,8 +569,8 @@ function DashboardProposalsPanel({
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filteredProposals.map((proposal) => {
+                    <tbody>
+                    {paginatedProposals.map((proposal) => {
                       const showApprovalMarker = isApprovedButNotSigned(proposal);
                       const dashboardStatus = getDashboardStatus(proposal);
                       const contractTypeLabel = getContractTypeLabel(proposal);
@@ -604,9 +636,18 @@ function DashboardProposalsPanel({
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+                    </tbody>
+                  </table>
+                </div>
+                <TablePagination
+                  currentPage={proposalPage}
+                  totalPages={proposalTotalPages}
+                  totalItems={filteredProposals.length}
+                  startIndex={proposalStartIndex}
+                  endIndex={proposalEndIndex}
+                  onPageChange={goToProposalPage}
+                />
+              </>
             )}
           </div>
         </div>

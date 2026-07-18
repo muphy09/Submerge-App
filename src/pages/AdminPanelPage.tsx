@@ -58,6 +58,8 @@ import {
   type ContractTemplateSummary,
 } from '../services/contractTemplateRegistry';
 import PdfCanvasViewer from '../components/PdfCanvasViewer';
+import TablePagination from '../components/TablePagination';
+import { useAdaptiveTablePagination } from '../hooks/useAdaptiveTablePagination';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 type SessionInfo = {
@@ -1145,6 +1147,29 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
     });
   }, [designerFilter, session?.userName, sortedProposals]);
 
+  const {
+    viewportRef: proposalTableViewportRef,
+    currentPage: proposalPage,
+    pageSize: proposalPageSize,
+    totalPages: proposalTotalPages,
+    startIndex: proposalStartIndex,
+    endIndex: proposalEndIndex,
+    goToPage: goToProposalPage,
+  } = useAdaptiveTablePagination({
+    itemCount: filteredProposals.length,
+    maxPageSize: 8,
+    estimatedRowHeight: 52,
+    estimatedHeaderHeight: 48,
+    resetKey: designerFilter,
+    viewportHeightRatio: 0.55,
+    minViewportHeight: 240,
+    maxViewportHeight: 680,
+  });
+  const paginatedProposals = filteredProposals.slice(
+    proposalStartIndex,
+    proposalStartIndex + proposalPageSize
+  );
+
   const sortedPricingModels = useMemo(
     () =>
       [...pricingModels]
@@ -1431,8 +1456,9 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
               : 'No proposals match the selected designer.'}
           </div>
         ) : (
-          <div className="admin-table-wrapper">
-            <table className="admin-table">
+          <div className="admin-proposals-table-region">
+            <div ref={proposalTableViewportRef} className="admin-table-wrapper">
+              <table className="admin-table">
               <colgroup>
                 <col style={{ width: '9%' }} />
                 <col style={{ width: '11%' }} />
@@ -1461,8 +1487,8 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                   <th className="th-right">Gross Profit Amount</th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredProposals.map((proposal) => {
+                <tbody>
+                {paginatedProposals.map((proposal) => {
                   const reviewerVisibleVersions = getReviewerVisibleVersions(proposal);
                   const reviewerPrimaryVersionId = getReviewerPrimaryVersionId(proposal);
                   const displayProposal =
@@ -1563,8 +1589,17 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
                     </tr>
                   );
                 })}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
+            <TablePagination
+              currentPage={proposalPage}
+              totalPages={proposalTotalPages}
+              totalItems={filteredProposals.length}
+              startIndex={proposalStartIndex}
+              endIndex={proposalEndIndex}
+              onPageChange={goToProposalPage}
+            />
           </div>
         )}
       </div>

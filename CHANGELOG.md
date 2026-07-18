@@ -1,8 +1,9 @@
 ## [3.0.5] - 7/18/26
 ### Resolution Scaling
-- Multiple structural changes to satisfy different screen sizes & resolutions
+- Numerous structural changes to satisfy different screen sizes & resolutions
     - Fixed an issue with 16:10 aspect ratio displays
     - Adjusted formatting to better fit vertical displays
+- Multiple proposals now condense into pages on the Dashboard and Admin Panel
 ### Windows Installer 
 -----
 ## [3.0.4] - 7/17/26
