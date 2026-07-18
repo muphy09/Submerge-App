@@ -120,12 +120,14 @@ export interface Excavation {
 
   // Additional work
   additionalSitePrepHours: number;
+  hasAdditionalSitePrep?: boolean;
   hasGravelInstall: boolean;
   hasDirtHaul: boolean;
   additionalBench: number; // Auto-calculated from steps > 20
 
   // Double curtain
   doubleCurtainLength: number; // LNFT
+  hasDoubleCurtain?: boolean;
 
   // Soil/Engineering
   needsSoilSampleEngineer: boolean;

@@ -7,6 +7,10 @@ const failures = [];
 const requireText = (content, pattern, description) => {
   if (!pattern.test(content)) failures.push(description);
 };
+const requireOccurrenceCount = (content, needle, expected, description) => {
+  const actual = content.split(needle).length - 1;
+  if (actual !== expected) failures.push(`${description} Expected ${expected}, found ${actual}.`);
+};
 
 const migration = read('supabase/migrations/202607150001_add_franchise_configuration_and_revisions.sql');
 const roleMigration = read('supabase/migrations/202607170001_harden_role_permissions.sql');
@@ -196,6 +200,11 @@ const proposalHome = read('src/pages/HomePage.tsx');
 const proposalForm = read('src/pages/ProposalForm.tsx');
 const proposalView = read('src/pages/ProposalView.tsx');
 const proposalViewCss = read('src/pages/ProposalView.css');
+const pricingDataModal = read('src/components/PricingDataModal.tsx');
+const pricingDataModalCss = read('src/components/PricingDataModal.css');
+const pricingDataDefaults = read('src/services/pricingData.ts');
+const proposalDefaults = read('src/utils/proposalDefaults.ts');
+const excavationSection = read('src/components/ExcavationSectionNew.tsx');
 const franchiseConfiguration = read('src/services/franchiseConfiguration.ts');
 const franchiseCapabilityHook = read('src/hooks/useFranchiseCapability.ts');
 const proposalAdapter = read('src/services/proposalsAdapter.ts');
@@ -234,6 +243,40 @@ requireText(authService, /getTestAccountByAuthId[\s\S]*app_test_accounts/, 'Auth
 requireText(authService, /buildTestSession[\s\S]*isTestAccount:\s*true/, 'Testing authentication does not mark the session as isolated.');
 requireText(testAccountsPanel, /dtest[\s\S]*bktest[\s\S]*atest[\s\S]*otest/, 'Master testing-account controls are missing one or more designated roles.');
 requireText(manageTestAccountsFunction, /getRequesterProfile[\s\S]*role[^\n]*master/, 'Testing-account management is not restricted to the master role.');
+requireText(pricingDataModal, /title:\s*'Pool Specifications'[\s\S]{0,140}title:\s*'Additional Features'[\s\S]{0,180}title:\s*'Pool specification feature costs'/, 'Pool Specification additional feature costs are not grouped in their own Admin pricing table.');
+requireText(pricingDataModal, /title:\s*'Excavation'[\s\S]{0,4000}title:\s*'Additional Features'[\s\S]{0,180}title:\s*'Excavation feature costs'/, 'Excavation additional feature costs are not grouped in their own Admin pricing table.');
+requireText(pricingDataModal, /title:\s*'Interior Finish'[\s\S]{0,5000}title:\s*'Additional Features'[\s\S]{0,180}title:\s*'Interior finish feature costs'/, 'Interior Finish additional feature costs are not grouped in their own Admin pricing table.');
+requireText(pricingDataModal, /<th scope="col">Additional Feature<\/th>[\s\S]{0,100}<th scope="col">Associated Cost<\/th>[\s\S]{0,100}<th scope="col">Enabled by Default\?<\/th>/, 'The Admin additional-feature table is missing its feature, cost, and default columns.');
+requireText(pricingDataModal, /className="pricing-field__info"[\s\S]{0,100}data-tooltip=\{field\.tooltip\}/, 'Additional feature cost rows do not expose application guidance.');
+requireText(pricingDataModal, /pricing-table pricing-table--browser pricing-scalar-table[\s\S]{0,2500}setSelectedAdditionalFeature/, 'Additional feature costs do not use the standard selectable Admin table pattern.');
+requireText(pricingDataModal, /Edit Additional Feature[\s\S]{0,1500}Additional Feature cannot be renamed/, 'Additional feature rows do not populate the protected right-side details editor.');
+requireText(pricingDataModal, /renderLabelText\('Enabled by Default\?'\)[\s\S]{0,1200}updateDefault\(true\)[\s\S]{0,800}updateDefault\(false\)/, 'The additional feature details editor cannot change the new-proposal default.');
+requireText(pricingDataModalCss, /\.pricing-scalar-table\s*\{[\s\S]{0,80}min-width:\s*720px/, 'The Admin additional-feature table is missing its minimum readable width.');
+requireText(pricingDataDefaults, /additionalFeatureDefaults:\s*\{[\s\S]{0,100}siltFence:\s*true[\s\S]{0,100}tanningShelf:\s*false[\s\S]{0,100}automaticCover:\s*false[\s\S]{0,100}gravelInstall:\s*true[\s\S]{0,100}dirtHaul:\s*true[\s\S]{0,100}soilSampleEngineer:\s*false[\s\S]{0,100}doubleCurtain:\s*false[\s\S]{0,100}additionalSitePrep:\s*false[\s\S]{0,100}waterproofing:\s*false/, 'Additional feature defaults do not preserve the current new-proposal behavior.');
+requireText(proposalDefaults, /isAdditionalFeatureEnabled[\s\S]*hasSiltFence:[\s\S]*hasAutomaticCover:[\s\S]*hasAdditionalSitePrep:[\s\S]*hasDoubleCurtain:[\s\S]*hasWaterproofing:/, 'New proposal defaults are not driven by the active pricing model additional-feature settings.');
+requireText(excavationSection, /hasDoubleCurtain\s*\?\?[\s\S]{0,100}doubleCurtainLength[\s\S]*hasAdditionalSitePrep\s*\?\?[\s\S]{0,100}additionalSitePrepHours/, 'Zero-quantity Excavation features cannot remain enabled by default.');
+
+[
+  "path: ['misc', 'layout', 'siltFencing']",
+  "path: ['steel', 'tanningShelf']",
+  "path: ['excavation', 'coverBox']",
+  "path: ['shotcrete', 'labor', 'autoCover']",
+  "path: ['shotcrete', 'material', 'autoCover']",
+  "path: ['excavation', 'gravelPerSqft']",
+  "path: ['excavation', 'dirtHaulPerYard']",
+  "path: ['plans', 'soilSampleEngineer']",
+  "path: ['steel', 'doubleCurtainPerLnft']",
+  "path: ['excavation', 'sitePrep']",
+  "path: ['interiorFinish', 'extras', 'waterproofingPerSqft']",
+  "path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa']",
+].forEach((pricingPath) => {
+  requireOccurrenceCount(
+    pricingDataModal,
+    pricingPath,
+    1,
+    `Admin pricing field ${pricingPath} must live in exactly one editor location.`
+  );
+});
 
 const packageJson = read('package.json');
 requireText(packageJson, /"release-notes\/\*\*\/\*"/, 'Franchise patch-note files are not included in packaged applications.');

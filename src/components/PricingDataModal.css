@@ -1475,6 +1475,38 @@
   background: #f1f5f9;
 }
 
+.pricing-scalar-table {
+  min-width: 720px;
+}
+
+.pricing-scalar-table__feature {
+  width: 48%;
+}
+
+.pricing-scalar-table__cost {
+  width: 26%;
+}
+
+.pricing-scalar-table th:last-child,
+.pricing-scalar-table td:last-child {
+  width: 26%;
+  white-space: nowrap;
+}
+
+.pricing-scalar-table__feature-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #172033;
+}
+
+.pricing-scalar-table__feature-label .pricing-field__label-text {
+  flex: 1;
+}
+
 .pricing-table__checkbox-cell {
   display: flex;
   justify-content: center;

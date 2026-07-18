@@ -142,6 +142,19 @@ const pricingData = {
   pricingDefaults: {
     targetMargin: 0.7, // Displayed as 70% in Admin Pricing; retail = COGS / targetMargin
   },
+  // Proposal-builder toggle state used only when a new proposal is created.
+  // Existing proposals retain the selections stored on the proposal itself.
+  additionalFeatureDefaults: {
+    siltFence: true,
+    tanningShelf: false,
+    automaticCover: false,
+    gravelInstall: true,
+    dirtHaul: true,
+    soilSampleEngineer: false,
+    doubleCurtain: false,
+    additionalSitePrep: false,
+    waterproofing: false,
+  },
   plans: {
     poolOnly: 410,
     spa: 80,

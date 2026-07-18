@@ -29,6 +29,11 @@ import { getDefaultCleanerOption, getNoCleanerOption } from './cleanerDefaults';
 import { getNoPumpSelection } from './pumpDefaults';
 import { normalizePapDiscounts } from './papDiscounts';
 
+const isAdditionalFeatureEnabled = (key: string, fallback: boolean) => {
+  const configured = (pricingData as any)?.additionalFeatureDefaults?.[key];
+  return typeof configured === 'boolean' ? configured : fallback;
+};
+
 export function getDefaultPoolSpecs(): PoolSpecs {
   return {
     poolType: 'gunite',
@@ -48,7 +53,7 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     maxWidth: 0,
     maxLength: 0,
     totalStepsAndBench: 0,
-    hasTanningShelf: false,
+    hasTanningShelf: isAdditionalFeatureEnabled('tanningShelf', false),
     spaType: 'none',
     spaLength: 0,
     spaWidth: 0,
@@ -63,8 +68,8 @@ export function getDefaultPoolSpecs(): PoolSpecs {
     deckingArea: 0,
     travelDistance: 0,
     poolToStreetDistance: 0,
-    hasSiltFence: true,
-    hasAutomaticCover: false,
+    hasSiltFence: isAdditionalFeatureEnabled('siltFence', true),
+    hasAutomaticCover: isAdditionalFeatureEnabled('automaticCover', false),
     automaticCoverManufacturerCost: 0,
     waterfallCount: 0,
     approximateGallons: 0,
@@ -84,11 +89,13 @@ export function getDefaultExcavation(): Excavation {
       facing: 'none',
     },
     additionalSitePrepHours: 0,
-    hasGravelInstall: true,
-    hasDirtHaul: true,
+    hasAdditionalSitePrep: isAdditionalFeatureEnabled('additionalSitePrep', false),
+    hasGravelInstall: isAdditionalFeatureEnabled('gravelInstall', true),
+    hasDirtHaul: isAdditionalFeatureEnabled('dirtHaul', true),
     additionalBench: 0,
     doubleCurtainLength: 0,
-    needsSoilSampleEngineer: false,
+    hasDoubleCurtain: isAdditionalFeatureEnabled('doubleCurtain', false),
+    needsSoilSampleEngineer: isAdditionalFeatureEnabled('soilSampleEngineer', false),
     retainingWalls: [],
     retainingWallType: 'None',
     retainingWallLength: 0,
@@ -306,7 +313,7 @@ export function getDefaultInteriorFinish(): InteriorFinish {
     color: '',
     surfaceArea: 0,
     hasSpa: false,
-    hasWaterproofing: true,
+    hasWaterproofing: isAdditionalFeatureEnabled('waterproofing', false),
     customOptions: [],
     cost: 0,
   };

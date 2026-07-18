@@ -137,8 +137,8 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
   const [activeRBBIndex, setActiveRBBIndex] = useState<number | null>(null);
   const [activeExposedPoolWallIndex, setActiveExposedPoolWallIndex] = useState<number | null>(null);
   const [columnsEditing, setColumnsEditing] = useState<boolean>(data.columns.count > 0);
-  const [doubleCurtainActive, setDoubleCurtainActive] = useState<boolean>(data.doubleCurtainLength > 0);
-  const [sitePrepActive, setSitePrepActive] = useState<boolean>(data.additionalSitePrepHours > 0);
+  const doubleCurtainActive = data.hasDoubleCurtain ?? (data.doubleCurtainLength > 0);
+  const sitePrepActive = data.hasAdditionalSitePrep ?? (data.additionalSitePrepHours > 0);
   const rbbFacingOptions = getMasonryFacingOptions(pricingData.masonry, 'rbb');
   const retainingWallOptions = pricingData.masonry.retainingWalls.filter(
     (option: any) => option.name && option.name !== 'No Retaining Wall' && option.name !== 'None',
@@ -163,18 +163,6 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
       setActiveExposedPoolWallIndex(null);
     }
   }, [exposedPoolWallLevels.length]);
-
-  useEffect(() => {
-    if (data.doubleCurtainLength > 0 && !doubleCurtainActive) {
-      setDoubleCurtainActive(true);
-    }
-  }, [data.doubleCurtainLength, doubleCurtainActive]);
-
-  useEffect(() => {
-    if (data.additionalSitePrepHours > 0 && !sitePrepActive) {
-      setSitePrepActive(true);
-    }
-  }, [data.additionalSitePrepHours, sitePrepActive]);
 
   useEffect(() => {
     const hasLegacySelection =
@@ -325,18 +313,20 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
 
   const toggleDoubleCurtain = () => {
     const next = !doubleCurtainActive;
-    setDoubleCurtainActive(next);
-    if (!next) {
-      handleChange('doubleCurtainLength', 0);
-    }
+    onChange({
+      ...data,
+      hasDoubleCurtain: next,
+      doubleCurtainLength: next ? data.doubleCurtainLength : 0,
+    });
   };
 
   const toggleSitePrep = () => {
     const next = !sitePrepActive;
-    setSitePrepActive(next);
-    if (!next) {
-      handleChange('additionalSitePrepHours', 0);
-    }
+    onChange({
+      ...data,
+      hasAdditionalSitePrep: next,
+      additionalSitePrepHours: next ? data.additionalSitePrepHours : 0,
+    });
   };
 
   const gravelSelected = data.hasGravelInstall;

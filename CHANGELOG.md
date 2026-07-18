@@ -1,9 +1,9 @@
-## [3.0.3] - 7/17/26
+## [3.0.4] - 7/17/26
+### Admin Pricing
+- Organized optional builder costs into Additional Features tables under Pool Specifications, Excavation, and Interior Finish
 ### Testing Accounts
 - Created isolated testing accounts for Designer, Book Keeper, Admin, and Owner roles
 - Testing proposals and workflow actions are stored separately and never appear in the franchise's live proposal workflow
-- Live franchise settings remain read-only in Test Mode
-- Fixed cross-role Test Mode proposal synchronization for Admin, Owner, and Book Keeper workflow testing
 -----
 ## [3.0.2] - 7/17/26
 ### Patch Notes Permissions

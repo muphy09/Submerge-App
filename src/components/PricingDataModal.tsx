@@ -62,6 +62,10 @@ type ScalarField = {
   isUnused?: boolean;
 };
 
+type AdditionalFeatureField = ScalarField & {
+  defaultEnabledPath: Path;
+};
+
 type ListFieldOption = {
   label: string;
   value: string;
@@ -103,6 +107,10 @@ type ListConfig = {
 type Group = {
   title: string;
   scalars?: ScalarField[];
+  scalarTable?: {
+    title: string;
+    rows: AdditionalFeatureField[];
+  };
   lists?: ListConfig[];
   render?: () => JSX.Element;
 };
@@ -123,6 +131,12 @@ type SelectedListItem = {
   groupTitle: string;
   listPathKey: string;
   index: number;
+};
+
+type SelectedAdditionalFeature = {
+  sectionTitle: string;
+  groupTitle: string;
+  rowPathKey: string;
 };
 
 type ContextHelp = {
@@ -192,6 +206,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [activatedFlash, setActivatedFlash] = useState(false);
   const [activeSectionTitle, setActiveSectionTitle] = useState<string>('');
   const [selectedListItem, setSelectedListItem] = useState<SelectedListItem | null>(null);
+  const [selectedAdditionalFeature, setSelectedAdditionalFeature] = useState<SelectedAdditionalFeature | null>(null);
   const [contextHelp, setContextHelp] = useState<ContextHelp | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const activateTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -245,6 +260,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setViewingHistoricalRevision(null);
     setHasChanges(false);
     setSelectedListItem(null);
+    setSelectedAdditionalFeature(null);
     setContextHelp(null);
     setFieldLabelOverrides(loadPricingFieldLabelOverrides(targetFranchise || 'default'));
     setActiveListFieldRename(null);
@@ -353,6 +369,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setNormalData(getNormalPricingDataSnapshot());
       setSelectedPricingTierId(getActivePricingTierId());
       setSelectedListItem(null);
+      setSelectedAdditionalFeature(null);
       setContextHelp(null);
       setPricingModels((prev) =>
         prev.map((m) => ({ ...m, isDefault: m.id === modelId ? m.isDefault : m.isDefault }))
@@ -382,6 +399,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setData(getPricingDataSnapshot());
       setNormalData(getNormalPricingDataSnapshot());
       setSelectedListItem(null);
+      setSelectedAdditionalFeature(null);
       setContextHelp(null);
     } finally {
       setIsInitializing(false);
@@ -443,6 +461,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setViewingHistoricalRevision(revision);
       setHasChanges(false);
       setSelectedListItem(null);
+      setSelectedAdditionalFeature(null);
       setContextHelp(null);
     } finally {
       setIsInitializing(false);
@@ -463,6 +482,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       setModelName('');
       setSaveError(null);
       setSelectedListItem(null);
+      setSelectedAdditionalFeature(null);
       setContextHelp(null);
       setSavingAsNew(true);
       setSelectedPricingTierId(getActivePricingTierId());
@@ -771,6 +791,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           <rect x="6" y="5" width="12" height="14" rx="2" />
           <path d="M9 3h6v4H9z" />
           <path d="M9 10h6M9 13h6M9 16h4" />
+        </svg>
+      ),
+      'Pool Specifications': (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 15c2.1-2 4.2-2 6.3 0s4.2 2 6.3 0 3.4-2 3.4-2" />
+          <path d="M5 18c1.8-1.5 3.6-1.5 5.4 0s3.6 1.5 5.4 0 3.2-1.5 3.2-1.5" />
+          <path d="M6 11V6h4v5M8 6V3M8 4h4" />
         </svg>
       ),
       Excavation: (
@@ -1684,6 +1711,59 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         ],
       },
       {
+        title: 'Pool Specifications',
+        groups: [
+          {
+            title: 'Additional Features',
+            scalarTable: {
+              title: 'Pool specification feature costs',
+              rows: [
+                {
+                  label: 'Silt Fence',
+                  path: ['misc', 'layout', 'siltFencing'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'siltFence'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Added once under Layout when Silt Fence Required is enabled. This feature is enabled by default on new proposals.',
+                },
+                {
+                  label: 'Tanning Shelf',
+                  path: ['steel', 'tanningShelf'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'tanningShelf'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Added once under Steel when a tanning shelf is enabled on a shotcrete pool.',
+                },
+                {
+                  label: 'Automatic Cover - Excavation Cover Box',
+                  path: ['excavation', 'coverBox'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'automaticCover'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Added once under Excavation when Automatic Cover is enabled on a shotcrete pool. This is separate from the manufacturer cost entered by the designer.',
+                },
+                {
+                  label: 'Automatic Cover - Shotcrete Labor',
+                  path: ['shotcrete', 'labor', 'autoCover'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'automaticCover'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Applied per calculated automatic-cover forming unit under Shotcrete Labor. Units round up from ((maximum pool width + 2 ft) x 7) / 22. The designer-entered manufacturer cost is separate.',
+                },
+                {
+                  label: 'Automatic Cover - Shotcrete Material',
+                  path: ['shotcrete', 'material', 'autoCover'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'automaticCover'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Applied per calculated automatic-cover forming unit under Shotcrete Material. Units round up from ((maximum pool width + 2 ft) x 7) / 22. The designer-entered manufacturer cost is separate.',
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
         title: 'Plans & Engineering',
         groups: [
           {
@@ -1717,13 +1797,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 tooltip: 'Applies when a water feature exists. Quantity equals total water feature count.',
                 prefix: '$',
               },
-              {
-                label: 'Soil Sample / Engineer',
-                path: ['plans', 'soilSampleEngineer'],
-                type: 'number',
-                tooltip: 'Added when the soil sample / engineer input is activated.',
-                prefix: '$',
-              },
             ],
           },
         ],
@@ -1746,13 +1819,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 path: ['misc', 'layout', 'spa'],
                 type: 'number',
                 tooltip: 'Added when a spa exists. Quantity is always 1 if spa exists.',
-                prefix: '$',
-              },
-              {
-                label: 'Silt Fencing',
-                path: ['misc', 'layout', 'siltFencing'],
-                type: 'number',
-                tooltip: 'Added when silt fencing is selected on the pool specs.',
                 prefix: '$',
               },
             ],
@@ -1806,38 +1872,10 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 prefix: '$',
               },
               {
-                label: 'Site Prep',
-                path: ['excavation', 'sitePrep'],
-                type: 'number',
-                tooltip: 'Applied per additional site-prep hour in Excavation.',
-                prefix: '$',
-              },
-              {
                 label: 'Backfill',
                 path: ['excavation', 'backfill'],
                 type: 'number',
                 tooltip: 'Added once for non-fiberglass pools.',
-                prefix: '$',
-              },
-              {
-                label: 'Gravel install (per sqft)',
-                path: ['excavation', 'gravelPerSqft'],
-                type: 'number',
-                tooltip: 'Applied per sqft when gravel install is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Dirt haul (per yard)',
-                path: ['excavation', 'dirtHaulPerYard'],
-                type: 'number',
-                tooltip: 'Applied per cubic yard when dirt haul is selected.',
-                prefix: '$',
-              },
-              {
-                label: 'Cover box',
-                path: ['excavation', 'coverBox'],
-                type: 'number',
-                tooltip: 'Added once when an automatic cover is selected.',
                 prefix: '$',
               },
               {
@@ -1855,6 +1893,54 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 prefix: '$',
               },
             ],
+          },
+          {
+            title: 'Additional Features',
+            scalarTable: {
+              title: 'Excavation feature costs',
+              rows: [
+                {
+                  label: 'Gravel Install',
+                  path: ['excavation', 'gravelPerSqft'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'gravelInstall'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Applied per pool surface sqft when Gravel Install is enabled. This feature is enabled by default for non-Bronze shotcrete proposals and is unavailable in Bronze pricing.',
+                },
+                {
+                  label: 'Dirt Haul',
+                  path: ['excavation', 'dirtHaulPerYard'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'dirtHaul'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Applied per calculated cubic yard when Dirt Haul is enabled. Calculated yardage includes pool overdig, adjusted depth, and the spa allowance. This feature is enabled by default.',
+                },
+                {
+                  label: 'Soil Sample / Engineer',
+                  path: ['plans', 'soilSampleEngineer'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'soilSampleEngineer'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Added once under Plans & Engineering when Soil Sample / Engineer is enabled in Excavation.',
+                },
+                {
+                  label: 'Double Curtain',
+                  path: ['steel', 'doubleCurtainPerLnft'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'doubleCurtain'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Applied per linear foot under Steel when Double Curtain is enabled and a length is entered in Excavation. Its length also contributes to calculated shotcrete yardage.',
+                },
+                {
+                  label: 'Additional Site Prep',
+                  path: ['excavation', 'sitePrep'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'additionalSitePrep'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Applied per additional site-preparation hour entered after Additional Site Prep is enabled.',
+                },
+              ],
+            },
           },
           {
             title: 'Base excavation (surface area breakpoints)',
@@ -2412,13 +2498,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 prefix: '$',
               },
               {
-                label: 'Tanning shelf',
-                path: ['steel', 'tanningShelf'],
-                type: 'number',
-                tooltip: 'Added once when a tanning shelf is selected.',
-                prefix: '$',
-              },
-              {
                 label: 'Depth over 8ft (per 6")',
                 path: ['steel', 'depthOver8Ft'],
                 type: 'number',
@@ -2465,13 +2544,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 path: ['steel', 'rbb36PerLnft'],
                 type: 'number',
                 tooltip: 'Applied per linear foot of 36" raised bond beam.',
-                prefix: '$',
-              },
-              {
-                label: 'Double curtain (per lnft)',
-                path: ['steel', 'doubleCurtainPerLnft'],
-                type: 'number',
-                tooltip: 'Applied per linear foot of double curtain length.',
                 prefix: '$',
               },
               {
@@ -2532,13 +2604,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 prefix: '$',
               },
               {
-                label: 'Automatic Cover (per unit)',
-                path: ['shotcrete', 'labor', 'autoCover'],
-                type: 'number',
-                tooltip: 'Applied per automatic cover unit.',
-                prefix: '$',
-              },
-              {
                 label: 'Distance 251-300',
                 path: ['shotcrete', 'labor', 'distance250to300'],
                 type: 'number',
@@ -2588,13 +2653,6 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 path: ['shotcrete', 'material', 'envFuelPerYard'],
                 type: 'number',
                 tooltip: 'Applied per shotcrete yard (same yardage used for material per yard).',
-                prefix: '$',
-              },
-              {
-                label: 'Automatic Cover (per unit)',
-                path: ['shotcrete', 'material', 'autoCover'],
-                type: 'number',
-                tooltip: 'Applied per automatic cover unit.',
                 prefix: '$',
               },
               {
@@ -2993,21 +3051,31 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 tooltip: 'Applied to steps/bench quantity above 20.',
                 prefix: '$',
               },
-              {
-                label: 'Waterproofing (microglass) per sqft',
-                path: ['interiorFinish', 'extras', 'waterproofingPerSqft'],
-                type: 'number',
-                tooltip: 'Applied per sqft of pool interior + spa waterproofing area when waterproofing is included.',
-                prefix: '$',
-              },
-              {
-                label: 'Waterproofing (raised spa)',
-                path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa'],
-                type: 'number',
-                tooltip: 'Added once when a raised shotcrete spa is waterproofed.',
-                prefix: '$',
-              },
             ],
+          },
+          {
+            title: 'Additional Features',
+            scalarTable: {
+              title: 'Interior finish feature costs',
+              rows: [
+                {
+                  label: 'Waterproofing (Microglass) - Pool & Spa Area',
+                  path: ['interiorFinish', 'extras', 'waterproofingPerSqft'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'waterproofing'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Applied per sqft of pool interior plus calculated spa waterproofing area when Waterproofing (Microglass) is enabled. This feature is enabled by default and unavailable in Bronze pricing.',
+                },
+                {
+                  label: 'Waterproofing (Microglass) - Raised Spa',
+                  path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa'],
+                  defaultEnabledPath: ['additionalFeatureDefaults', 'waterproofing'],
+                  type: 'number',
+                  prefix: '$',
+                  tooltip: 'Added once in addition to the per-sqft waterproofing charge when a raised shotcrete spa is waterproofed. This feature is unavailable in Bronze pricing.',
+                },
+              ],
+            },
           },
           {
             title: 'Finishes catalog',
@@ -3680,13 +3748,39 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     setSelectedListItem(null);
   }, [activeSection, selectedListItem]);
 
+  useEffect(() => {
+    if (!selectedAdditionalFeature || !activeSection) {
+      return;
+    }
+
+    const selectedGroup = activeSection.groups.find(
+      (group) => group.title === selectedAdditionalFeature.groupTitle
+    );
+    const selectedRow = selectedGroup?.scalarTable?.rows.find(
+      (row) => getPathKey(row.path) === selectedAdditionalFeature.rowPathKey
+    );
+
+    if (
+      selectedAdditionalFeature.sectionTitle !== activeSection.title ||
+      !selectedGroup ||
+      !selectedRow
+    ) {
+      setSelectedAdditionalFeature(null);
+    }
+  }, [activeSection, selectedAdditionalFeature]);
+
   const pluralize = (count: number, singular: string, plural = `${singular}s`) =>
     `${count} ${count === 1 ? singular : plural}`;
 
   const getGroupSummary = (group: Group) => {
     const hasCustom = Boolean(group.render);
     const hasScalars = Boolean(group.scalars?.length);
+    const hasScalarTable = Boolean(group.scalarTable?.rows.length);
     const hasLists = Boolean(group.lists?.length);
+
+    if (hasScalarTable) {
+      return 'Edit the fixed costs for optional features available to designers in this proposal category.';
+    }
 
     if (hasCustom && hasScalars && hasLists) {
       return 'Use the builder below, then tune the related pricing inputs and catalog entries.';
@@ -3807,6 +3901,29 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       index: selectedListItem.index,
     };
   }, [activeSection, data, selectedListItem]);
+
+  const selectedAdditionalFeatureEditor = useMemo(() => {
+    if (
+      !selectedAdditionalFeature ||
+      !activeSection ||
+      selectedAdditionalFeature.sectionTitle !== activeSection.title
+    ) {
+      return null;
+    }
+
+    const group = activeSection.groups.find(
+      (candidate) => candidate.title === selectedAdditionalFeature.groupTitle
+    );
+    const field = group?.scalarTable?.rows.find(
+      (candidate) => getPathKey(candidate.path) === selectedAdditionalFeature.rowPathKey
+    );
+
+    if (!group || !field) {
+      return null;
+    }
+
+    return { group, field };
+  }, [activeSection, selectedAdditionalFeature]);
 
   const isBronzeEditor = isBronzePricingTier(selectedPricingTierId);
   const isTierPathDifferent = (path: Path) =>
@@ -3929,6 +4046,229 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     );
   };
 
+  const renderScalarTable = (
+    config: NonNullable<Group['scalarTable']>,
+    sectionTitle: string,
+    groupTitle: string
+  ) => (
+    <div className="pricing-browser-card pricing-scalar-table-card">
+      <div className="pricing-browser-card__header">
+        <div className="pricing-browser-card__title-block">
+          <h5>{config.title}</h5>
+          <span className="pricing-browser-card__meta">{pluralize(config.rows.length, 'feature')}</span>
+        </div>
+      </div>
+      <div className="pricing-browser-card__body">
+        <div className="pricing-table-wrapper">
+          <table className="pricing-table pricing-table--browser pricing-scalar-table">
+            <thead>
+              <tr>
+                <th scope="col" className="pricing-table__select-col" />
+                <th scope="col">Additional Feature</th>
+                <th scope="col">Associated Cost</th>
+                <th scope="col">Enabled by Default?</th>
+              </tr>
+            </thead>
+            <tbody>
+              {config.rows.map((field) => {
+                const value = getValue(data, field.valuePath ?? field.path);
+                const isLocked = isActiveBronzeLockedPricingPath(field.path);
+                const isTierDifferent = isTierPathDifferent(field.path);
+                const isDefaultTierDifferent = isTierPathDifferent(field.defaultEnabledPath);
+                const isEnabledByDefault = Boolean(getValue(data, field.defaultEnabledPath));
+                const rowPathKey = getPathKey(field.path);
+                const isSelected =
+                  selectedAdditionalFeature?.sectionTitle === sectionTitle &&
+                  selectedAdditionalFeature?.groupTitle === groupTitle &&
+                  selectedAdditionalFeature?.rowPathKey === rowPathKey;
+
+                const selectRow = () => {
+                  setSelectedListItem(null);
+                  setSelectedAdditionalFeature({ sectionTitle, groupTitle, rowPathKey });
+                  setCenterFieldHelp(sectionTitle, groupTitle, field.label, field.tooltip || field.note);
+                };
+
+                return (
+                  <tr
+                    key={`${sectionTitle}-${groupTitle}-${field.path.join('.')}`}
+                    className={isSelected ? 'is-selected' : ''}
+                    tabIndex={0}
+                    onClick={selectRow}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectRow();
+                      }
+                    }}
+                  >
+                    <td className="pricing-table__select-col">
+                      <span className={`pricing-table__row-indicator${isSelected ? ' is-selected' : ''}`}>
+                        {isSelected ? '>' : ''}
+                      </span>
+                    </td>
+                    <td className="pricing-scalar-table__feature">
+                      <div className="pricing-scalar-table__feature-label">
+                        {renderLabelText(field.label)}
+                        {field.tooltip && (
+                          <span
+                            className="pricing-field__info"
+                            data-tooltip={field.tooltip}
+                            aria-label={field.tooltip}
+                            role="img"
+                            onMouseEnter={updateTooltipAlign}
+                          >
+                            i
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td
+                      className={`pricing-scalar-table__cost${isTierDifferent ? ' is-tier-different' : ''}${
+                        isLocked ? ' is-tier-locked' : ''
+                      }`}
+                    >
+                      {formatPrefixedValue(field.prefix, formatNumericValue(Number(value) || 0))}
+                    </td>
+                    <td className={isDefaultTierDifferent ? 'is-tier-different' : ''}>
+                      {isEnabledByDefault ? 'Yes' : 'No'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="pricing-browser-card__hint">
+          Select a row to edit its cost and new-proposal default in the details panel.
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSelectedAdditionalFeatureEditor = () => {
+    if (!selectedAdditionalFeatureEditor) {
+      return null;
+    }
+
+    const { group, field } = selectedAdditionalFeatureEditor;
+    const value = getValue(data, field.valuePath ?? field.path);
+    const displayValue =
+      field.type === 'number' && field.isPercent && typeof value === 'number'
+        ? formatPercentInputValue(value * 100)
+        : value;
+    const isCostLocked = Boolean(field.disabled) || isActiveBronzeLockedPricingPath(field.path);
+    const isCostDifferent = isTierPathDifferent(field.path);
+    const isDefaultDifferent = isTierPathDifferent(field.defaultEnabledPath);
+    const isEnabledByDefault = Boolean(getValue(data, field.defaultEnabledPath));
+    const isReadOnly = Boolean(viewingHistoricalRevision);
+
+    const updateDefault = (enabled: boolean) => {
+      if (isReadOnly) return;
+      updatePricingValue(field.defaultEnabledPath, enabled);
+      setHasChanges(true);
+    };
+
+    return (
+      <div className="pricing-rail-card">
+        <div className="pricing-rail-card__header">
+          <div>
+            <p className="pricing-rail-card__eyebrow">{group.title}</p>
+            <h3>Edit Additional Feature</h3>
+            <p className="pricing-rail-card__summary">{field.label}</p>
+          </div>
+          <button
+            type="button"
+            className="pricing-rail-card__close"
+            aria-label="Close additional feature editor"
+            onClick={() => setSelectedAdditionalFeature(null)}
+          >
+            ×
+          </button>
+        </div>
+        <div className="pricing-rail-card__body">
+          <label className="pricing-field is-disabled">
+            <div className="pricing-field__label">{renderLabelText('Additional Feature')}</div>
+            <input
+              className="pricing-field__input"
+              type="text"
+              value={field.label}
+              disabled
+              aria-label="Additional Feature cannot be renamed"
+            />
+            <div className="pricing-field__note">Feature names are fixed and cannot be renamed.</div>
+          </label>
+
+          <label
+            className={`pricing-field${isCostLocked || isReadOnly ? ' is-disabled' : ''}${
+              isCostDifferent ? ' is-tier-different' : ''
+            }`}
+          >
+            <div className="pricing-field__label">
+              {renderLabelText('Associated Cost')}
+              {field.tooltip && (
+                <span
+                  className="pricing-field__info"
+                  data-tooltip={field.tooltip}
+                  aria-label={field.tooltip}
+                  role="img"
+                  onMouseEnter={updateTooltipAlign}
+                >
+                  i
+                </span>
+              )}
+              {renderTierResetButton(field.path, isCostLocked || isReadOnly)}
+            </div>
+            <div className={`pricing-field__input-wrap${field.prefix ? ' has-prefix' : ''}`}>
+              {field.prefix && <span className="pricing-field__prefix">{field.prefix}</span>}
+              <input
+                className={`pricing-field__input${field.prefix ? ' pricing-field__input--bare' : ''}`}
+                type={field.type === 'number' ? 'number' : 'text'}
+                value={typeof displayValue === 'number' ? displayValue : displayValue ?? ''}
+                step={field.type === 'number' && field.isPercent ? '0.01' : undefined}
+                disabled={isCostLocked || isReadOnly}
+                onChange={(event) => handleScalarChange(field, event.target.value)}
+              />
+            </div>
+          </label>
+
+          <div className={`pricing-field${isReadOnly ? ' is-disabled' : ''}${isDefaultDifferent ? ' is-tier-different' : ''}`}>
+            <div className="pricing-field__label">
+              {renderLabelText('Enabled by Default?')}
+              <span
+                className="pricing-field__info"
+                data-tooltip="Controls whether this feature starts enabled when a designer creates a new proposal. Existing proposals are not changed."
+                aria-label="Controls whether this feature starts enabled when a designer creates a new proposal. Existing proposals are not changed."
+                role="img"
+                onMouseEnter={updateTooltipAlign}
+              >
+                i
+              </span>
+              {renderTierResetButton(field.defaultEnabledPath, isReadOnly)}
+            </div>
+            <div className="pricing-choice-toggle" role="group" aria-label="Enabled by Default?">
+              <button
+                type="button"
+                className={`pricing-choice-toggle__option${isEnabledByDefault ? ' is-active' : ''}`}
+                disabled={isReadOnly}
+                onClick={() => updateDefault(true)}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                className={`pricing-choice-toggle__option${!isEnabledByDefault ? ' is-active' : ''}`}
+                disabled={isReadOnly}
+                onClick={() => updateDefault(false)}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderList = (config: ListConfig, sectionTitle: string, groupTitle: string) => {
     const entries = (getValue(data, config.path) as any[]) || [];
     const entryCountLabel = pluralize(entries.length, 'item');
@@ -3946,6 +4286,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               onClick={() => {
                 const nextIndex = entries.length;
                 handleAddListItem(config);
+                setSelectedAdditionalFeature(null);
                 setSelectedListItem({
                   sectionTitle,
                   groupTitle,
@@ -3995,17 +4336,19 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       key={`${config.title}-${index}`}
                       className={isSelected ? 'is-selected' : ''}
                       tabIndex={0}
-                      onClick={() =>
+                      onClick={() => {
+                        setSelectedAdditionalFeature(null);
                         setSelectedListItem({
                           sectionTitle,
                           groupTitle,
                           listPathKey: getPathKey(config.path),
                           index,
-                        })
-                      }
+                        });
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
+                          setSelectedAdditionalFeature(null);
                           setSelectedListItem({
                             sectionTitle,
                             groupTitle,
@@ -4541,6 +4884,15 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                                     </div>
                                   </div>
                                 )}
+                                {group.scalarTable && (
+                                  <div className="pricing-group__surface">
+                                    {renderScalarTable(
+                                      group.scalarTable,
+                                      activeSection.title,
+                                      group.title
+                                    )}
+                                  </div>
+                                )}
                                 {group.lists && (
                                   <div className="pricing-group__surface">
                                     <div className="pricing-group__surface-header">
@@ -4567,7 +4919,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             </div>
 
             <aside className="pricing-workspace__rail">
-              {renderSelectedListEditor()}
+              {selectedAdditionalFeatureEditor
+                ? renderSelectedAdditionalFeatureEditor()
+                : renderSelectedListEditor()}
               {renderContextHelpPanel()}
               {selectedModelId && pricingModelRevisions.length > 0 && (
                 <div className="pricing-rail-card pricing-revision-history">
