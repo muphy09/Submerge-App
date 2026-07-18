@@ -9,6 +9,7 @@ import {
   getSessionUserName,
   isMasterActingAsOwnerSession,
   isMasterSession,
+  isTestSession,
   readSession,
 } from './session';
 import { isEnvFlagTrue } from './env';
@@ -60,6 +61,28 @@ const LOCAL_PROPOSAL_OWNERS_STORAGE_KEY = 'submerge.localProposalOwners.v1';
 const RECOVERY_SNAPSHOTS_STORAGE_KEY = 'submerge.proposalRecoverySnapshots.v1';
 const MAX_RECOVERY_SNAPSHOTS = 12;
 export const PROPOSAL_CLOUD_SYNC_EVENT = 'submerge:proposal-cloud-sync';
+const PRODUCTION_PROPOSALS_TABLE = 'franchise_proposals';
+const TEST_PROPOSALS_TABLE = 'franchise_test_proposals';
+
+function getProposalTableName() {
+  return isTestSession() ? TEST_PROPOSALS_TABLE : PRODUCTION_PROPOSALS_TABLE;
+}
+
+function isTestProposalNumber(proposalNumber?: string | null) {
+  return String(proposalNumber || '').trim().toUpperCase().startsWith('TEST-');
+}
+
+function isProposalNumberForCurrentMode(proposalNumber?: string | null) {
+  return isTestSession() === isTestProposalNumber(proposalNumber);
+}
+
+function getTestProposalNumber(proposalNumber?: string | null) {
+  const current = String(proposalNumber || '').trim();
+  if (!isTestSession() || current.startsWith('TEST-')) return current;
+  const code = String(getSessionFranchiseCode() || 'FRANCHISE').replace(/[^a-z0-9-]/gi, '').toUpperCase();
+  const suffix = current.replace(/^PROP-/i, '') || String(Date.now());
+  return `TEST-${code}-${suffix}`;
+}
 
 function proposalOwnershipColumnUnavailable(error: any) {
   const code = String(error?.code || '').toUpperCase();
@@ -175,6 +198,7 @@ function isSubmittedStatus(status?: string | null) {
 
 function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | null, franchiseId?: string) {
   if (isMasterSession()) return false;
+  if (!isProposalNumberForCurrentMode(proposal.proposalNumber)) return false;
   const role = getEffectiveRole(session);
   const targetFranchiseId = proposal.franchiseId || franchiseId || session?.franchiseId || DEFAULT_FRANCHISE_ID;
   const activeFranchiseId = getSessionFranchiseId();
@@ -329,11 +353,16 @@ function clearPendingDelete(proposalNumber: string) {
 }
 
 function isPendingDelete(proposalNumber: string) {
-  return loadPendingDeletes().some((r) => r.proposalNumber === proposalNumber);
+  return isProposalNumberForCurrentMode(proposalNumber) &&
+    loadPendingDeletes().some((r) => r.proposalNumber === proposalNumber);
 }
 
 function getPendingDeleteSet(): Set<string> {
-  return new Set(loadPendingDeletes().map((r) => r.proposalNumber));
+  return new Set(
+    loadPendingDeletes()
+      .filter((record) => isProposalNumberForCurrentMode(record.proposalNumber))
+      .map((record) => record.proposalNumber)
+  );
 }
 
 let tombstoneCache: Tombstone[] | null = null;
@@ -382,7 +411,11 @@ function clearDeletedTombstone(proposalNumber: string) {
 }
 
 function getDeletedTombstoneSet(): Set<string> {
-  return new Set(loadDeletedTombstones().map((r) => r.proposalNumber));
+  return new Set(
+    loadDeletedTombstones()
+      .filter((record) => isProposalNumberForCurrentMode(record.proposalNumber))
+      .map((record) => record.proposalNumber)
+  );
 }
 
 function isDeletedTombstone(proposalNumber: string) {
@@ -486,6 +519,7 @@ async function loadLocalProposals(
     const rows = await window.electron.getAllProposals();
     return (rows || [])
       .map((proposal: Proposal) => normalizeForConsumption(proposal, session))
+      .filter((proposal: Proposal) => isProposalNumberForCurrentMode(proposal.proposalNumber))
       .filter((proposal: Proposal) => isLocalProposalVisibleToSession(proposal, session))
       .filter((proposal: Proposal) =>
         includeAllFranchises
@@ -504,6 +538,7 @@ async function loadLocalProposal(proposalNumber: string, session?: UserSession |
     const proposal = await window.electron.getProposal(proposalNumber);
     if (!proposal) return null;
     const normalized = normalizeForConsumption(proposal as Proposal, session);
+    if (!isProposalNumberForCurrentMode(normalized.proposalNumber)) return null;
     return isLocalProposalVisibleToSession(normalized, session) ? normalized : null;
   } catch (error) {
     console.warn('Failed to load proposal from local store.', error);
@@ -515,7 +550,7 @@ async function fetchSupabaseProposals(franchiseId: string, session: UserSession 
   const supabase = getSupabaseClient();
   if (!supabase) return [];
   const initialResult = await supabase
-    .from('franchise_proposals')
+    .from(getProposalTableName())
     .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status')
     .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
     .order('updated_at', { ascending: false });
@@ -523,7 +558,7 @@ async function fetchSupabaseProposals(franchiseId: string, session: UserSession 
   let error = initialResult.error;
   if (error && proposalOwnershipColumnUnavailable(error)) {
     const legacyResult = await supabase
-      .from('franchise_proposals')
+      .from(getProposalTableName())
       .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
       .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
       .order('updated_at', { ascending: false });
@@ -539,10 +574,11 @@ async function fetchSupabaseProposals(franchiseId: string, session: UserSession 
 }
 
 async function fetchSupabaseProposal(proposalNumber: string, session: UserSession | null): Promise<Proposal | null> {
+  if (!isProposalNumberForCurrentMode(proposalNumber)) return null;
   const supabase = getSupabaseClient();
   if (!supabase) return null;
   const initialResult = await supabase
-    .from('franchise_proposals')
+    .from(getProposalTableName())
     .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status')
     .eq('proposal_number', proposalNumber)
     .maybeSingle();
@@ -550,7 +586,7 @@ async function fetchSupabaseProposal(proposalNumber: string, session: UserSessio
   let error = initialResult.error;
   if (error && proposalOwnershipColumnUnavailable(error)) {
     const legacyResult = await supabase
-      .from('franchise_proposals')
+      .from(getProposalTableName())
       .select('proposal_json, franchise_id, designer_name, designer_role, designer_code, status')
       .eq('proposal_number', proposalNumber)
       .maybeSingle();
@@ -583,6 +619,9 @@ function shouldSyncLocal(local: Proposal, remote?: Proposal | null) {
 }
 
 async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
+  if (!isProposalNumberForCurrentMode(proposal.proposalNumber)) {
+    throw new Error('This proposal belongs to a different storage mode and cannot be synced.');
+  }
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase not configured');
 
@@ -613,7 +652,7 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
     },
   };
   let { error } = await supabase
-    .from('franchise_proposals')
+    .from(getProposalTableName())
     .upsert(
       proposalRow,
       { onConflict: 'proposal_number', ignoreDuplicates: false }
@@ -621,7 +660,7 @@ async function upsertToSupabase(proposal: Proposal): Promise<Proposal> {
   if (error && proposalOwnershipColumnUnavailable(error)) {
     const { designer_auth_user_id: _designerAuthUserId, ...legacyProposalRow } = proposalRow;
     const legacyResult = await supabase
-      .from('franchise_proposals')
+      .from(getProposalTableName())
       .upsert(legacyProposalRow, { onConflict: 'proposal_number', ignoreDuplicates: false });
     error = legacyResult.error;
   }
@@ -690,6 +729,7 @@ export async function syncPendingProposals() {
     const pending = (locals || []).filter((p) => p.syncStatus === 'pending');
     if (!pending.length) return;
     for (const proposal of pending) {
+      if (!isProposalNumberForCurrentMode(proposal.proposalNumber)) continue;
       if (!canAttemptProposalWrite(proposal, session)) continue;
       try {
         const remote = await fetchSupabaseProposal(proposal.proposalNumber, session);
@@ -732,11 +772,12 @@ export async function syncPendingDeletes() {
   syncingPendingDeletes = true;
   try {
     for (const record of pendingDeletes) {
+      if (!isProposalNumberForCurrentMode(record.proposalNumber)) continue;
       try {
         addDeletedTombstone(record.proposalNumber);
         const franchiseId = record.franchiseId || session?.franchiseId || DEFAULT_FRANCHISE_ID;
         const { error, data } = await supabase
-          .from('franchise_proposals')
+          .from(getProposalTableName())
           .delete()
           .eq('proposal_number', record.proposalNumber)
           .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
@@ -746,7 +787,7 @@ export async function syncPendingDeletes() {
         const deletedCount = (data || []).length;
         if (!deletedCount) {
           const fallback = await supabase
-            .from('franchise_proposals')
+            .from(getProposalTableName())
             .delete()
             .eq('proposal_number', record.proposalNumber)
             .select('proposal_number');
@@ -891,7 +932,7 @@ export async function getWorkflowUnreadCount(franchiseId: string, userId?: strin
   if (!supabase) return 0;
 
   const { data, error } = await supabase
-    .from('franchise_proposals')
+    .from(getProposalTableName())
     .select(
       'proposal_number,status,workflow:proposal_json->workflow,versions:proposal_json->versions,version_id:proposal_json->versionId,proposal_status:proposal_json->status'
     )
@@ -987,10 +1028,15 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
   }
   const now = nowIso();
   const session = readSession();
-  clearDeletedTombstone(proposal.proposalNumber);
+  const proposalNumber = getTestProposalNumber(proposal.proposalNumber) || proposal.proposalNumber;
+  if (!isProposalNumberForCurrentMode(proposalNumber)) {
+    throw new Error('This proposal belongs to a different storage mode and cannot be saved.');
+  }
+  clearDeletedTombstone(proposalNumber);
   const normalized = ensureProposalWriteMetadata(
     ensureProposalWorkflow(applyActiveVersion({
       ...proposal,
+      proposalNumber,
       franchiseId: proposal.franchiseId || getSessionFranchiseId(),
       designerName: (proposal as any).designerName || getSessionUserName(),
       designerRole: (proposal as any).designerRole || getSessionRole(),
@@ -1041,7 +1087,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
   try {
     const synced = await upsertToSupabase(persistenceReady);
     await persistLocalProposal({ ...synced, franchiseId });
-    if (options.ledgerAction === 'proposal_submitted') {
+    if (options.ledgerAction === 'proposal_submitted' && !isTestSession()) {
       await logLedgerEventSafe({
         franchiseId,
         action: 'Proposal submitted',
@@ -1074,6 +1120,9 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
   if (isMasterSession()) {
     throw new Error(MASTER_INSPECTION_READ_ONLY_MESSAGE);
   }
+  if (!isProposalNumberForCurrentMode(proposalNumber)) {
+    throw new Error('This proposal belongs to a different storage mode and cannot be deleted.');
+  }
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
   if (SUPABASE_REQUIRED && !isSupabaseEnabled()) {
     throw new Error('Supabase is required but not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
@@ -1090,7 +1139,7 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
   }
 
   const existing = await supabase
-    .from('franchise_proposals')
+    .from(getProposalTableName())
     .select('proposal_number,franchise_id,designer_name,status,proposal_json')
     .eq('proposal_number', proposalNumber)
     .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
@@ -1100,7 +1149,7 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
   }
 
   const { error, data } = await supabase
-    .from('franchise_proposals')
+    .from(getProposalTableName())
     .delete()
     .eq('proposal_number', proposalNumber)
     .eq('franchise_id', targetFranchiseId || DEFAULT_FRANCHISE_ID)
@@ -1110,7 +1159,7 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
   const deletedCount = (data || []).length;
   if (!deletedCount) {
     const fallback = await supabase
-      .from('franchise_proposals')
+      .from(getProposalTableName())
       .delete()
       .eq('proposal_number', proposalNumber)
       .select('proposal_number');
@@ -1130,16 +1179,18 @@ export async function deleteProposal(proposalNumber: string, franchiseId?: strin
   }
 
   const existingProposal = (existing.data as any)?.proposal_json as Proposal | undefined;
-  await logLedgerEventSafe({
-    franchiseId: (existing.data as any)?.franchise_id || targetFranchiseId || DEFAULT_FRANCHISE_ID,
-    action: 'Proposal deleted',
-    targetType: 'proposal',
-    targetId: proposalNumber,
-    details: {
-      proposalNumber,
-      customerName: existingProposal?.customerInfo?.customerName || null,
-      designerName: (existing.data as any)?.designer_name || existingProposal?.designerName || null,
-      status: (existing.data as any)?.status || existingProposal?.status || null,
-    },
-  });
+  if (!isTestSession()) {
+    await logLedgerEventSafe({
+      franchiseId: (existing.data as any)?.franchise_id || targetFranchiseId || DEFAULT_FRANCHISE_ID,
+      action: 'Proposal deleted',
+      targetType: 'proposal',
+      targetId: proposalNumber,
+      details: {
+        proposalNumber,
+        customerName: existingProposal?.customerInfo?.customerName || null,
+        designerName: (existing.data as any)?.designer_name || existingProposal?.designerName || null,
+        status: (existing.data as any)?.status || existingProposal?.status || null,
+      },
+    });
+  }
 }

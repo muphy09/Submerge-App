@@ -16,6 +16,8 @@ export type UserSession = Partial<UserCommissionRates> & {
   approvalMarginThresholdPercent?: number;
   discountAllowanceThresholdPercent?: number;
   alwaysRequireApproval?: boolean;
+  isTestAccount?: boolean;
+  testAccountId?: string;
 };
 
 export type MasterImpersonation = {
@@ -31,6 +33,8 @@ export const MASTER_IMPERSONATION_KEY = 'submerge-master-impersonation';
 export const REMOTE_SIGNOUT_NOTICE_KEY = 'submerge-remote-signout-notice';
 export const DEFAULT_FRANCHISE_ID = 'default';
 export const MASTER_IMPERSONATION_UPDATED_EVENT = 'submerge-master-impersonation-updated';
+export const TEST_MODE_LIVE_SETTINGS_READ_ONLY_MESSAGE =
+  'Test Mode uses live franchise settings as read-only data. This change was not applied.';
 
 function emitMasterImpersonationUpdate(impersonation: MasterImpersonation | null) {
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
@@ -114,6 +118,14 @@ export function subscribeToMasterImpersonationUpdates(
 
 export function isMasterSession(): boolean {
   return (readSession()?.role || '').toLowerCase() === 'master';
+}
+
+export function isTestSession(): boolean {
+  return readSession()?.isTestAccount === true;
+}
+
+export function assertLiveFranchiseMutationAllowed() {
+  if (isTestSession()) throw new Error(TEST_MODE_LIVE_SETTINGS_READ_ONLY_MESSAGE);
 }
 
 export function isMasterActingAsOwnerSession(): boolean {

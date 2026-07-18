@@ -1,6 +1,7 @@
 import { getSupabaseClient, isSupabaseEnabled } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
 import { logLedgerEventSafe } from './ledger';
+import { assertLiveFranchiseMutationAllowed } from './session';
 
 const SUPABASE_REQUIRED = isEnvFlagTrue('VITE_SUPABASE_ONLY');
 
@@ -61,6 +62,7 @@ async function updateLocalFranchiseCode(payload: { franchiseId: string; franchis
 }
 
 export async function saveFranchiseCode(payload: FranchiseCodeUpdate, options: SaveFranchiseCodeOptions = {}) {
+  assertLiveFranchiseMutationAllowed();
   if (!payload.franchiseId) {
     throw new Error('Franchise ID is required.');
   }

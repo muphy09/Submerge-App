@@ -5,7 +5,7 @@ import {
   type ProposalNoteOverrides,
 } from '../utils/proposalNotes';
 import { getSupabaseClient } from './supabaseClient';
-import { readSession } from './session';
+import { assertLiveFranchiseMutationAllowed, readSession } from './session';
 
 export type FranchiseProposalNotesRecord = {
   franchiseId: string;
@@ -184,6 +184,7 @@ export async function loadFranchiseProposalNotes(
 export async function saveFranchiseProposalNotes(
   payload: SaveFranchiseProposalNotesPayload
 ): Promise<FranchiseProposalNotesRecord> {
+  assertLiveFranchiseMutationAllowed();
   if (!payload.franchiseId) {
     throw new Error('Franchise ID is required to save proposal notes.');
   }

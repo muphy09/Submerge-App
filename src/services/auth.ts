@@ -38,6 +38,16 @@ type FranchiseUserRow = {
   always_require_approval?: boolean | null;
 };
 
+type TestAccountRow = {
+  id: string;
+  auth_user_id: string;
+  email?: string | null;
+  name?: string | null;
+  role: Exclude<UserRole, 'master'>;
+  is_active?: boolean | null;
+  password_reset_required?: boolean | null;
+};
+
 type SignInSuccessResult = {
   status: 'signed-in';
   session: UserSession;
@@ -194,6 +204,17 @@ async function getUserProfileByAuthId(authUserId: string, email?: string | null)
   return (fallback.data as FranchiseUserRow) || null;
 }
 
+async function getTestAccountByAuthId(authUserId: string): Promise<TestAccountRow | null> {
+  const supabase = assertSupabaseReady();
+  const { data, error } = await supabase
+    .from('app_test_accounts')
+    .select('id,auth_user_id,email,name,role,is_active,password_reset_required')
+    .eq('auth_user_id', authUserId)
+    .maybeSingle();
+  if (error && error.code !== 'PGRST116') throw error;
+  return (data as TestAccountRow) || null;
+}
+
 async function updateLastLogin(authUserId: string) {
   const supabase = assertSupabaseReady();
   if (!authUserId) return;
@@ -239,6 +260,30 @@ function buildSessionFromProfile(options: {
   };
 }
 
+function buildTestSession(options: {
+  authUserId: string;
+  email: string;
+  account: TestAccountRow;
+  franchise: FranchiseRow;
+}): UserSession {
+  return {
+    userId: options.authUserId,
+    userEmail: options.email,
+    userName: normalizeDisplayName(options.account.name) || options.email || 'Test User',
+    franchiseId: options.franchise.id,
+    franchiseName: options.franchise.name || undefined,
+    franchiseCode: options.franchise.franchise_code || undefined,
+    role: options.account.role,
+    passwordResetRequired: Boolean(options.account.password_reset_required),
+    isTestAccount: true,
+    testAccountId: options.account.id,
+    approvalMarginThresholdPercent: 18,
+    discountAllowanceThresholdPercent: 18,
+    alwaysRequireApproval: false,
+    ...normalizeUserCommissionRates({}),
+  };
+}
+
 export async function signInWithEmail(payload: {
   email: string;
   password: string;
@@ -263,15 +308,49 @@ export async function signInWithEmail(payload: {
 
   const authUser = data.user;
   const profile = await getUserProfileByAuthId(authUser.id, authUser.email);
-  if (!profile) {
+  const testAccount = profile ? null : await getTestAccountByAuthId(authUser.id);
+  if (!profile && !testAccount) {
     await supabase.auth.signOut({ scope: 'local' });
     throw new Error('This account is not linked to a franchise.');
   }
 
-  const role = (profile.role || 'designer') as UserRole;
+  if (testAccount) {
+    const normalizedRole = String(testAccount.role || '').toLowerCase();
+    if (!['owner', 'admin', 'bookkeeper', 'designer'].includes(normalizedRole) || testAccount.is_active === false) {
+      await supabase.auth.signOut({ scope: 'local' });
+      throw new Error('This testing account is not active.');
+    }
+
+    clearMasterImpersonation();
+    const inputCode = normalizeCode(payload.franchiseCode);
+    if (!inputCode) {
+      await supabase.auth.signOut({ scope: 'local' });
+      throw new Error('Franchise code is required for this testing account.');
+    }
+    const franchise = await getFranchiseByCode(inputCode);
+    if (!franchise) {
+      await supabase.auth.signOut({ scope: 'local' });
+      throw new Error('Invalid franchise code.');
+    }
+
+    const session = buildTestSession({
+      authUserId: authUser.id,
+      email: normalizeEmailAddress(authUser.email || email),
+      account: testAccount,
+      franchise,
+    });
+    saveSession(session);
+    return {
+      status: 'signed-in',
+      session,
+      passwordResetRequired: Boolean(testAccount.password_reset_required),
+    };
+  }
+
+  const role = (profile!.role || 'designer') as UserRole;
   const normalizedRole = String(role || '').toLowerCase();
   const allowedRoles = ['master', 'owner', 'admin', 'bookkeeper', 'designer'];
-  const isActive = profile.is_active !== false;
+  const isActive = profile!.is_active !== false;
   if (!allowedRoles.includes(normalizedRole) || !isActive) {
     await supabase.auth.signOut({ scope: 'local' });
     throw new Error('This account is not active.');
@@ -290,19 +369,19 @@ export async function signInWithEmail(payload: {
       await supabase.auth.signOut({ scope: 'local' });
       throw new Error('Invalid franchise code.');
     }
-    if (!profile.franchise_id || franchise.id !== profile.franchise_id) {
+    if (!profile!.franchise_id || franchise.id !== profile!.franchise_id) {
       await supabase.auth.signOut({ scope: 'local' });
       throw new Error('Invalid franchise code.');
     }
-  } else if (profile.franchise_id) {
-    franchise = await getFranchiseById(profile.franchise_id);
+  } else if (profile!.franchise_id) {
+    franchise = await getFranchiseById(profile!.franchise_id);
   }
 
   const appSession = createAppSessionCredentials();
   const session = buildSessionFromProfile({
     authUserId: authUser.id,
     email: normalizeEmailAddress(authUser.email || email),
-    profile,
+    profile: profile!,
     franchise,
     appSession,
   });
@@ -317,7 +396,7 @@ export async function signInWithEmail(payload: {
     return {
       status: 'conflict',
       session,
-      passwordResetRequired: Boolean(profile.password_reset_required),
+      passwordResetRequired: Boolean(profile!.password_reset_required),
     };
   }
 
@@ -329,7 +408,7 @@ export async function signInWithEmail(payload: {
   return {
     status: 'signed-in',
     session,
-    passwordResetRequired: Boolean(profile.password_reset_required),
+    passwordResetRequired: Boolean(profile!.password_reset_required),
   };
 }
 
@@ -374,6 +453,36 @@ export async function loadSessionFromSupabase(): Promise<LoadSessionFromSupabase
   }
   const authSession = data?.session;
   if (!authSession?.user) return buildSignedOutRestoreResult('missing-session');
+
+  if (savedSession.isTestAccount === true) {
+    let testAccount: TestAccountRow | null = null;
+    let franchise: FranchiseRow | null = null;
+    try {
+      testAccount = await getTestAccountByAuthId(authSession.user.id);
+      if (testAccount?.is_active !== false && savedSession.franchiseId) {
+        franchise = await getFranchiseById(savedSession.franchiseId);
+      }
+    } catch (error) {
+      return buildUnverifiedRestoreResult(savedSession);
+    }
+    if (!testAccount || testAccount.is_active === false || !franchise) {
+      await supabase.auth.signOut({ scope: 'local' });
+      clearSession();
+      return buildSignedOutRestoreResult('missing-session');
+    }
+    const session = buildTestSession({
+      authUserId: authSession.user.id,
+      email: normalizeEmailAddress(authSession.user.email || savedSession.userEmail || ''),
+      account: testAccount,
+      franchise,
+    });
+    saveSession(session);
+    return {
+      status: 'restored',
+      session,
+      passwordResetRequired: Boolean(testAccount.password_reset_required),
+    };
+  }
 
   let profile: FranchiseUserRow | null = null;
   try {

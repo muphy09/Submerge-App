@@ -2,6 +2,7 @@ import { getSupabaseClient } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
 import { getLedgerContextPayload, logLedgerEventSafe } from './ledger';
 import { normalizeUserCommissionRates, type UserCommissionRates } from './userCommissionRates';
+import { assertLiveFranchiseMutationAllowed } from './session';
 
 export type FranchiseUser = UserCommissionRates & {
   id: string;
@@ -114,6 +115,7 @@ export async function createFranchiseUser(payload: {
   name?: string | null;
   role?: 'owner' | 'admin' | 'bookkeeper' | 'designer';
 }) {
+  assertLiveFranchiseMutationAllowed();
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
@@ -175,6 +177,7 @@ export async function updateFranchiseUserRole(
   userId: string,
   role: 'owner' | 'admin' | 'bookkeeper' | 'designer'
 ) {
+  assertLiveFranchiseMutationAllowed();
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
@@ -201,6 +204,7 @@ export async function updateFranchiseUserApprovalSettings(
     alwaysRequireApproval: boolean;
   }
 ) {
+  assertLiveFranchiseMutationAllowed();
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
@@ -262,6 +266,7 @@ export async function updateFranchiseUserCommissionRates(
   userId: string,
   rates: Partial<UserCommissionRates>
 ) {
+  assertLiveFranchiseMutationAllowed();
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
@@ -301,6 +306,7 @@ export async function updateFranchiseUserCommissionRates(
 }
 
 export async function deleteFranchiseUser(userId: string, transferToUserId?: string | null) {
+  assertLiveFranchiseMutationAllowed();
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();
@@ -323,6 +329,7 @@ export async function deleteFranchiseUser(userId: string, transferToUserId?: str
 }
 
 export async function resetFranchiseUserPassword(userId: string) {
+  assertLiveFranchiseMutationAllowed();
   const supabase = getSupabaseClient();
   if (!supabase) {
     requireSupabase();

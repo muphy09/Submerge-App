@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MasterFranchiseEditorModal from '../components/MasterFranchiseEditorModal';
 import TempPasswordModal from '../components/TempPasswordModal';
+import TestAccountsPanel from '../components/TestAccountsPanel';
 import { useGlobalFeedbackEnabled } from '../hooks/useGlobalFeedbackEnabled';
 import {
   archiveFeedback,
@@ -868,6 +869,8 @@ function MasterPage({ session, onActAsFranchise, actingFranchiseId, onFranchiseU
             </div>
           )}
         </div>
+
+        <TestAccountsPanel />
 
         <div className="master-card">
           <div className="master-card-header">

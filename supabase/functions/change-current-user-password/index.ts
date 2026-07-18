@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { getAdminClient, getRequesterProfile } from '../_shared/auth.ts';
+import { getAdminClient } from '../_shared/auth.ts';
 import { insertLedgerEvent } from '../_shared/ledger.ts';
 
 function normalizeText(value?: string | null) {
@@ -47,7 +47,11 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getAdminClient();
-    const { profile, user } = await getRequesterProfile(req, supabase);
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.replace('Bearer ', '');
+    const userResult = await supabase.auth.getUser(token);
+    const user = userResult.data?.user;
+    if (userResult.error || !user) throw new Error('Unauthorized.');
     const body = await req.json();
     const newPassword = normalizeText(body?.newPassword);
     const oldPassword = normalizeText(body?.oldPassword);
@@ -68,13 +72,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: target, error: targetError } = await supabase
+    const { data: franchiseProfile, error: franchiseProfileError } = await supabase
       .from('franchise_users')
       .select('id,auth_user_id,franchise_id,role,name,email')
       .eq('auth_user_id', user.id)
       .maybeSingle();
 
-    if (targetError && targetError.code !== 'PGRST116') throw targetError;
+    if (franchiseProfileError && franchiseProfileError.code !== 'PGRST116') throw franchiseProfileError;
+    const testProfileResult = franchiseProfile
+      ? { data: null, error: null }
+      : await supabase
+          .from('app_test_accounts')
+          .select('id,auth_user_id,role,name,email')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+    if (testProfileResult.error && testProfileResult.error.code !== 'PGRST116') throw testProfileResult.error;
+    const target = franchiseProfile || testProfileResult.data;
+    const isTestAccount = !franchiseProfile && Boolean(testProfileResult.data);
 
     if (!target?.auth_user_id) {
       return new Response(JSON.stringify({ error: 'User profile not found.' }), {
@@ -94,7 +108,7 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
     const { error: updateProfileError } = await supabase
-      .from('franchise_users')
+      .from(isTestAccount ? 'app_test_accounts' : 'franchise_users')
       .update({
         password_reset_required: false,
         password_updated_at: now,
@@ -103,28 +117,30 @@ Deno.serve(async (req) => {
       .eq('auth_user_id', user.id);
     if (updateProfileError) throw updateProfileError;
 
-    try {
-      await insertLedgerEvent(supabase, {
-        franchiseId: target.franchise_id,
-        actorUser: {
-          id: user?.id || null,
-          email: user?.email || null,
-        },
-        actorProfile: profile,
-        effectiveRole: String(profile.role || '').toLowerCase() || 'designer',
-        action,
-        targetType: 'user',
-        targetId: target.id,
-        details: {
-          targetUserId: target.id,
-          targetAuthUserId: target.auth_user_id,
-          targetRole: target.role || null,
-          targetName: target.name || null,
-          targetEmail: target.email || null,
-        },
-      });
-    } catch (ledgerError) {
-      console.error('Unable to write ledger event for change-current-user-password:', ledgerError);
+    if (!isTestAccount && franchiseProfile) {
+      try {
+        await insertLedgerEvent(supabase, {
+          franchiseId: franchiseProfile.franchise_id,
+          actorUser: {
+            id: user?.id || null,
+            email: user?.email || null,
+          },
+          actorProfile: franchiseProfile,
+          effectiveRole: String(franchiseProfile.role || '').toLowerCase() || 'designer',
+          action,
+          targetType: 'user',
+          targetId: target.id,
+          details: {
+            targetUserId: target.id,
+            targetAuthUserId: target.auth_user_id,
+            targetRole: target.role || null,
+            targetName: target.name || null,
+            targetEmail: target.email || null,
+          },
+        });
+      } catch (ledgerError) {
+        console.error('Unable to write ledger event for change-current-user-password:', ledgerError);
+      }
     }
 
     return new Response(JSON.stringify({ success: true }), {

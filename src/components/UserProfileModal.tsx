@@ -244,7 +244,7 @@ function UserProfileModal({
           </div>
 
           <div className="user-profile-content">
-            <section className="user-profile-section">
+            {!session.isTestAccount && <section className="user-profile-section">
               <div className="user-profile-section-heading">
                 <h3>Account Details</h3>
                 <p>Changing your email will require you to log back in.</p>
@@ -295,9 +295,9 @@ function UserProfileModal({
                   </button>
                 </div>
               </form>
-            </section>
+            </section>}
 
-            <section className="user-profile-section user-profile-section-divider">
+            <section className={`user-profile-section${session.isTestAccount ? '' : ' user-profile-section-divider'}`}>
               <div className="user-profile-section-heading">
                 <h3>Change Password</h3>
                 <p>Enter your current password before setting a new one.</p>

@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabaseClient';
+import { assertLiveFranchiseMutationAllowed } from './session';
 
 export type LocationInputMode = 'state' | 'county';
 export type ContractResolutionMode = 'state_and_pool_type' | 'pool_type_only';
@@ -216,6 +217,7 @@ export async function publishFranchiseConfiguration(payload: {
   changeSummary?: string | null;
   publishedBy?: string | null;
 }): Promise<LoadedFranchiseConfiguration> {
+  assertLiveFranchiseMutationAllowed();
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase is required to publish franchise configuration.');
 

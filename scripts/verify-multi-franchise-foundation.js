@@ -14,12 +14,14 @@ const draftPrivacyMigration = read('supabase/migrations/202607170002_keep_drafts
 const adminSettingsMigration = read('supabase/migrations/202607170003_secure_owner_admin_settings.sql');
 const masterDraftMigration = read('supabase/migrations/202607170004_claim_legacy_master_drafts.sql');
 const ownershipBackfillMigration = read('supabase/migrations/202607170005_backfill_all_legacy_proposal_owners.sql');
+const testAccountsMigration = read('supabase/migrations/202607170006_add_designated_test_accounts.sql');
 requireText(migration, /^begin;[\s\S]*commit;\s*$/im, 'Additive migration is not wrapped in an explicit transaction.');
 requireText(roleMigration, /^begin;[\s\S]*commit;\s*$/im, 'Role migration is not wrapped in an explicit transaction.');
 requireText(draftPrivacyMigration, /^begin;[\s\S]*commit;\s*$/im, 'Draft privacy migration is not wrapped in an explicit transaction.');
 requireText(adminSettingsMigration, /^begin;[\s\S]*commit;\s*$/im, 'Admin Settings migration is not wrapped in an explicit transaction.');
 requireText(masterDraftMigration, /^begin;[\s\S]*commit;\s*$/im, 'Master draft migration is not wrapped in an explicit transaction.');
 requireText(ownershipBackfillMigration, /^begin;[\s\S]*commit;\s*$/im, 'Ownership backfill migration is not wrapped in an explicit transaction.');
+requireText(testAccountsMigration, /^begin;[\s\S]*commit;\s*$/im, 'Testing-account migration is not wrapped in an explicit transaction.');
 const forbiddenMigrationChanges = [
   /\bdrop\s+table\b/i,
   /\btruncate\b/i,
@@ -33,6 +35,21 @@ for (const pattern of forbiddenMigrationChanges) {
   if (pattern.test(adminSettingsMigration)) failures.push(`Admin Settings migration contains forbidden operation: ${pattern}`);
   if (pattern.test(masterDraftMigration)) failures.push(`Master draft migration contains forbidden operation: ${pattern}`);
   if (pattern.test(ownershipBackfillMigration)) failures.push(`Ownership backfill migration contains forbidden operation: ${pattern}`);
+  if (pattern.test(testAccountsMigration)) failures.push(`Testing-account migration contains forbidden operation: ${pattern}`);
+}
+
+[
+  ['separate testing-account table', /create table if not exists public\.app_test_accounts/i],
+  ['isolated testing-proposal table', /create table if not exists public\.franchise_test_proposals/i],
+  ['one testing identity per role', /role text not null unique check \(role in \('owner', 'admin', 'bookkeeper', 'designer'\)\)/i],
+  ['read-only live franchise membership extension', /current_user_belongs_to_franchise[\s\S]*current_user_is_test_account/i],
+  ['restrictive live-proposal exclusion', /create policy "test accounts cannot access live proposals"[\s\S]*as restrictive for all[\s\S]*not public\.current_user_is_test_account/i],
+  ['production proposal-note mutation guard', /franchise proposal notes manage[\s\S]*current_user_can_manage_franchise/i],
+  ['test proposal RLS', /create policy "test proposal role (select|insert|update|delete)"/i],
+].forEach(([description, pattern]) => requireText(testAccountsMigration, pattern, `Testing-account migration is missing ${description}.`));
+
+if ((testAccountsMigration.match(/\$\$/g) || []).length % 2 !== 0) {
+  failures.push('Testing-account migration has an unbalanced dollar-quoted function body.');
 }
 
 [
@@ -169,6 +186,9 @@ const proposalHome = read('src/pages/HomePage.tsx');
 const proposalForm = read('src/pages/ProposalForm.tsx');
 const proposalView = read('src/pages/ProposalView.tsx');
 const proposalAdapter = read('src/services/proposalsAdapter.ts');
+const authService = read('src/services/auth.ts');
+const testAccountsPanel = read('src/components/TestAccountsPanel.tsx');
+const manageTestAccountsFunction = read('supabase/functions/manage-test-accounts/index.ts');
 for (const [name, content] of [
   ['Dashboard', proposalHome],
   ['Proposal Builder', proposalForm],
@@ -183,6 +203,15 @@ requireText(proposalAdapter, /canAttemptProposalWrite[\s\S]{0,180}isMasterSessio
 requireText(proposalAdapter, /export async function saveProposal[\s\S]{0,220}MASTER_INSPECTION_READ_ONLY_MESSAGE/, 'Proposal saves are not blocked during master inspection.');
 requireText(proposalAdapter, /export async function deleteProposal[\s\S]{0,220}MASTER_INSPECTION_READ_ONLY_MESSAGE/, 'Proposal deletes are not blocked during master inspection.');
 requireText(proposalView, /previewOnly=\{isProposalEditingRestricted\}/, 'Contract revision prompts are not preview-only during master inspection.');
+requireText(proposalAdapter, /TEST_PROPOSALS_TABLE\s*=\s*'franchise_test_proposals'[\s\S]{0,180}getProposalTableName\(\)[\s\S]{0,100}isTestSession\(\)\s*\?\s*TEST_PROPOSALS_TABLE/, 'Test sessions do not route proposals to the isolated table.');
+requireText(proposalAdapter, /TEST-\$\{code\}-\$\{suffix\}/, 'Testing proposals do not receive an unmistakable proposal-number prefix.');
+requireText(proposalAdapter, /isProposalNumberForCurrentMode[\s\S]*isTestSession\(\)\s*===\s*isTestProposalNumber/, 'Local proposal queues are not separated between testing and production modes.');
+requireText(proposalAdapter, /for \(const proposal of pending\)[\s\S]{0,180}!isProposalNumberForCurrentMode\(proposal\.proposalNumber\)/, 'Pending proposal sync can cross testing and production modes.');
+requireText(proposalAdapter, /for \(const record of pendingDeletes\)[\s\S]{0,180}!isProposalNumberForCurrentMode\(record\.proposalNumber\)/, 'Pending proposal deletes can cross testing and production modes.');
+requireText(authService, /getTestAccountByAuthId[\s\S]*app_test_accounts/, 'Authentication does not resolve designated testing identities.');
+requireText(authService, /buildTestSession[\s\S]*isTestAccount:\s*true/, 'Testing authentication does not mark the session as isolated.');
+requireText(testAccountsPanel, /dtest[\s\S]*bktest[\s\S]*atest[\s\S]*otest/, 'Master testing-account controls are missing one or more designated roles.');
+requireText(manageTestAccountsFunction, /getRequesterProfile[\s\S]*role[^\n]*master/, 'Testing-account management is not restricted to the master role.');
 
 const packageJson = read('package.json');
 requireText(packageJson, /"release-notes\/\*\*\/\*"/, 'Franchise patch-note files are not included in packaged applications.');
@@ -218,6 +247,8 @@ requireText(devStart, /SUBMERGE_DATA_PARTITION\s*=\s*'staging'/, 'The staging ta
 
 const app = read('src/App.tsx');
 requireText(app, /VITE_SUBMERGE_ENVIRONMENT[\s\S]{0,220}\[\$\{environmentLabel\}\]/, 'The staging environment is not visible in the window title.');
+requireText(app, /app-test-mode-banner[\s\S]{0,220}Live franchise settings are read-only/, 'Test sessions do not show a persistent safety banner.');
+requireText(app, /session\?\.isTestAccount !== true[\s\S]{0,180}canSubmitFeedback|canSubmitFeedback[\s\S]{0,180}session\?\.isTestAccount !== true/, 'Test sessions are not excluded from live franchise feedback.');
 
 if (failures.length) {
   console.error('Multi-franchise foundation verification failed:');

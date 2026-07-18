@@ -266,12 +266,12 @@ function AppContent() {
   }, [appVersion]);
 
   useEffect(() => {
-    if (!session?.userId) return;
+    if (!session?.userId || session.isTestAccount) return;
     void reportCurrentUserAppVersion({
       userId: session.userId,
       version: appVersion,
     });
-  }, [appVersion, session?.userId]);
+  }, [appVersion, session?.isTestAccount, session?.userId]);
 
   useEffect(() => {
     if (!session?.userId || !window.electron?.checkForUpdates) return;
@@ -457,6 +457,7 @@ function AppContent() {
     (masterImpersonation?.actingRole || 'owner') === 'owner';
   const canSubmitFeedback =
     Boolean(session) &&
+    session?.isTestAccount !== true &&
     feedbackAvailable &&
     globalFeedbackEnabled &&
     !globalFeedbackEnabledLoading &&
@@ -492,7 +493,8 @@ function AppContent() {
   const adminPanelRequiresPin =
     isAdmin &&
     Boolean(effectiveSession?.franchiseId) &&
-    !isMasterActingAsOwner;
+    !isMasterActingAsOwner &&
+    effectiveSession?.isTestAccount !== true;
   const { displayName } = useFranchiseAppName(effectiveSession?.franchiseId ?? null);
 
   useEffect(() => {
@@ -1190,6 +1192,12 @@ function AppContent() {
           <Route path="/contract-print-preview" element={<ContractPrintPreviewPage />} />
           </Routes>
         </Suspense>
+      )}
+      {!isContractPrintPreviewRoute && effectiveSession?.isTestAccount && (
+        <div className="app-test-mode-banner" role="status">
+          TEST MODE · {effectiveSession.franchiseName || effectiveSession.franchiseCode || 'Franchise'} ·{' '}
+          {String(effectiveSession.role || 'designer').toUpperCase()} · Live franchise settings are read-only
+        </div>
       )}
       {!isContractPrintPreviewRoute && (actingLabel || location.pathname === '/') && (
         <div className="app-bottom-left-meta">

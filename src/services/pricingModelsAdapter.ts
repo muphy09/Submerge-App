@@ -1,7 +1,7 @@
 import { getSupabaseClient, hasSupabaseConnection, isSupabaseEnabled } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
 import { logLedgerEventSafe } from './ledger';
-import { readSession } from './session';
+import { assertLiveFranchiseMutationAllowed, readSession } from './session';
 
 export type PricingModelSummary = {
   id: string;
@@ -415,6 +415,7 @@ export async function savePricingModel(payload: {
   copiedFromPricingModelName?: string | null;
   changeSummary?: Array<Record<string, unknown>>;
 }): Promise<SavePricingModelResult> {
+  assertLiveFranchiseMutationAllowed();
   return withFallback<SavePricingModelResult>(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
@@ -527,6 +528,7 @@ export async function savePricingModel(payload: {
 }
 
 export async function setDefaultPricingModel(payload: { franchiseId: string; pricingModelId: string }) {
+  assertLiveFranchiseMutationAllowed();
   return withFallback(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');
@@ -562,6 +564,7 @@ export async function setDefaultPricingModel(payload: { franchiseId: string; pri
 }
 
 export async function deletePricingModel(payload: { franchiseId: string; pricingModelId: string }) {
+  assertLiveFranchiseMutationAllowed();
   return withFallback(async () => {
     const supabase = getSupabaseClient();
     if (!supabase) throw new Error('Supabase not configured');

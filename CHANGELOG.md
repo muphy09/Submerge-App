@@ -1,4 +1,9 @@
 ## [3.0.2] - 7/17/26
+### Designated Testing Accounts
+- Master users can create one isolated testing account for Designer, Book Keeper, Admin, and Owner roles
+- Testing accounts can use any active franchise code to inspect that franchise's pricing, contracts, configuration, and role-specific UI
+- Testing proposals and workflow actions are stored separately and never appear in the franchise's live proposal workflow
+- Live franchise settings remain read-only in Test Mode, with a persistent on-screen warning banner
 ### Patch Notes Permissions
 - Designers can now open Patch Notes and view notes published for their franchise
 - Global patch notes remain available only to franchise owners & admins

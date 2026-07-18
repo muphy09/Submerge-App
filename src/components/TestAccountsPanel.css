@@ -1,0 +1,108 @@
+.test-accounts-card {
+  grid-column: 1 / -1;
+}
+
+.test-accounts-header {
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.test-accounts-header p {
+  margin: 6px 0 0;
+  max-width: 850px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.test-accounts-security-note {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #f0c75e;
+  border-radius: 8px;
+  background: #fff8dc;
+  color: #704f00;
+  font-size: 0.88rem;
+}
+
+.test-accounts-status {
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  font-size: 0.88rem;
+}
+
+.test-accounts-status.is-success {
+  background: #e8f7ee;
+  color: #17653a;
+}
+
+.test-accounts-status.is-error {
+  background: #fdecec;
+  color: #9a2424;
+}
+
+.test-accounts-list {
+  display: grid;
+  gap: 8px;
+}
+
+.test-account-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.7fr) minmax(230px, 1.4fr) minmax(170px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dbe3ec;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.test-account-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.test-account-identity strong {
+  color: #15334d;
+}
+
+.test-account-identity span,
+.test-account-state {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.test-account-state.is-active {
+  color: #167144;
+  font-weight: 700;
+}
+
+.test-account-email {
+  overflow-wrap: anywhere;
+  color: #26394b;
+}
+
+.test-account-email-input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #bdc8d4;
+  border-radius: 7px;
+}
+
+.test-account-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+@media (max-width: 1050px) {
+  .test-account-row {
+    grid-template-columns: 1fr 1.4fr;
+  }
+
+  .test-account-actions {
+    justify-content: flex-start;
+  }
+}

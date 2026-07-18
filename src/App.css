@@ -54,6 +54,24 @@
   position: relative;
 }
 
+.app-test-mode-banner {
+  position: fixed;
+  top: var(--header-offset);
+  left: 0;
+  right: 0;
+  z-index: 9400;
+  padding: 7px 16px;
+  border-top: 1px solid #d99d19;
+  border-bottom: 1px solid #b77800;
+  background: #f5b82e;
+  color: #3b2900;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  box-shadow: 0 5px 14px rgba(58, 39, 0, 0.18);
+}
+
 .app-bottom-left-meta {
   position: fixed;
   bottom: 10px;

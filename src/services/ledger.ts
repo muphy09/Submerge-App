@@ -1,5 +1,5 @@
 import { getSupabaseClient } from './supabaseClient';
-import { readMasterImpersonation, readSession } from './session';
+import { isTestSession, readMasterImpersonation, readSession } from './session';
 
 export type LedgerEvent = {
   id: string;
@@ -83,6 +83,7 @@ export function getLedgerRoleLabel(event: Pick<LedgerEvent, 'actorRole' | 'effec
 }
 
 export async function logLedgerEvent(payload: LedgerLogInput) {
+  if (isTestSession()) return false;
   const supabase = getSupabaseClient();
   if (!supabase) return false;
 

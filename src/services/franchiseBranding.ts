@@ -1,6 +1,7 @@
 import { getSupabaseClient } from './supabaseClient';
 import { isEnvFlagTrue } from './env';
 import { logLedgerEventSafe } from './ledger';
+import { assertLiveFranchiseMutationAllowed } from './session';
 import {
   ADMIN_PANEL_PIN_LENGTH,
   sanitizeAdminPanelPinInput,
@@ -364,6 +365,7 @@ export async function saveFranchiseBranding(
   payload: FranchiseBrandingUpdate,
   options: SaveFranchiseBrandingOptions = {}
 ): Promise<FranchiseBrandingRecord> {
+  assertLiveFranchiseMutationAllowed();
   if (!payload.franchiseId) {
     throw new Error('Franchise ID is required to save branding.');
   }
