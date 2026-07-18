@@ -48,6 +48,5 @@ Remove 'Microglass' from INT Finish
 
 Tight Access Job - Additional Option for Excavation - $6400
 
-New Block 'Project Proposal', separate Customer Cost and Warranty Breakdown
 
 Resolution fix for 2560 x 1600 125% for builder

@@ -15,6 +15,7 @@ const adminSettingsMigration = read('supabase/migrations/202607170003_secure_own
 const masterDraftMigration = read('supabase/migrations/202607170004_claim_legacy_master_drafts.sql');
 const ownershipBackfillMigration = read('supabase/migrations/202607170005_backfill_all_legacy_proposal_owners.sql');
 const testAccountsMigration = read('supabase/migrations/202607170006_add_designated_test_accounts.sql');
+const testWorkflowUpsertMigration = read('supabase/migrations/202607180001_allow_test_workflow_role_upserts.sql');
 requireText(migration, /^begin;[\s\S]*commit;\s*$/im, 'Additive migration is not wrapped in an explicit transaction.');
 requireText(roleMigration, /^begin;[\s\S]*commit;\s*$/im, 'Role migration is not wrapped in an explicit transaction.');
 requireText(draftPrivacyMigration, /^begin;[\s\S]*commit;\s*$/im, 'Draft privacy migration is not wrapped in an explicit transaction.');
@@ -22,6 +23,7 @@ requireText(adminSettingsMigration, /^begin;[\s\S]*commit;\s*$/im, 'Admin Settin
 requireText(masterDraftMigration, /^begin;[\s\S]*commit;\s*$/im, 'Master draft migration is not wrapped in an explicit transaction.');
 requireText(ownershipBackfillMigration, /^begin;[\s\S]*commit;\s*$/im, 'Ownership backfill migration is not wrapped in an explicit transaction.');
 requireText(testAccountsMigration, /^begin;[\s\S]*commit;\s*$/im, 'Testing-account migration is not wrapped in an explicit transaction.');
+requireText(testWorkflowUpsertMigration, /^begin;[\s\S]*commit;\s*$/im, 'Testing workflow upsert migration is not wrapped in an explicit transaction.');
 const forbiddenMigrationChanges = [
   /\bdrop\s+table\b/i,
   /\btruncate\b/i,
@@ -37,6 +39,14 @@ for (const pattern of forbiddenMigrationChanges) {
   if (pattern.test(ownershipBackfillMigration)) failures.push(`Ownership backfill migration contains forbidden operation: ${pattern}`);
   if (pattern.test(testAccountsMigration)) failures.push(`Testing-account migration contains forbidden operation: ${pattern}`);
 }
+
+[
+  ['test-account guard', /current_user_is_test_account\(\)/i],
+  ['same-franchise guard', /current_user_belongs_to_franchise\(franchise_id\)/i],
+  ['creator insert permission', /designer_auth_user_id\s*=\s*auth\.uid\(\)/i],
+  ['owner and admin workflow upserts', /current_test_account_role\(\)\s+in\s+\('owner',\s*'admin'\)/i],
+  ['submitted-only bookkeeper upserts', /current_test_account_role\(\)\s*=\s*'bookkeeper'[\s\S]*<>\s*'draft'/i],
+].forEach(([description, pattern]) => requireText(testWorkflowUpsertMigration, pattern, `Testing workflow upsert migration is missing ${description}.`));
 
 [
   ['separate testing-account table', /create table if not exists public\.app_test_accounts/i],
@@ -185,6 +195,9 @@ requireText(changelogModal, /role="tablist"[\s\S]*activeTab[\s\S]*franchiseTabLa
 const proposalHome = read('src/pages/HomePage.tsx');
 const proposalForm = read('src/pages/ProposalForm.tsx');
 const proposalView = read('src/pages/ProposalView.tsx');
+const proposalViewCss = read('src/pages/ProposalView.css');
+const franchiseConfiguration = read('src/services/franchiseConfiguration.ts');
+const franchiseCapabilityHook = read('src/hooks/useFranchiseCapability.ts');
 const proposalAdapter = read('src/services/proposalsAdapter.ts');
 const authService = read('src/services/auth.ts');
 const testAccountsPanel = read('src/components/TestAccountsPanel.tsx');
@@ -203,6 +216,15 @@ requireText(proposalAdapter, /canAttemptProposalWrite[\s\S]{0,180}isMasterSessio
 requireText(proposalAdapter, /export async function saveProposal[\s\S]{0,220}MASTER_INSPECTION_READ_ONLY_MESSAGE/, 'Proposal saves are not blocked during master inspection.');
 requireText(proposalAdapter, /export async function deleteProposal[\s\S]{0,220}MASTER_INSPECTION_READ_ONLY_MESSAGE/, 'Proposal deletes are not blocked during master inspection.');
 requireText(proposalView, /previewOnly=\{isProposalEditingRestricted\}/, 'Contract revision prompts are not preview-only during master inspection.');
+requireText(franchiseConfiguration, /splitCustomerCostWarranty\?:\s*boolean/, 'Franchise configuration is missing the customer-cost/warranty split capability.');
+requireText(franchiseCapabilityHook, /isFranchiseCapabilityEnabled[\s\S]*subscribeToFranchiseConfigurationUpdates/, 'The franchise capability hook does not load and subscribe to franchise-scoped configuration.');
+requireText(proposalView, /splitCustomerCostWarranty\s*\?\s*'cost'\s*:\s*'combined'/, 'Proposal summaries do not preserve the combined customer breakdown by default.');
+requireText(proposalView, /splitCustomerCostWarranty\s*&&\s*\([\s\S]{0,300}warranty-tile/, 'The standalone warranty tile is not gated by franchise configuration.');
+requireText(proposalView, /splitCustomerCostWarranty\s*&&\s*canViewCogsBreakdown[\s\S]{0,120}tiles-grid--two-column/, 'The four-card East COGS layout is not constrained to a two-column grid.');
+requireText(proposalView, /startViewTransition[\s\S]{0,420}flushSync\(toggle\)/, 'The East COGS grid toggle does not use a smooth layout transition.');
+requireText(proposalViewCss, /::view-transition-group\(proposal-customer-card\)[\s\S]{0,500}animation-duration:\s*180ms/, 'The proposal-card layout transition is missing its short animation timing.');
+requireText(proposalView, /customerBreakdownMode\s*!==\s*'warranty'[\s\S]{0,600}BreakdownCostExportPageComponent[\s\S]{0,600}customerBreakdownMode\s*!==\s*'cost'[\s\S]{0,300}BreakdownWarrantyExportPagesComponent/, 'Customer cost and warranty exports are not independently composed.');
+requireText(proposalView, /customerBreakdownMode\s*===\s*'warranty'[\s\S]{0,180}cloneRetailAdjustments\(targetVersion\.retailAdjustments\)[\s\S]{0,260}customerBreakdownMode\s*===\s*'cost'[\s\S]{0,180}cloneWarrantySections\(targetVersion\.warrantySections\)/, 'Independent customer breakdown saves do not preserve the untouched section.');
 requireText(proposalAdapter, /TEST_PROPOSALS_TABLE\s*=\s*'franchise_test_proposals'[\s\S]{0,180}getProposalTableName\(\)[\s\S]{0,100}isTestSession\(\)\s*\?\s*TEST_PROPOSALS_TABLE/, 'Test sessions do not route proposals to the isolated table.');
 requireText(proposalAdapter, /TEST-\$\{code\}-\$\{suffix\}/, 'Testing proposals do not receive an unmistakable proposal-number prefix.');
 requireText(proposalAdapter, /isProposalNumberForCurrentMode[\s\S]*isTestSession\(\)\s*===\s*isTestProposalNumber/, 'Local proposal queues are not separated between testing and production modes.');

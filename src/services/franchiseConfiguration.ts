@@ -11,6 +11,7 @@ export type FranchiseCapabilities = {
   contractTemplateLibrary?: boolean;
   pricingRevisionReview?: boolean;
   offlineDraftRecovery?: boolean;
+  splitCustomerCostWarranty?: boolean;
   [key: string]: boolean | undefined;
 };
 
@@ -146,6 +147,27 @@ function readCached(franchiseId: string): LoadedFranchiseConfiguration | null {
     console.warn('Unable to read cached franchise configuration:', error);
     return null;
   }
+}
+
+export function getCachedFranchiseConfiguration(
+  franchiseId: string
+): LoadedFranchiseConfiguration | null {
+  const normalizedFranchiseId = String(franchiseId || '').trim();
+  return normalizedFranchiseId ? readCached(normalizedFranchiseId) : null;
+}
+
+export function subscribeToFranchiseConfigurationUpdates(
+  franchiseId: string,
+  listener: (record: LoadedFranchiseConfiguration) => void
+) {
+  if (typeof window === 'undefined') return () => undefined;
+  const normalizedFranchiseId = String(franchiseId || '').trim();
+  const handleUpdate = (event: Event) => {
+    const record = (event as CustomEvent<LoadedFranchiseConfiguration>).detail;
+    if (record?.franchiseId === normalizedFranchiseId) listener(record);
+  };
+  window.addEventListener('submerge:franchise-configuration', handleUpdate);
+  return () => window.removeEventListener('submerge:franchise-configuration', handleUpdate);
 }
 
 export async function loadFranchiseConfiguration(

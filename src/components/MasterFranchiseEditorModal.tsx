@@ -882,6 +882,7 @@ function MasterFranchiseEditorModal({
                     ['signedWorkflow', 'Signed workflow'],
                     ['offContractItems', 'Off-contract items'],
                     ['financingSection', 'Financing section'],
+                    ['splitCustomerCostWarranty', 'Separate customer cost and warranty'],
                   ].map(([key, label]) => (
                     <label className="master-editor-toggle compact" key={key}>
                       <input

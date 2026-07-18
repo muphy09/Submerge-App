@@ -20,6 +20,7 @@ const CAPABILITIES = [
   ['signedWorkflow', 'Signed workflow'],
   ['offContractItems', 'Off-contract items'],
   ['financingSection', 'Financing section'],
+  ['splitCustomerCostWarranty', 'Separate customer cost and warranty'],
 ] as const;
 
 export default function FranchiseConfigurationModal({ franchiseId, updatedBy, onClose }: Props) {

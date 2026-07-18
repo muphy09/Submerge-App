@@ -5,9 +5,11 @@ import {
   useRef,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CostLineItem, Proposal, ProposalWorkflowActor, ProposalWorkflowEvent, RetailAdjustment } from '../types/proposal-new';
 import CostBreakdownView from '../components/CostBreakdownView';
+import SubmergeAdvantageWarranty from '../components/SubmergeAdvantageWarranty';
 import type { ContractViewHandle } from '../components/ContractView';
 import { OverflowTooltipText, TooltipAnchor } from '../components/AppTooltip';
 import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
@@ -22,6 +24,7 @@ import ContractRevisionPromptModal from '../components/ContractRevisionPromptMod
 import AddendumPricingChoiceModal from '../components/AddendumPricingChoiceModal';
 import './ProposalView.css';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
+import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
@@ -275,6 +278,10 @@ type BreakdownPrintPreviewMeta = {
   title: string;
 };
 
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => { finished: Promise<void> };
+};
+
 type CustomerBreakdownEditorState = {
   versionId: string;
   baselineRetailAdjustments: RetailAdjustment[];
@@ -282,6 +289,8 @@ type CustomerBreakdownEditorState = {
   baselineWarrantySections: Proposal['warrantySections'];
   draftWarrantySections: Proposal['warrantySections'];
 };
+
+type CustomerBreakdownMode = 'combined' | 'cost' | 'warranty';
 
 type WorkflowVersionOption = {
   id: string;
@@ -790,6 +799,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [loading, setLoading] = useState(true);
   const [, setPricingStoreVersion] = useState(0);
   const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
+  const [customerBreakdownMode, setCustomerBreakdownMode] = useState<CustomerBreakdownMode>('combined');
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
   const [preCogsBreakdownVersionId, setPreCogsBreakdownVersionId] = useState<string | null>(null);
   const [showCogsBreakdown, setShowCogsBreakdown] = useState(false);
@@ -891,6 +901,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       ? 'Completed proposal versions are locked.'
       : undefined;
   const { disableSignedWorkflow } = useFranchiseSignedWorkflowDisabled(proposal?.franchiseId);
+  const { enabled: splitCustomerCostWarranty } = useFranchiseCapability(
+    'splitCustomerCostWarranty',
+    proposal?.franchiseId
+  );
   const franchiseLogoId = proposal?.franchiseId;
   const canSubmitProposal = Boolean(proposal?.customerInfo.customerName?.trim());
   const reviewerReturnTo = locationState?.reviewerReturnTo === 'admin-panel' ? 'admin-panel' : 'workflow';
@@ -2126,15 +2140,20 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const versionId = customerBreakdownEditor.versionId;
     const normalizedAdjustments = cloneRetailAdjustments(customerBreakdownEditor.draftRetailAdjustments);
     const normalizedWarrantySections = cloneWarrantySections(customerBreakdownEditor.draftWarrantySections);
-    const hasUnsavedChanges =
-      !areRetailAdjustmentsEqual(
+    const retailChanged = !areRetailAdjustmentsEqual(
         customerBreakdownEditor.draftRetailAdjustments,
         customerBreakdownEditor.baselineRetailAdjustments
-      ) ||
-      !areWarrantySectionsEqual(
+      );
+    const warrantyChanged = !areWarrantySectionsEqual(
         customerBreakdownEditor.draftWarrantySections,
         customerBreakdownEditor.baselineWarrantySections
       );
+    const hasUnsavedChanges =
+      customerBreakdownMode === 'cost'
+        ? retailChanged
+        : customerBreakdownMode === 'warranty'
+        ? warrantyChanged
+        : retailChanged || warrantyChanged;
     if (!hasUnsavedChanges) return true;
     if (isProposalEditingRestricted || !proposal) return false;
 
@@ -2146,14 +2165,23 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         return false;
       }
 
+      const savedRetailAdjustments =
+        customerBreakdownMode === 'warranty'
+          ? cloneRetailAdjustments(targetVersion.retailAdjustments)
+          : normalizedAdjustments;
+      const savedWarrantySections =
+        customerBreakdownMode === 'cost'
+          ? cloneWarrantySections(targetVersion.warrantySections)
+          : normalizedWarrantySections;
+
       const updatedTimestamp = new Date().toISOString();
       const updatedVersions = all.map((entry) => {
         const entryId = entry.versionId || 'original';
         if (entryId !== versionId) return entry;
         return {
           ...(entry as Proposal),
-          retailAdjustments: normalizedAdjustments,
-          warrantySections: normalizedWarrantySections,
+          retailAdjustments: savedRetailAdjustments,
+          warrantySections: savedWarrantySections,
           lastModified: updatedTimestamp,
         };
       });
@@ -2200,23 +2228,35 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       setProposal(activeApplied as Proposal);
       setCustomerBreakdownEditor({
         versionId,
-        baselineRetailAdjustments: cloneRetailAdjustments(normalizedAdjustments),
-        draftRetailAdjustments: cloneRetailAdjustments(normalizedAdjustments),
-        baselineWarrantySections: cloneWarrantySections(normalizedWarrantySections),
-        draftWarrantySections: cloneWarrantySections(normalizedWarrantySections),
+        baselineRetailAdjustments: cloneRetailAdjustments(savedRetailAdjustments),
+        draftRetailAdjustments: cloneRetailAdjustments(savedRetailAdjustments),
+        baselineWarrantySections: cloneWarrantySections(savedWarrantySections),
+        draftWarrantySections: cloneWarrantySections(savedWarrantySections),
       });
+      const changeLabel =
+        customerBreakdownMode === 'cost'
+          ? 'Customer cost changes'
+          : customerBreakdownMode === 'warranty'
+          ? 'Warranty changes'
+          : 'Customer cost and warranty changes';
       showToast({
         type: isPending ? 'warning' : 'success',
         message: isPending
-          ? 'Customer cost and warranty changes saved locally. Will sync when back online.'
+          ? `${changeLabel} saved locally. Will sync when back online.`
           : savedWorkflowStatus === 'draft'
-          ? 'Customer cost and warranty changes saved. Resubmit when ready.'
-          : 'Customer cost and warranty changes saved.',
+          ? `${changeLabel} saved. Resubmit when ready.`
+          : `${changeLabel} saved.`,
       });
       return true;
     } catch (error) {
       console.error('Failed to save customer breakdown changes', error);
-      showToast({ type: 'error', message: 'Could not save customer cost and warranty changes.' });
+      const failureLabel =
+        customerBreakdownMode === 'cost'
+          ? 'customer cost changes'
+          : customerBreakdownMode === 'warranty'
+          ? 'warranty changes'
+          : 'customer cost and warranty changes';
+      showToast({ type: 'error', message: `Could not save ${failureLabel}.` });
       return false;
     } finally {
       setBreakdownSaving(false);
@@ -2240,6 +2280,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     if (cogsModalView) {
       return `${customerName}-cogs-cost-breakdown-${formattedDate}.pdf`;
     }
+    if (customerBreakdownMode === 'cost') {
+      return `${customerName}-customer-cost-breakdown-${formattedDate}.pdf`;
+    }
+    if (customerBreakdownMode === 'warranty') {
+      return `${customerName}-warranty-breakdown-${formattedDate}.pdf`;
+    }
     return `${customerName}-job-cost-summary-warranty-${formattedDate}.pdf`;
   };
 
@@ -2248,6 +2294,20 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       return {
         eyebrow: 'COGS Breakdown',
         title: 'COGS Cost Breakdown',
+      };
+    }
+
+    if (customerBreakdownMode === 'cost') {
+      return {
+        eyebrow: 'Customer Cost Breakdown',
+        title: 'Job Cost Summary',
+      };
+    }
+
+    if (customerBreakdownMode === 'warranty') {
+      return {
+        eyebrow: 'Warranty Breakdown',
+        title: 'Warranty & Inclusions',
       };
     }
 
@@ -3692,16 +3752,22 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : customerVersionRecordStatus === 'completed'
       ? 'Completed proposal versions are locked.'
       : undefined;
-  const customerBreakdownDirty = Boolean(customerBreakdownEditor) && (
+  const customerRetailBreakdownDirty = Boolean(customerBreakdownEditor) &&
     !areRetailAdjustmentsEqual(
       customerBreakdownEditor?.draftRetailAdjustments,
       customerBreakdownEditor?.baselineRetailAdjustments
-    ) ||
+    );
+  const customerWarrantyBreakdownDirty = Boolean(customerBreakdownEditor) &&
     !areWarrantySectionsEqual(
       customerBreakdownEditor?.draftWarrantySections ?? null,
       customerBreakdownEditor?.baselineWarrantySections ?? null
-    )
-  );
+    );
+  const customerBreakdownDirty =
+    customerBreakdownMode === 'cost'
+      ? customerRetailBreakdownDirty
+      : customerBreakdownMode === 'warranty'
+      ? customerWarrantyBreakdownDirty
+      : customerRetailBreakdownDirty || customerWarrantyBreakdownDirty;
   const customerBreakdownPreviewProposal =
     customerModalView && customerBreakdownEditor &&
     customerBreakdownEditor.versionId === (customerModalView.proposal.versionId || 'original')
@@ -3725,6 +3791,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     setBreakdownExportOpen(false);
     setCustomerBreakdownEditor(null);
     setCustomerBreakdownVersionId(null);
+    setCustomerBreakdownMode('combined');
   };
   const requestContractModalClose = () => {
     if (contractSaving) return;
@@ -3742,10 +3809,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     }
     closeCustomerBreakdownModal();
   };
-  const handleOpenCustomerBreakdown = (input: Proposal) => {
+  const handleOpenCustomerBreakdown = (
+    input: Proposal,
+    mode: CustomerBreakdownMode = 'combined'
+  ) => {
     setPendingUnsavedCloseTarget(null);
     setBreakdownSaving(false);
     setCustomerBreakdownEditor(createCustomerBreakdownEditorState(input));
+    setCustomerBreakdownMode(mode);
     setCustomerBreakdownVersionId(input.versionId || 'original');
   };
   const submitTargetVersion =
@@ -4158,18 +4229,35 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const versionId = vm.proposal.versionId || 'original';
     const contractTypeLabel = getContractTypeLabel(vm.proposal);
     return (
-      <div className="tiles-grid">
+      <div
+        className={`tiles-grid${
+          splitCustomerCostWarranty && canViewCogsBreakdown
+            ? ' tiles-grid--two-column'
+            : ''
+        }`}
+      >
         <button
           className="summary-tile customer-tile"
           type="button"
-          onClick={() => handleOpenCustomerBreakdown(vm.proposal)}
+          onClick={() =>
+            handleOpenCustomerBreakdown(
+              vm.proposal,
+              splitCustomerCostWarranty ? 'cost' : 'combined'
+            )
+          }
         >
           <div className="tile-header">
             <div className="tile-icon customer-icon">
               <img src={customerBreakIconImg} alt="Customer breakdown icon" className="customer-break-icon" />
             </div>
             <div className="tile-header-text">
-              <p className="tile-title">Customer Cost &amp;<br/>Warranty Breakdown</p>
+              <p className="tile-title">
+                {splitCustomerCostWarranty ? (
+                  <>Customer Cost<br/>Breakdown</>
+                ) : (
+                  <>Customer Cost &amp;<br/>Warranty Breakdown</>
+                )}
+              </p>
             </div>
           </div>
           <div className="tile-content-box">
@@ -4204,6 +4292,42 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             </svg>
           </span>
         </button>
+
+        {splitCustomerCostWarranty && (
+          <button
+            className="summary-tile warranty-tile"
+            type="button"
+            onClick={() => handleOpenCustomerBreakdown(vm.proposal, 'warranty')}
+          >
+            <div className="tile-header">
+              <div className="tile-icon warranty-icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 3L19 6V11C19 15.5 16.1 19.2 12 21C7.9 19.2 5 15.5 5 11V6L12 3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                  <path d="M9 12L11 14L15.5 9.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <div className="tile-header-text">
+                <p className="tile-title">Warranty<br/>Breakdown</p>
+              </div>
+            </div>
+            <div className="tile-content-box">
+              <div className="tile-metrics">
+                <div className="metric-row">
+                  <OverflowTooltipText as="p" className="metric-label">Prepared For:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">
+                    {vm.proposal.customerInfo.customerName || 'Customer'}
+                  </OverflowTooltipText>
+                </div>
+              </div>
+            </div>
+            <span className="tile-link">
+              View Warranty Breakdown
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
+          </button>
+        )}
 
         {canViewCogsBreakdown && (
           <button className="summary-tile cogs-tile" type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
@@ -4352,7 +4476,16 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           role="switch"
           aria-checked={showCogsBreakdown}
           className={`proposal-summary-toggle-switch ${showCogsBreakdown ? 'is-on' : ''}`}
-          onClick={() => setShowCogsBreakdown((current) => !current)}
+          onClick={() => {
+            const toggle = () => setShowCogsBreakdown((current) => !current);
+            const viewTransitionDocument = document as ViewTransitionDocument;
+            const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (!viewTransitionDocument.startViewTransition || prefersReducedMotion) {
+              toggle();
+              return;
+            }
+            viewTransitionDocument.startViewTransition(() => flushSync(toggle));
+          }}
         >
           <span className="proposal-summary-toggle-switch-track" aria-hidden="true">
             <span className="proposal-summary-toggle-switch-thumb" />
@@ -5361,8 +5494,20 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             <div className="modal-content wide" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div>
-                  <p className="modal-eyebrow">Customer Cost and Warranty Breakdown</p>
-                  <h2>Job Cost Summary &amp; Warranty</h2>
+                  <p className="modal-eyebrow">
+                    {customerBreakdownMode === 'cost'
+                      ? 'Customer Cost Breakdown'
+                      : customerBreakdownMode === 'warranty'
+                      ? 'Warranty Breakdown'
+                      : 'Customer Cost and Warranty Breakdown'}
+                  </p>
+                  <h2>
+                    {customerBreakdownMode === 'cost'
+                      ? 'Job Cost Summary'
+                      : customerBreakdownMode === 'warranty'
+                      ? 'Warranty & Inclusions'
+                      : 'Job Cost Summary & Warranty'}
+                  </h2>
                 </div>
                 <div className="breakdown-header-actions">
                   <div className="export-control" ref={breakdownExportControlRef}>
@@ -5421,35 +5566,55 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                   <button
                     className="modal-close"
                     onClick={requestCustomerBreakdownModalClose}
-                    aria-label="Close customer cost and warranty breakdown"
+                    aria-label={
+                      customerBreakdownMode === 'cost'
+                        ? 'Close customer cost breakdown'
+                        : customerBreakdownMode === 'warranty'
+                        ? 'Close warranty breakdown'
+                        : 'Close customer cost and warranty breakdown'
+                    }
                   >
                     x
                   </button>
                 </div>
               </div>
               <div className="modal-body-scroll">
-                <CostBreakdownView
-                  costBreakdown={customerBreakdownPreviewView!.costBreakdownForDisplay}
-                  customerName={customerBreakdownPreviewView!.proposal.customerInfo.customerName}
-                  proposal={customerBreakdownPreviewProposal}
-                  pricing={customerBreakdownPreviewView!.pricing}
-                  allowRetailAdjustments={canEditCustomerBreakdownVersion}
-                  editableWarranty={canEditCustomerBreakdownVersion}
-                  onRetailAdjustmentsChange={
-                    canEditCustomerBreakdownVersion
-                      ? (adjustments) =>
-                          handleCustomerRetailAdjustmentsDraftChange(adjustments)
-                      : undefined
-                  }
-                  onWarrantySectionsChange={
-                    canEditCustomerBreakdownVersion
-                      ? (sections) =>
-                          handleCustomerWarrantySectionsDraftChange(sections)
-                      : undefined
-                  }
-                  showWarranty
-                  showZoomControl={false}
-                />
+                {customerBreakdownMode === 'warranty' ? (
+                  <div className="customer-warranty-modal-body">
+                    <SubmergeAdvantageWarranty
+                      proposal={customerBreakdownPreviewProposal}
+                      editable={canEditCustomerBreakdownVersion}
+                      onWarrantySectionsChange={
+                        canEditCustomerBreakdownVersion
+                          ? handleCustomerWarrantySectionsDraftChange
+                          : undefined
+                      }
+                    />
+                  </div>
+                ) : (
+                  <CostBreakdownView
+                    costBreakdown={customerBreakdownPreviewView!.costBreakdownForDisplay}
+                    customerName={customerBreakdownPreviewView!.proposal.customerInfo.customerName}
+                    proposal={customerBreakdownPreviewProposal}
+                    pricing={customerBreakdownPreviewView!.pricing}
+                    allowRetailAdjustments={canEditCustomerBreakdownVersion}
+                    editableWarranty={
+                      customerBreakdownMode === 'combined' && canEditCustomerBreakdownVersion
+                    }
+                    onRetailAdjustmentsChange={
+                      canEditCustomerBreakdownVersion
+                        ? handleCustomerRetailAdjustmentsDraftChange
+                        : undefined
+                    }
+                    onWarrantySectionsChange={
+                      customerBreakdownMode === 'combined' && canEditCustomerBreakdownVersion
+                        ? handleCustomerWarrantySectionsDraftChange
+                        : undefined
+                    }
+                    showWarranty={customerBreakdownMode === 'combined'}
+                    showZoomControl={false}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -5459,15 +5624,19 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               ref={breakdownExportAreaRef}
               aria-hidden="true"
             >
-              <div className="export-breakdown-page export-breakdown-page--cost">
-                <BreakdownCostExportPageComponent
-                  costBreakdown={customerBreakdownPreviewView!.costBreakdownForDisplay}
-                  customerName={customerBreakdownPreviewView!.proposal.customerInfo.customerName}
-                  proposal={customerBreakdownPreviewProposal}
-                  pricing={customerBreakdownPreviewView!.pricing}
-                />
-              </div>
-              <BreakdownWarrantyExportPagesComponent proposal={customerBreakdownPreviewProposal} />
+              {customerBreakdownMode !== 'warranty' && (
+                <div className="export-breakdown-page export-breakdown-page--cost">
+                  <BreakdownCostExportPageComponent
+                    costBreakdown={customerBreakdownPreviewView!.costBreakdownForDisplay}
+                    customerName={customerBreakdownPreviewView!.proposal.customerInfo.customerName}
+                    proposal={customerBreakdownPreviewProposal}
+                    pricing={customerBreakdownPreviewView!.pricing}
+                  />
+                </div>
+              )}
+              {customerBreakdownMode !== 'cost' && (
+                <BreakdownWarrantyExportPagesComponent proposal={customerBreakdownPreviewProposal} />
+              )}
             </div>
           )}
         </>

@@ -715,6 +715,41 @@
   margin-top: 16px;
 }
 
+.tiles-grid.tiles-grid--two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+::view-transition-group(proposal-customer-card),
+::view-transition-group(proposal-warranty-card),
+::view-transition-group(proposal-cogs-card),
+::view-transition-group(proposal-contract-card),
+::view-transition-group(proposal-off-contract-card) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+::view-transition-new(proposal-cogs-card) {
+  animation: proposal-summary-card-enter 140ms ease-out;
+}
+
+::view-transition-old(proposal-cogs-card) {
+  animation: proposal-summary-card-exit 110ms ease-in;
+}
+
+@keyframes proposal-summary-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@keyframes proposal-summary-card-exit {
+  to {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
 .summary-tile {
   border: 1px solid #e5ebf1;
   background: #ffffff;
@@ -782,6 +817,7 @@
 }
 
 .summary-tile.warranty-tile {
+  view-transition-name: proposal-warranty-card;
   background: #ffffff;
   border: 2px solid #d4af37;
   box-shadow: 0 4px 16px rgba(212, 175, 55, 0.25);
@@ -822,6 +858,7 @@
 }
 
 .summary-tile.customer-tile {
+  view-transition-name: proposal-customer-card;
   background: #ffffff;
   border: 2px solid #52c084;
   box-shadow: 0 4px 16px rgba(82, 192, 132, 0.25);
@@ -861,6 +898,7 @@
 }
 
 .summary-tile.cogs-tile {
+  view-transition-name: proposal-cogs-card;
   background: #ffffff;
   border: 2px solid #e08ab1;
   box-shadow: 0 4px 16px rgba(224, 138, 177, 0.2);
@@ -939,6 +977,7 @@
 }
 
 .summary-tile.contract-tile {
+  view-transition-name: proposal-contract-card;
   background: #ffffff;
   border: 2px solid #60a5fa;
   box-shadow: 0 4px 16px rgba(96, 165, 250, 0.25);
@@ -969,6 +1008,7 @@
 }
 
 .summary-tile.off-contract-tile {
+  view-transition-name: proposal-off-contract-card;
   background: #ffffff;
   border: 2px solid #f59e0b;
   box-shadow: 0 4px 16px rgba(245, 158, 11, 0.2);
@@ -1357,6 +1397,15 @@
 .modal-body-scroll {
   max-height: 75vh;
   overflow: auto;
+}
+
+.customer-warranty-modal-body {
+  padding: 24px;
+}
+
+.customer-warranty-modal-body .warranty-sheet {
+  margin-top: 0;
+  page-break-before: auto;
 }
 
 .modal-loading-state {
@@ -2220,6 +2269,10 @@
 
 @media (max-width: 1024px) {
   .tiles-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tiles-grid.tiles-grid--two-column {
     grid-template-columns: 1fr;
   }
 
