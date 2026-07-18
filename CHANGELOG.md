@@ -4,7 +4,6 @@
     - Fixed an issue with 16:10 aspect ratio displays
     - Adjusted formatting to better fit vertical displays
 - Multiple proposals now condense into pages on the Dashboard and Admin Panel
-### Windows Installer 
 -----
 ## [3.0.4] - 7/17/26
 ### Admin Pricing
