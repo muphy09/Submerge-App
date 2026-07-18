@@ -2,7 +2,7 @@
 GLOBAL -
 Submission workflow blocks are too large (vertically)
 
-
+patch notes button on dashboard
 
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
@@ -19,6 +19,7 @@ Immediate Changes -
 - local file saves that can be clicked to open, or sent
 - full ledger full per owner (and master)
 - app name defaulting to submerge
+- Edit contract PDF in app
 
 warrnaty section custom items (and off contract)
 

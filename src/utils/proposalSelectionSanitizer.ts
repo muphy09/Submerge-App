@@ -6,6 +6,7 @@ import { flattenWaterFeatures } from './waterFeatureCost';
 import { getAdditionalPumpSelections, normalizePumpSelectionState } from './pumpSelections';
 import { normalizeEquipmentLighting } from './lighting';
 import { getEquipmentItemCost } from './equipmentCost';
+import { isPpasEastProposal } from './franchiseScope';
 
 const SPA_CONTRACT_FIELD_IDS = ['p2_52'];
 const SPA_LIGHT_CONTRACT_FIELD_IDS = ['p2_53', 'p2_54'];
@@ -527,6 +528,13 @@ export function sanitizeProposalSelectionState(
     tileCopingDecking,
     equipment: nextEquipment,
   } as Proposal;
+
+  if (isPpasEastProposal(nextProposal)) {
+    nextProposal.interiorFinish = {
+      ...nextProposal.interiorFinish,
+      hasWaterproofing: false,
+    };
+  }
 
   return {
     ...nextProposal,

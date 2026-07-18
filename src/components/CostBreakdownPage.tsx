@@ -72,7 +72,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   // Recalculate with current PAP discounts and manual adjustments
   const result = MasterPricingEngine.calculateCompleteProposal(proposalForCalc, papDiscounts);
   const pricing = result.pricing;
-  const costBreakdown = normalizeCostBreakdownForDisplay(result.costBreakdown);
+  const costBreakdown = normalizeCostBreakdownForDisplay(result.costBreakdown, proposal);
 
   const toggleCategory = (categoryName: string) => {
     const newExpanded = new Set(expandedCategories);

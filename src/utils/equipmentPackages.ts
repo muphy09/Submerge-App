@@ -401,6 +401,7 @@ export const createFreshEquipmentForPackage = (
       price: getEquipmentItemCost(defaultFilter as any, 1),
     },
     filterQuantity: 0,
+    additionalFilters: [],
     cleaner: {
       name: noCleaner.name,
       basePrice: (noCleaner as any).basePrice,
@@ -418,6 +419,9 @@ export const createFreshEquipmentForPackage = (
       price: getEquipmentItemCost(defaultHeater as any, 1),
     },
     heaterQuantity: 0,
+    additionalHeaters: [],
+    heaterChiller: undefined,
+    heaterChillerQuantity: 0,
     poolLights: [],
     spaLights: [],
     includePoolLights: false,

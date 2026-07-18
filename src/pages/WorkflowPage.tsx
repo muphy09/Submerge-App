@@ -253,7 +253,7 @@ const buildWorkflowCogsCategory = (
 
 const buildWorkflowCogsCategories = (proposal?: Partial<Proposal> | null): WorkflowCogsCategory[] => {
   if (!proposal?.costBreakdown) return [];
-  const costBreakdown = normalizeCostBreakdownForDisplay(proposal.costBreakdown);
+  const costBreakdown = normalizeCostBreakdownForDisplay(proposal.costBreakdown, proposal);
   const tileLaborItems = costBreakdown.tileLabor || [];
   const tileMaterialItems = costBreakdown.tileMaterial || [];
   const { baseItems: tileLaborBase, customOptions: tileCustomFromLabor } = splitCustomOptionItems(tileLaborItems);

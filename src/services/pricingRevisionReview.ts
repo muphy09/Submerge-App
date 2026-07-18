@@ -152,8 +152,18 @@ function hydrateProposalEquipmentFromRevision(proposal: Proposal, pricing: any):
     hydrateCatalogSelection(pump, catalogs.auxiliaryPumps)
   );
   equipment.filter = hydrateCatalogSelection(equipment.filter, catalogs.filters);
+  equipment.additionalFilters = equipment.additionalFilters?.map((filter) =>
+    hydrateCatalogSelection(filter, catalogs.filters)
+  );
   equipment.cleaner = hydrateCatalogSelection(equipment.cleaner, catalogs.cleaners);
   equipment.heater = hydrateCatalogSelection(equipment.heater, catalogs.heaters);
+  equipment.additionalHeaters = equipment.additionalHeaters?.map((heater) =>
+    hydrateCatalogSelection(heater, catalogs.heaters)
+  );
+  equipment.heaterChiller = hydrateCatalogSelection(
+    equipment.heaterChiller,
+    catalogs.heaterChillers
+  );
   equipment.automation = hydrateCatalogSelection(equipment.automation, catalogs.automation);
   equipment.saltSystem = hydrateCatalogSelection(equipment.saltSystem, catalogs.saltSystem);
   equipment.additionalSaltSystem = hydrateCatalogSelection(
@@ -348,6 +358,9 @@ function compareSelectedCatalogItems(
     afterEquipment.filters,
     getSelectionQuantity(equipment.filterQuantity)
   );
+  (equipment.additionalFilters || []).forEach((filter) =>
+    compareSelection(filter, beforeEquipment.filters, afterEquipment.filters, 1)
+  );
   compareSelection(
     equipment.cleaner,
     beforeEquipment.cleaners,
@@ -359,6 +372,18 @@ function compareSelectedCatalogItems(
     beforeEquipment.heaters,
     afterEquipment.heaters,
     getSelectionQuantity(equipment.heaterQuantity)
+  );
+  (equipment.additionalHeaters || []).forEach((heater) =>
+    compareSelection(heater, beforeEquipment.heaters, afterEquipment.heaters, 1)
+  );
+  compareSelection(
+    equipment.heaterChiller,
+    beforeEquipment.heaterChillers,
+    afterEquipment.heaterChillers,
+    getSelectionQuantity(
+      equipment.heaterChillerQuantity,
+      equipment.heaterChiller ? 1 : 0
+    )
   );
   compareSelection(
     equipment.automation,

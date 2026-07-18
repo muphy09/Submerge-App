@@ -51,6 +51,7 @@ import AdminSettingsModal from '../components/AdminSettingsModal';
 import FranchiseConfigurationModal from '../components/FranchiseConfigurationModal';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
+import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import {
   listContractTemplatesForFranchise,
   loadContractTemplatePreview,
@@ -307,7 +308,10 @@ function AdminPanelPage({ onOpenPricingData, onOpenNotes, session, offsetSetting
           pricingTierName: getPricingTierName(pricingTierId),
         };
         if (isBronzePricingTier(pricingTierId)) {
-          merged.excavation = { ...merged.excavation, hasGravelInstall: false };
+          merged.excavation = {
+            ...merged.excavation,
+            hasGravelInstall: isPpasEastFranchiseCode(merged.designerCode || session?.franchiseCode),
+          };
           merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
         }
         return merged;

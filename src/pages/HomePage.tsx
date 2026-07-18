@@ -15,6 +15,7 @@ import { getSessionFranchiseId, isMasterActingAsOwnerSession, type UserSession }
 import { loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from '../services/pricingDataStore';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
+import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import {
   buildPricingRevisionComparison,
   markPricingRevisionPending,
@@ -145,7 +146,10 @@ function HomePage({
           pricingTierName: getPricingTierName(pricingTierId),
         };
         if (isBronzePricingTier(pricingTierId)) {
-          merged.excavation = { ...merged.excavation, hasGravelInstall: false };
+          merged.excavation = {
+            ...merged.excavation,
+            hasGravelInstall: isPpasEastFranchiseCode(merged.designerCode || session?.franchiseCode),
+          };
           merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
         }
         return merged;

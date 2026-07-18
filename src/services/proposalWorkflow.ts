@@ -28,6 +28,8 @@ import {
   getTileSelectionId,
 } from '../utils/tileCopingCatalogs';
 import { getPricingTierName } from './pricingTiers';
+import { getExcavationOptionQuantity } from '../utils/excavationOptionQuantities';
+import { isPpasEastProposal } from '../utils/franchiseScope';
 
 export type SubmissionRequest = {
   manualReviewRequested?: boolean;
@@ -451,7 +453,14 @@ function summarizeRbbLevels(levels?: Proposal['excavation']['rbbLevels']) {
       const height = Number.isFinite(level?.height) ? `${level.height}"` : '';
       const length = formatNumber(level?.length, ' LF');
       const facing = normalizeText(level?.facing);
-      return [height, length, facing].filter(Boolean).join(' ');
+      const backsideFacing = normalizeText(level?.backsideFacing);
+      const backside =
+        backsideFacing && backsideFacing.toLowerCase() !== 'none'
+          ? `Backside: ${backsideFacing}`
+          : level?.hasBacksideFacing
+            ? 'Backside: same facing'
+            : '';
+      return [height, length, facing, backside].filter(Boolean).join(' ');
     })
     .filter(Boolean)
     .join(', ');
@@ -582,10 +591,23 @@ function extractExcavationFields(
     { key: 'exposedPoolWalls', label: 'Exposed Pool Walls', value: summarizeRbbLevels(excavation.exposedPoolWallLevels) },
     { key: 'columns', label: 'Columns', value: summarizeColumns(excavation.columns) },
     { key: 'sitePrepHours', label: 'Site Prep Hours', value: formatNumber(excavation.additionalSitePrepHours, ' HRS') },
-    { key: 'gravelInstall', label: 'Gravel Install', value: formatBoolean(excavation.hasGravelInstall) },
-    { key: 'dirtHaul', label: 'Dirt Haul', value: formatBoolean(excavation.hasDirtHaul) },
+    {
+      key: 'gravelInstall',
+      label: 'Gravel Install',
+      value: excavation.hasGravelInstall
+        ? `Yes (x${getExcavationOptionQuantity(true, excavation.gravelInstallQuantity)})`
+        : 'No',
+    },
+    {
+      key: 'dirtHaul',
+      label: 'Dirt Haul',
+      value: excavation.hasDirtHaul
+        ? `Yes (x${getExcavationOptionQuantity(true, excavation.dirtHaulQuantity)})`
+        : 'No',
+    },
     { key: 'additionalBench', label: 'Additional Bench', value: formatNumber(excavation.additionalBench, ' LF') },
     { key: 'doubleCurtain', label: 'Double Curtain', value: formatNumber(excavation.doubleCurtainLength, ' LF') },
+    { key: 'tightAccessJob', label: 'Tight Access Job', value: formatBoolean(excavation.hasTightAccessJob) },
     { key: 'soilEngineer', label: 'Soil Sample / Engineer', value: formatBoolean(excavation.needsSoilSampleEngineer) },
     { key: 'retainingWalls', label: 'Retaining Walls', value: summarizeRetainingWalls(excavation.retainingWalls) },
     { key: 'customOptions', label: 'Excavation Options', value: summarizeCustomOptions(excavation.customOptions) },
@@ -721,10 +743,14 @@ function extractEquipmentFields(
     { key: 'auxiliaryPumps', label: 'Blowers', value: summarizePumpArray(equipment.auxiliaryPumps) },
     { key: 'filter', label: 'Filter', value: formatNamedSelection(equipment.filter, 'no filter') },
     { key: 'filterQty', label: 'Filter Quantity', value: formatNumber(equipment.filterQuantity) },
+    { key: 'additionalFilters', label: 'Additional Filters', value: summarizePumpArray(equipment.additionalFilters) },
     { key: 'cleaner', label: 'Cleaner', value: formatNamedSelection(equipment.cleaner, 'no cleaner') },
     { key: 'cleanerQty', label: 'Cleaner Quantity', value: formatNumber(equipment.cleanerQuantity) },
     { key: 'heater', label: 'Heater', value: formatNamedSelection(equipment.heater, 'no heater') },
     { key: 'heaterQty', label: 'Heater Quantity', value: formatNumber(equipment.heaterQuantity) },
+    { key: 'additionalHeaters', label: 'Additional Heaters', value: summarizePumpArray(equipment.additionalHeaters) },
+    { key: 'heaterChiller', label: 'Heater Chiller', value: formatNamedSelection(equipment.heaterChiller, 'no heater chiller') },
+    { key: 'heaterChillerQty', label: 'Heater Chiller Quantity', value: formatNumber(equipment.heaterChillerQuantity) },
     { key: 'automation', label: 'Automation', value: formatNamedSelection(equipment.automation, 'no automation') },
     { key: 'automationQty', label: 'Automation Quantity', value: formatNumber(equipment.automationQuantity) },
     { key: 'automationZones', label: 'Automation Zones', value: formatNumber(equipment.automation?.zones) },
@@ -777,7 +803,9 @@ function extractInteriorFinishFields(
     { key: 'color', label: 'Finish Color', value: normalizeText(finish.color) },
     { key: 'surfaceArea', label: 'Finish Surface Area', value: formatNumber(finish.surfaceArea, ' SQFT') },
     { key: 'hasSpa', label: 'Interior Finish Includes Spa', value: formatBoolean(finish.hasSpa) },
-    { key: 'waterproofing', label: 'Waterproofing', value: formatBoolean(finish.hasWaterproofing) },
+    ...(!isPpasEastProposal(proposal)
+      ? [{ key: 'waterproofing', label: 'Waterproofing', value: formatBoolean(finish.hasWaterproofing) }]
+      : []),
     { key: 'customOptions', label: 'Interior Finish Options', value: summarizeCustomOptions(finish.customOptions) },
   ], options);
 }

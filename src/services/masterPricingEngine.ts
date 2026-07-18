@@ -9,6 +9,7 @@ import { CalculationModules } from './pricingEngineComplete';
 import { isBronzePricingTier } from './pricingTiers';
 import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { CUSTOM_OPTIONS_SUBCATEGORY } from '../utils/costBreakdownSubcategories';
+import { isPpasEastProposal } from '../utils/franchiseScope';
 import { getSelectedEquipmentPackage, isFixedEquipmentPackage } from '../utils/equipmentPackages';
 import {
   DEFAULT_CLOSEOUT_COMMISSION_RATE,
@@ -185,7 +186,17 @@ export class MasterPricingEngine {
     const plumbing = proposal.plumbing!;
     const electrical = proposal.electrical!;
     const drainage = proposal.drainage!;
-    const equipment = proposal.equipment!;
+    const isPpasEast = isPpasEastProposal(proposal);
+    const rawEquipment = proposal.equipment!;
+    const equipment = isPpasEast
+      ? rawEquipment
+      : {
+          ...rawEquipment,
+          additionalFilters: [],
+          additionalHeaters: [],
+          heaterChiller: undefined,
+          heaterChillerQuantity: 0,
+        };
     const waterFeatures = proposal.waterFeatures ?? { selections: [], totalCost: 0, customOptions: [] };
     const selectedEquipmentPackage = getSelectedEquipmentPackage(equipment);
     const customFeatures = normalizeCustomFeatures(proposal.customFeatures);
@@ -197,7 +208,11 @@ export class MasterPricingEngine {
     const plansItems = this.calculatePlansEngineering(poolSpecs, excavation, waterFeatures);
     const layoutItems = this.calculateLayout(poolSpecs);
     const permitItems = this.calculatePermit(poolSpecs);
-    let excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, normalizedExcavation);
+    let excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, normalizedExcavation, {
+      bronzeIncludesGravel: isPpasEast,
+      allowTightAccessJob: isPpasEast,
+      allowExcavationOptionMultipliers: isPpasEast,
+    });
     const plumbingWithElectrical = {
       ...plumbing,
       runs: {
@@ -243,7 +258,14 @@ export class MasterPricingEngine {
           : item.description,
     }));
     equipmentItems = rebuildEquipmentTax([...equipmentItems, ...waterFeaturesAsEquipment]);
-    const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(poolSpecs, interiorFinish, equipment);
+    const interiorForPricing = isPpasEast
+      ? { ...interiorFinish, hasWaterproofing: false }
+      : interiorFinish;
+    const interior = CalculationModules.InteriorFinish.calculateInteriorFinishCost(
+      poolSpecs,
+      interiorForPricing,
+      equipment
+    );
     const interiorFinishItems = [...interior.labor, ...interior.material]
       .concat(buildCustomOptionItems(interiorFinish.customOptions, 'Interior Finish'));
     const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, normalizedExcavation, tileCopingDecking);
@@ -252,7 +274,9 @@ export class MasterPricingEngine {
       appliedPapDiscounts?.fiberglassShell ?? 0
     );
     const fiberglassInstallItems = CalculationModules.Fiberglass.calculateFiberglassInstallCost(poolSpecs);
-    const masonryCalc = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, normalizedExcavation);
+    const masonryCalc = CalculationModules.Masonry.calculateMasonryCost(poolSpecs, normalizedExcavation, {
+      allowDistinctRbbBacksideFacing: isPpasEast,
+    });
     const rockworkLabor = masonryCalc.labor.concat(tileCoping.labor.filter(i => i.category.includes('Rockwork')));
     const rockworkMaterial = masonryCalc.material.concat(tileCoping.material.filter(i => i.category.includes('Rockwork')));
     const masonryMaterialSubtotal = masonryCalc.material.reduce((sum, i) => sum + i.total, 0);

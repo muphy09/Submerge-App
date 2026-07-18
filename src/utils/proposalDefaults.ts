@@ -77,6 +77,8 @@ export function getDefaultPoolSpecs(): PoolSpecs {
 }
 
 export function getDefaultExcavation(): Excavation {
+  const hasGravelInstall = isAdditionalFeatureEnabled('gravelInstall', true);
+  const hasDirtHaul = isAdditionalFeatureEnabled('dirtHaul', true);
   return {
     rbbLevels: [],
     totalRBBSqft: 0,
@@ -90,8 +92,11 @@ export function getDefaultExcavation(): Excavation {
     },
     additionalSitePrepHours: 0,
     hasAdditionalSitePrep: isAdditionalFeatureEnabled('additionalSitePrep', false),
-    hasGravelInstall: isAdditionalFeatureEnabled('gravelInstall', true),
-    hasDirtHaul: isAdditionalFeatureEnabled('dirtHaul', true),
+    hasTightAccessJob: isAdditionalFeatureEnabled('tightAccessJob', false),
+    hasGravelInstall,
+    gravelInstallQuantity: hasGravelInstall ? 1 : 0,
+    hasDirtHaul,
+    dirtHaulQuantity: hasDirtHaul ? 1 : 0,
     additionalBench: 0,
     doubleCurtainLength: 0,
     hasDoubleCurtain: isAdditionalFeatureEnabled('doubleCurtain', false),
@@ -229,6 +234,7 @@ export function getDefaultEquipment(): Equipment {
       price: getEquipmentItemCost(defaultFilter as any, otherOverhead),
     },
     filterQuantity: 0,
+    additionalFilters: [],
     cleaner: {
       name: defaultCleaner.name,
       basePrice: (defaultCleaner as any).basePrice,
@@ -246,6 +252,9 @@ export function getDefaultEquipment(): Equipment {
       price: getEquipmentItemCost(defaultHeater as any, otherOverhead),
     },
     heaterQuantity: 0,
+    additionalHeaters: [],
+    heaterChiller: undefined,
+    heaterChillerQuantity: 0,
     poolLights: [],
     spaLights: [],
     applyCustomPackageDefaultPoolLights: false,

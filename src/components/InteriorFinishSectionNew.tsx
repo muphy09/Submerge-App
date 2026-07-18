@@ -14,11 +14,24 @@ interface Props {
   onChange: (data: InteriorFinish) => void;
   hasSpa: boolean;
   isFiberglass: boolean;
+  supportsMicroglass?: boolean;
+  colorFieldLabel?: string;
+  includeAssignLaterColor?: boolean;
   pricingTierId?: string;
   noteOverrides?: ProposalNoteOverrides;
 }
 
-function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricingTierId, noteOverrides }: Props) {
+function InteriorFinishSectionNew({
+  data,
+  onChange,
+  hasSpa,
+  isFiberglass,
+  supportsMicroglass = true,
+  colorFieldLabel = 'Color / Style',
+  includeAssignLaterColor = false,
+  pricingTierId,
+  noteOverrides,
+}: Props) {
   const [finishes, setFinishes] = useState(pricingData.interiorFinish.finishes || []);
   const fiberglassDisabledMessage = 'Cannot be adjusted, Fiberglass selected';
   const isBronzeTier = isBronzePricingTier(pricingTierId);
@@ -41,17 +54,25 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricin
         ? [{ value: data.finishType, label: data.finishType }]
         : [{ value: '', label: 'No finishes configured' }];
   const rawColors = selectedFinish?.colors as any;
-  const colorOptions = Array.isArray(rawColors)
+  const configuredColorOptions = Array.isArray(rawColors)
     ? rawColors
     : typeof rawColors === 'string'
       ? rawColors.split(',').map((c: string) => c.trim()).filter(Boolean)
       : [];
+  const colorOptions = includeAssignLaterColor
+    ? [
+        'Assign Later',
+        ...configuredColorOptions.filter(
+          (color) => String(color || '').trim().toLowerCase() !== 'assign later'
+        ),
+      ]
+    : configuredColorOptions;
   const colorMatchesOption = colorOptions.some(
     (option) => option.toLowerCase() === (data.color || '').toLowerCase()
   );
   const selectedColorValue = colorMatchesOption ? data.color : '';
 
-  const includeMicroglass = isBronzeTier ? false : data.hasWaterproofing ?? true;
+  const includeMicroglass = supportsMicroglass && !isBronzeTier && (data.hasWaterproofing ?? true);
 
   // Auto-set defaults from pool specs and enforce a valid finish
   useEffect(() => {
@@ -59,9 +80,9 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricin
     if (data.hasSpa !== hasSpa) {
       updates.hasSpa = hasSpa;
     }
-    if (isBronzeTier && data.hasWaterproofing !== false) {
+    if ((!supportsMicroglass || isBronzeTier) && data.hasWaterproofing !== false) {
       updates.hasWaterproofing = false;
-    } else if (!isBronzeTier && data.hasWaterproofing === undefined) {
+    } else if (supportsMicroglass && !isBronzeTier && data.hasWaterproofing === undefined) {
       updates.hasWaterproofing = true;
     }
     const allowedValues = finishTypes.map((f) => f.value);
@@ -73,7 +94,7 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricin
       onChange({ ...data, ...updates });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSpa, finishes, isBronzeTier]);
+  }, [hasSpa, finishes, isBronzeTier, supportsMicroglass]);
 
   // Keep color in sync with finish-specific options
   useEffect(() => {
@@ -87,7 +108,7 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricin
       onChange({ ...data, color: colorOptions[0] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colorOptions.join(','), data.finishType]);
+  }, [colorOptions.join(','), data.finishType, includeAssignLaterColor]);
 
   const handleChange = (field: keyof InteriorFinish, value: any) => {
     onChange({ ...data, [field]: value });
@@ -110,7 +131,7 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricin
           </div>
         )}
 
-        <div className="spec-grid spec-grid-3">
+        <div className={`spec-grid ${supportsMicroglass ? 'spec-grid-3' : 'spec-grid-2'}`}>
           <div className="spec-field">
             <label className="spec-label required">Finish</label>
             <TooltipAnchor as="div" tooltip={isFiberglass ? fiberglassDisabledMessage : undefined}>
@@ -130,7 +151,7 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricin
           </div>
 
           <div className="spec-field">
-            <label className="spec-label">Color / Style</label>
+            <label className="spec-label">{colorFieldLabel}</label>
             <TooltipAnchor as="div" tooltip={isFiberglass ? fiberglassDisabledMessage : undefined}>
               <select
                 className="compact-input"
@@ -151,32 +172,34 @@ function InteriorFinishSectionNew({ data, onChange, hasSpa, isFiberglass, pricin
             </TooltipAnchor>
           </div>
 
-          <div className="spec-field">
-            <label className="spec-label">Microglass</label>
-            <TooltipAnchor
-              as="div"
-              tooltip={
-                isFiberglass
-                  ? fiberglassDisabledMessage
-                  : isBronzeTier
-                    ? 'Microglass is not available in Bronze pricing.'
-                    : undefined
-              }
-            >
-              <button
-                type="button"
-                className={`pool-type-btn ${includeMicroglass ? 'active' : ''}`}
-                onClick={() => {
-                  if (isBronzeTier) return;
-                  handleChange('hasWaterproofing', !includeMicroglass);
-                }}
-                disabled={isFiberglass || isBronzeTier}
-                style={{ width: '100%', padding: '10px 14px' }}
+          {supportsMicroglass && (
+            <div className="spec-field">
+              <label className="spec-label">Microglass</label>
+              <TooltipAnchor
+                as="div"
+                tooltip={
+                  isFiberglass
+                    ? fiberglassDisabledMessage
+                    : isBronzeTier
+                      ? 'Microglass is not available in Bronze pricing.'
+                      : undefined
+                }
               >
-                Include Waterproofing (Microglass)
-              </button>
-            </TooltipAnchor>
-          </div>
+                <button
+                  type="button"
+                  className={`pool-type-btn ${includeMicroglass ? 'active' : ''}`}
+                  onClick={() => {
+                    if (isBronzeTier) return;
+                    handleChange('hasWaterproofing', !includeMicroglass);
+                  }}
+                  disabled={isFiberglass || isBronzeTier}
+                  style={{ width: '100%', padding: '10px 14px' }}
+                >
+                  Include Waterproofing (Microglass)
+                </button>
+              </TooltipAnchor>
+            </div>
+          )}
         </div>
       </div>
 

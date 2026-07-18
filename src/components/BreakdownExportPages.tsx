@@ -447,8 +447,8 @@ const allItems = (costBreakdown: CostBreakdown): CostLineItem[] => [
 
 export function BreakdownCostExportPage({ costBreakdown, customerName, proposal, pricing }: CostExportProps) {
   const displayCostBreakdown = useMemo(
-    () => normalizeCostBreakdownForDisplay(costBreakdown),
-    [costBreakdown]
+    () => normalizeCostBreakdownForDisplay(costBreakdown, proposal),
+    [costBreakdown, proposal]
   );
   const franchiseId = proposal?.franchiseId;
   const rows = useMemo(() => {

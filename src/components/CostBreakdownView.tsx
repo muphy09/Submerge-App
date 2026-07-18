@@ -84,8 +84,8 @@ function CostBreakdownView({
   );
   const [focusedAdjustmentIndex, setFocusedAdjustmentIndex] = useState<number | null>(null);
   const displayCostBreakdown = useMemo(
-    () => normalizeCostBreakdownForDisplay(costBreakdown),
-    [costBreakdown]
+    () => normalizeCostBreakdownForDisplay(costBreakdown, proposal),
+    [costBreakdown, proposal]
   );
 
   useEffect(() => {

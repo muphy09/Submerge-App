@@ -26,6 +26,8 @@ import {
 import { getAdditionalPumpSelections } from '../utils/pumpSelections';
 import { isBronzePricingTier } from './pricingTiers';
 import { getPricingTaxRate } from './taxRate';
+import { isPpasEastProposal } from '../utils/franchiseScope';
+import { getExcavationOptionQuantity } from '../utils/excavationOptionQuantities';
 
 /**
  * ROUNDUP function - Excel-style ceiling function
@@ -33,6 +35,12 @@ import { getPricingTaxRate } from './taxRate';
  */
 const roundUp = (value: number): number => Math.ceil(value);
 const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
+
+type ExcavationCalculationOptions = {
+  bronzeIncludesGravel?: boolean;
+  allowTightAccessJob?: boolean;
+  allowExcavationOptionMultipliers?: boolean;
+};
 const MISC_PLUMBING_SUBCATEGORY = 'Misc. Plumbing';
 
 const isPlaceholderPumpName = (name?: string): boolean => {
@@ -141,7 +149,8 @@ export class ExcavationCalculations {
    */
   static calculateExcavationCost(
     poolSpecs: PoolSpecs,
-    excavation: Excavation
+    excavation: Excavation,
+    options: ExcavationCalculationOptions = {}
   ): CostLineItem[] {
     const items: CostLineItem[] = [];
     const prices = pricingData.excavation;
@@ -153,8 +162,29 @@ export class ExcavationCalculations {
       return items;
     }
 
+    const gravelMultiplier = options.allowExcavationOptionMultipliers
+      ? getExcavationOptionQuantity(excavation.hasGravelInstall, excavation.gravelInstallQuantity)
+      : excavation.hasGravelInstall
+        ? 1
+        : 0;
+    const dirtHaulMultiplier = options.allowExcavationOptionMultipliers
+      ? getExcavationOptionQuantity(excavation.hasDirtHaul, excavation.dirtHaulQuantity)
+      : excavation.hasDirtHaul
+        ? 1
+        : 0;
+
+    if (options.allowTightAccessJob && excavation.hasTightAccessJob) {
+      items.push({
+        category: 'Excavation',
+        description: 'Tight Access Job',
+        unitPrice: prices.tightAccessJob,
+        quantity: 1,
+        total: prices.tightAccessJob,
+      });
+    }
+
     if (isFiberglass) {
-      if (excavation.hasDirtHaul) {
+      if (dirtHaulMultiplier > 0) {
         const overdigArea = poolSpecs.surfaceArea * 1.15;
         const adjustedMinDepth = poolSpecs.shallowDepth + 1.25;
         const adjustedMaxDepth = poolSpecs.endDepth + 1.25;
@@ -163,12 +193,12 @@ export class ExcavationCalculations {
         const cubicYards = ((overdigArea * adjustedDepth) / 24) + ((spaAreaAllowance * 2.5) / 24);
         const yardage = Math.max(0, cubicYards);
         const yardageDisplay = Math.round(yardage * 100) / 100;
-        const dirtHaulTotal = Math.ceil(prices.dirtHaulPerYard * yardage);
+        const dirtHaulTotal = Math.ceil(prices.dirtHaulPerYard * yardage) * dirtHaulMultiplier;
         items.push({
           category: 'Excavation',
-          description: 'Dirt Haul',
+          description: `Dirt Haul${dirtHaulMultiplier > 1 ? ` (x${dirtHaulMultiplier})` : ''}`,
           unitPrice: prices.dirtHaulPerYard,
-          quantity: yardageDisplay,
+          quantity: Math.round(yardageDisplay * dirtHaulMultiplier * 100) / 100,
           total: dirtHaulTotal,
         });
         items.push({
@@ -294,18 +324,21 @@ export class ExcavationCalculations {
     });
 
     // Gravel install (price per sqft from EXC sheet)
-    if (excavation.hasGravelInstall && !isBronzePricingTier((pricingData as any).pricingTierId)) {
+    if (
+      gravelMultiplier > 0 &&
+      (!isBronzePricingTier((pricingData as any).pricingTierId) || options.bronzeIncludesGravel)
+    ) {
       items.push({
         category: 'Excavation',
-        description: 'Gravel',
+        description: `Gravel Install${gravelMultiplier > 1 ? ` (x${gravelMultiplier})` : ''}`,
         unitPrice: prices.gravelPerSqft,
-        quantity: poolSpecs.surfaceArea,
-        total: poolSpecs.surfaceArea * prices.gravelPerSqft,
+        quantity: poolSpecs.surfaceArea * gravelMultiplier,
+        total: poolSpecs.surfaceArea * prices.gravelPerSqft * gravelMultiplier,
       });
     }
 
     // Dirt haul
-    if (excavation.hasDirtHaul) {
+    if (dirtHaulMultiplier > 0) {
       const overdigArea = poolSpecs.surfaceArea * 1.15; // Excel upsizes for overdig
       const adjustedMinDepth = poolSpecs.shallowDepth + 1.25;
       const adjustedMaxDepth = poolSpecs.endDepth + 1.25;
@@ -314,12 +347,12 @@ export class ExcavationCalculations {
       const cubicYards = ((overdigArea * adjustedDepth) / 24) + ((spaAreaAllowance * 2.5) / 24);
       const yardage = Math.max(0, cubicYards); // Excel keeps decimals
       const yardageDisplay = Math.round(yardage * 100) / 100;
-      const dirtHaulTotal = Math.ceil(prices.dirtHaulPerYard * yardage);
+      const dirtHaulTotal = Math.ceil(prices.dirtHaulPerYard * yardage) * dirtHaulMultiplier;
       items.push({
         category: 'Excavation',
-        description: 'Dirt Haul',
+        description: `Dirt Haul${dirtHaulMultiplier > 1 ? ` (x${dirtHaulMultiplier})` : ''}`,
         unitPrice: prices.dirtHaulPerYard,
-        quantity: yardageDisplay,
+        quantity: Math.round(yardageDisplay * dirtHaulMultiplier * 100) / 100,
         total: dirtHaulTotal,
       });
     }
@@ -1340,7 +1373,12 @@ export class PricingEngine {
     const permitItems = this.calculatePermit(poolSpecs);
 
     // Excavation
-    const excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation);
+    const isPpasEast = isPpasEastProposal(proposal);
+    const excavationItems = ExcavationCalculations.calculateExcavationCost(poolSpecs, excavation, {
+      bronzeIncludesGravel: isPpasEast,
+      allowTightAccessJob: isPpasEast,
+      allowExcavationOptionMultipliers: isPpasEast,
+    });
 
     // Plumbing
     const plumbingItems = PlumbingCalculations.calculatePlumbingCost(

@@ -205,6 +205,20 @@ const pricingDataModalCss = read('src/components/PricingDataModal.css');
 const pricingDataDefaults = read('src/services/pricingData.ts');
 const proposalDefaults = read('src/utils/proposalDefaults.ts');
 const excavationSection = read('src/components/ExcavationSectionNew.tsx');
+const interiorFinishSection = read('src/components/InteriorFinishSectionNew.tsx');
+const equipmentSection = read('src/components/EquipmentSectionNew.tsx');
+const pricingEngine = read('src/services/pricingEngine.ts');
+const completePricingEngine = read('src/services/pricingEngineComplete.ts');
+const masterPricingEngine = read('src/services/masterPricingEngine.ts');
+const pricingDataStore = read('src/services/pricingDataStore.ts');
+const franchiseScope = read('src/utils/franchiseScope.ts');
+const excavationOptionQuantities = read('src/utils/excavationOptionQuantities.ts');
+const masonryFacing = read('src/utils/masonryFacing.ts');
+const proposalSelectionSanitizer = read('src/utils/proposalSelectionSanitizer.ts');
+const proposalWorkflow = read('src/services/proposalWorkflow.ts');
+const contractGenerator = read('src/services/contractGenerator.ts');
+const warrantyUtils = read('src/utils/warranty.ts');
+const costBreakdownDisplay = read('src/utils/costBreakdownDisplay.ts');
 const franchiseConfiguration = read('src/services/franchiseConfiguration.ts');
 const franchiseCapabilityHook = read('src/hooks/useFranchiseCapability.ts');
 const proposalAdapter = read('src/services/proposalsAdapter.ts');
@@ -243,18 +257,70 @@ requireText(authService, /getTestAccountByAuthId[\s\S]*app_test_accounts/, 'Auth
 requireText(authService, /buildTestSession[\s\S]*isTestAccount:\s*true/, 'Testing authentication does not mark the session as isolated.');
 requireText(testAccountsPanel, /dtest[\s\S]*bktest[\s\S]*atest[\s\S]*otest/, 'Master testing-account controls are missing one or more designated roles.');
 requireText(manageTestAccountsFunction, /getRequesterProfile[\s\S]*role[^\n]*master/, 'Testing-account management is not restricted to the master role.');
-requireText(pricingDataModal, /title:\s*'Pool Specifications'[\s\S]{0,140}title:\s*'Additional Features'[\s\S]{0,180}title:\s*'Pool specification feature costs'/, 'Pool Specification additional feature costs are not grouped in their own Admin pricing table.');
-requireText(pricingDataModal, /title:\s*'Excavation'[\s\S]{0,4000}title:\s*'Additional Features'[\s\S]{0,180}title:\s*'Excavation feature costs'/, 'Excavation additional feature costs are not grouped in their own Admin pricing table.');
-requireText(pricingDataModal, /title:\s*'Interior Finish'[\s\S]{0,5000}title:\s*'Additional Features'[\s\S]{0,180}title:\s*'Interior finish feature costs'/, 'Interior Finish additional feature costs are not grouped in their own Admin pricing table.');
+requireText(pricingDataModal, /title:\s*'Pool Specifications'[\s\S]{0,140}title:\s*'Additional Options'[\s\S]{0,180}title:\s*'Pool Specifications Additional Options'/, 'Pool Specification additional options are not grouped in their correctly named Admin pricing table.');
+requireText(pricingDataModal, /title:\s*'Excavation'[\s\S]{0,4000}title:\s*'Additional Options'[\s\S]{0,180}title:\s*'Excavation Additional Options'/, 'Excavation additional options are not grouped in their correctly named Admin pricing table.');
+requireText(pricingDataModal, /title:\s*'Interior Finish'[\s\S]{0,5000}title:\s*'Additional Options'[\s\S]{0,180}title:\s*'Interior Finish Additional Options'/, 'Interior Finish additional options are not grouped in their correctly named Admin pricing table.');
 requireText(pricingDataModal, /<th scope="col">Additional Feature<\/th>[\s\S]{0,100}<th scope="col">Associated Cost<\/th>[\s\S]{0,100}<th scope="col">Enabled by Default\?<\/th>/, 'The Admin additional-feature table is missing its feature, cost, and default columns.');
 requireText(pricingDataModal, /className="pricing-field__info"[\s\S]{0,100}data-tooltip=\{field\.tooltip\}/, 'Additional feature cost rows do not expose application guidance.');
 requireText(pricingDataModal, /pricing-table pricing-table--browser pricing-scalar-table[\s\S]{0,2500}setSelectedAdditionalFeature/, 'Additional feature costs do not use the standard selectable Admin table pattern.');
 requireText(pricingDataModal, /Edit Additional Feature[\s\S]{0,1500}Additional Feature cannot be renamed/, 'Additional feature rows do not populate the protected right-side details editor.');
 requireText(pricingDataModal, /renderLabelText\('Enabled by Default\?'\)[\s\S]{0,1200}updateDefault\(true\)[\s\S]{0,800}updateDefault\(false\)/, 'The additional feature details editor cannot change the new-proposal default.');
 requireText(pricingDataModalCss, /\.pricing-scalar-table\s*\{[\s\S]{0,80}min-width:\s*720px/, 'The Admin additional-feature table is missing its minimum readable width.');
-requireText(pricingDataDefaults, /additionalFeatureDefaults:\s*\{[\s\S]{0,100}siltFence:\s*true[\s\S]{0,100}tanningShelf:\s*false[\s\S]{0,100}automaticCover:\s*false[\s\S]{0,100}gravelInstall:\s*true[\s\S]{0,100}dirtHaul:\s*true[\s\S]{0,100}soilSampleEngineer:\s*false[\s\S]{0,100}doubleCurtain:\s*false[\s\S]{0,100}additionalSitePrep:\s*false[\s\S]{0,100}waterproofing:\s*false/, 'Additional feature defaults do not preserve the current new-proposal behavior.');
+requireText(pricingDataDefaults, /additionalFeatureDefaults:\s*\{[\s\S]{0,100}siltFence:\s*true[\s\S]{0,100}tanningShelf:\s*false[\s\S]{0,100}automaticCover:\s*false[\s\S]{0,100}gravelInstall:\s*true[\s\S]{0,100}dirtHaul:\s*true[\s\S]{0,100}soilSampleEngineer:\s*false[\s\S]{0,100}doubleCurtain:\s*false[\s\S]{0,100}additionalSitePrep:\s*false[\s\S]{0,100}tightAccessJob:\s*false[\s\S]{0,100}waterproofing:\s*false/, 'Additional option defaults do not preserve the current new-proposal behavior.');
 requireText(proposalDefaults, /isAdditionalFeatureEnabled[\s\S]*hasSiltFence:[\s\S]*hasAutomaticCover:[\s\S]*hasAdditionalSitePrep:[\s\S]*hasDoubleCurtain:[\s\S]*hasWaterproofing:/, 'New proposal defaults are not driven by the active pricing model additional-feature settings.');
 requireText(excavationSection, /hasDoubleCurtain\s*\?\?[\s\S]{0,100}doubleCurtainLength[\s\S]*hasAdditionalSitePrep\s*\?\?[\s\S]{0,100}additionalSitePrepHours/, 'Zero-quantity Excavation features cannot remain enabled by default.');
+requireText(franchiseScope, /PPAS_EAST_FRANCHISE_CODE\s*=\s*'9724'/, 'PPAS East-only functionality is not pinned to franchise code 9724.');
+requireText(pricingDataModal, /isPpasEast[\s\S]{0,1600}label:\s*'Tight Access Job'[\s\S]{0,180}path:\s*\['excavation',\s*'tightAccessJob'\]/, 'Tight Access Job is not gated to PPAS East in Admin Pricing.');
+requireText(pricingDataDefaults, /tightAccessJob:\s*6400/, 'Tight Access Job does not have the required $6,400 default cost.');
+requireText(excavationSection, /isPpasEast\s*&&[\s\S]{0,350}Tight Access Job/, 'The Proposal Builder does not gate Tight Access Job to PPAS East.');
+requireText(pricingEngine, /allowTightAccessJob\s*&&\s*excavation\.hasTightAccessJob[\s\S]{0,300}prices\.tightAccessJob/, 'Tight Access Job is not included in East excavation calculations.');
+requireText(pricingEngine, /bronzeIncludesGravel[\s\S]{0,180}prices\.gravelPerSqft/, 'The pricing engine cannot include gravel in PPAS East Bronze pricing.');
+requireText(pricingDataStore, /isPpasEastFranchiseCode\(getSessionFranchiseCode\(\)\)[\s\S]{0,120}excavation\.gravelPerSqft/, 'The East Bronze gravel rate is not unlocked in Admin Pricing.');
+requireText(excavationOptionQuantities, /MAX_EXCAVATION_OPTION_QUANTITY\s*=\s*9[\s\S]*if\s*\(!selected\)\s*return 0[\s\S]*return 1/, 'East excavation option quantities are not clamped from off through the required x1 default and x9 maximum.');
+requireText(excavationSection, /isPpasEast\s*\?[\s\S]{0,700}label:\s*'Gravel Install'[\s\S]{0,500}quantity:\s*gravelQuantity[\s\S]{0,900}label:\s*'Dirt Haul'[\s\S]{0,500}quantity:\s*dirtHaulQuantity/, 'East Gravel Install and Dirt Haul do not use the quantity controls.');
+requireText(excavationSection, /Decrease \$\{label\} quantity[\s\S]{0,800}Increase \$\{label\} quantity/, 'East excavation quantity controls are missing increment or decrement actions.');
+requireText(pricingEngine, /allowExcavationOptionMultipliers[\s\S]{0,500}gravelInstallQuantity[\s\S]{0,500}dirtHaulQuantity/, 'The East excavation quantities are not resolved as pricing multipliers.');
+requireText(pricingEngine, /Gravel Install\$\{gravelMultiplier[\s\S]{0,300}prices\.gravelPerSqft\s*\*\s*gravelMultiplier/, 'Gravel Install cost is not multiplied for East quantities.');
+requireText(pricingEngine, /Dirt Haul\$\{dirtHaulMultiplier[\s\S]{0,300}yardageDisplay\s*\*\s*dirtHaulMultiplier/, 'Dirt Haul cost is not multiplied for East quantities.');
+requireText(proposalForm, /supportsMicroglass=\{!isPpasEastFranchiseCode\(proposal\.designerCode\s*\|\|\s*getSessionFranchiseCode\(\)\)\}/, 'The Proposal Builder does not hide Microglass for PPAS East.');
+requireText(interiorFinishSection, /supportsMicroglass\s*&&\s*\([\s\S]{0,1800}Include Waterproofing \(Microglass\)/, 'The Microglass control is not gated by franchise support.');
+requireText(pricingDataModal, /\.\.\.\(!isPpasEast[\s\S]{0,700}Waterproofing \(Microglass\) - Pool & Spa Area/, 'PPAS East Admin Pricing does not hide the Microglass pricing table.');
+requireText(masterPricingEngine, /isPpasEast[\s\S]{0,100}hasWaterproofing:\s*false[\s\S]{0,160}calculateInteriorFinishCost/, 'PPAS East pricing does not force Microglass off.');
+requireText(proposalSelectionSanitizer, /isPpasEastProposal\(nextProposal\)[\s\S]{0,180}hasWaterproofing:\s*false/, 'Saved PPAS East proposals are not sanitized to remove Microglass.');
+requireText(proposalWorkflow, /!isPpasEastProposal\(proposal\)[\s\S]{0,180}key:\s*'waterproofing'/, 'PPAS East workflow details still expose Microglass.');
+requireText(warrantyUtils, /micro\\s\*glass[\s\S]{0,300}removeUnsupportedPpasEastWarrantyContent[\s\S]{0,300}isPpasEastProposal/, 'PPAS East warranty output is not protected from legacy Microglass content.');
+requireText(warrantyUtils, /resolveWarrantySections[\s\S]{0,900}removeUnsupportedPpasEastWarrantyContent/, 'PPAS East warranty filtering is not applied to resolved warranty sections.');
+requireText(costBreakdownDisplay, /micro\\s\*glass[\s\S]{0,300}removeUnsupportedPpasEastCostItems[\s\S]{0,700}interiorFinish/, 'PPAS East COGS and customer breakdown output is not protected from legacy Microglass line items.');
+requireText(proposalForm, /colorFieldLabel=\{[\s\S]{0,180}isPpasEastFranchiseCode[\s\S]{0,120}\?\s*'Color'[\s\S]{0,80}:\s*'Color \/ Style'/, 'The PPAS East Interior Finish color label is not franchise-scoped.');
+requireText(interiorFinishSection, /colorFieldLabel\s*=\s*'Color \/ Style'[\s\S]{0,5000}>\{colorFieldLabel\}<\/label>/, 'The Interior Finish color label cannot be customized for PPAS East.');
+requireText(pricingDataStore, /syncInteriorFinishColorOptions\(normalized\)/, 'Existing pricing models are not normalized for required interior finish colors.');
+requireText(pricingDataStore, /syncInteriorFinishColorOptions\(target:[\s\S]{0,120}isPpasEastFranchiseCode\(getSessionFranchiseCode\(\)\)/, 'Assign Later pricing-model normalization is not scoped to PPAS East.');
+requireText(pricingDataStore, /finish\.colors\s*=\s*\[ASSIGN_LATER_INTERIOR_FINISH_COLOR,\s*\.\.\.colors\]/, 'Existing pricing model finishes do not receive the Assign Later color.');
+requireText(pricingDataStore, /Interior finish colors have no incremental pricing; Assign Later is always a \$0 choice/, 'Assign Later is not documented as a zero-cost color selection.');
+requireText(pricingDataStore, /savePricingModelSnapshot[\s\S]{0,300}syncInteriorFinishColorOptions\(basePricingState\)[\s\S]{0,250}savePricingModelRemote/, 'Saved pricing models are not guaranteed to retain Assign Later.');
+requireText(proposalForm, /includeAssignLaterColor=\{isPpasEastFranchiseCode\([\s\S]{0,120}proposal\.designerCode\s*\|\|\s*getSessionFranchiseCode\(\)/, 'The Assign Later proposal option is not scoped to PPAS East.');
+requireText(interiorFinishSection, /includeAssignLaterColor[\s\S]{0,1600}'Assign Later'[\s\S]{0,300}configuredColorOptions\.filter/, 'PPAS East does not receive Assign Later as the first color choice for every finish.');
+requireText(proposalForm, /isPpasEast=\{isPpasEastFranchiseCode\(proposal\.designerCode\s*\|\|\s*getSessionFranchiseCode\(\)\)\}/, 'The Equipment Builder does not receive PPAS East franchise scope.');
+requireText(equipmentSection, /supportsMultipleHeatersAndFilters\s*=\s*[\s\S]{0,120}isPpasEast[\s\S]{0,120}isCustomEquipmentPackage/, 'Multiple filters and heaters are not restricted to the PPAS East Custom package.');
+requireText(equipmentSection, /Add Additional Filter/, 'The PPAS East Custom package cannot add another filter.');
+requireText(equipmentSection, /Add Additional Heater/, 'The PPAS East Custom package cannot add another heater.');
+requireText(equipmentSection, /Add Heater Chiller/, 'The PPAS East Custom package cannot add a Heater Chiller.');
+requireText(equipmentSection, /\{isPpasEast\s*&&\s*\([\s\S]{0,300}<h2 className="spec-block-title">Heater Chiller<\/h2>/, 'The Heater Chiller option is not always visible to PPAS East.');
+requireText(equipmentSection, /heaterChillerAddDisabledReason[\s\S]{0,220}!supportsMultipleHeatersAndFilters[\s\S]{0,220}Custom equipment package/, 'Heater Chiller is not disabled outside the PPAS East Custom package.');
+requireText(pricingDataModal, /isPpasEast[\s\S]{0,300}title:\s*'Heater Chiller'[\s\S]{0,180}path:\s*\['equipment',\s*'heaterChillers'\]/, 'The Heater Chiller Admin Pricing table is missing or not scoped to PPAS East.');
+requireText(completePricingEngine, /Additional Filter - \$\{filter\.name\}[\s\S]{0,2500}Additional Heater - \$\{heater\.name\}[\s\S]{0,500}Heater Chiller - \$\{normalizedEquipment\.heaterChiller\.name\}/, 'Additional filters, heaters, and Heater Chillers are not emitted as Equipment COGS items.');
+requireText(masterPricingEngine, /const equipment = isPpasEast[\s\S]{0,220}additionalFilters:\s*\[\][\s\S]{0,120}additionalHeaters:\s*\[\][\s\S]{0,120}heaterChiller:\s*undefined/, 'East-only equipment selections are not removed from non-East pricing.');
+requireText(contractGenerator, /getDefaultContractDepositValue[\s\S]{0,400}isPpasEast[\s\S]{0,220}poolType\s*===\s*'fiberglass'[\s\S]{0,120}formatCurrency\(5000\)/, 'PPAS East fiberglass contracts do not default to a $5,000 deposit.');
+requireText(contractGenerator, /resolveContractDepositSourceValue\(overrides\)\s*\|\|\s*getDefaultContractDepositValue\(normalized\)/, 'The editable deposit override does not take precedence over the PPAS East fiberglass default.');
+requireText(pricingDataDefaults, /masonry:\s*\{[\s\S]{0,180}rbbFacingOptions:[\s\S]{0,100}backsideFacingOptions:\s*\[\]/, 'New pricing models do not include the Backside Facings catalog.');
+requireText(masonryFacing, /MasonryFacingCatalogType\s*=\s*'rbb'\s*\|\s*'backside'\s*\|\s*'raisedSpa'[\s\S]*backsideFacingOptions[\s\S]*\['rbb',\s*'backside',\s*'raisedSpa'\]/, 'Backside Facings are not normalized for current and future pricing models.');
+requireText(pricingDataModal, /isPpasEast[\s\S]{0,400}title:\s*'Backside Facings'[\s\S]{0,160}path:\s*\['masonry',\s*'backsideFacingOptions'\]/, 'PPAS East Admin Pricing is missing the Backside Facings table.');
+requireText(excavationSection, /\{isPpasEast\s*&&\s*\([\s\S]{0,300}<label className="spec-label">Backside Facing<\/label>/, 'The PPAS East RBB editor is missing the Backside Facing dropdown.');
+requireText(excavationSection, /effectiveBacksideFacing[\s\S]{0,900}<option value="none">None<\/option>/, 'The PPAS East Backside Facing dropdown does not begin with None.');
+requireText(excavationSection, /disabled=\{\(normalizeMasonryFacingId\(level\.facing\)\s*\|\|\s*'none'\)\s*===\s*'none'\}/, 'Backside Facing is not disabled until a primary RBB Facing is selected.');
+requireText(completePricingEngine, /getMasonryFacingOptions\(prices,\s*'backside'\)/, 'The Masonry COGS engine does not load the distinct Backside Facings catalog.');
+requireText(completePricingEngine, /allowDistinctRbbBacksideFacing[\s\S]{0,800}explicitBacksideFacing[\s\S]{0,800}'backside'/, 'The Masonry COGS engine does not price the selected Backside Facing independently.');
+requireText(masterPricingEngine, /allowDistinctRbbBacksideFacing:\s*isPpasEast/, 'Distinct RBB backside-facing pricing is not restricted to PPAS East.');
 
 [
   "path: ['misc', 'layout', 'siltFencing']",
@@ -267,6 +333,7 @@ requireText(excavationSection, /hasDoubleCurtain\s*\?\?[\s\S]{0,100}doubleCurtai
   "path: ['plans', 'soilSampleEngineer']",
   "path: ['steel', 'doubleCurtainPerLnft']",
   "path: ['excavation', 'sitePrep']",
+  "path: ['excavation', 'tightAccessJob']",
   "path: ['interiorFinish', 'extras', 'waterproofingPerSqft']",
   "path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa']",
 ].forEach((pricingPath) => {

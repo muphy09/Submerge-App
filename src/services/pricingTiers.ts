@@ -177,7 +177,8 @@ export function normalizePricingTiers<T extends Record<string, any>>(pricing: T)
 
 export function resolvePricingForTier<T extends Record<string, any>>(
   basePricing: T,
-  tierId?: string | null
+  tierId?: string | null,
+  options: { bronzeIncludesGravel?: boolean } = {}
 ): PricingData {
   const normalizedTierId = normalizePricingTierId(tierId);
   const normalizedBase = normalizePricingTiers(deepClone(basePricing));
@@ -188,6 +189,13 @@ export function resolvePricingForTier<T extends Record<string, any>>(
       : {};
 
   Object.entries(overrides).forEach(([pathKey, value]) => {
+    if (
+      options.bronzeIncludesGravel &&
+      pathKey === 'excavation.gravelPerSqft' &&
+      Number(value) === 0
+    ) {
+      return;
+    }
     setDeep(effective, parsePathKey(pathKey), deepClone(value));
   });
   effective.pricingTierId = normalizedTierId;

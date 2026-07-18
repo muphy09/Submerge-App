@@ -45,6 +45,7 @@ import {
   isBronzePricingTier,
   normalizePricingTierId,
 } from '../services/pricingTiers';
+import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import './PricingDataModal.css';
 
 type Path = (string | number)[];
@@ -181,9 +182,10 @@ const getPathKey = (path: Path) => path.join('.');
 interface PricingDataModalProps {
   onClose: () => void;
   franchiseId?: string | null;
+  franchiseCode?: string | null;
 }
 
-const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseId }) => {
+const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseId, franchiseCode }) => {
   const [data, setData] = useState(getPricingDataSnapshot());
   const [normalData, setNormalData] = useState(getNormalPricingDataSnapshot());
   const [selectedPricingTierId, setSelectedPricingTierId] = useState<string>(() => getActivePricingTierId());
@@ -213,6 +215,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   const [hasChanges, setHasChanges] = useState(false);
   const [confirmDeleteModel, setConfirmDeleteModel] = useState<{ id: string; name: string } | null>(null);
   const labelFranchiseId = franchiseId || getActiveFranchiseId() || 'default';
+  const isPpasEast = isPpasEastFranchiseCode(franchiseCode);
   const activeRenameInputRef = useRef<HTMLInputElement | null>(null);
   const updateTooltipAlign = (e: React.MouseEvent<HTMLSpanElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -636,7 +639,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     const isMasonryFacingName =
       field.key === 'name' &&
       list.path[0] === 'masonry' &&
-      (list.path[1] === 'rbbFacingOptions' || list.path[1] === 'raisedSpaFacingOptions');
+      (list.path[1] === 'rbbFacingOptions' ||
+        list.path[1] === 'backsideFacingOptions' ||
+        list.path[1] === 'raisedSpaFacingOptions');
     if (isMasonryFacingName) {
       const entries = (getValue(data, list.path) as any[]) || [];
       const existing = entries[index] || {};
@@ -1025,7 +1030,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         label: 'Facing Option',
         type: 'text',
         placeholder: 'Split Face',
-        tooltip: 'Label shown in RBB, exposed pool wall, column, and raised spa facing selectors.',
+        tooltip: 'Label shown in the applicable masonry-facing selector.',
       },
       {
         key: 'materialCost',
@@ -1033,7 +1038,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         type: 'number',
         placeholder: '0',
         prefix: '$',
-        tooltip: 'Material rate for this facing option.',
+        tooltip: 'Material cost applied per SQFT for this facing option.',
       },
       {
         key: 'laborCost',
@@ -1041,7 +1046,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         type: 'number',
         placeholder: '0',
         prefix: '$',
-        tooltip: 'Labor rate for this facing option.',
+        tooltip: 'Labor cost applied per SQFT for this facing option.',
       },
     ],
     []
@@ -1714,9 +1719,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Pool Specifications',
         groups: [
           {
-            title: 'Additional Features',
+            title: 'Additional Options',
             scalarTable: {
-              title: 'Pool specification feature costs',
+              title: 'Pool Specifications Additional Options',
               rows: [
                 {
                   label: 'Silt Fence',
@@ -1895,9 +1900,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
-            title: 'Additional Features',
+            title: 'Additional Options',
             scalarTable: {
-              title: 'Excavation feature costs',
+              title: 'Excavation Additional Options',
               rows: [
                 {
                   label: 'Gravel Install',
@@ -1905,7 +1910,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   defaultEnabledPath: ['additionalFeatureDefaults', 'gravelInstall'],
                   type: 'number',
                   prefix: '$',
-                  tooltip: 'Applied per pool surface sqft when Gravel Install is enabled. This feature is enabled by default for non-Bronze shotcrete proposals and is unavailable in Bronze pricing.',
+                  tooltip: isPpasEast
+                    ? 'Applied per pool surface sqft when Gravel Install is enabled. Gravel Install is included in PPAS East Bronze pricing.'
+                    : 'Applied per pool surface sqft when Gravel Install is enabled. This feature is enabled by default for non-Bronze shotcrete proposals and is unavailable in Bronze pricing.',
                 },
                 {
                   label: 'Dirt Haul',
@@ -1939,6 +1946,18 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   prefix: '$',
                   tooltip: 'Applied per additional site-preparation hour entered after Additional Site Prep is enabled.',
                 },
+                ...(isPpasEast
+                  ? [
+                      {
+                        label: 'Tight Access Job',
+                        path: ['excavation', 'tightAccessJob'],
+                        defaultEnabledPath: ['additionalFeatureDefaults', 'tightAccessJob'],
+                        type: 'number' as const,
+                        prefix: '$',
+                        tooltip: 'Added once under Excavation when Tight Access Job is enabled. This PPAS East option is not enabled by default.',
+                      },
+                    ]
+                  : []),
               ],
             },
           },
@@ -2898,6 +2917,26 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               },
             ],
           },
+          ...(isPpasEast
+            ? ([
+                {
+                  title: 'Heater Chiller',
+                  lists: [
+                    {
+                      title: 'Heater Chiller models',
+                      path: ['equipment', 'heaterChillers'],
+                      addLabel: 'Add heater chiller',
+                      fields: [
+                        { key: 'name', label: 'Name', type: 'text', placeholder: 'Heater Chiller name' },
+                        { key: 'basePrice', label: 'Base Price', type: 'number', placeholder: '0', prefix: '$' },
+                        { key: 'addCost1', label: 'Add. Cost 1', type: 'number', placeholder: '0', prefix: '$' },
+                        { key: 'addCost2', label: 'Add. Cost 2', type: 'number', placeholder: '0', prefix: '$' },
+                      ],
+                    },
+                  ],
+                },
+              ] satisfies Group[])
+            : []),
           {
             title: 'Lighting & automation rates',
             scalars: [{ label: 'Automation extra zone', path: ['equipment', 'automationZoneAddon'], type: 'number' }],
@@ -3053,30 +3092,34 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               },
             ],
           },
-          {
-            title: 'Additional Features',
-            scalarTable: {
-              title: 'Interior finish feature costs',
-              rows: [
+          ...(!isPpasEast
+            ? ([
                 {
-                  label: 'Waterproofing (Microglass) - Pool & Spa Area',
-                  path: ['interiorFinish', 'extras', 'waterproofingPerSqft'],
-                  defaultEnabledPath: ['additionalFeatureDefaults', 'waterproofing'],
-                  type: 'number',
-                  prefix: '$',
-                  tooltip: 'Applied per sqft of pool interior plus calculated spa waterproofing area when Waterproofing (Microglass) is enabled. This feature is enabled by default and unavailable in Bronze pricing.',
+                  title: 'Additional Options',
+                  scalarTable: {
+                    title: 'Interior Finish Additional Options',
+                    rows: [
+                      {
+                        label: 'Waterproofing (Microglass) - Pool & Spa Area',
+                        path: ['interiorFinish', 'extras', 'waterproofingPerSqft'],
+                        defaultEnabledPath: ['additionalFeatureDefaults', 'waterproofing'],
+                        type: 'number',
+                        prefix: '$',
+                        tooltip: 'Applied per sqft of pool interior plus calculated spa waterproofing area when Waterproofing (Microglass) is enabled. This feature is enabled by default and unavailable in Bronze pricing.',
+                      },
+                      {
+                        label: 'Waterproofing (Microglass) - Raised Spa',
+                        path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa'],
+                        defaultEnabledPath: ['additionalFeatureDefaults', 'waterproofing'],
+                        type: 'number',
+                        prefix: '$',
+                        tooltip: 'Added once in addition to the per-sqft waterproofing charge when a raised shotcrete spa is waterproofed. This feature is unavailable in Bronze pricing.',
+                      },
+                    ],
+                  },
                 },
-                {
-                  label: 'Waterproofing (Microglass) - Raised Spa',
-                  path: ['interiorFinish', 'extras', 'waterproofingRaisedSpa'],
-                  defaultEnabledPath: ['additionalFeatureDefaults', 'waterproofing'],
-                  type: 'number',
-                  prefix: '$',
-                  tooltip: 'Added once in addition to the per-sqft waterproofing charge when a raised shotcrete spa is waterproofed. This feature is unavailable in Bronze pricing.',
-                },
-              ],
-            },
-          },
+              ] satisfies Group[])
+            : []),
           {
             title: 'Finishes catalog',
             lists: [
@@ -3490,6 +3533,24 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                 }),
                 fields: masonryFacingFields,
               },
+              ...(isPpasEast
+                ? ([
+                    {
+                      title: 'Backside Facings',
+                      path: ['masonry', 'backsideFacingOptions'],
+                      addLabel: 'Add backside facing',
+                      variant: 'table',
+                      emptyMessage: 'No backside facing options yet. Add one to get started.',
+                      defaultItem: () => ({
+                        id: '',
+                        name: '',
+                        materialCost: 0,
+                        laborCost: 0,
+                      }),
+                      fields: masonryFacingFields,
+                    },
+                  ] satisfies ListConfig[])
+                : []),
               {
                 title: 'Raised Spa facings',
                 path: ['masonry', 'raisedSpaFacingOptions'],
@@ -3708,6 +3769,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       data.plumbing.spaOverrunThreshold,
       data.papDiscountRates,
       data.manualAdjustments,
+      isPpasEast,
     ],
   );
 

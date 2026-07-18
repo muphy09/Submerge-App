@@ -31,8 +31,11 @@ export type RetiredEquipmentFlags = {
   additionalPumps: boolean[];
   auxiliaryPumps: boolean[];
   filter: boolean;
+  additionalFilters: boolean[];
   cleaner: boolean;
   heater: boolean;
+  additionalHeaters: boolean[];
+  heaterChiller: boolean;
   automation: boolean;
   saltSystem: boolean;
   sanitationAccessory: boolean;
@@ -47,8 +50,11 @@ export const getEmptyRetiredEquipmentFlags = (): RetiredEquipmentFlags => ({
   additionalPumps: [],
   auxiliaryPumps: [],
   filter: false,
+  additionalFilters: [],
   cleaner: false,
   heater: false,
+  additionalHeaters: [],
+  heaterChiller: false,
   automation: false,
   saltSystem: false,
   sanitationAccessory: false,
@@ -98,8 +104,20 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     isRetiredName(item?.name, auxiliaryCatalog)
   );
   const filter = filterSelected && isRetiredName(equipment.filter?.name, pricingData.equipment.filters);
+  const additionalFilters = (equipment.additionalFilters ?? []).map((item) =>
+    isRetiredName(item?.name, pricingData.equipment.filters)
+  );
   const cleaner = cleanerSelected && isRetiredName(equipment.cleaner?.name, pricingData.equipment.cleaners);
   const heater = heaterSelected && isRetiredName(equipment.heater?.name, pricingData.equipment.heaters);
+  const additionalHeaters = (equipment.additionalHeaters ?? []).map((item) =>
+    isRetiredName(item?.name, pricingData.equipment.heaters)
+  );
+  const heaterChiller =
+    hasRealSelection(equipment.heaterChiller?.name, 'no heater chiller') &&
+    isRetiredName(
+      equipment.heaterChiller?.name,
+      ((pricingData as any).equipment?.heaterChillers || []) as NamedItem[]
+    );
   const automation = automationSelected && isRetiredName(equipment.automation?.name, pricingData.equipment.automation);
   const saltSystem =
     saltSelected &&
@@ -128,8 +146,11 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
   const any =
     pump ||
     filter ||
+    additionalFilters.some(Boolean) ||
     cleaner ||
     heater ||
+    additionalHeaters.some(Boolean) ||
+    heaterChiller ||
     automation ||
     saltSystem ||
     sanitationAccessory ||
@@ -144,8 +165,11 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
     additionalPumps,
     auxiliaryPumps,
     filter,
+    additionalFilters,
     cleaner,
     heater,
+    additionalHeaters,
+    heaterChiller,
     automation,
     saltSystem,
     sanitationAccessory,

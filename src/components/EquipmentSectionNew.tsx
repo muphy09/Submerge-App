@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Equipment,
   EquipmentPackageOption,
+  FilterSelection,
+  HeaterSelection,
   PumpSelection,
   LightSelection,
   PlumbingRuns,
@@ -49,6 +51,7 @@ interface Props {
   onChangePlumbingRuns: (runs: Partial<PlumbingRuns>) => void;
   hasSpa: boolean;
   hasPool: boolean;
+  isPpasEast?: boolean;
   noteOverrides?: ProposalNoteOverrides;
 }
 
@@ -109,6 +112,7 @@ function EquipmentSectionNew({
   onChangePlumbingRuns,
   hasSpa,
   hasPool,
+  isPpasEast = false,
   noteOverrides,
 }: Props) {
   const { showToast } = useToast();
@@ -130,9 +134,16 @@ function EquipmentSectionNew({
     const cleaner = getDefaultCleanerOption(pricingData.equipment.cleaners) || byCost(pricingData.equipment.cleaners);
     const noCleaner = getNoCleanerOption(pricingData.equipment.cleaners) || byCost(pricingData.equipment.cleaners);
     const heater = byCost(pricingData.equipment.heaters);
+    const heaterChillerCatalog = ((pricingData as any).equipment?.heaterChillers || []) as any[];
+    const heaterChiller = byCost(heaterChillerCatalog) || {
+      name: 'No Heater Chiller (Select heater chiller)',
+      basePrice: 0,
+      addCost1: 0,
+      addCost2: 0,
+    };
     const automation = byCost(pricingData.equipment.automation);
     const autoFillSystem = byCost(pricingData.equipment.autoFillSystem);
-    return { pump, filter, cleaner, noCleaner, heater, automation, autoFillSystem };
+    return { pump, filter, cleaner, noCleaner, heater, heaterChiller, automation, autoFillSystem };
   }, []);
 
   const selectableDefaults = useMemo(() => ({
@@ -143,6 +154,10 @@ function EquipmentSectionNew({
       pricingData.equipment.cleaners.find(cleaner => !isNoCleanerSelection(cleaner.name)) ||
       pricingData.equipment.cleaners[0],
     heater: pricingData.equipment.heaters.find(h => !h.name.toLowerCase().includes('no heater')) || pricingData.equipment.heaters[0],
+    heaterChiller:
+      (((pricingData as any).equipment?.heaterChillers || []) as any[]).find(
+        (item) => !String(item?.name || '').toLowerCase().includes('no heater chiller')
+      ) || ((pricingData as any).equipment?.heaterChillers || [])[0],
     automation: pricingData.equipment.automation.find(a => !a.name.toLowerCase().includes('no automation')) || pricingData.equipment.automation[0],
     saltSystem: pricingData.equipment.saltSystem.find(s => !isNoSaltSystemName(s.name)) || pricingData.equipment.saltSystem[0],
     autoFillSystem: pricingData.equipment.autoFillSystem.find(s => !s.name.toLowerCase().includes('no auto')) || pricingData.equipment.autoFillSystem[0],
@@ -179,6 +194,10 @@ function EquipmentSectionNew({
   const filterOptions = pricingData.equipment.filters.filter(filter => !filter.name.toLowerCase().includes('no filter'));
   const cleanerOptions = pricingData.equipment.cleaners.filter(cleaner => !cleaner.name.toLowerCase().includes('no cleaner'));
   const heaterOptions = pricingData.equipment.heaters.filter(heater => !heater.name.toLowerCase().includes('no heater'));
+  const heaterChillerCatalog = ((pricingData as any).equipment?.heaterChillers || []) as any[];
+  const heaterChillerOptions = heaterChillerCatalog.filter(
+    (item: any) => !String(item?.name || '').toLowerCase().includes('no heater chiller')
+  );
   const automationOptions = pricingData.equipment.automation.filter(auto => !auto.name.toLowerCase().includes('no automation'));
   const saltCatalog = pricingData.equipment.saltSystem.filter(system => !isNoSaltSystemName(system.name));
   const autoFillOptions = pricingData.equipment.autoFillSystem.filter(system => !system.name.toLowerCase().includes('no auto'));
@@ -265,6 +284,7 @@ function EquipmentSectionNew({
       price: costOf(defaults.filter),
     },
     filterQuantity: data?.filterQuantity ?? 0,
+    additionalFilters: Array.isArray(data?.additionalFilters) ? data.additionalFilters.filter(Boolean) : [],
     cleaner: data?.cleaner || {
       name: defaults.noCleaner.name,
       basePrice: (defaults.noCleaner as any).basePrice,
@@ -282,6 +302,12 @@ function EquipmentSectionNew({
       price: costOf(defaults.heater),
     },
     heaterQuantity: hasHeaterSelection ? Math.max(data?.heaterQuantity ?? 1, 1) : 0,
+    additionalHeaters: Array.isArray(data?.additionalHeaters) ? data.additionalHeaters.filter(Boolean) : [],
+    heaterChiller: data?.heaterChiller,
+    heaterChillerQuantity:
+      hasRealSelection(data?.heaterChiller?.name, 'no heater chiller')
+        ? Math.max(data?.heaterChillerQuantity ?? 1, 1)
+        : 0,
     includePoolLights: data?.includePoolLights,
     applyCustomPackageDefaultPoolLights: data?.applyCustomPackageDefaultPoolLights,
     includeSpaLights: data?.includeSpaLights,
@@ -400,6 +426,9 @@ function EquipmentSectionNew({
   const [includeFilter, setIncludeFilter] = useState<boolean>(() => hasRealSelection(data?.filter?.name, 'no filter'));
   const [includeCleaner, setIncludeCleaner] = useState<boolean>(() => hasRealSelection(data?.cleaner?.name, 'no cleaner'));
   const [includeHeater, setIncludeHeater] = useState<boolean>(() => hasHeaterSelection);
+  const [includeHeaterChiller, setIncludeHeaterChiller] = useState<boolean>(() =>
+    hasRealSelection(data?.heaterChiller?.name, 'no heater chiller')
+  );
   const [includePoolLights, setIncludePoolLights] = useState<boolean>(() => (safeData.poolLights?.length ?? 0) > 0);
   const [includeSpaLights, setIncludeSpaLights] = useState<boolean>(() => (safeData.spaLights?.length ?? 0) > 0);
   const [includeAutomation, setIncludeAutomation] = useState<boolean>(() =>
@@ -415,10 +444,13 @@ function EquipmentSectionNew({
   const [filterEditing, setFilterEditing] = useState(false);
   const [cleanerEditing, setCleanerEditing] = useState(false);
   const [heaterEditing, setHeaterEditing] = useState(false);
+  const [heaterChillerEditing, setHeaterChillerEditing] = useState(false);
   const [automationEditing, setAutomationEditing] = useState(false);
   const [sanitationEditing, setSanitationEditing] = useState(false);
   const [autoFillEditing, setAutoFillEditing] = useState(false);
   const [activeAdditionalPumpIndex, setActiveAdditionalPumpIndex] = useState<number | null>(null);
+  const [activeAdditionalFilterIndex, setActiveAdditionalFilterIndex] = useState<number | null>(null);
+  const [activeAdditionalHeaterIndex, setActiveAdditionalHeaterIndex] = useState<number | null>(null);
   const [activeAuxiliaryPumpIndex, setActiveAuxiliaryPumpIndex] = useState<number | null>(null);
   const [activePoolLightIndex, setActivePoolLightIndex] = useState<number | null>(null);
   const [activeSpaLightIndex, setActiveSpaLightIndex] = useState<number | null>(null);
@@ -428,6 +460,10 @@ function EquipmentSectionNew({
     setIncludeFilter(hasRealSelection(safeData.filter?.name, 'no filter') && (safeData.filterQuantity ?? 0) > 0);
     setIncludeCleaner(hasRealSelection(safeData.cleaner?.name, 'no cleaner') && (safeData.cleanerQuantity ?? 0) > 0);
     setIncludeHeater(hasRealSelection(safeData.heater?.name, 'no heater') && (safeData.heaterQuantity ?? 0) > 0);
+    setIncludeHeaterChiller(
+      hasRealSelection(safeData.heaterChiller?.name, 'no heater chiller') &&
+        (safeData.heaterChillerQuantity ?? 0) > 0
+    );
     setIncludePoolLights((safeData.poolLights?.length ?? 0) > 0);
     setIncludeSpaLights((safeData.spaLights?.length ?? 0) > 0);
     setIncludeAutomation(
@@ -452,6 +488,10 @@ function EquipmentSectionNew({
     safeData.cleanerQuantity,
     safeData.heater?.name,
     safeData.heaterQuantity,
+    safeData.additionalHeaters,
+    safeData.heaterChiller?.name,
+    safeData.heaterChillerQuantity,
+    safeData.additionalFilters,
     safeData.poolLights,
     safeData.spaLights,
     safeData.automation?.name,
@@ -463,6 +503,8 @@ function EquipmentSectionNew({
     safeData.autoFillSystemQuantity,
   ]);
   const additionalPumps = safeData.additionalPumps || [];
+  const additionalFilters = safeData.additionalFilters || [];
+  const additionalHeaters = safeData.additionalHeaters || [];
   const auxiliaryPumps = safeData.auxiliaryPumps || [];
   const maxAuxiliaryPumps = 1;
   const pumpQuantity = Math.max(safeData.pumpQuantity ?? (includePump ? 1 : 0), 0);
@@ -472,6 +514,12 @@ function EquipmentSectionNew({
   const cleanerQuantity = Math.max(safeData.cleanerQuantity ?? (includeCleaner ? 1 : 0), 0);
   const filterQuantity = Math.max(safeData.filterQuantity ?? (includeFilter ? 1 : 0), 0);
   const heaterQuantity = Math.max(safeData.heaterQuantity ?? (includeHeater ? 1 : 0), 0);
+  const heaterChillerQuantity = Math.max(
+    safeData.heaterChillerQuantity ?? (includeHeaterChiller ? 1 : 0),
+    0
+  );
+  const supportsMultipleHeatersAndFilters =
+    isPpasEast && Boolean(selectedPackage && isCustomEquipmentPackage(selectedPackage));
   const automationQuantity = Math.max(safeData.automationQuantity ?? (includeAutomation ? 1 : 0), 0);
   const saltSystemQuantity = Math.max(
     safeData.saltSystemQuantity ?? (isRealSaltSystemSelection(safeData.saltSystem) ? 1 : 0),
@@ -563,6 +611,12 @@ function EquipmentSectionNew({
     if ((packageIncludesFilter || includeFilter) && hasRealSelection(safeData.filter?.name, 'no filter') && filterQuantity > 0) {
       pushRow('Filter', summarizeQuantity(safeData.filter?.name || 'Filter', filterQuantity));
     }
+    if (supportsMultipleHeatersAndFilters) {
+      pushRow(
+        'Additional Filter',
+        summarizeSelectionNames(additionalFilters.map((filter) => filter?.name))
+      );
+    }
 
     if ((packageIncludesCleaner || includeCleaner) && hasRealSelection(safeData.cleaner?.name, 'no cleaner') && cleanerQuantity > 0) {
       pushRow('Cleaner', summarizeQuantity(safeData.cleaner?.name || 'Cleaner', cleanerQuantity));
@@ -570,6 +624,22 @@ function EquipmentSectionNew({
 
     if ((packageIncludesHeater || includeHeater) && hasRealSelection(safeData.heater?.name, 'no heater') && heaterQuantity > 0) {
       pushRow('Heater', summarizeQuantity(safeData.heater?.name || 'Heater', heaterQuantity));
+    }
+    if (supportsMultipleHeatersAndFilters) {
+      pushRow(
+        'Additional Heater',
+        summarizeSelectionNames(additionalHeaters.map((heater) => heater?.name))
+      );
+    }
+    if (
+      supportsMultipleHeatersAndFilters &&
+      hasRealSelection(safeData.heaterChiller?.name, 'no heater chiller') &&
+      heaterChillerQuantity > 0
+    ) {
+      pushRow(
+        'Heater Chiller',
+        summarizeQuantity(safeData.heaterChiller?.name || 'Heater Chiller', heaterChillerQuantity)
+      );
     }
 
     if (
@@ -648,17 +718,21 @@ function EquipmentSectionNew({
     return rows;
   }, [
     additionalPumps,
+    additionalFilters,
+    additionalHeaters,
     auxiliaryPumps,
     autoFillSystemQuantity,
     automationQuantity,
     cleanerQuantity,
     filterQuantity,
     heaterQuantity,
+    heaterChillerQuantity,
     includeAutoFill,
     includeAutomation,
     includeCleaner,
     includeFilter,
     includeHeater,
+    includeHeaterChiller,
     includePump,
     includeSalt,
     editableSanitationAccessorySelected,
@@ -681,6 +755,7 @@ function EquipmentSectionNew({
     safeData.filter?.name,
     safeData.applyCustomPackageDefaultPoolLights,
     safeData.heater?.name,
+    safeData.heaterChiller?.name,
     safeData.pump?.name,
     safeData.saltSystem,
     safeData.sanitationAccessory?.name,
@@ -695,6 +770,7 @@ function EquipmentSectionNew({
     sanitationAccessoryQuantity,
     saltSystemQuantity,
     spaLights,
+    supportsMultipleHeatersAndFilters,
   ]);
 
   const updateData = (updates: Partial<Equipment>) => {
@@ -714,6 +790,14 @@ function EquipmentSectionNew({
       pumpQuantity: Math.max(getBasePumpQuantity(safeData), 0),
       additionalPumps: pumps,
     });
+  };
+
+  const setAdditionalFilters = (filters: FilterSelection[]) => {
+    updateData({ additionalFilters: filters });
+  };
+
+  const setAdditionalHeaters = (heaters: HeaterSelection[]) => {
+    updateData({ additionalHeaters: heaters });
   };
 
   const poolLightOptions = pricingData.equipment.lights.poolLights || [];
@@ -807,6 +891,15 @@ function EquipmentSectionNew({
   const heaterAddDisabledReason = getFirstDisabledReason(
     packageRequiredReason,
     heaterDisabledByPackage ? 'This equipment package does not allow heater upgrades.' : undefined
+  );
+  const heaterChillerAddDisabledReason = getFirstDisabledReason(
+    packageRequiredReason,
+    !supportsMultipleHeatersAndFilters
+      ? 'Heater Chillers are available in the PPAS East Custom equipment package.'
+      : undefined,
+    heaterChillerOptions.length === 0
+      ? 'No Heater Chiller models are configured in the active pricing model.'
+      : undefined
   );
   const poolLightTopLevelDisabledReason = getFirstDisabledReason(packageRequiredReason, addPoolLightDisabledReason);
   const spaLightTopLevelDisabledReason = getFirstDisabledReason(packageRequiredReason, addSpaLightDisabledReason);
@@ -966,6 +1059,7 @@ function EquipmentSectionNew({
           price: costOf(defaults.filter),
         },
         filterQuantity: 0,
+        additionalFilters: [],
       });
     }
   };
@@ -1048,7 +1142,38 @@ function EquipmentSectionNew({
           autoAddedReason: undefined,
         },
         heaterQuantity: 0,
+        additionalHeaters: [],
       });
+    }
+  };
+
+  const toggleHeaterChiller = (val: boolean) => {
+    if (!isPpasEast) return;
+    if (val) {
+      const selected = getActiveOrDefaultOption(
+        heaterChillerOptions,
+        safeData.heaterChiller?.name,
+        selectableDefaults.heaterChiller
+      );
+      if (!selected) {
+        setIncludeHeaterChiller(false);
+        return;
+      }
+      setIncludeHeaterChiller(true);
+      updateData({
+        heaterChiller: {
+          name: selected.name,
+          btu: (selected as any).btu,
+          basePrice: (selected as any).basePrice,
+          addCost1: (selected as any).addCost1,
+          addCost2: (selected as any).addCost2,
+          price: costOf(selected),
+        },
+        heaterChillerQuantity: Math.max(safeData.heaterChillerQuantity ?? 1, 1),
+      });
+    } else {
+      setIncludeHeaterChiller(false);
+      updateData({ heaterChiller: undefined, heaterChillerQuantity: 0 });
     }
   };
 
@@ -1546,6 +1671,38 @@ function EquipmentSectionNew({
     setAdditionalPumps(next);
   };
 
+  const handleAdditionalFilterChange = (index: number, name: string | number) => {
+    const filter = pricingData.equipment.filters.find((item) => item.name === name);
+    if (!filter) return;
+    const next = [...additionalFilters];
+    next[index] = {
+      name: filter.name,
+      sqft: (filter as any).sqft,
+      basePrice: (filter as any).basePrice,
+      addCost1: (filter as any).addCost1,
+      addCost2: (filter as any).addCost2,
+      price: costOf(filter),
+    };
+    setAdditionalFilters(next);
+  };
+
+  const handleAdditionalHeaterChange = (index: number, name: string | number) => {
+    const heater = pricingData.equipment.heaters.find((item) => item.name === name);
+    if (!heater) return;
+    const next = [...additionalHeaters];
+    next[index] = {
+      name: heater.name,
+      btu: (heater as any).btu,
+      basePrice: (heater as any).basePrice,
+      addCost1: (heater as any).addCost1,
+      addCost2: (heater as any).addCost2,
+      price: costOf(heater),
+      autoAddedForSpa: false,
+      autoAddedReason: undefined,
+    };
+    setAdditionalHeaters(next);
+  };
+
   const handleAuxiliaryPumpChange = (index: number, name: string | number) => {
     const pump = auxiliaryPumpCatalog.find((p: any) => p.name === name);
     if (!pump) return;
@@ -1605,6 +1762,52 @@ function EquipmentSectionNew({
     setActiveAdditionalPumpIndex(additionalPumps.length);
   };
 
+  const addAdditionalFilter = () => {
+    if (!supportsMultipleHeatersAndFilters) return;
+    const selectedFilter = getActiveOrDefaultOption(
+      filterOptions,
+      hasRealSelection(safeData.filter?.name, 'no filter') ? safeData.filter?.name : undefined,
+      selectableDefaults.filter
+    );
+    if (!selectedFilter) return;
+    setAdditionalFilters([
+      ...additionalFilters,
+      {
+        name: selectedFilter.name,
+        sqft: (selectedFilter as any).sqft,
+        basePrice: (selectedFilter as any).basePrice,
+        addCost1: (selectedFilter as any).addCost1,
+        addCost2: (selectedFilter as any).addCost2,
+        price: costOf(selectedFilter),
+      },
+    ]);
+    setActiveAdditionalFilterIndex(additionalFilters.length);
+  };
+
+  const addAdditionalHeater = () => {
+    if (!supportsMultipleHeatersAndFilters) return;
+    const selectedHeater = getActiveOrDefaultOption(
+      heaterOptions,
+      hasRealSelection(safeData.heater?.name, 'no heater') ? safeData.heater?.name : undefined,
+      selectableDefaults.heater
+    );
+    if (!selectedHeater) return;
+    setAdditionalHeaters([
+      ...additionalHeaters,
+      {
+        name: selectedHeater.name,
+        btu: (selectedHeater as any).btu,
+        basePrice: (selectedHeater as any).basePrice,
+        addCost1: (selectedHeater as any).addCost1,
+        addCost2: (selectedHeater as any).addCost2,
+        price: costOf(selectedHeater),
+        autoAddedForSpa: false,
+        autoAddedReason: undefined,
+      },
+    ]);
+    setActiveAdditionalHeaterIndex(additionalHeaters.length);
+  };
+
   const removeAuxiliaryPump = (index: number) => {
     const next = auxiliaryPumps.filter((_, i) => i !== index);
     setAuxiliaryPumps(next);
@@ -1613,6 +1816,16 @@ function EquipmentSectionNew({
   const removeAdditionalPump = (index: number) => {
     const next = additionalPumps.filter((_, i) => i !== index);
     setAdditionalPumps(next);
+  };
+
+  const removeAdditionalFilter = (index: number) => {
+    setAdditionalFilters(additionalFilters.filter((_, itemIndex) => itemIndex !== index));
+    setActiveAdditionalFilterIndex(null);
+  };
+
+  const removeAdditionalHeater = (index: number) => {
+    setAdditionalHeaters(additionalHeaters.filter((_, itemIndex) => itemIndex !== index));
+    setActiveAdditionalHeaterIndex(null);
   };
 
   const handleFilterChange = (name: string) => {
@@ -1666,6 +1879,22 @@ function EquipmentSectionNew({
         heaterQuantity: Math.max(safeData.heaterQuantity ?? 1, 1),
       });
     }
+  };
+
+  const handleHeaterChillerChange = (name: string) => {
+    const heaterChiller = heaterChillerCatalog.find((item: any) => item.name === name);
+    if (!heaterChiller) return;
+    updateData({
+      heaterChiller: {
+        name: heaterChiller.name,
+        btu: (heaterChiller as any).btu,
+        basePrice: (heaterChiller as any).basePrice,
+        addCost1: (heaterChiller as any).addCost1,
+        addCost2: (heaterChiller as any).addCost2,
+        price: costOf(heaterChiller),
+      },
+      heaterChillerQuantity: Math.max(safeData.heaterChillerQuantity ?? 1, 1),
+    });
   };
 
   const handleAutomationChange = (name: string) => {
@@ -1766,6 +1995,7 @@ function EquipmentSectionNew({
   const hasFilterSelection = packageIncludesFilter || includeFilter;
   const hasCleanerSelection = packageIncludesCleaner || includeCleaner;
   const hasHeaterSelectionState = packageIncludesHeater || includeHeater;
+  const hasHeaterChillerSelection = supportsMultipleHeatersAndFilters && includeHeaterChiller;
   const hasPoolLightSelection = includePoolLights || packageIncludesPoolLights || effectivePoolLights.length > 0;
   const hasSpaLightSelectionState = includeSpaLights || packageIncludesSpaLights || spaLights.length > 0;
   const hasAutomationSelection = packageIncludesAutomation || includeAutomation;
@@ -1858,6 +2088,10 @@ function EquipmentSectionNew({
     safeData.heater?.name || selectedPackage?.includedHeaterName || 'Heater',
     packageIncludesHeater ? Math.max(selectedPackage?.includedHeaterQuantity ?? heaterQuantity, 0) : heaterQuantity
   );
+  const heaterChillerCardTitle = summarizeQuantity(
+    safeData.heaterChiller?.name || 'Heater Chiller',
+    heaterChillerQuantity
+  );
   const automationCardTitle = summarizeQuantity(
     safeData.automation?.name || selectedPackage?.includedAutomationName || 'Automation',
     packageIncludesAutomation ? Math.max(selectedPackage?.includedAutomationQuantity ?? automationQuantity, 0) : automationQuantity
@@ -1935,6 +2169,18 @@ function EquipmentSectionNew({
     if (packageIncludesHeater || heaterRequiredBySpa) return;
     toggleHeater(false);
     setHeaterEditing(false);
+  };
+
+  const openHeaterChillerFlow = () => {
+    if (!hasHeaterChillerSelection) {
+      toggleHeaterChiller(true);
+    }
+    setHeaterChillerEditing(true);
+  };
+
+  const clearHeaterChillerFlow = () => {
+    toggleHeaterChiller(false);
+    setHeaterChillerEditing(false);
   };
 
   const openPoolLightFlow = () => {
@@ -2440,6 +2686,7 @@ function EquipmentSectionNew({
         })}
 
         {hasFilterSelection ? (
+          <>
           <div className="spec-subcard">
             <div className="spec-subcard-header">
               <div>
@@ -2522,6 +2769,75 @@ function EquipmentSectionNew({
               </>
             )}
           </div>
+          {supportsMultipleHeatersAndFilters && additionalFilters.map((filter, index) => {
+            const isEditing = activeAdditionalFilterIndex === index;
+            return (
+              <div key={`additional-filter-${index}`} className="spec-subcard">
+                <div className="spec-subcard-header">
+                  <div>
+                    <div className="spec-subcard-title">{`Additional Filter ${index + 1}: ${filter.name}`}</div>
+                    {!isEditing && <div className="spec-subcard-subtitle">Additional Filter</div>}
+                  </div>
+                  <div className="spec-subcard-actions stacked-actions">
+                    <div className="stacked-primary-actions">
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => setActiveAdditionalFilterIndex(isEditing ? null : index)}
+                      >
+                        {isEditing ? 'Collapse' : 'Edit'}
+                      </button>
+                      <button
+                        type="button"
+                        className="link-btn danger"
+                        onClick={() => removeAdditionalFilter(index)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {isEditing && (
+                  <>
+                    <div className="spec-grid spec-grid-2">
+                      <div className="spec-field">
+                        <LabelWithRetired
+                          text="Additional Filter"
+                          showRetired={retiredFlags.additionalFilters[index]}
+                        />
+                        <select
+                          className="compact-input equipment-select"
+                          value={filter.name}
+                          onChange={(event) => handleAdditionalFilterChange(index, event.target.value)}
+                        >
+                          {retiredFlags.additionalFilters[index] && renderRetiredOption(filter.name)}
+                          {filterOptions.map((option) => (
+                            <option key={option.name} value={option.name}>
+                              {formatOptionLabel(`${option.name} (${option.sqft} sqft)`, costOf(option))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {renderReadOnlyQuantity('Additional Filter Quantity', 1)}
+                    </div>
+                    <div className="action-row">
+                      <button type="button" className="action-btn" onClick={() => setActiveAdditionalFilterIndex(null)}>
+                        Done
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {supportsMultipleHeatersAndFilters && (
+            <div className="action-row">
+              <button type="button" className="action-btn secondary" onClick={addAdditionalFilter}>
+                Add Additional Filter
+              </button>
+            </div>
+          )}
+          </>
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
             No Filter
@@ -2666,6 +2982,7 @@ function EquipmentSectionNew({
         })}
 
         {hasHeaterSelectionState ? (
+          <>
           <div className="spec-subcard">
             <div className="spec-subcard-header">
               <div>
@@ -2757,12 +3074,173 @@ function EquipmentSectionNew({
               </>
             )}
           </div>
+          {supportsMultipleHeatersAndFilters && additionalHeaters.map((heater, index) => {
+            const isEditing = activeAdditionalHeaterIndex === index;
+            return (
+              <div key={`additional-heater-${index}`} className="spec-subcard">
+                <div className="spec-subcard-header">
+                  <div>
+                    <div className="spec-subcard-title">{`Additional Heater ${index + 1}: ${heater.name}`}</div>
+                    {!isEditing && <div className="spec-subcard-subtitle">Additional Heater</div>}
+                  </div>
+                  <div className="spec-subcard-actions stacked-actions">
+                    <div className="stacked-primary-actions">
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => setActiveAdditionalHeaterIndex(isEditing ? null : index)}
+                      >
+                        {isEditing ? 'Collapse' : 'Edit'}
+                      </button>
+                      <button
+                        type="button"
+                        className="link-btn danger"
+                        onClick={() => removeAdditionalHeater(index)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {isEditing && (
+                  <>
+                    <div className="spec-grid spec-grid-2">
+                      <div className="spec-field">
+                        <LabelWithRetired
+                          text="Additional Heater"
+                          showRetired={retiredFlags.additionalHeaters[index]}
+                        />
+                        <select
+                          className="compact-input equipment-select"
+                          value={heater.name}
+                          onChange={(event) => handleAdditionalHeaterChange(index, event.target.value)}
+                        >
+                          {retiredFlags.additionalHeaters[index] && renderRetiredOption(heater.name)}
+                          {heaterOptions.map((option) => (
+                            <option key={option.name} value={option.name}>
+                              {formatOptionLabel(option.name, costOf(option))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {renderReadOnlyQuantity('Additional Heater Quantity', 1)}
+                    </div>
+                    <div className="action-row">
+                      <button type="button" className="action-btn" onClick={() => setActiveAdditionalHeaterIndex(null)}>
+                        Done
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {supportsMultipleHeatersAndFilters && (
+            <div className="action-row">
+              <button type="button" className="action-btn secondary" onClick={addAdditionalHeater}>
+                Add Additional Heater
+              </button>
+            </div>
+          )}
+          </>
         ) : (
           <div className="empty-message" style={{ marginTop: '10px' }}>
             No Heater
           </div>
         )}
       </div>
+
+      {/* Heater Chiller - visible for PPAS East, editable in the Custom package */}
+      {isPpasEast && (
+        <div className="spec-block">
+          <div className="spec-block-header">
+            <h2 className="spec-block-title">Heater Chiller</h2>
+            <ProposalNote categoryKey="equipment" subcategoryId="heaterChiller" overrides={noteOverrides} />
+          </div>
+          {renderToggleButtons({
+            hasSelection: hasHeaterChillerSelection,
+            noLabel: 'No Heater Chiller',
+            addLabel: 'Add Heater Chiller',
+            onNo: clearHeaterChillerFlow,
+            onAdd: openHeaterChillerFlow,
+            addDisabledReason: heaterChillerAddDisabledReason,
+          })}
+
+          {hasHeaterChillerSelection ? (
+            <div className="spec-subcard">
+              <div className="spec-subcard-header">
+                <div>
+                  <div className="spec-subcard-title">{heaterChillerCardTitle}</div>
+                  {!heaterChillerEditing && <div className="spec-subcard-subtitle">Heater Chiller</div>}
+                </div>
+                <div className="spec-subcard-actions stacked-actions">
+                  <div className="stacked-primary-actions">
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setHeaterChillerEditing((current) => !current)}
+                    >
+                      {heaterChillerEditing ? 'Collapse' : 'Edit'}
+                    </button>
+                    <button type="button" className="link-btn danger" onClick={clearHeaterChillerFlow}>
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {heaterChillerEditing && (
+                <>
+                  <div className="spec-grid spec-grid-2">
+                    <div className="spec-field">
+                      <LabelWithRetired
+                        text="Heater Chiller Model"
+                        showRetired={retiredFlags.heaterChiller}
+                      />
+                      <select
+                        className="compact-input equipment-select"
+                        value={safeData.heaterChiller?.name || noneOptionValue}
+                        onChange={(event) => handleHeaterChillerChange(event.target.value)}
+                      >
+                        {retiredFlags.heaterChiller &&
+                          safeData.heaterChiller?.name &&
+                          renderRetiredOption(safeData.heaterChiller.name)}
+                        {heaterChillerOptions.map((option) => (
+                          <option key={option.name} value={option.name}>
+                            {formatOptionLabel(option.name, costOf(option))}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="spec-field" style={{ maxWidth: '220px' }}>
+                      <label className="spec-label">Heater Chiller Quantity</label>
+                      <CompactInput
+                        value={heaterChillerQuantity}
+                        onChange={(event) =>
+                          updateData({ heaterChillerQuantity: Math.max(1, parseInt(event.target.value) || 1) })
+                        }
+                        unit="ea"
+                        min="1"
+                        step="1"
+                        placeholder="1"
+                      />
+                    </div>
+                  </div>
+                  <div className="action-row">
+                    <button type="button" className="action-btn" onClick={() => setHeaterChillerEditing(false)}>
+                      Done
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="empty-message" style={{ marginTop: '10px' }}>
+              No Heater Chiller
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Pool Lights */}
       <div className="spec-block">

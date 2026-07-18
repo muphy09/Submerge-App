@@ -3,14 +3,16 @@ import PricingDataModal from '../components/PricingDataModal';
 
 interface AdminPricingPageProps {
   franchiseId?: string | null;
+  franchiseCode?: string | null;
 }
 
-function AdminPricingPage({ franchiseId }: AdminPricingPageProps) {
+function AdminPricingPage({ franchiseId, franchiseCode }: AdminPricingPageProps) {
   const navigate = useNavigate();
 
   return (
     <PricingDataModal
       franchiseId={franchiseId}
+      franchiseCode={franchiseCode}
       onClose={() => navigate('/admin')}
     />
   );

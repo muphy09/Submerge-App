@@ -153,6 +153,7 @@ const pricingData = {
     soilSampleEngineer: false,
     doubleCurtain: false,
     additionalSitePrep: false,
+    tightAccessJob: false,
     waterproofing: false,
   },
   plans: {
@@ -185,6 +186,7 @@ const pricingData = {
     baseSpa: 200,
     raisedSpa: 350,
     sitePrep: 200,
+    tightAccessJob: 6400,
     backfill: 600,
     gravelPerSqft: 2.75,
     dirtHaulPerYard: 18,
@@ -450,6 +452,9 @@ const pricingData = {
     ],
     heaters: [
       { name: 'No Heater (Select heater)', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
+    ],
+    heaterChillers: [
+      { name: 'No Heater Chiller (Select heater chiller)', btu: 0, basePrice: 0, addCost1: 0, addCost2: 0 },
     ],
     lights: {
       // Light catalogs must come from the active pricing model.
@@ -747,6 +752,7 @@ const pricingData = {
   masonry: {
     columnBase: 500,
     rbbFacingOptions: defaultRbbFacingOptions,
+    backsideFacingOptions: [],
     raisedSpaFacingOptions: defaultRaisedSpaFacingOptions,
     labor: {
       rbbFacing: {

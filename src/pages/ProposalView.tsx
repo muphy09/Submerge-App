@@ -25,6 +25,7 @@ import AddendumPricingChoiceModal from '../components/AddendumPricingChoiceModal
 import './ProposalView.css';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
 import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
+import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
@@ -983,7 +984,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       pricingTierName: getPricingTierName(pricingTierId),
     };
     if (isBronzePricingTier(pricingTierId)) {
-      merged.excavation = { ...merged.excavation, hasGravelInstall: false };
+      merged.excavation = {
+        ...merged.excavation,
+        hasGravelInstall: isPpasEastFranchiseCode(merged.designerCode),
+      };
       merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
     }
     return merged;
@@ -3175,7 +3179,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     }
 
     const costBreakdownForDisplay = normalizeCostBreakdownForDisplay(
-      calculated?.costBreakdown || mergedProposal.costBreakdown
+      calculated?.costBreakdown || mergedProposal.costBreakdown,
+      mergedProposal
     );
     const subtotal = calculated?.subtotal ?? mergedProposal.subtotal ?? 0;
     const totalCost = calculated?.totalCost ?? mergedProposal.totalCost ?? 0;

@@ -12,11 +12,17 @@ import CustomOptionsSection from './CustomOptionsSection';
 import ProposalNote from './ProposalNote';
 import './SectionStyles.css';
 import { isBronzePricingTier } from '../services/pricingTiers';
+import {
+  MAX_EXCAVATION_OPTION_QUANTITY,
+  clampExcavationOptionQuantity,
+  getExcavationOptionQuantity,
+} from '../utils/excavationOptionQuantities';
 
 interface Props {
   data: Excavation;
   onChange: (data: Excavation) => void;
   pricingTierId?: string;
+  isPpasEast?: boolean;
   noteOverrides?: ProposalNoteOverrides;
 }
 
@@ -25,6 +31,7 @@ const defaultRBBLevel: RBBLevel = {
   length: 0,
   facing: 'none',
   hasBacksideFacing: false,
+  backsideFacing: 'none',
 };
 
 const wallHeightOptions = [6, 12, 18, 24, 30, 36] as const;
@@ -102,20 +109,31 @@ const formatWallTitle = (
   label: string,
   level: RBBLevel,
   facingOptions: MasonryFacingOption[],
-  includeBacksideFacing: boolean = false
+  includeBacksideFacing: boolean = false,
+  backsideFacingOptions: MasonryFacingOption[] = [],
+  useDistinctBacksideLabel: boolean = false
 ) => {
   const parts = [`${formatNumber(level.height)}" ${label}`, `${formatNumber(level.length)} LNFT`];
   if (level.facing && level.facing !== 'none') {
     parts.push(formatMasonryFacingLabel(level.facing, facingOptions));
   }
   if (includeBacksideFacing && level.hasBacksideFacing) {
-    parts.push('Backside Facing');
+    if (useDistinctBacksideLabel) {
+      const backsideFacing = level.backsideFacing || level.facing;
+      parts.push(`Backside: ${formatMasonryFacingLabel(backsideFacing, backsideFacingOptions)}`);
+    } else {
+      parts.push('Backside Facing');
+    }
   }
   return parts.join(' | ');
 };
 
-const formatRBBTitle = (level: RBBLevel, facingOptions: MasonryFacingOption[]) =>
-  formatWallTitle('RBB', level, facingOptions, true);
+const formatRBBTitle = (
+  level: RBBLevel,
+  facingOptions: MasonryFacingOption[],
+  backsideFacingOptions: MasonryFacingOption[],
+  useDistinctBacksideLabel: boolean
+) => formatWallTitle('RBB', level, facingOptions, true, backsideFacingOptions, useDistinctBacksideLabel);
 
 const formatExposedPoolWallTitle = (level: RBBLevel, facingOptions: MasonryFacingOption[]) =>
   formatWallTitle('Exposed Pool Wall', level, facingOptions);
@@ -133,13 +151,14 @@ const formatColumnsTitle = (columns: Excavation['columns'], facingOptions: Mason
   return parts.join(' | ');
 };
 
-function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: Props) {
+function ExcavationSectionNew({ data, onChange, pricingTierId, isPpasEast = false, noteOverrides }: Props) {
   const [activeRBBIndex, setActiveRBBIndex] = useState<number | null>(null);
   const [activeExposedPoolWallIndex, setActiveExposedPoolWallIndex] = useState<number | null>(null);
   const [columnsEditing, setColumnsEditing] = useState<boolean>(data.columns.count > 0);
   const doubleCurtainActive = data.hasDoubleCurtain ?? (data.doubleCurtainLength > 0);
   const sitePrepActive = data.hasAdditionalSitePrep ?? (data.additionalSitePrepHours > 0);
   const rbbFacingOptions = getMasonryFacingOptions(pricingData.masonry, 'rbb');
+  const backsideFacingOptions = getMasonryFacingOptions(pricingData.masonry, 'backside');
   const retainingWallOptions = pricingData.masonry.retainingWalls.filter(
     (option: any) => option.name && option.name !== 'No Retaining Wall' && option.name !== 'None',
   );
@@ -198,10 +217,17 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
     value: any
   ) => {
     const updated = [...levels];
-    const nextValue = field === 'facing' ? normalizeMasonryFacingId(String(value)) || 'none' : value;
+    const nextValue =
+      field === 'facing' || field === 'backsideFacing'
+        ? normalizeMasonryFacingId(String(value)) || 'none'
+        : value;
     const nextLevel = { ...updated[index], [field]: nextValue };
     if (field === 'facing' && nextValue === 'none') {
       nextLevel.hasBacksideFacing = false;
+      nextLevel.backsideFacing = 'none';
+    }
+    if (field === 'backsideFacing') {
+      nextLevel.hasBacksideFacing = nextValue !== 'none';
     }
     updated[index] = nextLevel;
     setWallLevels(wallField, updated);
@@ -331,9 +357,80 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
 
   const gravelSelected = data.hasGravelInstall;
   const isBronzeTier = isBronzePricingTier(pricingTierId);
+  const gravelUnavailable = isBronzeTier && !isPpasEast;
   const dirtSelected = data.hasDirtHaul;
+  const gravelQuantity = getExcavationOptionQuantity(gravelSelected, data.gravelInstallQuantity);
+  const dirtHaulQuantity = getExcavationOptionQuantity(dirtSelected, data.dirtHaulQuantity);
   const soilSelected = data.needsSoilSampleEngineer;
   const hasDoubleCurtain = doubleCurtainActive;
+
+  const updateEastOptionQuantity = (
+    selectedField: 'hasGravelInstall' | 'hasDirtHaul',
+    quantityField: 'gravelInstallQuantity' | 'dirtHaulQuantity',
+    quantity: number
+  ) => {
+    const nextQuantity = clampExcavationOptionQuantity(quantity);
+    onChange({
+      ...data,
+      [selectedField]: nextQuantity > 0,
+      [quantityField]: nextQuantity,
+    });
+  };
+
+  const renderEastQuantityOption = ({
+    label,
+    selectedField,
+    quantityField,
+    quantity,
+    title,
+  }: {
+    label: string;
+    selectedField: 'hasGravelInstall' | 'hasDirtHaul';
+    quantityField: 'gravelInstallQuantity' | 'dirtHaulQuantity';
+    quantity: number;
+    title?: string;
+  }) => (
+    <div
+      className={`pool-type-btn excavation-quantity-option${quantity > 0 ? ' active' : ''}`}
+      title={title}
+    >
+      <button
+        type="button"
+        className="excavation-quantity-option__toggle"
+        aria-pressed={quantity > 0}
+        onClick={() => updateEastOptionQuantity(selectedField, quantityField, quantity > 0 ? 0 : 1)}
+      >
+        {label}
+      </button>
+      <span className="excavation-quantity-stepper">
+        <button
+          type="button"
+          className="excavation-quantity-stepper__arrow"
+          aria-label={`Decrease ${label} quantity`}
+          disabled={quantity <= 0}
+          onClick={() => updateEastOptionQuantity(selectedField, quantityField, quantity - 1)}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M10 3.5L5.5 8l4.5 4.5" />
+          </svg>
+        </button>
+        <span className="excavation-quantity-stepper__value" aria-label={`${label} quantity ${quantity}`}>
+          x{quantity}
+        </span>
+        <button
+          type="button"
+          className="excavation-quantity-stepper__arrow"
+          aria-label={`Increase ${label} quantity`}
+          disabled={quantity >= MAX_EXCAVATION_OPTION_QUANTITY}
+          onClick={() => updateEastOptionQuantity(selectedField, quantityField, quantity + 1)}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6 3.5L10.5 8 6 12.5" />
+          </svg>
+        </button>
+      </span>
+    </div>
+  );
 
   return (
     <div className="section-form">
@@ -365,11 +462,18 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
           <>
             {rbbLevels.map((level, index) => {
               const isEditing = activeRBBIndex === index;
+              const effectiveBacksideFacing =
+                normalizeMasonryFacingId(level.backsideFacing) ||
+                (level.hasBacksideFacing
+                  ? normalizeMasonryFacingId(level.facing) || 'none'
+                  : 'none');
               return (
                 <div key={index} className="spec-subcard">
                   <div className="spec-subcard-header">
                     <div>
-                      <div className="spec-subcard-title">{formatRBBTitle(level, rbbFacingOptions)}</div>
+                      <div className="spec-subcard-title">
+                        {formatRBBTitle(level, rbbFacingOptions, backsideFacingOptions, isPpasEast)}
+                      </div>
                       {!isEditing && <div className="spec-subcard-subtitle">RBB #{index + 1}</div>}
                     </div>
                     <div className="spec-subcard-actions stacked-actions">
@@ -403,7 +507,7 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
 
                   {isEditing && (
                     <>
-                      <div className="spec-grid-3-fixed">
+                      <div className={isPpasEast ? 'spec-grid-4-fixed' : 'spec-grid-3-fixed'}>
                         <div className="spec-field">
                           <label className="spec-label">Height</label>
                           <select
@@ -448,27 +552,56 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
                               </option>
                             ))}
                           </select>
-                          <label
-                            className="form-checkbox"
-                            style={{ opacity: (normalizeMasonryFacingId(level.facing) || 'none') === 'none' ? 0.6 : 1 }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={Boolean(level.hasBacksideFacing)}
+                          {!isPpasEast && (
+                            <label
+                              className="form-checkbox"
+                              style={{ opacity: (normalizeMasonryFacingId(level.facing) || 'none') === 'none' ? 0.6 : 1 }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(level.hasBacksideFacing)}
+                                disabled={(normalizeMasonryFacingId(level.facing) || 'none') === 'none'}
+                                onChange={(e) =>
+                                  updateWallLevel(
+                                    'rbbLevels',
+                                    rbbLevels,
+                                    index,
+                                    'hasBacksideFacing',
+                                    e.target.checked
+                                  )
+                                }
+                              />
+                              <span>Add Backside Facing</span>
+                            </label>
+                          )}
+                        </div>
+
+                        {isPpasEast && (
+                          <div className="spec-field">
+                            <label className="spec-label">Backside Facing</label>
+                            <select
+                              className="compact-input"
+                              value={effectiveBacksideFacing}
                               disabled={(normalizeMasonryFacingId(level.facing) || 'none') === 'none'}
                               onChange={(e) =>
                                 updateWallLevel(
                                   'rbbLevels',
                                   rbbLevels,
                                   index,
-                                  'hasBacksideFacing',
-                                  e.target.checked
+                                  'backsideFacing',
+                                  e.target.value
                                 )
                               }
-                            />
-                            <span>Add Backside Facing</span>
-                          </label>
-                        </div>
+                            >
+                              <option value="none">None</option>
+                              {getFacingSelectOptions(backsideFacingOptions, effectiveBacksideFacing).map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
                       <div className="action-row">
@@ -933,26 +1066,45 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
           <h2 className="spec-block-title">Additional Options</h2>
           <ProposalNote categoryKey="excavation" subcategoryId="additionalOptions" overrides={noteOverrides} />
         </div>
-        <div className="pool-type-buttons stackable" style={{ marginTop: '10px' }}>
-          <button
-            type="button"
-            className={`pool-type-btn ${gravelSelected ? 'active' : ''}`}
-            onClick={() => {
-              if (isBronzeTier) return;
-              handleChange('hasGravelInstall', !data.hasGravelInstall);
-            }}
-            disabled={isBronzeTier}
-            title={isBronzeTier ? 'Gravel Install is not available in Bronze pricing.' : undefined}
-          >
-            Gravel Install
-          </button>
-          <button
-            type="button"
-            className={`pool-type-btn ${dirtSelected ? 'active' : ''}`}
-            onClick={() => handleChange('hasDirtHaul', !data.hasDirtHaul)}
-          >
-            Dirt Haul
-          </button>
+        <div className="pool-type-buttons excavation-additional-options-grid" style={{ marginTop: '10px' }}>
+          {isPpasEast ? (
+            renderEastQuantityOption({
+              label: 'Gravel Install',
+              selectedField: 'hasGravelInstall',
+              quantityField: 'gravelInstallQuantity',
+              quantity: gravelQuantity,
+              title: isBronzeTier ? 'Gravel Install starts included at x1 in PPAS East Bronze pricing.' : undefined,
+            })
+          ) : (
+            <button
+              type="button"
+              className={`pool-type-btn ${gravelSelected ? 'active' : ''}`}
+              onClick={() => {
+                if (gravelUnavailable) return;
+                handleChange('hasGravelInstall', !data.hasGravelInstall);
+              }}
+              disabled={gravelUnavailable}
+              title={gravelUnavailable ? 'Gravel Install is not available in Bronze pricing.' : undefined}
+            >
+              Gravel Install
+            </button>
+          )}
+          {isPpasEast ? (
+            renderEastQuantityOption({
+              label: 'Dirt Haul',
+              selectedField: 'hasDirtHaul',
+              quantityField: 'dirtHaulQuantity',
+              quantity: dirtHaulQuantity,
+            })
+          ) : (
+            <button
+              type="button"
+              className={`pool-type-btn ${dirtSelected ? 'active' : ''}`}
+              onClick={() => handleChange('hasDirtHaul', !data.hasDirtHaul)}
+            >
+              Dirt Haul
+            </button>
+          )}
           <button
             type="button"
             className={`pool-type-btn ${soilSelected ? 'active' : ''}`}
@@ -960,9 +1112,6 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
           >
             Soil Sample / Engineer
           </button>
-        </div>
-
-        <div className="pool-type-buttons stackable" style={{ marginTop: '10px' }}>
           <button
             type="button"
             className={`pool-type-btn ${hasDoubleCurtain ? 'active' : ''}`}
@@ -977,6 +1126,15 @@ function ExcavationSectionNew({ data, onChange, pricingTierId, noteOverrides }: 
           >
             Additional Site Prep
           </button>
+          {isPpasEast && (
+            <button
+              type="button"
+              className={`pool-type-btn ${data.hasTightAccessJob ? 'active' : ''}`}
+              onClick={() => handleChange('hasTightAccessJob', !data.hasTightAccessJob)}
+            >
+              Tight Access Job
+            </button>
+          )}
         </div>
 
         {hasDoubleCurtain && (

@@ -864,6 +864,121 @@ select.compact-input {
   border-color: #0a2d6b;
 }
 
+.excavation-quantity-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 14px;
+  min-height: 58px;
+}
+
+.pool-type-buttons.excavation-additional-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.excavation-additional-options-grid .pool-type-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 58px;
+}
+
+.excavation-quantity-option__toggle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+.excavation-quantity-stepper {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.excavation-quantity-stepper__arrow {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  background: #f8fafc;
+  color: #082556;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.excavation-quantity-stepper__arrow svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  overflow: visible;
+}
+
+.excavation-quantity-stepper__arrow path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.excavation-quantity-stepper__arrow:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  transform: scale(1.06);
+}
+
+.excavation-quantity-stepper__arrow:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.excavation-quantity-option.active .excavation-quantity-stepper__arrow {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.excavation-quantity-option.active .excavation-quantity-stepper__arrow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.excavation-quantity-stepper__value {
+  min-width: 24px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .pool-type-buttons.excavation-additional-options-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .pool-type-buttons.excavation-additional-options-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .pool-type-btn.disabled {
   border-color: #e5e7eb;
   background: #f3f4f6;

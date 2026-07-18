@@ -1,4 +1,4 @@
-export type MasonryFacingCatalogType = 'rbb' | 'raisedSpa';
+export type MasonryFacingCatalogType = 'rbb' | 'backside' | 'raisedSpa';
 
 export interface MasonryFacingOption {
   id: string;
@@ -9,6 +9,7 @@ export interface MasonryFacingOption {
 
 const DEFAULT_ORDER: Record<MasonryFacingCatalogType, string[]> = {
   rbb: ['tile', 'panel-ledge', 'stacked-stone'],
+  backside: [],
   raisedSpa: ['tile', 'ledgestone', 'stacked-stone'],
 };
 
@@ -18,6 +19,7 @@ const LEGACY_LABELS: Record<MasonryFacingCatalogType, Record<string, string>> = 
     'panel-ledge': 'Panel Ledge',
     'stacked-stone': 'Stacked Stone',
   },
+  backside: {},
   raisedSpa: {
     tile: 'Tile',
     ledgestone: 'Ledgestone',
@@ -74,19 +76,27 @@ const getLegacyRate = (rates: Record<string, unknown> | undefined, id: string): 
   return 0;
 };
 
-const getCatalogKey = (catalog: MasonryFacingCatalogType) =>
-  catalog === 'rbb' ? 'rbbFacingOptions' : 'raisedSpaFacingOptions';
+const getCatalogKey = (catalog: MasonryFacingCatalogType) => {
+  if (catalog === 'rbb') return 'rbbFacingOptions';
+  if (catalog === 'backside') return 'backsideFacingOptions';
+  return 'raisedSpaFacingOptions';
+};
 
-const getLegacyRateMaps = (masonry: any, catalog: MasonryFacingCatalogType) =>
-  catalog === 'rbb'
-    ? {
-        material: masonry?.material?.rbbFacing,
-        labor: masonry?.labor?.rbbFacing,
-      }
-    : {
-        material: masonry?.material?.raisedSpaFacing,
-        labor: masonry?.labor?.raisedSpaFacing,
-      };
+const getLegacyRateMaps = (masonry: any, catalog: MasonryFacingCatalogType) => {
+  if (catalog === 'rbb') {
+    return {
+      material: masonry?.material?.rbbFacing,
+      labor: masonry?.labor?.rbbFacing,
+    };
+  }
+  if (catalog === 'backside') {
+    return { material: undefined, labor: undefined };
+  }
+  return {
+    material: masonry?.material?.raisedSpaFacing,
+    labor: masonry?.labor?.raisedSpaFacing,
+  };
+};
 
 const normalizeFacingOptions = (
   options: unknown[],
@@ -156,7 +166,7 @@ export const ensureMasonryFacingCatalogs = (target: any, source?: any, defaults?
   const sourceMasonry = source?.masonry ?? source ?? targetMasonry;
   const defaultMasonry = defaults?.masonry ?? defaults ?? targetMasonry;
 
-  (['rbb', 'raisedSpa'] as MasonryFacingCatalogType[]).forEach((catalog) => {
+  (['rbb', 'backside', 'raisedSpa'] as MasonryFacingCatalogType[]).forEach((catalog) => {
     const key = getCatalogKey(catalog);
     const defaultOptions = getMasonryFacingOptions(defaultMasonry, catalog);
     const rawOptions = Array.isArray(sourceMasonry?.[key])
@@ -201,4 +211,3 @@ export const getMasonryFacingRate = (
     ? getLegacyRate(legacyRates.material, normalized)
     : getLegacyRate(legacyRates.labor, normalized);
 };
-

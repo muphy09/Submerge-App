@@ -94,6 +94,7 @@ export interface RBBLevel {
   length: number; // LNFT
   facing: MasonryFacing;
   hasBacksideFacing?: boolean;
+  backsideFacing?: MasonryFacing;
 }
 
 export interface ColumnSpec {
@@ -121,8 +122,11 @@ export interface Excavation {
   // Additional work
   additionalSitePrepHours: number;
   hasAdditionalSitePrep?: boolean;
+  hasTightAccessJob?: boolean;
   hasGravelInstall: boolean;
+  gravelInstallQuantity?: number;
   hasDirtHaul: boolean;
+  dirtHaulQuantity?: number;
   additionalBench: number; // Auto-calculated from steps > 20
 
   // Double curtain
@@ -424,10 +428,14 @@ export interface Equipment {
   auxiliaryPumps?: PumpSelection[]; // Blower selections (single-select in current UI)
   filter: FilterSelection;
   filterQuantity?: number;
+  additionalFilters?: FilterSelection[];
   cleaner: CleanerSelection;
   cleanerQuantity?: number; // Excel NEW POOL B119 qty (0 to exclude cleaner)
   heater: HeaterSelection;
   heaterQuantity?: number;
+  additionalHeaters?: HeaterSelection[];
+  heaterChiller?: HeaterSelection;
+  heaterChillerQuantity?: number;
 
   // Lights
   poolLights?: LightSelection[];

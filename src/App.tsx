@@ -1145,7 +1145,16 @@ function AppContent() {
           />
           <Route
             path="/admin/pricing"
-            element={canRenderAdminPanel ? <AdminPricingPage franchiseId={effectiveSession?.franchiseId} /> : <Navigate to="/" replace />}
+            element={
+              canRenderAdminPanel ? (
+                <AdminPricingPage
+                  franchiseId={effectiveSession?.franchiseId}
+                  franchiseCode={effectiveSession?.franchiseCode}
+                />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
           />
           <Route
             path="/admin/notes"

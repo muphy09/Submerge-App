@@ -23,6 +23,7 @@ import {
   normalizeDeckingOptionId,
 } from './tileCopingCatalogs';
 import { isBronzeProposal } from '../services/pricingTiers';
+import { isPpasEastProposal } from './franchiseScope';
 
 type LegacyWarrantyItem = {
   id?: string;
@@ -885,6 +886,29 @@ const sanitizeWarrantySections = (sections: WarrantySection[]): WarrantySection[
     };
   });
 
+const PPAS_EAST_UNSUPPORTED_WARRANTY_PATTERN = /\bmicro\s*glass\b|\bwaterproofing\b/i;
+
+const removeUnsupportedPpasEastWarrantyContent = (
+  sections: WarrantySection[],
+  proposal?: Partial<Proposal>
+): WarrantySection[] => {
+  if (!isPpasEastProposal(proposal)) return sections;
+
+  return sections
+    .filter((section) => !PPAS_EAST_UNSUPPORTED_WARRANTY_PATTERN.test(section.title))
+    .map((section) => ({
+      ...section,
+      featureItems: section.featureItems.filter(
+        (item) =>
+          !PPAS_EAST_UNSUPPORTED_WARRANTY_PATTERN.test(item.label || '') &&
+          !PPAS_EAST_UNSUPPORTED_WARRANTY_PATTERN.test(item.detail || '')
+      ),
+      advantageItems: section.advantageItems.filter(
+        (item) => !PPAS_EAST_UNSUPPORTED_WARRANTY_PATTERN.test(item.text || '')
+      ),
+    }));
+};
+
 const ensurePlumbingWarrantyAdvantage = (sections: WarrantySection[]): WarrantySection[] => {
   const canonicalText = normalizeWarrantyText(PLUMBING_WARRANTY_ADVANTAGE_TEXT);
 
@@ -1310,9 +1334,15 @@ export const resolveWarrantySections = (
   brandName: string = 'Submerge'
 ): WarrantySection[] => {
   if (Array.isArray(proposal?.warrantySections)) {
-    return sanitizeWarrantySections(normalizeWarrantySections(proposal.warrantySections)).map(
-      (section) => applyBrandToSection(section, brandName)
+    return removeUnsupportedPpasEastWarrantyContent(
+      sanitizeWarrantySections(normalizeWarrantySections(proposal.warrantySections)).map(
+        (section) => applyBrandToSection(section, brandName)
+      ),
+      proposal
     );
   }
-  return buildGeneratedWarrantySections(proposal, brandName);
+  return removeUnsupportedPpasEastWarrantyContent(
+    buildGeneratedWarrantySections(proposal, brandName),
+    proposal
+  );
 };

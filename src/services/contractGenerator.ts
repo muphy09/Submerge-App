@@ -18,6 +18,7 @@ import {
   getContractTemplateIdForProposal,
 } from './contractTemplates';
 import { isPpasEastFranchiseId } from '../constants/franchises';
+import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import {
   getGroupedCustomFeatureSubcategory,
   hasCustomFeatureContent,
@@ -250,6 +251,15 @@ function formatYesNo(value: any, defaultValue = 'NO'): string {
 function formatCurrency(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '$0.00';
   return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+}
+
+export function getDefaultContractDepositValue(proposal?: Partial<Proposal>): string {
+  const isPpasEast =
+    isPpasEastFranchiseId(proposal?.franchiseId) ||
+    isPpasEastFranchiseCode(proposal?.designerCode);
+  return isPpasEast && proposal?.poolSpecs?.poolType === 'fiberglass'
+    ? formatCurrency(5000)
+    : '';
 }
 
 export function normalizeContractDepositInput(value: string | number | null | undefined): string {
@@ -1020,7 +1030,8 @@ export async function getEditableContractFields(
   const normalized = normalizeProposal(proposal);
   const resolvedTemplateId = templateId || getContractTemplateIdForProposal(proposal);
   const templateFields = (templateOverride || getContractTemplate(resolvedTemplateId)).fields;
-  const depositSourceValue = resolveContractDepositSourceValue(overrides);
+  const depositSourceValue =
+    resolveContractDepositSourceValue(overrides) || getDefaultContractDepositValue(normalized);
   const totalCashPrice = getRetailPrice(normalized);
   const schedulePercentages = getContractDepositSchedulePercentages(normalized);
   const fields: ContractFieldRender[] = templateFields

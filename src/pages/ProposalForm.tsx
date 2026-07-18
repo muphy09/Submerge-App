@@ -72,6 +72,7 @@ import {
   withTemporaryPricingSnapshot,
 } from '../services/pricingDataStore';
 import pricingData from '../services/pricingData';
+import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import {
   createFreshEquipmentForPackage,
   getEnabledEquipmentPackageOptions,
@@ -323,7 +324,7 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   if (isBronzePricingTier(pricingTierId)) {
     merged.excavation = {
       ...(merged.excavation || getDefaultExcavation()),
-      hasGravelInstall: false,
+      hasGravelInstall: isPpasEastFranchiseCode(merged.designerCode || getSessionFranchiseCode()),
     };
     merged.interiorFinish = {
       ...(merged.interiorFinish || getDefaultInteriorFinish()),
@@ -1637,20 +1638,21 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       if (isBronzePricingTier(pricingTierId)) {
         nextProposal.excavation = {
           ...(prev.excavation || getDefaultExcavation()),
-          hasGravelInstall: false,
+          hasGravelInstall: isPpasEastFranchiseCode(prev.designerCode || getSessionFranchiseCode()),
         };
         nextProposal.interiorFinish = {
           ...(prev.interiorFinish || getDefaultInteriorFinish()),
           hasWaterproofing: false,
         };
       } else {
+        const supportsMicroglass = !isPpasEastFranchiseCode(prev.designerCode || getSessionFranchiseCode());
         nextProposal.excavation = {
           ...(prev.excavation || getDefaultExcavation()),
           hasGravelInstall: true,
         };
         nextProposal.interiorFinish = {
           ...(prev.interiorFinish || getDefaultInteriorFinish()),
-          hasWaterproofing: true,
+          hasWaterproofing: supportsMicroglass,
         };
       }
 
@@ -2311,6 +2313,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               data={proposal.excavation!}
               onChange={(data) => updateProposal('excavation', data)}
               pricingTierId={normalizePricingTierId(proposal.pricingTierId || selectedPricingTierId)}
+              isPpasEast={isPpasEastFranchiseCode(proposal.designerCode || getSessionFranchiseCode())}
               noteOverrides={proposalNoteOverrides}
             />
           );
@@ -2365,6 +2368,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChangePlumbingRuns={updatePlumbingRuns}
               hasSpa={hasSpa}
               hasPool={hasPool}
+              isPpasEast={isPpasEastFranchiseCode(proposal.designerCode || getSessionFranchiseCode())}
               noteOverrides={proposalNoteOverrides}
             />
           );
@@ -2387,6 +2391,15 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               onChange={(data) => updateProposal('interiorFinish', data)}
               hasSpa={hasSpa}
               isFiberglass={isFiberglass}
+              supportsMicroglass={!isPpasEastFranchiseCode(proposal.designerCode || getSessionFranchiseCode())}
+              colorFieldLabel={
+                isPpasEastFranchiseCode(proposal.designerCode || getSessionFranchiseCode())
+                  ? 'Color'
+                  : 'Color / Style'
+              }
+              includeAssignLaterColor={isPpasEastFranchiseCode(
+                proposal.designerCode || getSessionFranchiseCode()
+              )}
               pricingTierId={normalizePricingTierId(proposal.pricingTierId || selectedPricingTierId)}
               noteOverrides={proposalNoteOverrides}
             />

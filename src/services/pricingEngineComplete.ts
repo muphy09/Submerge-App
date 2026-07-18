@@ -771,6 +771,24 @@ export class EquipmentCalculations {
     return getBasePumpQuantity(equipment);
   }
 
+  private static getAdditionalFilters(equipment: Equipment): NonNullable<Equipment['additionalFilters']> {
+    return (Array.isArray(equipment.additionalFilters) ? equipment.additionalFilters : []).filter(
+      (filter) => Boolean(filter?.name) && !filter.name.toLowerCase().includes('no filter')
+    );
+  }
+
+  private static getAdditionalHeaters(equipment: Equipment): NonNullable<Equipment['additionalHeaters']> {
+    return (Array.isArray(equipment.additionalHeaters) ? equipment.additionalHeaters : []).filter(
+      (heater) => Boolean(heater?.name) && !heater.name.toLowerCase().includes('no heater')
+    );
+  }
+
+  private static getValidHeaterChillerQuantity(equipment: Equipment): number {
+    const quantity = Math.max(equipment.heaterChillerQuantity ?? 0, 0);
+    const name = equipment.heaterChiller?.name?.toLowerCase() || '';
+    return quantity > 0 && name && !name.includes('no heater chiller') ? quantity : 0;
+  }
+
   private static getSanitationAccessoryQuantity(equipment: Equipment): number {
     const name = equipment.sanitationAccessory?.name?.toLowerCase() || '';
     if (!name || name.includes('no sanitation')) return 0;
@@ -790,6 +808,9 @@ export class EquipmentCalculations {
     const pumpOverhead = pricingData.equipment.pumpOverheadMultiplier ?? 1;
     const pumpQty = this.getPumpQuantity(equipment);
     const additionalPrimaryPumps = getAdditionalPumpSelections(equipment);
+    const additionalFilters = this.getAdditionalFilters(equipment);
+    const additionalHeaters = this.getAdditionalHeaters(equipment);
+    const heaterChillerQty = this.getValidHeaterChillerQuantity(equipment);
     const additionalPrimaryPrices = additionalPrimaryPumps.map((pump) => getEquipmentItemCost(pump as any, pumpOverhead));
     const auxiliaryPrices = (equipment.auxiliaryPumps && equipment.auxiliaryPumps.length > 0
       ? equipment.auxiliaryPumps
@@ -818,8 +839,11 @@ export class EquipmentCalculations {
       ...additionalPrimaryPrices,
       ...auxiliaryPrices,
       filterQty > 0 ? getEquipmentItemCost(equipment.filter as any, 1) : 0,
+      ...additionalFilters.map((filter) => getEquipmentItemCost(filter as any, 1)),
       cleanerQty > 0 ? getEquipmentItemCost(equipment.cleaner as any, 1) : 0,
       heaterQty > 0 ? getEquipmentItemCost(equipment.heater as any, 1) : 0,
+      ...additionalHeaters.map((heater) => getEquipmentItemCost(heater as any, 1)),
+      heaterChillerQty > 0 ? getEquipmentItemCost(equipment.heaterChiller as any, 1) : 0,
       automationQty > 0 ? getEquipmentItemCost(equipment.automation as any, 1) : 0,
       saltQty > 0 ? getEquipmentItemCost(equipment.saltSystem as any, 1) : 0,
       additionalSaltCost,
@@ -836,7 +860,10 @@ export class EquipmentCalculations {
 
     return pricedSelections.some(price => (price ?? 0) > 0) ||
       filterQty > 0 ||
+      additionalFilters.length > 0 ||
       heaterQty > 0 ||
+      additionalHeaters.length > 0 ||
+      heaterChillerQty > 0 ||
       automationQty > 0 ||
       cleanerQty > 0 ||
       saltQty > 0 ||
@@ -857,6 +884,9 @@ export class EquipmentCalculations {
     const selectedPackage = getSelectedEquipmentPackage(normalizedEquipment);
     const pumpQty = this.getPumpQuantity(normalizedEquipment);
     const additionalPrimaryPumps = getAdditionalPumpSelections(normalizedEquipment);
+    const additionalFilters = this.getAdditionalFilters(normalizedEquipment);
+    const additionalHeaters = this.getAdditionalHeaters(normalizedEquipment);
+    const heaterChillerQty = this.getValidHeaterChillerQuantity(normalizedEquipment);
     const auxiliaryPumps =
       normalizedEquipment.auxiliaryPumps && normalizedEquipment.auxiliaryPumps.length > 0
         ? normalizedEquipment.auxiliaryPumps
@@ -880,6 +910,8 @@ export class EquipmentCalculations {
     const filterCost = getEquipmentItemCost(normalizedEquipment.filter as any, 1);
     const cleanerCost = getEquipmentItemCost(normalizedEquipment.cleaner as any, 1);
     const heaterCost = heaterQty > 0 ? getEquipmentItemCost(normalizedEquipment.heater as any, 1) : 0;
+    const heaterChillerCost =
+      heaterChillerQty > 0 ? getEquipmentItemCost(normalizedEquipment.heaterChiller as any, 1) : 0;
     const automationCost = getEquipmentItemCost(normalizedEquipment.automation as any, 1);
     const saltCost = getEquipmentItemCost(normalizedEquipment.saltSystem as any, 1);
     const additionalSaltCost = getEquipmentItemCost(normalizedEquipment.additionalSaltSystem as any, 1);
@@ -1023,6 +1055,10 @@ export class EquipmentCalculations {
         pushUpgrade(normalizedEquipment.filter.name, filterCost, extraFilterQty);
       }
 
+      additionalFilters.forEach((filter) => {
+        pushUpgrade(`Additional Filter - ${filter.name}`, getEquipmentItemCost(filter as any, 1), 1);
+      });
+
       const extraCleanerQty = Math.max(cleanerQty - includedCleanerQty, 0);
       if (extraCleanerQty > 0 && normalizedEquipment.cleaner?.name) {
         pushUpgrade(normalizedEquipment.cleaner.name, cleanerCost, extraCleanerQty);
@@ -1031,6 +1067,17 @@ export class EquipmentCalculations {
       const extraHeaterQty = Math.max(heaterQty - includedHeaterQty, 0);
       if (extraHeaterQty > 0 && normalizedEquipment.heater?.name) {
         pushUpgrade(normalizedEquipment.heater.name, heaterCost, extraHeaterQty);
+      }
+
+      additionalHeaters.forEach((heater) => {
+        pushUpgrade(`Additional Heater - ${heater.name}`, getEquipmentItemCost(heater as any, 1), 1);
+      });
+      if (heaterChillerQty > 0 && normalizedEquipment.heaterChiller?.name) {
+        pushUpgrade(
+          `Heater Chiller - ${normalizedEquipment.heaterChiller.name}`,
+          heaterChillerCost,
+          heaterChillerQty
+        );
       }
 
       addLightGroup(poolLights.slice(includedPoolLightQty), 'Pool', ' (upgrade)');
@@ -1108,12 +1155,27 @@ export class EquipmentCalculations {
         pushItem(normalizedEquipment.filter.name, filterCost, filterQty);
       }
 
+      additionalFilters.forEach((filter) => {
+        pushItem(`Additional Filter - ${filter.name}`, getEquipmentItemCost(filter as any, 1), 1);
+      });
+
       if (cleanerCost > 0 && cleanerQty > 0) {
         pushItem(normalizedEquipment.cleaner.name, cleanerCost, cleanerQty);
       }
 
       if (heaterQty > 0) {
         pushItem(normalizedEquipment.heater.name, heaterCost, heaterQty);
+      }
+
+      additionalHeaters.forEach((heater) => {
+        pushItem(`Additional Heater - ${heater.name}`, getEquipmentItemCost(heater as any, 1), 1);
+      });
+      if (heaterChillerQty > 0 && normalizedEquipment.heaterChiller?.name) {
+        pushItem(
+          `Heater Chiller - ${normalizedEquipment.heaterChiller.name}`,
+          heaterChillerCost,
+          heaterChillerQty
+        );
       }
 
       addLightGroup(poolLights, 'Pool');
@@ -1179,7 +1241,9 @@ export class EquipmentCalculations {
         ? findFiberglassPoolModel(poolSpecs.fiberglassModelName, poolSpecs.fiberglassSize)
         : undefined;
     const equipmentPadCost = Number((pricingData as any)?.fiberglass?.equipmentPadCost || 0);
-    const equipmentPadQuantity = fiberglassPoolModel ? 1 + heaterQty : 0;
+    const equipmentPadQuantity = fiberglassPoolModel
+      ? 1 + heaterQty + additionalHeaters.length + heaterChillerQty
+      : 0;
     if (equipmentPadCost > 0 && equipmentPadQuantity > 0) {
       pushItem('Equipment Pad', equipmentPadCost, equipmentPadQuantity);
     }
@@ -1206,7 +1270,10 @@ export class EquipmentCalculations {
     const hasSpa = PoolCalculations.hasSpa(poolSpecs);
     const hasPool = hasPoolDefinition(poolSpecs);
     const normalizedEquipment = normalizeEquipmentLighting(equipment, { hasPool, hasSpa, poolSpecs });
-    const heaterQty = this.getValidHeaterQuantity(normalizedEquipment);
+    const heaterQty =
+      this.getValidHeaterQuantity(normalizedEquipment) +
+      this.getAdditionalHeaters(normalizedEquipment).length +
+      this.getValidHeaterChillerQuantity(normalizedEquipment);
 
     if (!this.hasEquipmentSelection(normalizedEquipment)) {
       return items;
@@ -1757,7 +1824,11 @@ export class FiberglassCalculations {
 // ============================================================================
 
 export class MasonryCalculations {
-  static calculateMasonryCost(poolSpecs: PoolSpecs, excavation: Excavation): {
+  static calculateMasonryCost(
+    poolSpecs: PoolSpecs,
+    excavation: Excavation,
+    options: { allowDistinctRbbBacksideFacing?: boolean } = {}
+  ): {
     labor: CostLineItem[];
     material: CostLineItem[];
   } {
@@ -1782,6 +1853,7 @@ export class MasonryCalculations {
           : [];
 
     const rbbFacingOptions = getMasonryFacingOptions(prices, 'rbb');
+    const backsideFacingOptions = getMasonryFacingOptions(prices, 'backside');
     const raisedSpaFacingOptions = getMasonryFacingOptions(prices, 'raisedSpa');
 
     const getRockworkMaterialWaste = (facingKey: string, hasExplicitQty: boolean): number => {
@@ -1796,7 +1868,7 @@ export class MasonryCalculations {
       description: string,
       sqft: number,
       facingKey: string,
-      catalog: 'rbb' | 'raisedSpa',
+      catalog: 'rbb' | 'backside' | 'raisedSpa',
       materialQtyOverride?: number
     ) => {
       const normalizedFacing = normalizeMasonryFacingId(facingKey);
@@ -1848,7 +1920,24 @@ export class MasonryCalculations {
         const sqft = level.length * (level.height / 12);
         const facingLabel = formatMasonryFacingLabel(level.facing, rbbFacingOptions);
         addFacing(`${level.height}" RBB ${facingLabel} Facing`, sqft, level.facing, 'rbb');
-        if (level.hasBacksideFacing) {
+        const explicitBacksideFacing = normalizeMasonryFacingId(level.backsideFacing);
+        if (
+          options.allowDistinctRbbBacksideFacing &&
+          explicitBacksideFacing &&
+          explicitBacksideFacing !== 'none'
+        ) {
+          const backsideFacingLabel = formatMasonryFacingLabel(
+            explicitBacksideFacing,
+            backsideFacingOptions
+          );
+          addFacing(
+            `Backside ${backsideFacingLabel} Facing`,
+            sqft,
+            explicitBacksideFacing,
+            'backside'
+          );
+        } else if (level.hasBacksideFacing && (!options.allowDistinctRbbBacksideFacing || !explicitBacksideFacing)) {
+          // Preserve legacy proposals that selected the old same-facing backside toggle.
           addFacing(`Backside ${facingLabel} Facing`, sqft, level.facing, 'rbb');
         }
       }

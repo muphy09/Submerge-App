@@ -1,4 +1,6 @@
 import pricingData from './pricingData';
+import { getSessionFranchiseCode } from './session';
+import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import { removeHardcodedPapDiscountsFromPricing } from '../utils/papDiscounts';
 import { DEFAULT_TAX_RATE, normalizeTaxRate, syncLegacyTaxRateAliases } from './taxRate';
 import {
@@ -43,7 +45,12 @@ type PricingLoadState = {
 const STORAGE_VERSION = '2025-03-interior-finish-catalog';
 const LEGACY_STORAGE_KEY = `pricingDataOverrides-${STORAGE_VERSION}`;
 const DEFAULT_FRANCHISE_ID = 'default';
+
+const getTierResolutionOptions = () => ({
+  bronzeIncludesGravel: isPpasEastFranchiseCode(getSessionFranchiseCode()),
+});
 const EXCAVATION_RBB_HEIGHTS = [6, 12, 18, 24, 30, 36];
+export const ASSIGN_LATER_INTERIOR_FINISH_COLOR = 'Assign Later';
 
 const FIXED_PACKAGE_CATALOG_DEPENDENCIES: Record<
   string,
@@ -114,7 +121,11 @@ let activePricingModelIsDefault = true;
 let activePricingTierId: PricingTierId = NORMAL_PRICING_TIER_ID;
 const defaultSnapshot: PricingData = deepClone(pricingData);
 let basePricingState: PricingData = normalizePricingTiers(deepClone(pricingData));
-let pricingState: PricingData = resolvePricingForTier(basePricingState, activePricingTierId);
+let pricingState: PricingData = resolvePricingForTier(
+  basePricingState,
+  activePricingTierId,
+  getTierResolutionOptions()
+);
 const listeners = new Set<(data: PricingData) => void>();
 
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
@@ -127,7 +138,37 @@ function normalizePricingState(snapshot: PricingData, source?: any): PricingData
   syncOutOfGroundPlumbingPricing(normalized, source);
   syncExcavationAdminTables(normalized, source);
   syncBlowerCatalog(normalized);
+  syncInteriorFinishColorOptions(normalized);
   return normalizePricingTiers(normalized);
+}
+
+function syncInteriorFinishColorOptions(target: PricingData) {
+  if (!isPpasEastFranchiseCode(getSessionFranchiseCode())) return;
+  const finishes = (target as any)?.interiorFinish?.finishes;
+  if (!Array.isArray(finishes)) return;
+
+  finishes.forEach((finish: any) => {
+    const configuredColors = Array.isArray(finish?.colors)
+      ? finish.colors
+      : typeof finish?.colors === 'string'
+        ? finish.colors.split(',')
+        : [];
+    const seen = new Set<string>();
+    const colors = configuredColors
+      .map((color: unknown) => String(color || '').trim())
+      .filter((color: string) => {
+        if (!color) return false;
+        const normalized = color.toLowerCase();
+        if (normalized === ASSIGN_LATER_INTERIOR_FINISH_COLOR.toLowerCase() || seen.has(normalized)) {
+          return false;
+        }
+        seen.add(normalized);
+        return true;
+      });
+
+    // Interior finish colors have no incremental pricing; Assign Later is always a $0 choice.
+    finish.colors = [ASSIGN_LATER_INTERIOR_FINISH_COLOR, ...colors];
+  });
 }
 
 function syncGlobalTaxRatePricing(target: PricingData, source?: any) {
@@ -754,7 +795,7 @@ async function resolvePricingState(
         );
         return {
           franchiseId,
-          pricing: resolvePricingForTier(basePricing, resolvedTierId),
+          pricing: resolvePricingForTier(basePricing, resolvedTierId, getTierResolutionOptions()),
           basePricing,
           pricingTierId: resolvedTierId,
           pricingTierName: getPricingTierName(resolvedTierId),
@@ -775,7 +816,7 @@ async function resolvePricingState(
   const basePricing = normalizePricingState(mergeDeep(defaultSnapshot, saved.pricing ?? {}), saved.pricing);
   return {
     franchiseId,
-    pricing: resolvePricingForTier(basePricing, resolvedTierId),
+    pricing: resolvePricingForTier(basePricing, resolvedTierId, getTierResolutionOptions()),
     basePricing,
     pricingTierId: resolvedTierId,
     pricingTierName: getPricingTierName(resolvedTierId),
@@ -897,7 +938,7 @@ export async function setActivePricingModel(
 export async function setActivePricingTier(pricingTierId: string | null | undefined) {
   const nextTierId = normalizePricingTierId(pricingTierId);
   activePricingTierId = nextTierId;
-  pricingState = resolvePricingForTier(basePricingState, activePricingTierId);
+  pricingState = resolvePricingForTier(basePricingState, activePricingTierId, getTierResolutionOptions());
   syncBaseFromState();
   notify();
 }
@@ -986,6 +1027,7 @@ export async function savePricingModelSnapshot(options: {
   updatedBy?: string | null;
   createNew?: boolean;
 }) {
+  syncInteriorFinishColorOptions(basePricingState);
   return savePricingModelRemote({
     franchiseId: activeFranchiseId,
     pricing: withoutPricingRuntimeFields(basePricingState),
@@ -1018,12 +1060,20 @@ export function resetPricingTierOverride(path: (string | number)[]) {
 }
 
 export function isActiveBronzeLockedPricingPath(path: (string | number)[]) {
-  return activePricingTierId === BRONZE_PRICING_TIER_ID && isBronzeLockedPricingPath(path);
+  const isEastGravel =
+    isPpasEastFranchiseCode(getSessionFranchiseCode()) && path.join('.') === 'excavation.gravelPerSqft';
+  return (
+    activePricingTierId === BRONZE_PRICING_TIER_ID &&
+    !isEastGravel &&
+    isBronzeLockedPricingPath(path)
+  );
 }
 
 function refreshEffectivePricingState() {
+  syncInteriorFinishColorOptions(basePricingState);
   basePricingState = normalizePricingTiers(basePricingState);
-  pricingState = resolvePricingForTier(basePricingState, activePricingTierId);
+  pricingState = resolvePricingForTier(basePricingState, activePricingTierId, getTierResolutionOptions());
+  syncInteriorFinishColorOptions(pricingState);
   syncBaseFromState();
   notify();
 }
