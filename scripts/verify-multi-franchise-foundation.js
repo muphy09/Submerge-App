@@ -7,6 +7,9 @@ const failures = [];
 const requireText = (content, pattern, description) => {
   if (!pattern.test(content)) failures.push(description);
 };
+const rejectText = (content, pattern, description) => {
+  if (pattern.test(content)) failures.push(description);
+};
 const requireOccurrenceCount = (content, needle, expected, description) => {
   const actual = content.split(needle).length - 1;
   if (actual !== expected) failures.push(`${description} Expected ${expected}, found ${actual}.`);
@@ -301,15 +304,18 @@ requireText(pricingDataStore, /savePricingModelSnapshot[\s\S]{0,300}syncInterior
 requireText(proposalForm, /includeAssignLaterColor=\{isPpasEastFranchiseCode\([\s\S]{0,120}proposal\.designerCode\s*\|\|\s*getSessionFranchiseCode\(\)/, 'The Assign Later proposal option is not scoped to PPAS East.');
 requireText(interiorFinishSection, /includeAssignLaterColor[\s\S]{0,1600}'Assign Later'[\s\S]{0,300}configuredColorOptions\.filter/, 'PPAS East does not receive Assign Later as the first color choice for every finish.');
 requireText(proposalForm, /isPpasEast=\{isPpasEastFranchiseCode\(proposal\.designerCode\s*\|\|\s*getSessionFranchiseCode\(\)\)\}/, 'The Equipment Builder does not receive PPAS East franchise scope.');
-requireText(equipmentSection, /supportsMultipleHeatersAndFilters\s*=\s*[\s\S]{0,120}isPpasEast[\s\S]{0,120}isCustomEquipmentPackage/, 'Multiple filters and heaters are not restricted to the PPAS East Custom package.');
-requireText(equipmentSection, /Add Additional Filter/, 'The PPAS East Custom package cannot add another filter.');
-requireText(equipmentSection, /Add Additional Heater/, 'The PPAS East Custom package cannot add another heater.');
+requireText(equipmentSection, /supportsMultipleHeatersAndFilters\s*=\s*[\s\S]{0,120}Boolean\(selectedPackage\s*&&\s*isCustomEquipmentPackage\(selectedPackage\)\)/, 'Multiple filters and heaters are not available globally for Custom equipment packages.');
+rejectText(equipmentSection, /supportsMultipleHeatersAndFilters\s*=\s*[\s\S]{0,120}isPpasEast/, 'Multiple filters and heaters are still restricted to PPAS East.');
+requireText(equipmentSection, /Add Additional Filter/, 'Custom equipment packages cannot add another filter.');
+requireText(equipmentSection, /Add Additional Heater/, 'Custom equipment packages cannot add another heater.');
 requireText(equipmentSection, /Add Heater Chiller/, 'The PPAS East Custom package cannot add a Heater Chiller.');
 requireText(equipmentSection, /\{isPpasEast\s*&&\s*\([\s\S]{0,300}<h2 className="spec-block-title">Heater Chiller<\/h2>/, 'The Heater Chiller option is not always visible to PPAS East.');
 requireText(equipmentSection, /heaterChillerAddDisabledReason[\s\S]{0,220}!supportsMultipleHeatersAndFilters[\s\S]{0,220}Custom equipment package/, 'Heater Chiller is not disabled outside the PPAS East Custom package.');
 requireText(pricingDataModal, /isPpasEast[\s\S]{0,300}title:\s*'Heater Chiller'[\s\S]{0,180}path:\s*\['equipment',\s*'heaterChillers'\]/, 'The Heater Chiller Admin Pricing table is missing or not scoped to PPAS East.');
 requireText(completePricingEngine, /Additional Filter - \$\{filter\.name\}[\s\S]{0,2500}Additional Heater - \$\{heater\.name\}[\s\S]{0,500}Heater Chiller - \$\{normalizedEquipment\.heaterChiller\.name\}/, 'Additional filters, heaters, and Heater Chillers are not emitted as Equipment COGS items.');
-requireText(masterPricingEngine, /const equipment = isPpasEast[\s\S]{0,220}additionalFilters:\s*\[\][\s\S]{0,120}additionalHeaters:\s*\[\][\s\S]{0,120}heaterChiller:\s*undefined/, 'East-only equipment selections are not removed from non-East pricing.');
+requireText(masterPricingEngine, /const equipment = isPpasEast[\s\S]{0,220}heaterChiller:\s*undefined[\s\S]{0,120}heaterChillerQuantity:\s*0/, 'The East-only Heater Chiller selection is not removed from non-East pricing.');
+rejectText(masterPricingEngine, /const equipment = isPpasEast[\s\S]{0,220}additionalFilters:\s*\[\]/, 'Additional filters are still removed from non-East pricing.');
+rejectText(masterPricingEngine, /const equipment = isPpasEast[\s\S]{0,220}additionalHeaters:\s*\[\]/, 'Additional heaters are still removed from non-East pricing.');
 requireText(contractGenerator, /getDefaultContractDepositValue[\s\S]{0,400}isPpasEast[\s\S]{0,220}poolType\s*===\s*'fiberglass'[\s\S]{0,120}formatCurrency\(5000\)/, 'PPAS East fiberglass contracts do not default to a $5,000 deposit.');
 requireText(contractGenerator, /resolveContractDepositSourceValue\(overrides\)\s*\|\|\s*getDefaultContractDepositValue\(normalized\)/, 'The editable deposit override does not take precedence over the PPAS East fiberglass default.');
 requireText(pricingDataDefaults, /masonry:\s*\{[\s\S]{0,180}rbbFacingOptions:[\s\S]{0,100}backsideFacingOptions:\s*\[\]/, 'New pricing models do not include the Backside Facings catalog.');

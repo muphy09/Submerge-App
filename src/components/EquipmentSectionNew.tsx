@@ -519,7 +519,7 @@ function EquipmentSectionNew({
     0
   );
   const supportsMultipleHeatersAndFilters =
-    isPpasEast && Boolean(selectedPackage && isCustomEquipmentPackage(selectedPackage));
+    Boolean(selectedPackage && isCustomEquipmentPackage(selectedPackage));
   const automationQuantity = Math.max(safeData.automationQuantity ?? (includeAutomation ? 1 : 0), 0);
   const saltSystemQuantity = Math.max(
     safeData.saltSystemQuantity ?? (isRealSaltSystemSelection(safeData.saltSystem) ? 1 : 0),

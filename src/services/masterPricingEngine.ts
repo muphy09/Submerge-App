@@ -192,8 +192,6 @@ export class MasterPricingEngine {
       ? rawEquipment
       : {
           ...rawEquipment,
-          additionalFilters: [],
-          additionalHeaters: [],
           heaterChiller: undefined,
           heaterChillerQuantity: 0,
         };
