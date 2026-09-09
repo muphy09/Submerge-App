@@ -60,6 +60,7 @@
   },
   "devDependencies": {
     "@electron/notarize": "^2.2.0",
+    "@electron/osx-sign": "1.0.5",
     "@playwright/test": "^1.62.1",
     "@types/better-sqlite3": "^7.6.9",
     "@types/react": "^18.3.0",
@@ -80,7 +81,7 @@
     "appId": "com.submerge.proposalbuilder",
     "productName": "Submerge Proposal Builder",
     "artifactName": "${productName} v${version}-${arch}.${ext}",
-    "afterSign": "scripts/notarize.js",
+    "afterPack": "scripts/sign-mac.js",
     "publish": [
       {
         "provider": "github",

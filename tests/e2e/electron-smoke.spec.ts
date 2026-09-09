@@ -1,9 +1,11 @@
 import { mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { _electron as electron, type ElectronApplication } from 'playwright';
 
 const workspaceRoot = path.resolve(__dirname, '..', '..');
+const packagedExecutable = process.env.SUBMERGE_TEST_PACKAGED_EXECUTABLE;
 
 test('launches Submerge with isolated data and validates the login screen', async ({}, testInfo) => {
   const appDataDirectory = testInfo.outputPath('app-data');
@@ -25,14 +27,28 @@ test('launches Submerge with isolated data and validates the login screen', asyn
   let traceStarted = false;
 
   try {
+    if (packagedExecutable && process.platform === 'darwin') {
+      const appBundle = path.resolve(path.dirname(packagedExecutable), '..', '..');
+      execFileSync('codesign', ['--verify', '--deep', '--strict', appBundle]);
+    }
     electronApp = await electron.launch({
+      executablePath: packagedExecutable,
       // The managed test environment cannot initialize Electron 29's Chromium
       // child-process sandbox. Production launches do not use this switch.
-      args: ['main.js', '--no-sandbox'],
+      args: packagedExecutable ? [] : ['main.js', '--no-sandbox'],
       cwd: workspaceRoot,
       env: electronEnvironment,
       timeout: 30_000,
     });
+
+    if (packagedExecutable) {
+      const appState = await electronApp.evaluate(({ app }) => ({
+        isPackaged: app.isPackaged,
+        userData: app.getPath('userData'),
+      }));
+      expect(appState.isPackaged).toBe(true);
+      expect(appState.userData).toBe(path.join(appDataDirectory, 'Submerge Proposal Builder-playwright-e2e'));
+    }
 
     const window = await electronApp.firstWindow();
     await window.context().tracing.start({ screenshots: true, snapshots: true, sources: true });

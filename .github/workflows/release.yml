@@ -152,29 +152,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -n "${{ secrets.MAC_CERT_BASE64 }}" ] && [ -n "${{ secrets.MAC_CERT_PASSWORD }}" ]; then
-            echo "Using provided macOS signing certificate."
-            export CSC_LINK='${{ secrets.MAC_CERT_BASE64 }}'
-            export CSC_KEY_PASSWORD='${{ secrets.MAC_CERT_PASSWORD }}'
-          else
-            echo "No macOS signing cert/password provided; building unsigned (identity=null)."
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
-          fi
-
-          if [ -n "${{ secrets.APPLE_API_KEY_BASE64 }}" ] && [ -n "${{ secrets.APPLE_API_KEY_ID }}" ] && [ -n "${{ secrets.APPLE_API_KEY_ISSUER }}" ]; then
-            export APPLE_API_KEY_BASE64='${{ secrets.APPLE_API_KEY_BASE64 }}'
-            export APPLE_API_KEY_ID='${{ secrets.APPLE_API_KEY_ID }}'
-            export APPLE_API_KEY_ISSUER='${{ secrets.APPLE_API_KEY_ISSUER }}'
-            [ -n "${{ secrets.APPLE_TEAM_ID }}" ] && export APPLE_TEAM_ID='${{ secrets.APPLE_TEAM_ID }}'
-          elif [ -n "${{ secrets.APPLE_ID }}" ] && [ -n "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" ]; then
-            export APPLE_ID='${{ secrets.APPLE_ID }}'
-            export APPLE_APP_SPECIFIC_PASSWORD='${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}'
-            [ -n "${{ secrets.APPLE_TEAM_ID }}" ] && export APPLE_TEAM_ID='${{ secrets.APPLE_TEAM_ID }}'
-          else
-            echo "No Apple notarization credentials provided; skipping notarization."
-          fi
-
-          # Build DMG on the current macOS runner.
+          # The afterPack hook signs and verifies the complete app ad-hoc.
+          # No paid Apple certificate or notarization credentials are required.
+          # A signing/verification failure aborts before DMG creation/upload.
+          export CSC_IDENTITY_AUTO_DISCOVERY=false
+          echo "Building an ad-hoc signed Mac app; users must approve it in Privacy & Security."
           npx electron-builder --mac dmg --publish always
 
       - name: Publish fixed franchise update endpoint (macOS)

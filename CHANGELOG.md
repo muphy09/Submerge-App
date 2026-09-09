@@ -1,3 +1,7 @@
+## [3.3.3] - 9/9/26
+### Mac OS Silicon Support
+- Introduced & optimized support for Mac OS machines using an ARM64 processor
+-----
 ## [3.3.2] - 9/5/26
 ### BUGFIX (Cloud Connection)
 - Added redundancy to the Cloud Connection scope so it cannot trigger the generic Cloud Connection error for a simple background poll failure
