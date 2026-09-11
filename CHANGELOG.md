@@ -1,6 +1,7 @@
-## [3.3.4] - 9/9/26
+## [3.3.5] - 9/9/26
 ### HOTFIX
 - Fixed an issue that could prevent certain contracts from loading correctly, resulting in an error
+- Fixed an issue that could leave users in an update loop
 -----
 ## [3.3.3] - 9/9/26
 ### Mac OS Silicon Support

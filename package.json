@@ -96,6 +96,7 @@
     "files": [
       "dist/**/*",
       "main.js",
+      "update-recovery.js",
       "CHANGELOG.md",
       "release-notes/**/*",
       "preload-script.js",

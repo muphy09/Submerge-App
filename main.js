@@ -83,6 +83,15 @@ let mainWindow = null;
 let db = null;
 let proposalsDir = null;
 let updateClient = null;
+let updateRecovery = null;
+let updateCheckPromise = null;
+let updateChannel = null;
+let retryFailedUpdate = false;
+let acceptedUpdateVersion = null;
+let downloadedUpdateVersion = null;
+let installingUpdateVersion = null;
+let updateDownloadPending = false;
+let updateDecision = null;
 const contractPreviewWindows = new Set();
 const contractPreviewPayloads = new Map();
 const contractPreviewTempDirs = new Set();
@@ -121,6 +130,19 @@ function getAutoUpdater() {
   if (!updateClient) {
     const { autoUpdater } = require('electron-updater');
     updateClient = autoUpdater;
+    const updateLogPath = path.join(app.getPath('userData'), 'update.log');
+    const writeUpdateLog = (level, values) => {
+      try {
+        fs.mkdirSync(path.dirname(updateLogPath), { recursive: true });
+        if (fs.existsSync(updateLogPath) && fs.statSync(updateLogPath).size > 256 * 1024) {
+          fs.renameSync(updateLogPath, `${updateLogPath}.previous`);
+        }
+        fs.appendFileSync(updateLogPath, `${new Date().toISOString()} ${level} ${values.map(value => String(value)).join(' ')}\n`);
+      } catch (_) { /* Diagnostics must not prevent normal app use. */ }
+    };
+    updateClient.logger = Object.fromEntries(['info', 'warn', 'error', 'debug'].map(level => [
+      level, (...values) => writeUpdateLog(level, values),
+    ]));
 
     try {
       const feedConfig = { ...UPDATE_FEED };
@@ -134,7 +156,10 @@ function getAutoUpdater() {
     }
 
     updateClient.autoDownload = false;
-    updateClient.autoInstallOnAppQuit = true;
+    updateClient.autoInstallOnAppQuit = false;
+    updateRecovery = require('./update-recovery').createUpdateRecovery(
+      path.join(app.getPath('userData'), 'update-recovery.json'), app.getVersion()
+    );
   }
 
   return updateClient;
@@ -457,6 +482,13 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-available', (info) => {
+    updateDecision = updateRecovery.offer(info.version, updateChannel, retryFailedUpdate);
+    if (!updateDecision.available) {
+      if (updateDecision.message) sendUpdateError(updateDecision.message);
+      return;
+    }
+    acceptedUpdateVersion = info.version;
+    updateDownloadPending = true;
     console.log('Update available:', info);
     if (mainWindow) {
       mainWindow.webContents.send('update-available', info);
@@ -464,8 +496,8 @@ function setupAutoUpdater() {
     // Auto-download the update
     autoUpdater.downloadUpdate().catch((error) => {
       console.error('Failed to download update:', error);
-      sendUpdateError();
-    });
+      sendUpdateError('The update could not be downloaded. You can keep working and retry from Settings.');
+    }).finally(() => { updateDownloadPending = false; });
   });
 
   autoUpdater.on('update-not-available', (info) => {
@@ -477,7 +509,13 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('Error in auto-updater:', err);
-    sendUpdateError();
+    autoUpdater.logger.error(err?.stack || err);
+    if (installingUpdateVersion) {
+      updateRecovery.fail(installingUpdateVersion);
+      installingUpdateVersion = null;
+    }
+    downloadedUpdateVersion = null;
+    sendUpdateError('The update could not be completed. You can keep using the current app and retry from Settings.');
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
@@ -488,6 +526,8 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    if (info.version !== acceptedUpdateVersion) return;
+    downloadedUpdateVersion = info.version;
     console.log('Update downloaded:', info);
     if (mainWindow) {
       mainWindow.webContents.send('update-downloaded', info);
@@ -1735,6 +1775,10 @@ ipcMain.handle('check-for-updates', async (_event, payload = {}) => {
     }
 
     const requestedChannel = String(payload?.channel || '').trim().toLowerCase();
+    if (!requestedChannel) return { message: 'Sign in to your franchise before checking for updates.' };
+    if (updateCheckPromise || updateDownloadPending || installingUpdateVersion) {
+      return { message: 'An update is already in progress. You can keep working.' };
+    }
     if (requestedChannel) {
       if (!/^(master|franchise-[a-z0-9-]+)$/.test(requestedChannel)) {
         throw new Error('Invalid update channel.');
@@ -1746,14 +1790,21 @@ ipcMain.handle('check-for-updates', async (_event, payload = {}) => {
       autoUpdater.channel = 'latest';
       autoUpdater.allowPrerelease = true;
       autoUpdater.allowDowngrade = false;
+      updateChannel = requestedChannel;
+      retryFailedUpdate = payload?.retryFailedUpdate === true;
+      acceptedUpdateVersion = null;
+      downloadedUpdateVersion = null;
+      updateDecision = null;
       console.log(`Auto-update channel configured: updates-${requestedChannel}`);
     }
 
-    const result = await autoUpdater.checkForUpdates();
+    updateCheckPromise = autoUpdater.checkForUpdates();
+    let result;
+    try { result = await updateCheckPromise; } finally { updateCheckPromise = null; }
     const updateInfo = result?.updateInfo;
-    const available = Boolean(updateInfo && updateInfo.version && updateInfo.version !== app.getVersion());
+    const available = Boolean(result?.isUpdateAvailable && updateDecision?.available);
 
-    return { available, updateInfo };
+    return { available, updateInfo, ...(updateDecision?.message ? { message: updateDecision.message } : {}) };
   } catch (error) {
     console.error('Error checking for updates:', error);
     sendUpdateError();
@@ -1766,7 +1817,24 @@ ipcMain.handle('install-update', async () => {
     return;
   }
   const autoUpdater = getAutoUpdater();
-  if (autoUpdater) {
-    autoUpdater.quitAndInstall();
+  if (autoUpdater && downloadedUpdateVersion && !installingUpdateVersion) {
+    updateRecovery.beginInstall(downloadedUpdateVersion);
+    installingUpdateVersion = downloadedUpdateVersion;
+    try {
+      await require('./update-recovery').handOffUpdateInstall({
+        platform: process.platform,
+        updater: autoUpdater,
+        openPath: installerPath => shell.openPath(installerPath),
+        quit: () => app.quit(),
+      });
+    } catch (error) {
+      autoUpdater.logger.error(error?.stack || error);
+      updateRecovery.fail(installingUpdateVersion);
+      installingUpdateVersion = null;
+      downloadedUpdateVersion = null;
+      sendUpdateError('The installer could not start. You can keep working and retry from Settings.');
+    }
+  } else {
+    sendUpdateError('No update is ready to install. You can keep working and check again in Settings.');
   }
 });

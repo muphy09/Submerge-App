@@ -380,7 +380,7 @@ for (const code of ['5555', '9724']) {
 const settings = read('src/pages/SettingsPage.tsx');
 requireText(settings, /canViewChangelog\s*=\s*[\s\S]{0,180}sessionRole\s*===\s*'designer'/, 'Designers cannot open their franchise Patch Notes.');
 requireText(settings, /getUpdateChannel\(sessionRole,\s*getSessionFranchiseCode\(\)\)/, 'The manual update check does not resolve the authenticated franchise channel.');
-requireText(settings, /checkForUpdates\(channel\s*\?\s*\{\s*channel\s*\}/, 'The manual update check does not pass its isolated channel to Electron.');
+requireText(settings, /checkForUpdates\(\{\s*channel,\s*retryFailedUpdate:\s*true\s*\}/, 'The manual update check does not pass its isolated channel and explicit retry to Electron.');
 
 requireText(main, /canViewGlobalNotes\s*=\s*role\s*===\s*'master'\s*\|\|\s*role\s*===\s*'owner'\s*\|\|\s*role\s*===\s*'admin'/, 'Global Patch Notes are not restricted to master, owner, and admin roles in Electron.');
 requireText(main, /const globalNotes\s*=\s*canViewGlobalNotes\s*\?[^:]+:\s*''/s, 'Restricted roles still receive Global Patch Notes content.');

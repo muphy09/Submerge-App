@@ -161,7 +161,7 @@ declare global {
       }>;
 
       // Update operations
-      checkForUpdates: (payload?: { channel?: string }) => Promise<any>;
+      checkForUpdates: (payload?: { channel?: string; retryFailedUpdate?: boolean }) => Promise<any>;
       installUpdate: () => Promise<void>;
       onUpdateAvailable: (callback: (info: any) => void) => void;
       onUpdateNotAvailable: (callback: (info: any) => void) => void;

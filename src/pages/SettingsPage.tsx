@@ -9,7 +9,7 @@ import {
   PRICE_IMPACT_CAPABILITY,
 } from '../services/franchiseConfiguration';
 import { getSessionFranchiseCode, getSessionFranchiseId, getSessionRole } from '../services/session';
-import { formatFranchiseAppVersion, getUpdateChannel } from '../services/franchiseRelease';
+import { formatFranchiseAppVersion, getUpdateChannel, loadFranchiseReleaseAssignment } from '../services/franchiseRelease';
 import { savePriceImpactPreferences } from '../services/userPreferences';
 import './SettingsPage.css';
 
@@ -72,8 +72,17 @@ const SettingsPage: React.FC = () => {
     setMessage({ text: 'Checking for updates...', tone: 'info' });
 
     try {
+      const assignment = sessionRole === 'master' ? null : await loadFranchiseReleaseAssignment(franchiseId);
+      if (assignment?.updateEnabled === false || assignment?.releaseChannel === 'paused') {
+        setMessage({ text: 'Updates are temporarily paused for your franchise. You can keep using the current app.', tone: 'info' });
+        return;
+      }
       const channel = getUpdateChannel(sessionRole, getSessionFranchiseCode());
-      const result = await window.electron.checkForUpdates(channel ? { channel } : undefined);
+      if (!channel) {
+        setMessage({ text: 'Sign in to your franchise before checking for updates.', tone: 'error' });
+        return;
+      }
+      const result = await window.electron.checkForUpdates({ channel, retryFailedUpdate: true });
 
       if (result.message) {
         setMessage({ text: result.message, tone: 'error' });

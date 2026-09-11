@@ -22,9 +22,9 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ status, onInsta
       )}
       {status === 'ready' && (
         <div className="update-notification-message update-notification-message--ready">
-          <span>Update ready. Restart the app to apply it.</span>
+          <span>Update downloaded. Install when you are ready; you can keep working.</span>
           <button onClick={onInstall} className="update-notification-install-button">
-            Restart Now
+            Install Update
           </button>
         </div>
       )}

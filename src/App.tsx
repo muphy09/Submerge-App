@@ -470,7 +470,7 @@ function AppContent() {
       window.electron.onUpdateError((error: string) => {
         console.error('Auto-update error:', error);
         setUpdateStatus('error');
-        setUpdateError('Error checking for updates');
+        setUpdateError(error || 'The update could not be completed. You can keep using the current app.');
         // Clear error after 10 seconds
         setTimeout(() => setUpdateStatus(null), 10000);
       });
@@ -758,7 +758,10 @@ function AppContent() {
 
   const handleInstallUpdate = () => {
     if (window.electron) {
-      window.electron.installUpdate();
+      void window.electron.installUpdate().catch(() => {
+        setUpdateStatus('error');
+        setUpdateError('The installer could not start. You can keep using the current app.');
+      });
     }
   };
 
