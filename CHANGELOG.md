@@ -1,3 +1,7 @@
+## [3.3.4] - 9/9/26
+### HOTFIX
+- Fixed an issue that could prevent certain contracts from loading correctly, resulting in an error
+-----
 ## [3.3.3] - 9/9/26
 ### Mac OS Silicon Support
 - Introduced & optimized support for Mac OS machines using an ARM64 processor

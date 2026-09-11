@@ -1,6 +1,6 @@
 import type { Proposal, ProposalWorkflowActor } from '../types/proposal-new';
 import { getSupabaseClient } from './supabaseClient';
-import { getSessionFranchiseCode, getSessionFranchiseId } from './session';
+import { DEFAULT_FRANCHISE_ID, getSessionFranchiseCode, getSessionFranchiseId } from './session';
 import {
   getBundledContractTemplateRevision,
   getContractTemplate,
@@ -74,9 +74,9 @@ const normalizeJurisdiction = (proposal: Proposal) =>
 function bundledRevision(
   franchiseId: string,
   proposal: Proposal,
-  revisionNumber?: number | null
+  revisionNumber?: number | null,
+  localId = getContractTemplateIdForProposal(proposal)
 ): ContractRevisionDescriptor | null {
-  const localId = getContractTemplateIdForProposal(proposal);
   const bundled = getBundledContractTemplateRevision(localId, revisionNumber);
   if (!bundled) return null;
   const template = bundled.contractTemplate;
@@ -86,8 +86,8 @@ function bundledRevision(
     revisionId: `bundled:${franchiseId}:${localId}:r${bundled.revisionNumber}`,
     revisionNumber: bundled.revisionNumber,
     franchiseId,
-    jurisdictionKey: normalizeJurisdiction(proposal),
-    poolType: normalizePoolType(proposal),
+    jurisdictionKey: localId.startsWith('sc-') ? 'SC' : 'NC',
+    poolType: localId.endsWith('fiberglass') ? 'fiberglass' : 'shotcrete',
     originalFileName: template.label + '.pdf',
     publishedAt: bundled.publishedAt,
     source: 'bundled',
@@ -95,17 +95,14 @@ function bundledRevision(
   };
 }
 
-function getBundledRevisionNumber(revisionId: string, franchiseId: string, localId: ContractTemplateId) {
-  const prefix = `bundled:${franchiseId}:${localId}:r`;
-  if (!revisionId.startsWith(prefix)) return null;
-  const parsed = Number(revisionId.slice(prefix.length));
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
 function bundledRevisionFromId(franchiseId: string, proposal: Proposal, revisionId: string) {
-  const localId = getContractTemplateIdForProposal(proposal);
-  const revisionNumber = getBundledRevisionNumber(revisionId, franchiseId, localId);
-  return revisionNumber === null ? null : bundledRevision(franchiseId, proposal, revisionNumber);
+  const prefix = `bundled:${franchiseId}:`;
+  if (!revisionId.startsWith(prefix)) return null;
+  // The saved revision identifies the historical template. The customer's
+  // state or pool type may have changed since it was pinned.
+  const match = /^(nc-gunite|nc-fiberglass|sc-gunite|sc-fiberglass):r([1-9]\d*)$/.exec(revisionId.slice(prefix.length));
+  if (!match) return null;
+  return bundledRevision(franchiseId, proposal, Number(match[2]), match[1] as ContractTemplateId);
 }
 
 async function isWestFranchise(franchiseId: string) {
@@ -249,17 +246,27 @@ async function loadRemoteRevision(proposal: Proposal, revisionId: string): Promi
 
 export async function checkProposalContractRevision(proposal: Proposal): Promise<ContractRevisionCheck | null> {
   if (!proposal.franchiseId) return null;
+  // Master-area proposals borrow a franchise's pricing model without changing
+  // proposal ownership. Their contracts must come from that same franchise.
+  // Ordinary franchise proposals always retain their own contract scope.
+  const contractFranchiseId = proposal.franchiseId === DEFAULT_FRANCHISE_ID
+    ? proposal.pricingModelFranchiseId || proposal.franchiseId
+    : proposal.franchiseId;
+  proposal = { ...proposal, franchiseId: contractFranchiseId };
   const latestRemote = await loadRemoteCurrent(proposal);
-  const supportsBundled = await isWestFranchise(proposal.franchiseId);
+  const supportsBundled = await isWestFranchise(contractFranchiseId);
   if (!latestRemote && !supportsBundled) return null;
-  const latestBundled = supportsBundled ? bundledRevision(proposal.franchiseId, proposal) : null;
-  const initialBundled = supportsBundled ? bundledRevision(proposal.franchiseId, proposal, 1) : null;
+  const latestBundled = supportsBundled ? bundledRevision(contractFranchiseId, proposal) : null;
+  const initialBundled = supportsBundled ? bundledRevision(contractFranchiseId, proposal, 1) : null;
   const pinned = proposal.contractTemplateRevisionId
     ? proposal.contractTemplateRevisionId.startsWith('bundled:')
-      ? bundledRevisionFromId(proposal.franchiseId, proposal, proposal.contractTemplateRevisionId)
+      ? bundledRevisionFromId(contractFranchiseId, proposal, proposal.contractTemplateRevisionId)
       : await loadRemoteRevision(proposal, proposal.contractTemplateRevisionId)
     : initialBundled || latestRemote;
   const latest = latestRemote || latestBundled;
+  if (!pinned && proposal.contractTemplateRevisionId) {
+    throw new Error('The saved contract revision could not be loaded. Reconnect and try again, or ask your administrator to check the saved revision.');
+  }
   if (!pinned || !latest) return null;
   if (pinned.franchiseId !== proposal.franchiseId || latest.franchiseId !== proposal.franchiseId) {
     throw new Error('The selected contract revision does not belong to this proposal franchise.');

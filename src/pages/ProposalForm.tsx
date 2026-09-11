@@ -1442,6 +1442,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       };
       void initializeNewProposal();
     }
+    return () => {
+      // A route change (including opening a contract from the summary) must
+      // cancel this builder's pending load before it changes shared pricing.
+      if (loadRequestRef.current === requestId) loadRequestRef.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCreationRestricted, proposalNumber, loadRetryNonce]);
 
@@ -1624,6 +1629,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       // pricing-model revision is the active calculation source. Previously,
       // this happened in a later effect and briefly exposed whichever model was
       // last loaded on that computer.
+      if (loadRequestRef.current !== requestId) return;
       await initPricingDataStore(
         sanitizedTarget.franchiseId || sourceProposal.franchiseId || getSessionFranchiseId(),
         sanitizedTarget.pricingModelId || undefined,
@@ -1631,6 +1637,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         targetTierId,
         sanitizedTarget.pricingModelRevisionId || undefined
       );
+      if (loadRequestRef.current !== requestId) return;
       const loadedPricingMeta = getActivePricingModelMeta();
       if (
         sanitizedTarget.pricingModelId &&
@@ -1694,6 +1701,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         setExistingProposalLoadError(null);
       }
     } catch (error) {
+      if (loadRequestRef.current !== requestId) return;
       console.error('Failed to load proposal:', error);
       if (loadRequestRef.current === requestId) {
         loadedProposalNumberRef.current = null;

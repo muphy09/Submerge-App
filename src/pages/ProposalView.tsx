@@ -5773,6 +5773,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         isOpen={contractRevisionPromptOpen && Boolean(pendingContractRevision)}
         currentRevision={pendingContractRevision?.check.pinned.revisionNumber}
         latestRevision={pendingContractRevision?.check.latest.revisionNumber}
+        currentTemplateName={pendingContractRevision?.check.pinned.templateName}
+        latestTemplateName={pendingContractRevision?.check.latest.templateName}
         busy={contractRevisionBusy}
         error={contractRevisionError}
         previewOnly={isProposalEditingRestricted}

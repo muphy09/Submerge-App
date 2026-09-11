@@ -4,6 +4,8 @@ type ContractRevisionPromptModalProps = {
   isOpen: boolean;
   currentRevision?: number | null;
   latestRevision?: number | null;
+  currentTemplateName?: string;
+  latestTemplateName?: string;
   busy?: boolean;
   error?: string | null;
   previewOnly?: boolean;
@@ -16,6 +18,8 @@ export default function ContractRevisionPromptModal({
   isOpen,
   currentRevision,
   latestRevision,
+  currentTemplateName,
+  latestTemplateName,
   busy = false,
   error,
   previewOnly = false,
@@ -24,6 +28,7 @@ export default function ContractRevisionPromptModal({
   onClose,
 }: ContractRevisionPromptModalProps) {
   if (!isOpen) return null;
+  const templateChanged = Boolean(currentTemplateName && latestTemplateName && currentTemplateName !== latestTemplateName);
   return (
     <div className="pricing-revision-backdrop" role="dialog" aria-modal="true" aria-labelledby="contract-revision-title">
       <div className="pricing-revision-modal">
@@ -31,11 +36,19 @@ export default function ContractRevisionPromptModal({
           <div>
             <p className="pricing-revision-kicker">Contract Template Update</p>
             <h2 id="contract-revision-title">
-              {previewOnly
+              {templateChanged
+                ? previewOnly
+                  ? 'This proposal matches a different contract template. Which would you like to preview?'
+                  : 'This proposal matches a different contract template. Use the matching template?'
+                : previewOnly
                 ? 'A newer contract template is available. Which version would you like to preview?'
                 : 'Your Admin has made changes to this Contract Template. Upgrade to newest Contract?'}
             </h2>
-            <p>Revision {currentRevision || 'Current'} to Revision {latestRevision || 'Latest'}</p>
+            <p>
+              {currentTemplateName ? `${currentTemplateName} — ` : ''}Revision {currentRevision || 'Current'}
+              {' to '}
+              {latestTemplateName ? `${latestTemplateName} — ` : ''}Revision {latestRevision || 'Latest'}
+            </p>
           </div>
           <button type="button" className="pricing-revision-close" onClick={onClose} disabled={busy} aria-label="Close">
             x
@@ -44,10 +57,10 @@ export default function ContractRevisionPromptModal({
         {error && <div className="pricing-revision-body"><div className="pricing-revision-message is-error">{error}</div></div>}
         <footer className="pricing-revision-actions">
           <button type="button" className="pricing-revision-btn is-secondary" onClick={onKeepCurrent} disabled={busy}>
-            {previewOnly ? 'View Current' : 'No'}
+            {previewOnly ? 'View Current' : templateChanged ? 'Keep Saved Template' : 'No'}
           </button>
           <button type="button" className="pricing-revision-btn is-primary" onClick={onUpgrade} disabled={busy}>
-            {busy ? (previewOnly ? 'Opening...' : 'Saving...') : previewOnly ? 'Preview Latest' : 'Yes'}
+            {busy ? (previewOnly ? 'Opening...' : 'Saving...') : previewOnly ? 'Preview Latest' : templateChanged ? 'Use Matching Template' : 'Yes'}
           </button>
         </footer>
       </div>
