@@ -158,7 +158,10 @@ function getAutoUpdater() {
     updateClient.autoDownload = false;
     updateClient.autoInstallOnAppQuit = false;
     updateRecovery = require('./update-recovery').createUpdateRecovery(
-      path.join(app.getPath('userData'), 'update-recovery.json'), app.getVersion()
+      path.join(app.getPath('userData'), 'update-recovery.json'), app.getVersion(), require('./release-state.json')
+    );
+    require('./release-version').configureReleaseComparison(
+      updateClient, app.getVersion(), () => updateChannel, require('./release-state.json')
     );
   }
 
@@ -1789,7 +1792,9 @@ ipcMain.handle('check-for-updates', async (_event, payload = {}) => {
       });
       autoUpdater.channel = 'latest';
       autoUpdater.allowPrerelease = true;
-      autoUpdater.allowDowngrade = false;
+      // Our core/revision comparison rejects downgrades before Electron's
+      // SemVer check, which otherwise rejects same-core franchise revisions.
+      autoUpdater.allowDowngrade = true;
       updateChannel = requestedChannel;
       retryFailedUpdate = payload?.retryFailedUpdate === true;
       acceptedUpdateVersion = null;

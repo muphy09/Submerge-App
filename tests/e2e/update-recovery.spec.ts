@@ -5,7 +5,7 @@ import { _electron as electron, type ElectronApplication } from 'playwright';
 
 const { createUpdateRecovery, handOffUpdateInstall } = require('../../update-recovery');
 const root = path.resolve(__dirname, '../..');
-const target = '3.3.6-franchise-5555.1';
+const target = '3.3.8-franchise-5555.2';
 
 test('Windows waits for installer launch and keeps the app open when launch is blocked', async () => {
   let quits = 0;
@@ -41,7 +41,7 @@ test('recovery remembers failed installs, allows explicit retry and clears a suc
   restarted.beginInstall(target);
   const updated = createUpdateRecovery(statePath, target);
   expect(updated.offer(target, 'franchise-5555').available).toBe(false);
-  expect(updated.offer('3.3.6-franchise-5555.2', 'franchise-5555').available).toBe(true);
+  expect(updated.offer('3.3.8-franchise-5555.3', 'franchise-5555').available).toBe(true);
 });
 
 async function launch(appData: string, bootstrap: string) {
@@ -58,14 +58,21 @@ test('Electron does not repeat a failed restart and only retries when requested'
   mkdirSync(appData, { recursive: true });
   const bootstrap = testInfo.outputPath('fake-updater.cjs');
   writeFileSync(bootstrap, `
+    // Model an installed stable app, not Electron's runtime version.
+    require('electron').app.getVersion = () => '3.3.8';
     const { EventEmitter } = require('events');
     const Module = require('module');
     const fake = new EventEmitter();
     Object.assign(fake, {
       downloads: 0, installs: 0,
       setFeedURL() {},
+      isUpdateSupported: async () => true,
       async checkForUpdates() {
         const updateInfo = { version: '${target}' };
+        if (!await this.isUpdateSupported(updateInfo)) {
+          this.emit('update-not-available', updateInfo);
+          return { isUpdateAvailable: false, updateInfo };
+        }
         this.emit('update-available', updateInfo);
         return { isUpdateAvailable: true, updateInfo };
       },

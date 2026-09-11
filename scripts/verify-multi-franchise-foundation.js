@@ -387,7 +387,7 @@ requireText(main, /const globalNotes\s*=\s*canViewGlobalNotes\s*\?[^:]+:\s*''/s,
 requireText(changelogModal, /\{canViewGlobalNotes\s*&&\s*\([\s\S]{0,500}patch-notes-global-tab/, 'The Global Patch Notes tab is not hidden from designers.');
 
 const releaseScript = read('scripts/release-channel.js');
-requireText(releaseScript, /stableTag\s*=\s*bumpMajor\(state\.coreVersion\)/, 'The one-time bootstrap does not create a major-version stable bridge.');
+requireText(read('scripts/release-plan.js'), /stableTag\s*=\s*bumpVersion\(state\.coreVersion,\s*'major'\)/, 'The one-time bootstrap does not create a major-version stable bridge.');
 requireText(releaseScript, /rev-parse[\s\S]{0,100}@\{upstream\}/, 'The release script does not resolve the configured upstream remote.');
 requireText(releaseScript, /tags\.forEach\(\(tag\)\s*=>\s*run\('git',\s*\['push',\s*remote,\s*tag\]\)\)/, 'The release script does not publish tags individually for GitHub Actions.');
 

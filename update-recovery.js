@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+const { parseReleaseVersion, compareCore, installedRevision, isNewerChannelRelease } = require('./release-version');
 
 // Keep failed installation state outside the updater's disposable download
 // cache so a relaunch cannot immediately offer the same blocked installer.
-function createUpdateRecovery(filePath, currentVersion) {
+function createUpdateRecovery(filePath, currentVersion, releaseState) {
   let state = { failedVersions: [] };
   try { state = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) { /* First launch. */ }
   if (!Array.isArray(state.failedVersions)) state.failedVersions = [];
@@ -18,8 +19,13 @@ function createUpdateRecovery(filePath, currentVersion) {
     save();
   };
   if (state.pendingInstall) {
-    if (currentVersion === state.pendingInstall.version) {
-      state.failedVersions = state.failedVersions.filter(version => version !== currentVersion);
+    const current = parseReleaseVersion(currentVersion);
+    const pending = parseReleaseVersion(state.pendingInstall.version);
+    const superseded = current && pending && (compareCore(current.core, pending.core) > 0 ||
+      (compareCore(current.core, pending.core) === 0 &&
+        installedRevision(current, pending.channel, releaseState) >= pending.revision));
+    if (currentVersion === state.pendingInstall.version || superseded) {
+      state.failedVersions = state.failedVersions.filter(version => version !== state.pendingInstall.version);
       delete state.pendingInstall;
       save();
     } else {
@@ -28,16 +34,11 @@ function createUpdateRecovery(filePath, currentVersion) {
   }
   return {
     offer(version, channel, retryFailed = false) {
-      const match = /^(\d+)\.(\d+)\.(\d+)-(master|franchise-[a-z0-9-]+)\.(\d+)$/.exec(version || '');
-      if (!match || match[4] !== channel) {
+      const candidate = parseReleaseVersion(version);
+      if (!candidate?.channel || candidate.channel !== channel) {
         return { available: false, message: 'This update does not match your update channel. You can keep using the current app.' };
       }
-      // A global release and the initial channel build contain the same code.
-      // Do not require a second installation just to change the version label.
-      const stableVersion = `${match[1]}.${match[2]}.${Number(match[3]) - 1}`;
-      if (currentVersion === version || (currentVersion === stableVersion && Number(match[5]) === 1)) {
-        return { available: false };
-      }
+      if (!isNewerChannelRelease(currentVersion, version, channel, releaseState)) return { available: false };
       if (state.failedVersions.includes(version)) {
         if (!retryFailed) return {
           available: false,

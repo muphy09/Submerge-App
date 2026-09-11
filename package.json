@@ -1,6 +1,6 @@
 {
   "name": "submerge-proposal-builder",
-  "version": "3.3.5",
+  "version": "3.3.8",
   "description": "Submerge Proposal Builder",
   "main": "main.js",
   "scripts": {
@@ -97,6 +97,9 @@
       "dist/**/*",
       "main.js",
       "update-recovery.js",
+      "release-version.js",
+      "release-version-policy.json",
+      "release-state.json",
       "CHANGELOG.md",
       "release-notes/**/*",
       "preload-script.js",

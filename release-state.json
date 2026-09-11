@@ -1,7 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "bootstrapped": true,
-  "coreVersion": "3.3.6",
+  "coreVersion": "3.3.8",
+  "pendingGlobalRelease": true,
   "masterBuild": 1,
   "franchises": {
     "5555": 1,

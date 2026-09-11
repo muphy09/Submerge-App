@@ -52,7 +52,7 @@ if (!localStorage.getItem(preferenceKey)) {
 }
 
 (window as any).electron = {
-  appVersion: '1.0.5',
+  appVersion: params.get('version') || '1.0.5',
   checkForUpdates: async () => ({ available: false }),
 };
 

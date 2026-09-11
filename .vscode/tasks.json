@@ -160,7 +160,7 @@
       "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
       "group": "build",
       "problemMatcher": [],
-      "detail": "Publishes the queued patch version to West, East, master, and the stable bridge. Resets every franchise release counter to 1."
+      "detail": "Publishes the prepared global version, or advances the core patch if none is prepared. West, East, master, and stable share that core version; channel counters reset to 1."
     },
     {
       "label": "Release - Global Minor (All Franchises)",

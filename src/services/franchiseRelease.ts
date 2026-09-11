@@ -1,4 +1,5 @@
 import releaseState from '../../release-state.json';
+import { alignedFrom } from '../../release-version-policy.json';
 import { getSupabaseClient } from './supabaseClient';
 
 export type FranchiseReleaseAssignment = {
@@ -33,10 +34,10 @@ export function formatFranchiseAppVersion(version: string) {
   const normalized = String(version || '').trim().replace(/^v/i, '');
   const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)-(?:franchise-[a-z0-9-]+|master)\.(\d+)$/i);
   if (match) {
-    // Isolated-channel builds use the next patch number so Electron treats
-    // them as newer than the matching stable release. That next patch is an
-    // updater implementation detail, not the released core version.
-    const releasedPatch = Math.max(Number(match[3]) - 1, 0);
+    const core = match.slice(1, 4).map(Number);
+    const differingIndex = core.findIndex((value, index) => value !== alignedFrom[index]);
+    const legacy = differingIndex >= 0 && core[differingIndex] < alignedFrom[differingIndex];
+    const releasedPatch = legacy ? Math.max(core[2] - 1, 0) : core[2];
     return `${match[1]}.${match[2]}.${releasedPatch}-${match[4]}`;
   }
   const stable = normalized.match(/^(\d+\.\d+\.\d+)/);
