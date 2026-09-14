@@ -1,3 +1,7 @@
+## [3.3.9] - 9/12/26
+### HOTFIX
+- Fixed an issue with proposals being cut off when exporting
+-----
 ## [3.3.8] - 9/10/26
 ### HOTFIX
 - Fixed an issue that could prevent certain contracts from loading correctly, resulting in an error

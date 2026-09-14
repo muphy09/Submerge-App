@@ -2409,6 +2409,13 @@
     visibility: hidden !important;
   }
 
+  /* The breakdown modal locks document scrolling on screen. Native printing
+     must allow the full export to overflow that screen-sized document. */
+  html:has(body.breakdown-print-mode),
+  body.breakdown-print-mode {
+    overflow: visible !important;
+  }
+
   body.breakdown-print-mode .export-print-area,
   body.breakdown-print-mode .export-print-area * {
     visibility: visible !important;
