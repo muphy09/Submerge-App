@@ -237,6 +237,7 @@ export async function loadPricingModel(
       if (!(await hasSupabaseConnection())) {
         const cached = readPricingModelSnapshotCache(franchiseId, pricingModelId, revisionId);
         if (cached?.pricing) return cached;
+        if (revisionId) throw new Error('The saved pricing revision is not cached. Reconnect before editing this proposal.');
         return await window.electron.loadPricingModel({
           franchiseId,
           pricingModelId: pricingModelId || undefined,
@@ -271,7 +272,11 @@ export async function loadPricingModel(
           currentRevisionId: data.current_revision_id,
         });
       } catch (revisionError) {
+        if (revisionId) throw revisionError;
         if (!isRevisionFoundationUnavailable(revisionError)) throw revisionError;
+      }
+      if (revisionId && revision?.id !== revisionId) {
+        throw new Error('The saved pricing revision is unavailable. Reconnect before editing this proposal.');
       }
       const loaded: LoadedPricingModel = {
         franchiseId: data.franchise_id,
@@ -291,12 +296,18 @@ export async function loadPricingModel(
     } catch (error) {
       const cached = readPricingModelSnapshotCache(franchiseId, pricingModelId, revisionId);
       if (cached?.pricing) return cached;
+      if (revisionId) throw error;
       return await window.electron.loadPricingModel({
         franchiseId,
         pricingModelId: pricingModelId || undefined,
       });
     }
   }, async () => {
+    if (revisionId) {
+      const cached = readPricingModelSnapshotCache(franchiseId, pricingModelId, revisionId);
+      if (cached?.pricing) return cached;
+      throw new Error('The saved pricing revision is not cached. Reconnect before editing this proposal.');
+    }
     return window.electron.loadPricingModel({
       franchiseId,
       pricingModelId: pricingModelId || undefined,

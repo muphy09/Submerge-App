@@ -130,6 +130,11 @@ const listeners = new Set<(data: PricingData) => void>();
 
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
   const normalized = removeHardcodedPapDiscountsFromPricing(deepClone(snapshot));
+  // Missing in a persisted model means historical pricing, not the new default.
+  // The rollout publishes 10% in NEW revisions; never inject it into old ones.
+  if (source && source.tileCoping?.offContractDecking?.materialWasteRate == null) {
+    normalized.tileCoping.offContractDecking.materialWasteRate = 0;
+  }
   ensureMasonryFacingCatalogs(normalized, source, defaultSnapshot);
   ensureTileCopingDeckingCatalogs(normalized, source, defaultSnapshot);
   syncLegacyFiberglassPricing(normalized, source);
@@ -788,6 +793,9 @@ async function resolvePricingState(
     if (pricingModelId) {
       const sourceFranchiseId = pricingModelFranchiseId || franchiseId;
       const result = await loadPricingModelRemote(sourceFranchiseId, pricingModelId, pricingModelRevisionId);
+      if (pricingModelRevisionId && result?.revisionId !== pricingModelRevisionId) {
+        throw new Error('The saved pricing revision is unavailable. Reconnect before editing this proposal.');
+      }
       if (result?.pricing) {
         const basePricing = normalizePricingState(
           mergeDeep(defaultSnapshot, result.pricing ?? {}),
@@ -809,6 +817,7 @@ async function resolvePricingState(
       }
     }
   } catch (error) {
+    if (pricingModelRevisionId) throw error;
     console.warn('Unable to load specific pricing model:', error);
   }
 

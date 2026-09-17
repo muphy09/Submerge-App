@@ -335,6 +335,13 @@ const pricingData = {
     },
   },
   tileCoping: {
+    onContractDecking: {
+      quantityWasteRate: 0.05,
+      freeformWasteRate: 0.05,
+    },
+    offContractDecking: {
+      materialWasteRate: 0.10,
+    },
     materialTaxRate: 0.0725,
     tileMaterialTaxRate: 0.0725,
     flagstoneQuantityMultiplier: 1.1, // 10% overage for flagstone materials (Excel rows 192-197)

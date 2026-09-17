@@ -5713,8 +5713,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         }
         pricingModelName={pricingRevisionComparison?.pricingModelName}
         busy={pricingRevisionBusy}
-        onUpgrade={() => void handleUpgradePricingRevision()}
-        onDecline={() => void handleDeclinePricingRevision()}
         onCompare={() => {
           setPricingRevisionBusy(true);
           setPricingRevisionError(null);

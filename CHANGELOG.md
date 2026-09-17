@@ -1,3 +1,9 @@
+## [3.4.0] - 9/16/26
+### Pricing Model Update
+- Off Contract Decking now includes a 10% Waste overhead added to the Material Cost
+    - Does not impact Labor Cost
+    - Only applies to Off Contract Decking; On Contract Decking already included 10% waste
+-----
 ## [3.3.9] - 9/12/26
 ### HOTFIX
 - Fixed an issue with proposals being cut off when exporting
@@ -15,7 +21,7 @@
 ## [3.3.2] - 9/5/26
 ### BUGFIX (Cloud Connection)
 - Added redundancy to the Cloud Connection scope so it cannot trigger the generic Cloud Connection error for a simple background poll failure
-- *Should* help prevent random connection interruptions
+    - *Should* help prevent random connection interruptions
 - A 'Retry Connection' button has been added to the Cloud error screen
 -----
 ## [3.3.1] - 8/26/26

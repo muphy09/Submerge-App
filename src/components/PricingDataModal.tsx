@@ -62,6 +62,7 @@ type ScalarField = {
   tooltip?: string;
   prefix?: string;
   isPercent?: boolean;
+  min?: number;
   disabled?: boolean;
   isUnused?: boolean;
 };
@@ -634,7 +635,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     if (isActiveBronzeLockedPricingPath(field.path)) return;
     let parsed: any = value;
     if (field.type === 'number') {
-      const numericValue = typeof value === 'string' ? toNumber(value) : Number(value);
+      let numericValue = typeof value === 'string' ? toNumber(value) : Number(value);
+      if (field.min != null) numericValue = Math.max(field.min, numericValue);
       parsed = field.isPercent ? numericValue / 100 : numericValue;
     } else if (field.type === 'boolean') {
       parsed = Boolean(value);
@@ -1233,7 +1235,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         key: 'wasteNotIncluded',
         label: 'Waste not Included',
         type: 'boolean',
-        tooltip: 'When enabled, this option skips the standard 5% additional decking waste and freeform waste overhead.',
+        tooltip: 'Skips standard quantity waste and freeform waste. The separate Off Contract Material Waste setting still applies when Off Contract is enabled.',
       },
     ],
     []
@@ -2872,6 +2874,37 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             ],
           },
           {
+            title: 'On Contract Decking',
+            scalars: [
+              {
+                label: 'Quantity Waste',
+                path: ['tileCoping', 'onContractDecking', 'quantityWasteRate'],
+                type: 'number', prefix: '%', isPercent: true, min: 0,
+                tooltip: 'Existing allowance, normally 5%. Increases material AND labor quantities for non-concrete on-contract decking. Additional options marked Waste not Included are exempt.',
+              },
+              {
+                label: 'Freeform Waste',
+                path: ['tileCoping', 'onContractDecking', 'freeformWasteRate'],
+                type: 'number', prefix: '%', isPercent: true, min: 0,
+                tooltip: 'Existing allowance, normally 5%. Applies to combined decking labor and material (including material tax) for freeform, non-concrete on-contract decking. Additional options marked Waste not Included are exempt.',
+              },
+            ],
+          },
+          {
+            title: 'Off Contract Decking',
+            scalars: [
+              {
+                label: 'Material Waste',
+                path: ['tileCoping', 'offContractDecking', 'materialWasteRate'],
+                type: 'number',
+                min: 0,
+                prefix: '%',
+                isPercent: true,
+                tooltip: 'Additional percentage of decking material cost when Off Contract is enabled. Applies to primary and additional decking; excludes labor. Existing quantity waste remains unchanged.',
+              },
+            ],
+          },
+          {
             title: 'Concrete steps',
             scalars: [
               {
@@ -4210,6 +4243,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             type={field.type === 'number' ? 'number' : 'text'}
             value={typeof displayValue === 'number' ? displayValue : displayValue ?? ''}
             step={field.type === 'number' && field.isPercent ? '0.01' : undefined}
+            min={field.min}
             disabled={isDisabled}
             aria-disabled={isDisabled}
             onChange={(e) => handleScalarChange(field, e.target.value)}
