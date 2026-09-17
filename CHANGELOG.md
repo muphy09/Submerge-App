@@ -3,6 +3,7 @@
 - Off Contract Decking now includes a 10% Waste overhead added to the Material Cost
     - Does not impact Labor Cost
     - Only applies to Off Contract Decking; On Contract Decking already included 10% waste
+- Exposed Off Contract Waste % in the Tile/Coping/Decking category of the Admin Panel
 -----
 ## [3.3.9] - 9/12/26
 ### HOTFIX
