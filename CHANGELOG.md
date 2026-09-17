@@ -1,4 +1,4 @@
-## [3.4.0] - 9/16/26
+## [3.3.10] - 9/16/26
 ### Pricing Model Update
 - Off Contract Decking now includes a 10% Waste overhead added to the Material Cost
     - Does not impact Labor Cost
