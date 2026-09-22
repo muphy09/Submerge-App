@@ -39,6 +39,22 @@ async function mount() {
   (window as any).initialWasteProposal = clone(initial);
   (window as any).testMissingRevision = () => loadPricingSnapshotForExistingProposal(franchiseId, model.pricingModelId, franchiseId, 'normal', 'missing');
   const comparison = await buildPricingRevisionComparison(initial);
+  (window as any).testPricingDecisionIsolation = async () => {
+    const proposals = new Map([
+      ['A', { ...clone(initial), proposalNumber: 'PRICING-A' }],
+      ['B', { ...clone(initial), proposalNumber: 'PRICING-B' }],
+    ]);
+    proposals.set('A', clone(await upgradeProposalPricingRevision(proposals.get('A')!, comparison!)));
+    proposals.set('B', clone(markPricingRevisionDeclined(proposals.get('B')!, comparison!)));
+    const a = clone(proposals.get('A'));
+    const b = clone(proposals.get('B'));
+    const aSnapshot = await loadPricingSnapshotForExistingProposal(franchiseId, model.pricingModelId, franchiseId, 'normal', a.pricingModelRevisionId);
+    const bSnapshot = await loadPricingSnapshotForExistingProposal(franchiseId, model.pricingModelId, franchiseId, 'normal', b.pricingModelRevisionId);
+    return {
+      a: { revision: a.pricingModelRevisionId, decision: a.pricingRevisionReview?.decision, snapshotRevision: aSnapshot.pricingModelRevisionId },
+      b: { revision: b.pricingModelRevisionId, decision: b.pricingRevisionReview?.decision, snapshotRevision: bSnapshot.pricingModelRevisionId },
+    };
+  };
   function Review() {
     const [proposal, setProposal] = useState(initial);
     const [step, setStep] = useState('prompt');

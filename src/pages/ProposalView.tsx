@@ -868,7 +868,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [showCogsBreakdown, setShowCogsBreakdown] = useState(false);
   const [offContractVersionId, setOffContractVersionId] = useState<string | null>(null);
   const [contractVersionId, setContractVersionId] = useState<string | null>(null);
-  const [activeContractRevision, setActiveContractRevision] = useState<ContractRevisionDescriptor | null>(null);
+  const [activeContractPreview, setActiveContractPreview] = useState<{
+    version: Proposal;
+    revision: ContractRevisionDescriptor;
+  } | null>(null);
   const [pendingContractRevision, setPendingContractRevision] = useState<{
     version: Proposal;
     check: ContractRevisionCheck;
@@ -1328,6 +1331,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   }, [location.state, navigate, proposalNumber, showToast]);
 
   useEffect(() => {
+    setContractVersionId(null);
+    setActiveContractPreview(null);
+    setPendingContractRevision(null);
+    setContractRevisionPromptOpen(false);
+  }, [proposalNumber]);
+
+  useEffect(() => {
     autoOpenedSignModalRef.current = false;
   }, [proposalNumber]);
 
@@ -1530,6 +1540,23 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     setVersions(savedVersions);
     setProposal(activeApplied as Proposal);
     setVersionSyncMeta(await resolveVersionSyncMetaEntries(savedVersions, saved as Proposal));
+    return savedVersions.find((entry) => (entry.versionId || 'original') === targetVersionId);
+  };
+
+  const persistContractRevisionVersion = async (
+    updatedVersion: Proposal,
+    revision: ContractRevisionDescriptor,
+    decision: 'upgraded' | 'declined'
+  ) => {
+    const savedVersion = await persistPricingRevisionVersion(updatedVersion);
+    if (
+      !savedVersion ||
+      savedVersion.contractTemplateRevisionId !== revision.revisionId ||
+      savedVersion.contractRevisionReview?.decision !== decision
+    ) {
+      throw new Error('The contract revision choice was not saved to this proposal. Reopen the proposal and try again.');
+    }
+    return savedVersion;
   };
 
   const handleApplyCustomOptionPricingCorrection = async () => {
@@ -1660,7 +1687,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const openContractWithRevision = (version: Proposal, revision: ContractRevisionDescriptor) => {
-    setActiveContractRevision(revision);
+    setActiveContractPreview({ version, revision });
     setContractVersionId(version.versionId || 'original');
   };
 
@@ -1693,8 +1720,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       }
       if (check.canAdoptInitialRevisionSilently) {
         const pinned = adoptContractRevision(version, check.latest, getPricingRevisionActor());
-        await persistPricingRevisionVersion(pinned);
-        openContractWithRevision(pinned, check.latest);
+        const savedVersion = await persistContractRevisionVersion(pinned, check.latest, 'upgraded');
+        openContractWithRevision(savedVersion, check.latest);
         return;
       }
       if (check.requiresReview) {
@@ -1704,8 +1731,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       }
       if (!version.contractTemplateRevisionId) {
         const pinned = adoptContractRevision(version, check.pinned, getPricingRevisionActor());
-        await persistPricingRevisionVersion(pinned);
-        openContractWithRevision(pinned, check.pinned);
+        const savedVersion = await persistContractRevisionVersion(pinned, check.pinned, 'upgraded');
+        openContractWithRevision(savedVersion, check.pinned);
         return;
       }
       openContractWithRevision(version, check.pinned);
@@ -1731,10 +1758,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     try {
       const { version, check } = pendingContractRevision;
       const declined = declineContractRevision(version, check.pinned, check.latest, getPricingRevisionActor());
-      await persistPricingRevisionVersion(declined);
+      const savedVersion = await persistContractRevisionVersion(declined, check.pinned, 'declined');
       setContractRevisionPromptOpen(false);
       setPendingContractRevision(null);
-      openContractWithRevision(declined, check.pinned);
+      openContractWithRevision(savedVersion, check.pinned);
     } catch (error: any) {
       setContractRevisionError(error?.message || 'Unable to keep the current contract revision.');
     } finally {
@@ -1761,10 +1788,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     try {
       const { version, check } = pendingContractRevision;
       const upgraded = adoptContractRevision(version, check.latest, getPricingRevisionActor());
-      await persistPricingRevisionVersion(upgraded);
+      const savedVersion = await persistContractRevisionVersion(upgraded, check.latest, 'upgraded');
       setContractRevisionPromptOpen(false);
       setPendingContractRevision(null);
-      openContractWithRevision(upgraded, check.latest);
+      openContractWithRevision(savedVersion, check.latest);
     } catch (error: any) {
       setContractRevisionError(error?.message || 'Unable to upgrade the contract revision.');
     } finally {
@@ -3896,7 +3923,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const offContractModalView = offContractVersionId
     ? versionMap.get(offContractVersionId) || primaryView
     : null;
-  const contractModalView = contractVersionId ? versionMap.get(contractVersionId) || primaryView : null;
+  const contractModalView =
+    contractVersionId &&
+    activeContractPreview &&
+    activeContractPreview.version.proposalNumber === proposalNumber &&
+    (activeContractPreview.version.versionId || 'original') === contractVersionId
+      ? { proposal: activeContractPreview.version }
+      : null;
   const contractVersionRecordStatus = getVersionRecordStatus(contractModalView?.proposal);
   const contractHasUnsavedChanges =
     contractDirty || Boolean(contractViewRef.current?.hasUnsavedChanges);
@@ -3957,7 +3990,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     setPendingUnsavedCloseTarget(null);
     setContractExportOpen(false);
     setContractVersionId(null);
-    setActiveContractRevision(null);
+    setActiveContractPreview(null);
   };
   const closeCustomerBreakdownModal = () => {
     setPendingUnsavedCloseTarget(null);
@@ -5350,7 +5383,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         }}
         onCancel={handleDiscardPendingUnsavedClose}
       />
-      {contractVersionId && contractModalView && (
+      {contractVersionId && contractModalView && activeContractPreview && (
         <div className="modal-overlay contract-printable" data-scroll-lock="true" onClick={requestContractModalClose}>
           <div className="modal-content contract-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header contract-modal-header">
@@ -5427,6 +5460,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             <div className="modal-body-scroll">
               {ContractViewComponent ? (
                 <ContractViewComponent
+                  key={`${contractModalView.proposal.proposalNumber}:${contractModalView.proposal.versionId || 'original'}:${activeContractPreview.revision.revisionId}`}
                   ref={handleContractViewRef}
                   proposal={contractModalView.proposal}
                   overrides={contractModalView.proposal.contractOverrides || {}}
@@ -5434,7 +5468,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                     handleSaveContractOverrides(contractModalView.proposal.versionId || 'original', next)
                   }
                   readOnly={!canEditContractVersion}
-                  contractTemplate={activeContractRevision?.contractTemplate}
+                  contractTemplate={activeContractPreview.revision.contractTemplate}
                   onDirtyChange={setContractDirty}
                   onExportingChange={setContractExporting}
                   onSavingChange={setContractSaving}
@@ -5773,6 +5807,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         latestRevision={pendingContractRevision?.check.latest.revisionNumber}
         currentTemplateName={pendingContractRevision?.check.pinned.templateName}
         latestTemplateName={pendingContractRevision?.check.latest.templateName}
+        changeNotes={pendingContractRevision?.check.changeNotes}
         busy={contractRevisionBusy}
         error={contractRevisionError}
         previewOnly={isProposalEditingRestricted}

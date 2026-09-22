@@ -1046,7 +1046,8 @@ export async function getEditableContractFields(
 ): Promise<ContractFieldRender[]> {
   const normalized = normalizeProposal(proposal);
   const resolvedTemplateId = templateId || getContractTemplateIdForProposal(proposal);
-  const templateFields = (templateOverride || getContractTemplate(resolvedTemplateId)).fields;
+  const template = templateOverride || getContractTemplate(resolvedTemplateId);
+  const templateFields = template.fields;
   const depositSourceValue =
     resolveContractDepositSourceValue(overrides) || getDefaultContractDepositValue(normalized);
   const totalCashPrice = getContractCashPrice(normalized);
@@ -1074,6 +1075,9 @@ export async function getEditableContractFields(
         },
         normalized
       );
+      if (template.defaultFieldValues && Object.prototype.hasOwnProperty.call(template.defaultFieldValues, field.id)) {
+        autoValue = template.defaultFieldValues[field.id];
+      }
       if (
         CONTRACT_DEPOSIT_SOURCE_FIELD_ID_SET.has(field.id) ||
         Object.prototype.hasOwnProperty.call(schedulePercentages, field.id)

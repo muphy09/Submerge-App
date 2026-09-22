@@ -35,6 +35,7 @@ export type ContractTemplate = {
   pdfPath: string;
   fields: TemplateField[];
   staticPatches: ContractStaticPatch[];
+  defaultFieldValues?: Record<string, string>;
 };
 
 const DEFAULT_FIELDS = contractFieldLayout as TemplateField[];
@@ -476,10 +477,17 @@ const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {
 export type BundledContractTemplateRevision = {
   revisionNumber: number;
   publishedAt?: string | null;
+  changeNotes?: readonly string[];
   contractTemplate: ContractTemplate;
 };
 
 const FIBERGLASS_REVISION_2_PUBLISHED_AT = '2026-08-04T18:56:30.000Z';
+const SURFACE_RETURNS_REVISION_PUBLISHED_AT = '2026-09-22T21:46:00.000Z';
+const SURFACE_RETURNS_CHANGE_NOTE = 'The default Surface Returns quantity changed from 4 to 3.';
+const withSurfaceReturnsQuantity = (template: ContractTemplate, quantity: '3' | '4'): ContractTemplate => ({
+  ...template,
+  defaultFieldValues: { ...template.defaultFieldValues, p1_36: quantity },
+});
 
 const BUNDLED_CONTRACT_TEMPLATE_REVISIONS: Record<
   ContractTemplateId,
@@ -488,50 +496,92 @@ const BUNDLED_CONTRACT_TEMPLATE_REVISIONS: Record<
   'nc-gunite': [
     {
       revisionNumber: 1,
-      contractTemplate: CONTRACT_TEMPLATES['nc-gunite'],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['nc-gunite'], '4'),
+    },
+    {
+      revisionNumber: 2,
+      publishedAt: SURFACE_RETURNS_REVISION_PUBLISHED_AT,
+      changeNotes: [SURFACE_RETURNS_CHANGE_NOTE],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['nc-gunite'], '3'),
     },
   ],
   'nc-fiberglass': [
     {
       revisionNumber: 1,
-      contractTemplate: buildTemplate(
-        'nc-fiberglass',
-        '2026 Contract NC Fiberglass',
-        NC_FIBERGLASS_REVISION_1_URL,
-        PAYMENT_SCHEDULE_OVERRIDES['nc-fiberglass'],
-        STATIC_TEMPLATE_PATCHES['nc-fiberglass']
+      contractTemplate: withSurfaceReturnsQuantity(
+        buildTemplate(
+          'nc-fiberglass',
+          '2026 Contract NC Fiberglass',
+          NC_FIBERGLASS_REVISION_1_URL,
+          PAYMENT_SCHEDULE_OVERRIDES['nc-fiberglass'],
+          STATIC_TEMPLATE_PATCHES['nc-fiberglass']
+        ),
+        '4'
       ),
     },
     {
       revisionNumber: 2,
       publishedAt: FIBERGLASS_REVISION_2_PUBLISHED_AT,
-      contractTemplate: CONTRACT_TEMPLATES['nc-fiberglass'],
+      changeNotes: ['The fiberglass contract payment schedule wording changed on pages 1 and 5.'],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['nc-fiberglass'], '4'),
+    },
+    {
+      revisionNumber: 3,
+      publishedAt: SURFACE_RETURNS_REVISION_PUBLISHED_AT,
+      changeNotes: [SURFACE_RETURNS_CHANGE_NOTE],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['nc-fiberglass'], '3'),
     },
   ],
   'sc-gunite': [
     {
       revisionNumber: 1,
-      contractTemplate: CONTRACT_TEMPLATES['sc-gunite'],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['sc-gunite'], '4'),
+    },
+    {
+      revisionNumber: 2,
+      publishedAt: SURFACE_RETURNS_REVISION_PUBLISHED_AT,
+      changeNotes: [SURFACE_RETURNS_CHANGE_NOTE],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['sc-gunite'], '3'),
     },
   ],
   'sc-fiberglass': [
     {
       revisionNumber: 1,
-      contractTemplate: buildTemplate(
-        'sc-fiberglass',
-        '2026 Contract SC Fiberglass',
-        SC_FIBERGLASS_REVISION_1_URL,
-        PAYMENT_SCHEDULE_OVERRIDES['sc-fiberglass'],
-        STATIC_TEMPLATE_PATCHES['sc-fiberglass']
+      contractTemplate: withSurfaceReturnsQuantity(
+        buildTemplate(
+          'sc-fiberglass',
+          '2026 Contract SC Fiberglass',
+          SC_FIBERGLASS_REVISION_1_URL,
+          PAYMENT_SCHEDULE_OVERRIDES['sc-fiberglass'],
+          STATIC_TEMPLATE_PATCHES['sc-fiberglass']
+        ),
+        '4'
       ),
     },
     {
       revisionNumber: 2,
       publishedAt: FIBERGLASS_REVISION_2_PUBLISHED_AT,
-      contractTemplate: CONTRACT_TEMPLATES['sc-fiberglass'],
+      changeNotes: ['The fiberglass contract payment schedule wording changed on pages 1 and 5.'],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['sc-fiberglass'], '4'),
+    },
+    {
+      revisionNumber: 3,
+      publishedAt: SURFACE_RETURNS_REVISION_PUBLISHED_AT,
+      changeNotes: [SURFACE_RETURNS_CHANGE_NOTE],
+      contractTemplate: withSurfaceReturnsQuantity(CONTRACT_TEMPLATES['sc-fiberglass'], '3'),
     },
   ],
 };
+
+export function getBundledContractChangeNotes(
+  id: ContractTemplateId,
+  afterRevisionNumber: number,
+  throughRevisionNumber: number
+): string[] {
+  return (BUNDLED_CONTRACT_TEMPLATE_REVISIONS[id] || [])
+    .filter((revision) => revision.revisionNumber > afterRevisionNumber && revision.revisionNumber <= throughRevisionNumber)
+    .flatMap((revision) => [...(revision.changeNotes || [])]);
+}
 
 export const VERSION_RESETTABLE_CONTRACT_OVERRIDE_FIELD_IDS = new Set<string>(
   Object.values(CONTRACT_TEMPLATES).flatMap((template) =>

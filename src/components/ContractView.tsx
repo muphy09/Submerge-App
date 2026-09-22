@@ -1294,7 +1294,7 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
                         if (isGeneralConstructionResponsibility) wrapperClassNames.push('gc-responsibility');
                         if (isPaymentScheduleField) wrapperClassNames.push('payment-schedule-field');
                         return (
-                          <div key={`${field.name}-${pageIdx}`} className={wrapperClassNames.join(' ')} style={style}>
+                          <div key={`${field.name}-${pageIdx}`} className={wrapperClassNames.join(' ')} data-field-id={field.name} style={style}>
                             {isBinaryChoice ? (
                               <button
                                 type="button"

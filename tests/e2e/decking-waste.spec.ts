@@ -52,3 +52,13 @@ test('an unavailable saved revision cannot fall back to current pricing', async 
     catch (error: any) { return error.message; }
   })).toContain('saved pricing revision');
 });
+
+test('accepting pricing on one proposal does not change a second proposal that keeps its revision', async ({ page }) => {
+  await page.goto(`${url}?review&franchise=5555`);
+  await expect(page.getByTestId('revision')).toHaveText('old');
+  const result = await page.evaluate(() => (window as any).testPricingDecisionIsolation());
+  expect(result).toEqual({
+    a: { revision: 'new', decision: 'upgraded', snapshotRevision: 'new' },
+    b: { revision: 'old', decision: 'declined', snapshotRevision: 'old' },
+  });
+});

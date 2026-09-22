@@ -246,6 +246,77 @@ test('still opens and saves a normal existing proposal without changing its iden
   }
 });
 
+test('West contract revision choices stay with separate locally saved proposals', async ({}, testInfo) => {
+  const firstNumber = 'TEST-PWTEST-CONTRACT-CHOICE-A';
+  const secondNumber = 'TEST-PWTEST-CONTRACT-CHOICE-B';
+  const oldRevision = `bundled:${testSession.franchiseId}:nc-gunite:r1`;
+  const newRevision = `bundled:${testSession.franchiseId}:nc-gunite:r2`;
+  const makeProposal = (number: string, name: string) => ({
+    ...buildLocalProposal(number, name),
+    designerCode: '5555',
+    contractTemplateId: `bundled:${testSession.franchiseId}:nc-gunite`,
+    contractTemplateRevisionId: oldRevision,
+    contractTemplateRevisionNumber: 1,
+  });
+  let electronApp: ElectronApplication | null = null;
+
+  try {
+    const launched = await launchIsolatedApp(testInfo.outputPath('app-data'));
+    electronApp = launched.electronApp;
+    const window = launched.window;
+    await seedSessionAndProposals(window, [
+      makeProposal(firstNumber, 'First Contract Choice Customer'),
+      makeProposal(secondNumber, 'Second Contract Choice Customer'),
+    ]);
+    await window.evaluate((sessionKey) => {
+      const session = JSON.parse(localStorage.getItem(sessionKey) || '{}');
+      localStorage.setItem(sessionKey, JSON.stringify({ ...session, franchiseCode: '5555' }));
+    }, sessionStorageKey);
+    await window.context().setOffline(true);
+
+    let firstVisit = true;
+    const visit = async (number: string) => {
+      await window.evaluate(({ route, reload }) => {
+        window.location.hash = route;
+        if (reload) window.location.reload();
+      }, { route: `/proposal/view/${number}`, reload: firstVisit });
+      firstVisit = false;
+      await expect(window.getByRole('button', { name: /View Contract/ })).toBeVisible({ timeout: 20_000 });
+    };
+    await visit(firstNumber);
+    await window.getByRole('button', { name: /View Contract/ }).click();
+    await window.getByRole('dialog').getByRole('button', { name: 'Apply Update' }).click();
+    await expect(window.locator('[data-field-id="p1_36"] input')).toHaveValue('3');
+    await window.getByRole('button', { name: 'Close contract' }).click();
+
+    await visit(secondNumber);
+    await window.getByRole('button', { name: /View Contract/ }).click();
+    await window.getByRole('dialog').getByRole('button', { name: 'Keep Current' }).click();
+    await expect(window.locator('[data-field-id="p1_36"] input')).toHaveValue('4');
+    await window.getByRole('button', { name: 'Close contract' }).click();
+
+    await visit(firstNumber);
+    await window.getByRole('button', { name: /View Contract/ }).click();
+    await expect(window.getByRole('dialog')).toHaveCount(0);
+    await expect(window.locator('[data-field-id="p1_36"] input')).toHaveValue('3');
+    const decisions = await window.evaluate(async ([a, b]) => {
+      const first = await window.electron.getProposal(a);
+      const second = await window.electron.getProposal(b);
+      return [first, second].map((proposal) => ({
+        number: proposal.proposalNumber,
+        revision: proposal.contractTemplateRevisionId,
+        decision: proposal.contractRevisionReview?.decision,
+      }));
+    }, [firstNumber, secondNumber]);
+    expect(decisions).toEqual([
+      { number: firstNumber, revision: newRevision, decision: 'upgraded' },
+      { number: secondNumber, revision: oldRevision, decision: 'declined' },
+    ]);
+  } finally {
+    await electronApp?.close().catch(() => undefined);
+  }
+});
+
 test('does not display a positive historical price adjustment as negative customer savings', async ({}, testInfo) => {
   const proposalNumber = 'TEST-PWTEST-SAVINGS-SUMMARY';
   const proposal = buildPositiveHistoricalAdjustmentProposal(

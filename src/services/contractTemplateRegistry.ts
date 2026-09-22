@@ -2,6 +2,7 @@ import type { Proposal, ProposalWorkflowActor } from '../types/proposal-new';
 import { getSupabaseClient } from './supabaseClient';
 import { DEFAULT_FRANCHISE_ID, getSessionFranchiseCode, getSessionFranchiseId } from './session';
 import {
+  getBundledContractChangeNotes,
   getBundledContractTemplateRevision,
   getContractTemplate,
   getContractTemplateIdForProposal,
@@ -32,6 +33,7 @@ export type ContractRevisionDescriptor = {
 export type ContractRevisionCheck = {
   pinned: ContractRevisionDescriptor;
   latest: ContractRevisionDescriptor;
+  changeNotes: string[];
   requiresReview: boolean;
   canAdoptInitialRevisionSilently: boolean;
 };
@@ -281,10 +283,23 @@ export async function checkProposalContractRevision(proposal: Proposal): Promise
   const silentInitial =
     !proposal.contractTemplateRevisionId &&
     ((latest.source === 'remote' && latest.revisionNumber === 1) || proposalWasCreatedAfterLatestPublication);
+  const alreadyDeclined =
+    proposal.contractRevisionReview?.decision === 'declined' &&
+    proposal.contractRevisionReview.latestRevisionId === latest.revisionId;
+  const changeNotes = changed && latest.source === 'bundled'
+    ? getBundledContractChangeNotes(
+        getContractTemplateIdForProposal(proposal),
+        pinned.source === 'bundled' && pinned.templateId === latest.templateId
+          ? pinned.revisionNumber
+          : latest.revisionNumber - 1,
+        latest.revisionNumber
+      )
+    : [];
   return {
     pinned,
     latest,
-    requiresReview: changed && !silentInitial,
+    changeNotes,
+    requiresReview: changed && !silentInitial && !alreadyDeclined,
     canAdoptInitialRevisionSilently: silentInitial,
   };
 }

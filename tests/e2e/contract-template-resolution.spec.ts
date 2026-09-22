@@ -8,32 +8,39 @@ const model = 'playwright-summer';
 const revision = 'playwright-summer-r1';
 const proposalNumber = 'PROP-PW-CONTRACT';
 
-async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean } = {}) {
+async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean } = {}) {
   const errors: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence }) => {
+  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals }) => {
     window.__APP_ENV__ = {
       VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
       VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder', VITE_SUPABASE_ONLY: 'false',
     };
     localStorage.setItem('submerge-user-session', JSON.stringify({
       userId: 'playwright-master', userName: 'Playwright Master',
-      userEmail: 'master@playwright.invalid', franchiseId: lawrence ? west : 'default', role: lawrence ? 'designer' : 'master', franchiseCode: lawrence ? '5555' : undefined,
+      userEmail: 'master@playwright.invalid', franchiseId: lawrence || westContract ? west : 'default', role: lawrence || westContract ? 'designer' : 'master', franchiseCode: lawrence || westContract ? '5555' : undefined,
     }));
     (window as any).contractFixture = {
       edit,
+      secondProposalNumber: twoProposals ? `${proposalNumber}-B` : undefined,
       proposal: {
-        proposalNumber, franchiseId: lawrence ? west : 'default', designerAuthUserId: 'playwright-master',
-        designerName: 'Playwright Master', designerRole: lawrence ? 'designer' : 'master', status: 'draft',
+        proposalNumber, franchiseId: lawrence || westContract ? west : 'default', designerAuthUserId: 'playwright-master',
+        designerName: 'Playwright Master', designerRole: lawrence || westContract ? 'designer' : 'master', status: 'draft',
         pricingModelId: model, pricingModelName: 'Sizzlin Summer 2026',
         pricingModelFranchiseId: west, pricingModelRevisionId: revision, pricingModelRevisionNumber: 1,
         customerInfo: { customerName: lawrence ? 'State Change Regression' : 'CONTRACT TEST', state: lawrence ? 'SC' : 'NC', city: 'Charlotte' },
-        ...(lawrence ? { contractTemplateId: `bundled:${west}:nc-gunite`, contractTemplateRevisionId: `bundled:${west}:nc-gunite:r1` } : {}),
-        createdDate: '2026-09-10T12:00:00.000Z', lastModified: '2026-09-10T12:00:00.000Z',
+        ...(oldFiberglass ? { poolSpecs: { poolType: 'fiberglass' } } : {}),
+        ...(lawrence || westContract ? {
+          contractTemplateId: `bundled:${west}:nc-${oldFiberglass ? 'fiberglass' : 'gunite'}`,
+          contractTemplateRevisionId: `bundled:${west}:nc-${oldFiberglass ? 'fiberglass' : 'gunite'}:r1`,
+        } : {}),
+        ...(manualReturns ? { contractOverrides: { p1_36: '5' } } : {}),
+        createdDate: lawrence || westContract ? '2026-09-10T12:00:00.000Z' : '2026-09-23T00:00:00.000Z',
+        lastModified: '2026-09-10T12:00:00.000Z',
         versionId: 'original', activeVersionId: 'original', isOriginalVersion: true,
       },
     };
-  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false });
+  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false });
 
   let releasePricing = () => {};
   const pricingGate = options.delayPricing ? new Promise<void>((resolve) => { releasePricing = resolve; }) : Promise.resolve();
@@ -115,7 +122,7 @@ test(`West designer ${useMatching ? 'adopts SC' : 'keeps NC'} after the proposal
   await expect(page.locator('.contract-page-canvas').first()).toBeVisible();
   const saved = await page.evaluate(() => (window as any).contractFixture.saved.at(-1));
   expect(saved.franchiseId).toBe(west);
-  expect(saved.contractTemplateRevisionId).toBe(`bundled:${west}:${useMatching ? 'sc' : 'nc'}-gunite:r1`);
+  expect(saved.contractTemplateRevisionId).toBe(`bundled:${west}:${useMatching ? 'sc-gunite:r2' : 'nc-gunite:r1'}`);
   expect(saved.pricingModelRevisionId).toBe(revision);
 });
 }
@@ -135,6 +142,139 @@ test('existing West pins and ordinary franchise scope are preserved', async ({ p
   expect(result[1].check.pinned.franchiseId).toBe(west);
   expect(result[2].check).toBeNull();
 });
+
+test('West contract revisions preserve 4 on saved versions and use 3 only on the latest revision', async ({ page }) => {
+  await setup(page);
+  for (const state of ['NC', 'SC']) {
+    for (const [poolType, templateKind, savedRevision] of [
+      ['gunite', 'gunite', 1],
+      ['fiberglass', 'fiberglass', 2],
+    ] as const) {
+      const values = await page.evaluate(({ west, east, state, poolType, templateKind, savedRevision }) =>
+        (window as any).contractFixture.returnValues({
+          franchiseId: west,
+          pricingModelFranchiseId: east,
+          customerInfo: { state },
+          poolSpecs: { poolType },
+          contractTemplateRevisionId: `bundled:${west}:${state.toLowerCase()}-${templateKind}:r${savedRevision}`,
+        }), { west, east, state, poolType, templateKind, savedRevision });
+      expect(values.pinned).toBe('4');
+      expect(values.latest).toBe('3');
+      expect(values.requiresReview).toBe(true);
+      expect(values.afterDeclineRequiresReview).toBe(false);
+      expect(values.changeNotes).toEqual(['The default Surface Returns quantity changed from 4 to 3.']);
+    }
+  }
+  const eastValues = await page.evaluate((east) =>
+    (window as any).contractFixture.returnValues({ pricingModelFranchiseId: east }), east);
+  expect(eastValues.latest).toBe('4');
+  expect(eastValues.changeNotes).toEqual([]);
+  const olderFiberglass = await page.evaluate((west) =>
+    (window as any).contractFixture.returnValues({
+      franchiseId: west,
+      customerInfo: { state: 'NC' },
+      poolSpecs: { poolType: 'fiberglass' },
+      contractTemplateRevisionId: `bundled:${west}:nc-fiberglass:r1`,
+    }), west);
+  expect(olderFiberglass.changeNotes).toEqual([
+    'The fiberglass contract payment schedule wording changed on pages 1 and 5.',
+    'The default Surface Returns quantity changed from 4 to 3.',
+  ]);
+  const unpinned = await page.evaluate(async ({ west }) => ({
+    older: await (window as any).contractFixture.returnValues({
+      franchiseId: west, contractTemplateRevisionId: undefined,
+      createdDate: '2026-09-10T12:00:00.000Z',
+    }),
+    newer: await (window as any).contractFixture.returnValues({
+      franchiseId: west, contractTemplateRevisionId: undefined,
+      createdDate: '2026-09-23T00:00:00.000Z',
+    }),
+  }), { west });
+  expect(unpinned.older.pinned).toBe('4');
+  expect(unpinned.older.requiresReview).toBe(true);
+  expect(unpinned.newer.latest).toBe('3');
+  expect(unpinned.newer.requiresReview).toBe(false);
+});
+
+test('West designer can keep the saved 4-return revision without being prompted again', async ({ page }, testInfo) => {
+  await setup(page, { westContract: true });
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('The default Surface Returns quantity changed from 4 to 3. Apply the updated contract revision or keep your current contract?');
+  await dialog.screenshot({ path: testInfo.outputPath('surface-returns-revision-prompt.png') });
+  await dialog.getByRole('button', { name: 'Keep Current' }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('4');
+  const saved = await page.evaluate(() => (window as any).contractFixture.saved.at(-1));
+  expect(saved.contractRevisionReview.decision).toBe('declined');
+  expect(saved.contractTemplateRevisionId).toBe(`bundled:${west}:nc-gunite:r1`);
+  await page.getByRole('button', { name: 'Close contract' }).click();
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('4');
+});
+
+test('accepting the West contract revision on one proposal survives declining it on another', async ({ page }) => {
+  test.setTimeout(30_000);
+  await setup(page, { westContract: true, twoProposals: true });
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Apply Update' }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('3');
+  await page.getByRole('button', { name: 'Close contract' }).click();
+
+  await page.getByRole('button', { name: 'Go to second proposal' }).click();
+  await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}-B`);
+  await expect(page.getByRole('button', { name: /View Contract/ })).toBeVisible();
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Keep Current' }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('4');
+  // Route changes can arrive while a contract preview is still mounted.
+  await page.evaluate((number) => (window as any).contractFixture.navigateTo(number), proposalNumber);
+  await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+  await expect(page.getByRole('button', { name: /View Contract/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close contract' })).toHaveCount(0);
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('3');
+  await page.getByRole('button', { name: 'Close contract' }).click();
+  await page.getByRole('button', { name: 'Go to second proposal' }).click();
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('4');
+  await page.getByRole('button', { name: 'Close contract' }).click();
+  await page.getByRole('button', { name: 'Go to test summary' }).click();
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('3');
+  const decisions = await page.evaluate(() => [...(window as any).contractFixture.storedProposals.values()].map((item: any) => ({
+    number: item.proposalNumber,
+    revision: item.contractTemplateRevisionId,
+    decision: item.contractRevisionReview?.decision,
+  })));
+  expect(decisions).toEqual(expect.arrayContaining([
+    { number: proposalNumber, revision: `bundled:${west}:nc-gunite:r2`, decision: 'upgraded' },
+    { number: `${proposalNumber}-B`, revision: `bundled:${west}:nc-gunite:r1`, decision: 'declined' },
+  ]));
+});
+
+test('West designer sees every change since an older saved fiberglass revision', async ({ page }) => {
+  await setup(page, { westContract: true, oldFiberglass: true });
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('The fiberglass contract payment schedule wording changed on pages 1 and 5.');
+  await expect(dialog).toContainText('The default Surface Returns quantity changed from 4 to 3.');
+});
+
+for (const manualReturns of [false, true]) {
+  test(`West designer can apply the 3-return revision${manualReturns ? ' and retain a saved manual quantity' : ''}`, async ({ page }) => {
+    await setup(page, { westContract: true, manualReturns });
+    await page.getByRole('button', { name: /View Contract/ }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Apply Update' }).click();
+    await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue(manualReturns ? '5' : '3');
+    const saved = await page.evaluate(() => (window as any).contractFixture.saved.at(-1));
+    expect(saved.contractTemplateRevisionId).toBe(`bundled:${west}:nc-gunite:r2`);
+    expect(saved.contractRevisionReview.decision).toBe('upgraded');
+    expect(saved.contractOverrides?.p1_36).toBe(manualReturns ? '5' : undefined);
+  });
+}
 
 test('builder loads the exact borrowed pricing revision', async ({ page }) => {
   const { errors } = await setup(page, { edit: true });

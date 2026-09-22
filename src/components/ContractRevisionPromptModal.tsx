@@ -6,6 +6,7 @@ type ContractRevisionPromptModalProps = {
   latestRevision?: number | null;
   currentTemplateName?: string;
   latestTemplateName?: string;
+  changeNotes?: string[];
   busy?: boolean;
   error?: string | null;
   previewOnly?: boolean;
@@ -20,6 +21,7 @@ export default function ContractRevisionPromptModal({
   latestRevision,
   currentTemplateName,
   latestTemplateName,
+  changeNotes = [],
   busy = false,
   error,
   previewOnly = false,
@@ -54,13 +56,32 @@ export default function ContractRevisionPromptModal({
             x
           </button>
         </header>
-        {error && <div className="pricing-revision-body"><div className="pricing-revision-message is-error">{error}</div></div>}
+        {(changeNotes.length > 0 || error) && (
+          <div className="pricing-revision-body">
+            {changeNotes.length === 1 ? (
+              <div className="pricing-revision-message">
+                {changeNotes[0]} {previewOnly
+                  ? 'Preview the updated contract revision or view your current contract?'
+                  : 'Apply the updated contract revision or keep your current contract?'}
+              </div>
+            ) : changeNotes.length > 1 ? (
+              <div className="pricing-revision-message">
+                <p>These changes are included in the updated contract revision:</p>
+                <ul>{changeNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}</ul>
+                <p>{previewOnly
+                  ? 'Preview the updated contract revision or view your current contract?'
+                  : 'Apply the updated contract revision or keep your current contract?'}</p>
+              </div>
+            ) : null}
+            {error && <div className="pricing-revision-message is-error">{error}</div>}
+          </div>
+        )}
         <footer className="pricing-revision-actions">
           <button type="button" className="pricing-revision-btn is-secondary" onClick={onKeepCurrent} disabled={busy}>
-            {previewOnly ? 'View Current' : templateChanged ? 'Keep Saved Template' : 'No'}
+            {previewOnly ? 'View Current' : templateChanged ? 'Keep Saved Template' : changeNotes.length ? 'Keep Current' : 'No'}
           </button>
           <button type="button" className="pricing-revision-btn is-primary" onClick={onUpgrade} disabled={busy}>
-            {busy ? (previewOnly ? 'Opening...' : 'Saving...') : previewOnly ? 'Preview Latest' : templateChanged ? 'Use Matching Template' : 'Yes'}
+            {busy ? (previewOnly ? 'Opening...' : 'Saving...') : previewOnly ? 'Preview Latest' : templateChanged ? 'Use Matching Template' : changeNotes.length ? 'Apply Update' : 'Yes'}
           </button>
         </footer>
       </div>
