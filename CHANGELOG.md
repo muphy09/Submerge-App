@@ -1,7 +1,3 @@
-## [3.3.11] - 9/22/26
-### Remote Contract Revisions
-- Hardened the backend
-
 -----
 ## [3.3.10] - 9/16/26
 ### Pricing Model Update
