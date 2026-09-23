@@ -32,9 +32,26 @@ export type PricingRevisionComparison = {
   latestRevisionNumber: number | null;
   rows: PricingRevisionComparisonRow[];
   affectsProposal: boolean;
+  specificationOnly?: boolean;
 };
 
 const CURRENCY_EPSILON = 0.005;
+
+function pricingWithoutFiberglassSpecifications(value: any): string {
+  const snapshot = JSON.parse(JSON.stringify(value));
+  const fiberglass = snapshot?.fiberglass;
+  if (fiberglass) {
+    for (const size of ['small', 'medium', 'large']) {
+      for (const item of fiberglass.poolModels?.[size] || []) delete item.specifications;
+    }
+    for (const item of fiberglass.spaOptions || []) delete item.specifications;
+    for (const item of fiberglass.tanningLedgeOptions || []) delete item.specifications;
+  }
+  const ordered = (item: any): any => Array.isArray(item) ? item.map(ordered)
+    : item && typeof item === 'object'
+      ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, ordered(item[key])])) : item;
+  return JSON.stringify(ordered(snapshot));
+}
 
 type PricingCalculation = ReturnType<typeof MasterPricingEngine.calculateCompleteProposal>;
 
@@ -573,7 +590,8 @@ async function calculateWithModel(
 }
 
 export async function buildPricingRevisionComparison(
-  proposal: Proposal
+  proposal: Proposal,
+  options: { includeSpecificationOnly?: boolean } = {}
 ): Promise<PricingRevisionComparison | null> {
   if (!proposal.pricingModelId || !proposal.pricingModelRevisionId) return null;
   const franchiseId = proposal.pricingModelFranchiseId || proposal.franchiseId || 'default';
@@ -595,6 +613,27 @@ export async function buildPricingRevisionComparison(
     );
   }
   if (!pinned?.revisionId || !latest?.revisionId || pinned.revisionId === latest.revisionId) return null;
+
+  const reviewedRevisionId = review?.decision !== 'pending' &&
+    review?.pricingModelId === proposal.pricingModelId ? review.latestRevisionId : undefined;
+  const reviewed = reviewedRevisionId && reviewedRevisionId !== pinned.revisionId
+    ? await loadPricingModel(franchiseId, proposal.pricingModelId, reviewedRevisionId) : pinned;
+  if (reviewed?.revisionId && reviewed.revisionId === (reviewedRevisionId || pinned.revisionId) &&
+    pricingWithoutFiberglassSpecifications(reviewed.pricing) ===
+      pricingWithoutFiberglassSpecifications(latest.pricing)) {
+    if (!options.includeSpecificationOnly) return null;
+    return {
+      pricingModelId: proposal.pricingModelId,
+      pricingModelName: proposal.pricingModelName || latest.pricingModelName || 'Pricing Model',
+      pinnedRevisionId: pinned.revisionId,
+      pinnedRevisionNumber: pinned.revisionNumber || proposal.pricingModelRevisionNumber || null,
+      latestRevisionId: latest.revisionId,
+      latestRevisionNumber: latest.revisionNumber || null,
+      rows: [],
+      affectsProposal: false,
+      specificationOnly: true,
+    };
+  }
 
   // Pricing calculations temporarily swap a process-wide pricing snapshot, so
   // keep the two immutable revision calculations deliberately sequential.

@@ -1113,6 +1113,13 @@ export function updatePricingValue(path: (string | number)[], value: any) {
   refreshEffectivePricingState();
 }
 
+// Physical manufacturer dimensions belong to the pricing model, not a pricing tier.
+export function updateSharedFiberglassSpecification(path: (string | number)[], value: any) {
+  basePricingState = upsertPricingTierOverride(basePricingState, NORMAL_PRICING_TIER_ID, path, value ?? null);
+  basePricingState = removePricingTierOverride(basePricingState, BRONZE_PRICING_TIER_ID, path);
+  refreshEffectivePricingState();
+}
+
 export function updatePricingListItem(
   path: (string | number)[],
   index: number,

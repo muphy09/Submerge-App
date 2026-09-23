@@ -865,6 +865,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const shouldUseActiveDefault = Boolean(modelMeta.isDefault && modelMeta.pricingModelId);
     return {
       ...base,
+      poolSpecs: { ...base.poolSpecs!, fiberglassSpecAutofillEnabled: true },
       franchiseId,
       designerName,
       designerRole,

@@ -2,6 +2,56 @@ import pricingData from '../services/pricingData';
 
 export type FiberglassCatalogSize = 'small' | 'medium' | 'large';
 
+export interface FiberglassSpecifications {
+  widthFeet?: number;
+  widthInches?: number;
+  lengthFeet?: number;
+  lengthInches?: number;
+  shallowDepthFeet?: number;
+  shallowDepthInches?: number;
+  deepDepthFeet?: number;
+  deepDepthInches?: number;
+  surfaceArea?: number;
+  perimeter?: number;
+  gallons?: number;
+  stepsAndBench?: number;
+}
+
+const isMeasurement = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+export const feetAndInches = (feet: number, inches: number): number =>
+  Math.round((feet + inches / 12) * 10000) / 10000;
+
+export const hasCompleteFiberglassSpecifications = (
+  specs?: FiberglassSpecifications,
+  pool = false
+): specs is FiberglassSpecifications => {
+  if (!specs) return false;
+  const dimensions = [
+    specs.widthFeet, specs.widthInches, specs.lengthFeet, specs.lengthInches,
+    specs.shallowDepthFeet, specs.shallowDepthInches,
+    specs.deepDepthFeet, specs.deepDepthInches,
+  ];
+  return dimensions.every(isMeasurement) &&
+    [specs.widthInches, specs.lengthInches, specs.shallowDepthInches, specs.deepDepthInches]
+      .every((value) => Number(value) < 12) &&
+    feetAndInches(Number(specs.widthFeet), Number(specs.widthInches)) > 0 &&
+    feetAndInches(Number(specs.lengthFeet), Number(specs.lengthInches)) > 0 &&
+    feetAndInches(Number(specs.shallowDepthFeet), Number(specs.shallowDepthInches)) > 0 &&
+    feetAndInches(Number(specs.deepDepthFeet), Number(specs.deepDepthInches)) > 0 &&
+    isMeasurement(specs.surfaceArea) && specs.surfaceArea > 0 &&
+    isMeasurement(specs.perimeter) && specs.perimeter > 0 &&
+    isMeasurement(specs.gallons) && specs.gallons > 0 &&
+    (!pool || isMeasurement(specs.stepsAndBench));
+};
+
+export const formatFiberglassSize = (specs?: FiberglassSpecifications): string => {
+  if (!specs || !isMeasurement(specs.widthFeet) || !isMeasurement(specs.widthInches) ||
+    !isMeasurement(specs.lengthFeet) || !isMeasurement(specs.lengthInches)) return '—';
+  return `${specs.widthFeet}'${specs.widthInches}" × ${specs.lengthFeet}'${specs.lengthInches}"`;
+};
+
 export interface FiberglassPoolModel {
   id?: string;
   name: string;
@@ -11,6 +61,7 @@ export interface FiberglassPoolModel {
   install: number;
   gravel: number;
   discountPercent?: number;
+  specifications?: FiberglassSpecifications;
 }
 
 export interface FiberglassNamedPriceOption {
@@ -19,6 +70,7 @@ export interface FiberglassNamedPriceOption {
   price: number;
   crane?: number;
   spilloverPrice?: number;
+  specifications?: FiberglassSpecifications;
 }
 
 type FiberglassPricingSource = {

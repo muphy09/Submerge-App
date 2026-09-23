@@ -12,9 +12,12 @@ import {
   fiberglassSpaOptionSupportsSpillover,
   findFiberglassNamedOption,
   findFiberglassPoolModel,
+  feetAndInches,
   getFiberglassNamedOptions,
   getFiberglassPoolModelsBySize,
+  hasCompleteFiberglassSpecifications,
   normalizeFiberglassSize,
+  type FiberglassSpecifications,
 } from '../utils/fiberglass';
 import { type ProposalNoteOverrides } from '../utils/proposalNotes';
 import { TooltipAnchor } from './AppTooltip';
@@ -72,6 +75,55 @@ const CompactInput = ({
     </div>
   );
 };
+
+const accessoryDimensionFields = [
+  ['width', 'Width'], ['length', 'Length'],
+  ['shallowDepth', 'Shallow Depth'], ['deepDepth', 'Deep Depth'],
+] as const;
+
+function AccessorySpecInputs({
+  title, specs, readOnly, onChange,
+}: {
+  title: string;
+  specs?: FiberglassSpecifications;
+  readOnly: boolean;
+  onChange: (next: FiberglassSpecifications) => void;
+}) {
+  const updateFeet = (key: typeof accessoryDimensionFields[number][0], decimal: number) => {
+    const feet = Math.floor(decimal);
+    onChange({ ...specs, [`${key}Feet`]: feet, [`${key}Inches`]: Math.round((decimal - feet) * 12 * 100) / 100 });
+  };
+  return (
+    <div style={{ marginTop: 15 }}>
+      <h3>{title} Specifications</h3>
+      <div className="spec-grid-4">
+        {accessoryDimensionFields.map(([key, label]) => (
+          <div className="spec-field" key={key}>
+            <label className="spec-label">{label}</label>
+            <CompactInput
+              value={feetAndInches(Number(specs?.[`${key}Feet`] || 0), Number(specs?.[`${key}Inches`] || 0))}
+              onChange={(event) => updateFeet(key, Number(event.target.value) || 0)}
+              unit="ft" min="0" step="0.01" readOnly={readOnly}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="spec-grid-4">
+        {([
+          ['surfaceArea', 'Water Surface Area', 'sqft'],
+          ['perimeter', 'Perimeter', 'ft'],
+          ['gallons', 'Gallons', 'gal'],
+        ] as const).map(([key, label, unit]) => (
+          <div className="spec-field" key={key}>
+            <label className="spec-label">{label}</label>
+            <CompactInput value={specs?.[key] || 0} onChange={(event) => onChange({ ...specs, [key]: Number(event.target.value) || 0 })}
+              unit={unit} min="0" step="1" readOnly={readOnly} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const getFacingSelectOptions = (
   options: MasonryFacingOption[],
@@ -159,6 +211,31 @@ function PoolSpecsSectionNew({
   };
 
   const isFiberglass = data.poolType === 'fiberglass';
+  const poolSpecsLocked = Boolean(isFiberglass && data.fiberglassSpecAutofillEnabled && data.fiberglassPoolSpecsAutoFilled);
+  const spaSpecsLocked = Boolean(data.fiberglassSpecAutofillEnabled && data.fiberglassSpaSpecsAutoFilled);
+  const ledgeSpecsLocked = Boolean(data.fiberglassSpecAutofillEnabled && data.fiberglassLedgeSpecsAutoFilled);
+  const selectPoolModel = (modelName?: string, size = data.fiberglassSize) => {
+    const model = modelName ? findFiberglassPoolModel(modelName, size) : undefined;
+    const specs = data.fiberglassSpecAutofillEnabled && hasCompleteFiberglassSpecifications(model?.specifications, true)
+      ? model.specifications : undefined;
+    onChange({
+      ...data,
+      fiberglassSize: size,
+      fiberglassModelName: modelName,
+      fiberglassPoolSpecifications: specs,
+      fiberglassPoolSpecsAutoFilled: Boolean(specs),
+      ...(data.fiberglassSpecAutofillEnabled ? {
+        perimeter: specs?.perimeter || 0,
+        surfaceArea: specs?.surfaceArea || 0,
+        shallowDepth: specs ? feetAndInches(specs.shallowDepthFeet!, specs.shallowDepthInches!) : 0,
+        endDepth: specs ? feetAndInches(specs.deepDepthFeet!, specs.deepDepthInches!) : 0,
+        maxWidth: specs ? feetAndInches(specs.widthFeet!, specs.widthInches!) : 0,
+        maxLength: specs ? feetAndInches(specs.lengthFeet!, specs.lengthInches!) : 0,
+        totalStepsAndBench: specs?.stepsAndBench || 0,
+        approximateGallons: specs?.gallons || 0,
+      } : {}),
+    });
+  };
   const selectedFiberglassSize = normalizeFiberglassSize(data.fiberglassSize);
   const fiberglassPoolModels = selectedFiberglassSize
     ? getFiberglassPoolModelsBySize(selectedFiberglassSize)
@@ -277,6 +354,7 @@ function PoolSpecsSectionNew({
             <label className="spec-label">Perimeter</label>
             <CompactInput
               value={data.perimeter}
+              readOnly={poolSpecsLocked}
               onChange={(e) => handleChange('perimeter', parseFloat(e.target.value) || 0)}
               unit="ft"
               min="0"
@@ -287,6 +365,7 @@ function PoolSpecsSectionNew({
             <label className="spec-label">Surface Area</label>
             <CompactInput
               value={data.surfaceArea}
+              readOnly={poolSpecsLocked}
               onChange={(e) => handleChange('surfaceArea', parseFloat(e.target.value) || 0)}
               unit="sqft"
               min="0"
@@ -297,6 +376,7 @@ function PoolSpecsSectionNew({
             <label className="spec-label">Shallow Depth</label>
             <CompactInput
               value={data.shallowDepth}
+              readOnly={poolSpecsLocked}
               onChange={(e) => handleChange('shallowDepth', parseFloat(e.target.value) || 0)}
               unit="ft"
               min="0"
@@ -307,6 +387,7 @@ function PoolSpecsSectionNew({
             <label className="spec-label">End Depth</label>
             <CompactInput
               value={data.endDepth}
+              readOnly={poolSpecsLocked}
               onChange={(e) => handleChange('endDepth', parseFloat(e.target.value) || 0)}
               unit="ft"
               min="0"
@@ -320,6 +401,7 @@ function PoolSpecsSectionNew({
             <label className="spec-label">Max Width</label>
             <CompactInput
               value={data.maxWidth}
+              readOnly={poolSpecsLocked}
               onChange={(e) => handleChange('maxWidth', parseFloat(e.target.value) || 0)}
               unit="ft"
               min="0"
@@ -330,6 +412,7 @@ function PoolSpecsSectionNew({
             <label className="spec-label">Max Length</label>
             <CompactInput
               value={data.maxLength}
+              readOnly={poolSpecsLocked}
               onChange={(e) => handleChange('maxLength', parseFloat(e.target.value) || 0)}
               unit="ft"
               min="0"
@@ -340,6 +423,7 @@ function PoolSpecsSectionNew({
             <label className="spec-label">Total Steps & Bench</label>
             <CompactInput
               value={data.totalStepsAndBench}
+              readOnly={poolSpecsLocked}
               onChange={(e) => handleChange('totalStepsAndBench', parseFloat(e.target.value) || 0)}
               unit="ft"
               min="0"
@@ -368,15 +452,10 @@ function PoolSpecsSectionNew({
                   value={selectedFiberglassSize || ''}
                   onChange={(e) => {
                     const nextSize = normalizeFiberglassSize(e.target.value);
-                    const nextModel =
-                      nextSize && data.fiberglassModelName
-                        ? findFiberglassPoolModel(data.fiberglassModelName, nextSize)
-                        : undefined;
-                    onChange({
-                      ...data,
-                      fiberglassSize: nextSize,
-                      fiberglassModelName: nextModel ? data.fiberglassModelName : undefined,
-                    });
+                    const nextModel = nextSize && data.fiberglassModelName
+                      ? getFiberglassPoolModelsBySize(nextSize).find((model) => model.name === data.fiberglassModelName)
+                      : undefined;
+                    selectPoolModel(nextModel ? data.fiberglassModelName : undefined, nextSize);
                   }}
                 >
                   <option value="">Select size</option>
@@ -391,7 +470,7 @@ function PoolSpecsSectionNew({
                   <select
                     className="compact-input"
                     value={data.fiberglassModelName || ''}
-                    onChange={(e) => handleChange('fiberglassModelName', e.target.value || undefined)}
+                    onChange={(e) => selectPoolModel(e.target.value || undefined)}
                     disabled={!selectedFiberglassSize}
                   >
                     <option value="">Select model</option>
@@ -440,13 +519,14 @@ function PoolSpecsSectionNew({
                 <select
                   className="compact-input"
                   value={data.fiberglassTanningLedgeName || ''}
-                  onChange={(e) =>
-                    onChange({
-                      ...data,
-                      fiberglassTanningLedgeName: e.target.value || undefined,
-                      hasTanningShelf: Boolean(e.target.value),
-                    })
-                  }
+                  onChange={(e) => {
+                    const name = e.target.value || undefined;
+                    const option = name ? findFiberglassNamedOption('tanningLedgeOptions', name) : undefined;
+                    const specs = data.fiberglassSpecAutofillEnabled && hasCompleteFiberglassSpecifications(option?.specifications)
+                      ? option.specifications : undefined;
+                    onChange({ ...data, fiberglassTanningLedgeName: name, hasTanningShelf: Boolean(name),
+                      fiberglassLedgeSpecifications: specs || {}, fiberglassLedgeSpecsAutoFilled: Boolean(specs) });
+                  }}
                 >
                   <option value="">No Tanning Ledge</option>
                   {fiberglassTanningOptions.map((option) => (
@@ -457,6 +537,11 @@ function PoolSpecsSectionNew({
                 </select>
               </div>
             </div>
+            {data.fiberglassTanningLedgeName && data.fiberglassSpecAutofillEnabled && (
+              <AccessorySpecInputs title="Tanning Ledge" specs={data.fiberglassLedgeSpecifications}
+                readOnly={ledgeSpecsLocked}
+                onChange={(specs) => onChange({ ...data, fiberglassLedgeSpecifications: specs })} />
+            )}
           </>
         )}
 
@@ -559,6 +644,11 @@ function PoolSpecsSectionNew({
                       ...data,
                       spaFiberglassModelName: nextValue,
                       spaFiberglassModelPrice: undefined,
+                      fiberglassSpaSpecifications: data.fiberglassSpecAutofillEnabled &&
+                        hasCompleteFiberglassSpecifications(findFiberglassNamedOption('spaOptions', nextValue)?.specifications)
+                        ? findFiberglassNamedOption('spaOptions', nextValue)?.specifications : {},
+                      fiberglassSpaSpecsAutoFilled: Boolean(data.fiberglassSpecAutofillEnabled &&
+                        hasCompleteFiberglassSpecifications(findFiberglassNamedOption('spaOptions', nextValue)?.specifications)),
                     });
                   }}
                 >
@@ -571,6 +661,11 @@ function PoolSpecsSectionNew({
                 </select>
               </div>
             </div>
+            {data.spaFiberglassModelName && data.fiberglassSpecAutofillEnabled && (
+              <AccessorySpecInputs title="Spa" specs={data.fiberglassSpaSpecifications}
+                readOnly={spaSpecsLocked}
+                onChange={(specs) => onChange({ ...data, fiberglassSpaSpecifications: specs })} />
+            )}
 
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">

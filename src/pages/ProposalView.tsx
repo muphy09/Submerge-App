@@ -26,6 +26,7 @@ import './ProposalView.css';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
 import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
 import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
+import { formatFiberglassSize } from '../utils/fiberglass';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
 import summaryIconImg from '../../docs/img/summary.png';
@@ -917,6 +918,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [pricingRevisionComparison, setPricingRevisionComparison] = useState<PricingRevisionComparison | null>(null);
   const [pricingRevisionPromptOpen, setPricingRevisionPromptOpen] = useState(false);
   const [pricingRevisionComparisonOpen, setPricingRevisionComparisonOpen] = useState(false);
+  const dismissedFiberglassNoticeRef = useRef<Set<string>>(new Set());
   const [pricingRevisionBusy, setPricingRevisionBusy] = useState(false);
   const [pricingRevisionError, setPricingRevisionError] = useState<string | null>(null);
   const [customOptionPricingCorrection, setCustomOptionPricingCorrection] =
@@ -1819,11 +1821,18 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         return;
       }
       try {
-        const comparison = await buildPricingRevisionComparison(proposal);
+        const comparison = await buildPricingRevisionComparison(proposal, { includeSpecificationOnly: true });
         if (cancelled) return;
         setPricingRevisionComparison(comparison);
         if (!comparison) {
           setPricingRevisionPromptOpen(false);
+          return;
+        }
+        if (comparison.specificationOnly) {
+          const noticeKey = `submerge.fiberglassSpecificationNotice.${proposal.proposalNumber}.${comparison.latestRevisionId}`;
+          let alreadySeen = dismissedFiberglassNoticeRef.current.has(noticeKey);
+          try { alreadySeen ||= localStorage.getItem(noticeKey) === 'seen'; } catch { /* Storage may be unavailable. */ }
+          setPricingRevisionPromptOpen(!alreadySeen);
           return;
         }
         const alreadyDeclined =
@@ -3504,7 +3513,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const endDepth = formatNumber(mergedProposal.poolSpecs.endDepth, 'ft');
     const spaLengthLabel = showFiberglassSpaSummary ? 'Spa' : 'Spa Length';
     const spaLength = showFiberglassSpaSummary
-      ? 'Fiberglass Spa'
+      ? mergedProposal.poolSpecs.spaFiberglassModelName && mergedProposal.poolSpecs.fiberglassSpecAutofillEnabled
+        ? `${mergedProposal.poolSpecs.spaFiberglassModelName} (${formatFiberglassSize(mergedProposal.poolSpecs.fiberglassSpaSpecifications)})`
+        : 'Fiberglass Spa'
       : hasSpaSelected
       ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft')
       : 'No Spa';
@@ -3512,6 +3523,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const spaWidth = hasSpaSelected && !showFiberglassSpaSummary
       ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft')
       : 'No Spa';
+    const ledgeSize = mergedProposal.poolSpecs.fiberglassSpecAutofillEnabled && mergedProposal.poolSpecs.fiberglassTanningLedgeName
+      ? `${mergedProposal.poolSpecs.fiberglassTanningLedgeName} (${formatFiberglassSize(mergedProposal.poolSpecs.fiberglassLedgeSpecifications)})`
+      : null;
+    const totalWaterGallons = mergedProposal.poolSpecs.fiberglassSpecAutofillEnabled
+      ? (mergedProposal.poolSpecs.approximateGallons || 0) +
+        (mergedProposal.poolSpecs.spaType === 'fiberglass' ? Number(mergedProposal.poolSpecs.fiberglassSpaSpecifications?.gallons) || 0 : 0) +
+        (mergedProposal.poolSpecs.fiberglassTanningLedgeName ? Number(mergedProposal.poolSpecs.fiberglassLedgeSpecifications?.gallons) || 0 : 0)
+      : null;
     const equipmentSummary = buildEquipmentSummary(mergedProposal.equipment, equipmentFlags);
 
     const tileLaborItems = costBreakdownForDisplay?.tileLabor || [];
@@ -3666,6 +3685,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       spaLength,
       spaWidthLabel,
       spaWidth,
+      ledgeSize,
+      totalWaterGallons,
       showFiberglassSpaSummary,
       ...equipmentSummary,
       offContractTotal,
@@ -4555,9 +4576,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                   <div className="hero-line"><span className="hero-label">Max Width:</span><OverflowTooltipText>{vm.maxWidth}</OverflowTooltipText></div>
                   <div className="hero-line"><span className="hero-label">Shallow Depth:</span><OverflowTooltipText>{vm.shallowDepth}</OverflowTooltipText></div>
                   <div className="hero-line"><span className="hero-label">{vm.spaLengthLabel}:</span><OverflowTooltipText>{vm.spaLength}</OverflowTooltipText></div>
+                  {vm.ledgeSize && <div className="hero-line"><span className="hero-label">Tanning Ledge:</span><OverflowTooltipText>{vm.ledgeSize}</OverflowTooltipText></div>}
                 </div>
                 <div className="hero-column">
                   <div className="hero-line"><span className="hero-label">Approx. Gallons:</span><OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText></div>
+                  {vm.totalWaterGallons !== null && <div className="hero-line"><span className="hero-label">Total Water Gallons:</span><OverflowTooltipText>{vm.totalWaterGallons.toLocaleString('en-US')}</OverflowTooltipText></div>}
                   <div className="hero-line"><span className="hero-label">Max Length:</span><OverflowTooltipText>{vm.maxLength}</OverflowTooltipText></div>
                   <div className="hero-line"><span className="hero-label">End Depth:</span><OverflowTooltipText>{vm.endDepth}</OverflowTooltipText></div>
                   {!vm.showFiberglassSpaSummary && (
@@ -5746,7 +5769,16 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           !customOptionPricingCorrection
         }
         pricingModelName={pricingRevisionComparison?.pricingModelName}
+        specificationOnly={pricingRevisionComparison?.specificationOnly}
         busy={pricingRevisionBusy}
+        onDismiss={() => {
+          if (proposal && pricingRevisionComparison?.specificationOnly) {
+            const noticeKey = `submerge.fiberglassSpecificationNotice.${proposal.proposalNumber}.${pricingRevisionComparison.latestRevisionId}`;
+            dismissedFiberglassNoticeRef.current.add(noticeKey);
+            try { localStorage.setItem(noticeKey, 'seen'); } catch { /* Storage may be unavailable. */ }
+          }
+          setPricingRevisionPromptOpen(false);
+        }}
         onCompare={() => {
           setPricingRevisionBusy(true);
           setPricingRevisionError(null);

@@ -875,7 +875,11 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
 
   if (field.id === 'p2_spa_length') return specs.spaLength ? String(specs.spaLength) : '';
   if (field.id === 'p2_spa_width') return specs.spaWidth ? String(specs.spaWidth) : '';
-  if (/spa perimeter/.test(label)) return specs.spaPerimeter ? String(specs.spaPerimeter) : '';
+  if (/spa perimeter/.test(label)) {
+    const fiberglassPerimeter = specs.fiberglassSpecAutofillEnabled && specs.spaType === 'fiberglass'
+      ? specs.fiberglassSpaSpecifications?.perimeter : undefined;
+    return fiberglassPerimeter ? String(fiberglassPerimeter) : specs.spaPerimeter ? String(specs.spaPerimeter) : '';
+  }
   if (/perimeter/.test(label) && /surface area/.test(label)) return String(specs.surfaceArea || '');
   if (/perimeter/.test(label)) return String(specs.perimeter || '');
   if (/surface area/.test(label)) return String(specs.surfaceArea || '');

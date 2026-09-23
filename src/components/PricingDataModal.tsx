@@ -18,6 +18,7 @@ import {
   subscribeToPricingData,
   updatePricingListItem,
   updatePricingValue,
+  updateSharedFiberglassSpecification,
 } from '../services/pricingDataStore';
 import {
   buildPricingFieldLabelOverrideKey,
@@ -33,6 +34,7 @@ import {
   type PricingModelRevisionSummary,
 } from '../services/pricingModelsAdapter';
 import { getDefaultCleanerIndex } from '../utils/cleanerDefaults';
+import { formatFiberglassSize, hasCompleteFiberglassSpecifications, type FiberglassSpecifications } from '../utils/fiberglass';
 import { normalizeEquipmentPackageOptions } from '../utils/equipmentPackages';
 import { slugifyMasonryFacingId } from '../utils/masonryFacing';
 import {
@@ -101,6 +103,8 @@ type ListConfig = {
   title: string;
   path: Path;
   fields: ListField[];
+  previewFields?: ListField[];
+  fiberglassSpecKind?: 'pool' | 'accessory';
   addLabel: string;
   defaultItem?: Record<string, any> | (() => Record<string, any>);
   variant?: 'card' | 'table';
@@ -1357,6 +1361,18 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     []
   );
+  const fiberglassPoolPreviewFields: ListField[] = [
+    { key: 'name', label: 'Name', type: 'text' },
+    { key: '__specSize', label: 'Size', type: 'text' },
+    { key: 'shellPrice', label: 'Price', type: 'number', prefix: '$' },
+    { key: '__specStatus', label: 'Specs', type: 'text' },
+  ];
+  const fiberglassAccessoryPreviewFields: ListField[] = [
+    { key: 'name', label: 'Name', type: 'text' },
+    { key: '__specSize', label: 'Size', type: 'text' },
+    { key: 'price', label: 'Price', type: 'number', prefix: '$' },
+    { key: '__specStatus', label: 'Specs', type: 'text' },
+  ];
 
   const isRenamableAddCostField = (field: ListField) => /^addCost\d+$/.test(field.key);
   const getListFieldOverrideKey = (list: ListConfig, field: ListField) =>
@@ -3386,6 +3402,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   gravel: 0,
                 }),
                 fields: fiberglassPoolModelFields,
+                previewFields: fiberglassPoolPreviewFields,
+                fiberglassSpecKind: 'pool',
               },
               {
                 title: 'Medium fiberglass pool models',
@@ -3402,6 +3420,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   gravel: 0,
                 }),
                 fields: fiberglassPoolModelFields,
+                previewFields: fiberglassPoolPreviewFields,
+                fiberglassSpecKind: 'pool',
               },
               {
                 title: 'Large fiberglass pool models',
@@ -3418,6 +3438,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   gravel: 0,
                 }),
                 fields: fiberglassPoolModelFields,
+                previewFields: fiberglassPoolPreviewFields,
+                fiberglassSpecKind: 'pool',
               },
             ],
           },
@@ -3436,6 +3458,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   crane: 0,
                 }),
                 fields: fiberglassSpaOptionFields,
+                previewFields: fiberglassAccessoryPreviewFields,
+                fiberglassSpecKind: 'accessory',
               },
             ],
           },
@@ -3453,6 +3477,8 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   price: 0,
                 }),
                 fields: fiberglassNamedPriceFields,
+                previewFields: fiberglassAccessoryPreviewFields,
+                fiberglassSpecKind: 'accessory',
               },
             ],
           },
@@ -4059,6 +4085,11 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
   };
 
   const formatListFieldValue = (list: ListConfig, entry: any, field: ListField, index: number) => {
+    if (field.key === '__specSize') return formatFiberglassSize(entry?.specifications);
+    if (field.key === '__specStatus') {
+      if (hasCompleteFiberglassSpecifications(entry?.specifications, list.fiberglassSpecKind === 'pool')) return 'Complete';
+      return entry?.specifications && Object.keys(entry.specifications).length ? 'Incomplete' : 'Missing';
+    }
     if (isListFieldHidden(field, entry)) {
       return '—';
     }
@@ -4088,7 +4119,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     return String(nameLikeValue || entry?.name || entry?.id || `${list.title} ${index + 1}`);
   };
 
-  const getPreviewFields = (list: ListConfig) => list.fields;
+  const getPreviewFields = (list: ListConfig) => list.previewFields || list.fields;
 
   const selectedListEditor = useMemo(() => {
     if (!selectedListItem || !activeSection || selectedListItem.sectionTitle !== activeSection.title) {
@@ -4638,6 +4669,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
           </button>
         </div>
         <div className="pricing-rail-card__body">
+          {list.fiberglassSpecKind && <h4 className="pricing-rail-card__subheading">Pricing</h4>}
           {list.fields.map((field) => {
             const cellKey = `${list.path.join('.')}.${index}.${field.key}`;
             const cellPath = [...list.path, index, field.key];
@@ -4808,6 +4840,68 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
               </label>
             );
           })}
+          {list.fiberglassSpecKind && (
+            <div className="fiberglass-spec-editor">
+              <h4 className="pricing-rail-card__subheading">Specifications</h4>
+              <p>Save partial measurements at any time. These physical dimensions apply to every pricing tier. Autofill starts when every required value is complete.</p>
+              {([
+                ['width', 'Width'], ['length', 'Length'],
+                ['shallowDepth', 'Shallow depth'], ['deepDepth', 'Deep depth'],
+              ] as const).map(([key, label]) => (
+                <div className="fiberglass-spec-editor__dimension" key={key}>
+                  <span>{label}</span>
+                  {(['Feet', 'Inches'] as const).map((unit) => {
+                    const specKey = `${key}${unit}` as keyof FiberglassSpecifications;
+                    return (
+                      <label key={unit}>
+                        {unit === 'Feet' ? 'ft' : 'in'}
+                        <input
+                          className="pricing-field__input"
+                          type="number"
+                          min="0"
+                          max={unit === 'Inches' ? 11.99 : undefined}
+                          step={unit === 'Inches' ? '0.25' : '1'}
+                          value={entry.specifications?.[specKey] ?? ''}
+                          readOnly={isActiveBronzeLockedPricingPath([...list.path, index, 'specifications', specKey])}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            updateSharedFiberglassSpecification([...list.path, index, 'specifications', specKey], raw === '' ? undefined : Number(raw));
+                            setHasChanges(true);
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+              {([
+                ['surfaceArea', 'Water surface area', 'sq ft'],
+                ['perimeter', 'Perimeter', 'ft'],
+                ['gallons', 'Gallons', 'gal'],
+                ...(list.fiberglassSpecKind === 'pool' ? [['stepsAndBench', 'Liner feet steps', 'ft']] : []),
+              ] as Array<[keyof FiberglassSpecifications, string, string]>).map(([key, label, unit]) => (
+                <label className="pricing-field" key={key}>
+                  <span>{label} ({unit})</span>
+                  <input
+                    className="pricing-field__input"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={entry.specifications?.[key] ?? ''}
+                    readOnly={isActiveBronzeLockedPricingPath([...list.path, index, 'specifications', key])}
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      updateSharedFiberglassSpecification([...list.path, index, 'specifications', key], raw === '' ? undefined : Number(raw));
+                      setHasChanges(true);
+                    }}
+                  />
+                </label>
+              ))}
+              <strong>{hasCompleteFiberglassSpecifications(entry.specifications, list.fiberglassSpecKind === 'pool')
+                ? 'Complete — ready to autofill'
+                : 'Incomplete — manual proposal entry'}</strong>
+            </div>
+          )}
         </div>
         {canRemoveListItem(list, entry, index) && (
           <div className="pricing-rail-card__footer">

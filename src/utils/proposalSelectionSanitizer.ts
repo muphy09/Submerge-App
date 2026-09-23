@@ -463,6 +463,12 @@ export function sanitizeProposalSelectionState(
     poolSpecs.fiberglassModelPrice = undefined;
     poolSpecs.fiberglassPerimeter = undefined;
     poolSpecs.fiberglassCraneOption = poolDefaults.fiberglassCraneOption;
+    if (poolSpecs.fiberglassSpecAutofillEnabled) {
+      poolSpecs.fiberglassPoolSpecifications = undefined;
+      poolSpecs.fiberglassPoolSpecsAutoFilled = false;
+      poolSpecs.fiberglassLedgeSpecifications = undefined;
+      poolSpecs.fiberglassLedgeSpecsAutoFilled = false;
+    }
   } else {
     tileCopingDecking.tileLevel = 0;
     tileCopingDecking.tileOptionId = undefined;
@@ -475,6 +481,24 @@ export function sanitizeProposalSelectionState(
     poolSpecs.spaFiberglassModelName = undefined;
     poolSpecs.needsFiberglassSpaCrane = false;
     poolSpecs.spaFiberglassModelPrice = undefined;
+    if (poolSpecs.fiberglassSpecAutofillEnabled) {
+      poolSpecs.fiberglassSpaSpecifications = undefined;
+      poolSpecs.fiberglassSpaSpecsAutoFilled = false;
+    }
+  }
+  if (poolSpecs.fiberglassSpecAutofillEnabled) {
+    if (!poolSpecs.fiberglassModelName) {
+      poolSpecs.fiberglassPoolSpecifications = undefined;
+      poolSpecs.fiberglassPoolSpecsAutoFilled = false;
+    }
+    if (!poolSpecs.fiberglassTanningLedgeName) {
+      poolSpecs.fiberglassLedgeSpecifications = undefined;
+      poolSpecs.fiberglassLedgeSpecsAutoFilled = false;
+    }
+    if (!poolSpecs.spaFiberglassModelName) {
+      poolSpecs.fiberglassSpaSpecifications = undefined;
+      poolSpecs.fiberglassSpaSpecsAutoFilled = false;
+    }
   }
 
   if (poolSpecs.spaType !== 'gunite') {

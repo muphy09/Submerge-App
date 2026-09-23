@@ -102,11 +102,27 @@ const getDeckingSelectionKey = (item?: CostLineItem | null): string =>
 
 export class PoolCalculations {
   static calculateGallons(poolSpecs: PoolSpecs): number {
+    if (poolSpecs.fiberglassSpecAutofillEnabled && poolSpecs.poolType === 'fiberglass' &&
+      poolSpecs.fiberglassPoolSpecsAutoFilled && poolSpecs.fiberglassPoolSpecifications?.gallons) {
+      return poolSpecs.fiberglassPoolSpecifications.gallons;
+    }
     const avgDepth = (poolSpecs.shallowDepth + poolSpecs.endDepth) / 2;
     const baseGallons = poolSpecs.surfaceArea * avgDepth * 7.6;
-    const tanningShelfDeduction = poolSpecs.hasTanningShelf ? 850 : 0;
+    const separateLedge = poolSpecs.fiberglassSpecAutofillEnabled && poolSpecs.poolType === 'fiberglass' &&
+      Boolean(poolSpecs.fiberglassTanningLedgeName);
+    const tanningShelfDeduction = poolSpecs.hasTanningShelf && !separateLedge ? 850 : 0;
     const gallons = ceilToStep(baseGallons, 10) - tanningShelfDeduction;
     return Math.max(0, gallons);
+  }
+
+  static calculateWaterTruckGallons(poolSpecs: PoolSpecs): number {
+    const poolGallons = this.calculateGallons(poolSpecs);
+    if (!poolSpecs.fiberglassSpecAutofillEnabled) return poolGallons;
+    const spaGallons = poolSpecs.spaType === 'fiberglass' && poolSpecs.spaFiberglassModelName
+      ? Number(poolSpecs.fiberglassSpaSpecifications?.gallons) || 0 : 0;
+    const ledgeGallons = poolSpecs.poolType === 'fiberglass' && poolSpecs.fiberglassTanningLedgeName
+      ? Number(poolSpecs.fiberglassLedgeSpecifications?.gallons) || 0 : 0;
+    return poolGallons + spaGallons + ledgeGallons;
   }
 
   static calculateSpaPerimeter(poolSpecs: PoolSpecs): number {
@@ -1566,7 +1582,7 @@ export class InteriorFinishCalculations {
     }
 
     // WATER TRUCK
-    const gallons = PoolCalculations.calculateGallons(poolSpecs);
+    const gallons = PoolCalculations.calculateWaterTruckGallons(poolSpecs);
     const waterTruckPricing = pricingData.misc?.waterTruck ?? prices.waterTruck;
     const configuredLoadSizeGallons = Number(waterTruckPricing?.loadSizeGallons);
     const loadSizeGallons =

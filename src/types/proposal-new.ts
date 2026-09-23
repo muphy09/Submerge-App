@@ -40,6 +40,13 @@ export interface PoolSpecs {
   needsFiberglassCrane?: boolean;
   fiberglassModelPrice?: number;
   fiberglassPerimeter?: number;
+  fiberglassSpecAutofillEnabled?: boolean;
+  fiberglassPoolSpecifications?: import('../utils/fiberglass').FiberglassSpecifications;
+  fiberglassSpaSpecifications?: import('../utils/fiberglass').FiberglassSpecifications;
+  fiberglassLedgeSpecifications?: import('../utils/fiberglass').FiberglassSpecifications;
+  fiberglassPoolSpecsAutoFilled?: boolean;
+  fiberglassSpaSpecsAutoFilled?: boolean;
+  fiberglassLedgeSpecsAutoFilled?: boolean;
   fiberglassCraneOption?: FiberglassCraneOption;
 
   // Shotcrete pool dimensions
