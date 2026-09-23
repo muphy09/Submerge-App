@@ -1,3 +1,8 @@
+## [3.3.11] - 9/22/26
+### Remote Contract Templates
+- Converted Franchise 5555 to use remote contract templates instead of bundled
+- Removed bundled contracts from the packaged application
+-----
 ## [3.3.10] - 9/16/26
 ### Pricing Model Update
 - Off Contract Decking now includes a 10% Waste overhead added to the Material Cost
