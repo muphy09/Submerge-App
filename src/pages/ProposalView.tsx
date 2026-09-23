@@ -3496,8 +3496,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         ? `Fiberglass - ${mergedProposal.poolSpecs.fiberglassModelName}`
         : 'Fiberglass';
 
+    const additionalFiberglassGallons = mergedProposal.poolSpecs.fiberglassSpecAutofillEnabled
+      ? (mergedProposal.poolSpecs.spaType === 'fiberglass'
+          ? Number(mergedProposal.poolSpecs.fiberglassSpaSpecifications?.gallons) || 0 : 0) +
+        (mergedProposal.poolSpecs.fiberglassTanningLedgeName
+          ? Number(mergedProposal.poolSpecs.fiberglassLedgeSpecifications?.gallons) || 0 : 0)
+      : 0;
     const approximateGallons = Number.isFinite(mergedProposal.poolSpecs.approximateGallons)
-      ? mergedProposal.poolSpecs.approximateGallons.toLocaleString('en-US')
+      ? (mergedProposal.poolSpecs.approximateGallons + additionalFiberglassGallons).toLocaleString('en-US')
       : 'N/A';
 
     const hasSpaSelected = mergedProposal.poolSpecs.spaType !== 'none';
@@ -3507,29 +3513,29 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       (mergedProposal.plumbing?.runs?.spaRun ?? 0) > 0;
     const showFiberglassSpaSummary =
       mergedProposal.poolSpecs.spaType === 'fiberglass' || hasIntegratedFiberglassSpa;
+    const hasSelectedFiberglassSpa = mergedProposal.poolSpecs.spaType === 'fiberglass';
     const maxWidth = formatNumber(mergedProposal.poolSpecs.maxWidth, 'ft');
     const maxLength = formatNumber(mergedProposal.poolSpecs.maxLength, 'ft');
     const shallowDepth = formatNumber(mergedProposal.poolSpecs.shallowDepth, 'ft');
     const endDepth = formatNumber(mergedProposal.poolSpecs.endDepth, 'ft');
-    const spaLengthLabel = showFiberglassSpaSummary ? 'Spa' : 'Spa Length';
-    const spaLength = showFiberglassSpaSummary
-      ? mergedProposal.poolSpecs.spaFiberglassModelName && mergedProposal.poolSpecs.fiberglassSpecAutofillEnabled
-        ? `${mergedProposal.poolSpecs.spaFiberglassModelName} (${formatFiberglassSize(mergedProposal.poolSpecs.fiberglassSpaSpecifications)})`
-        : 'Fiberglass Spa'
+    const spaLengthLabel = hasSelectedFiberglassSpa ? 'Spa Type'
+      : showFiberglassSpaSummary ? 'Spa' : 'Spa Length';
+    const spaLength = hasSelectedFiberglassSpa
+      ? mergedProposal.poolSpecs.spaFiberglassModelName || 'Fiberglass Spa'
+      : showFiberglassSpaSummary
+      ? 'Fiberglass Spa'
       : hasSpaSelected
       ? formatNumber(mergedProposal.poolSpecs.spaLength, 'ft')
       : 'No Spa';
+    const spaDimensions = hasSelectedFiberglassSpa
+      ? formatFiberglassSize(mergedProposal.poolSpecs.fiberglassSpaSpecifications)
+      : null;
     const spaWidthLabel = 'Spa Width';
     const spaWidth = hasSpaSelected && !showFiberglassSpaSummary
       ? formatNumber(mergedProposal.poolSpecs.spaWidth, 'ft')
       : 'No Spa';
     const ledgeSize = mergedProposal.poolSpecs.fiberglassSpecAutofillEnabled && mergedProposal.poolSpecs.fiberglassTanningLedgeName
       ? `${mergedProposal.poolSpecs.fiberglassTanningLedgeName} (${formatFiberglassSize(mergedProposal.poolSpecs.fiberglassLedgeSpecifications)})`
-      : null;
-    const totalWaterGallons = mergedProposal.poolSpecs.fiberglassSpecAutofillEnabled
-      ? (mergedProposal.poolSpecs.approximateGallons || 0) +
-        (mergedProposal.poolSpecs.spaType === 'fiberglass' ? Number(mergedProposal.poolSpecs.fiberglassSpaSpecifications?.gallons) || 0 : 0) +
-        (mergedProposal.poolSpecs.fiberglassTanningLedgeName ? Number(mergedProposal.poolSpecs.fiberglassLedgeSpecifications?.gallons) || 0 : 0)
       : null;
     const equipmentSummary = buildEquipmentSummary(mergedProposal.equipment, equipmentFlags);
 
@@ -3686,7 +3692,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       spaWidthLabel,
       spaWidth,
       ledgeSize,
-      totalWaterGallons,
+      spaDimensions,
       showFiberglassSpaSummary,
       ...equipmentSummary,
       offContractTotal,
@@ -4580,10 +4586,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 </div>
                 <div className="hero-column">
                   <div className="hero-line"><span className="hero-label">Approx. Gallons:</span><OverflowTooltipText>{vm.approximateGallons}</OverflowTooltipText></div>
-                  {vm.totalWaterGallons !== null && <div className="hero-line"><span className="hero-label">Total Water Gallons:</span><OverflowTooltipText>{vm.totalWaterGallons.toLocaleString('en-US')}</OverflowTooltipText></div>}
                   <div className="hero-line"><span className="hero-label">Max Length:</span><OverflowTooltipText>{vm.maxLength}</OverflowTooltipText></div>
                   <div className="hero-line"><span className="hero-label">End Depth:</span><OverflowTooltipText>{vm.endDepth}</OverflowTooltipText></div>
-                  {!vm.showFiberglassSpaSummary && (
+                  {vm.spaDimensions !== null ? (
+                    <div className="hero-line"><span className="hero-label">Spa Dimensions:</span><OverflowTooltipText>{vm.spaDimensions}</OverflowTooltipText></div>
+                  ) : !vm.showFiberglassSpaSummary && (
                     <div className="hero-line"><span className="hero-label">{vm.spaWidthLabel}:</span><OverflowTooltipText>{vm.spaWidth}</OverflowTooltipText></div>
                   )}
                 </div>

@@ -401,6 +401,62 @@ test('does not display a positive historical price adjustment as negative custom
   }
 });
 
+test('fiberglass spa summary pairs its model with dimensions and combines approximate gallons', async ({}, testInfo) => {
+  const proposalNumber = 'TEST-PWTEST-FIBERGLASS-SUMMARY';
+  const base = buildLocalProposal(proposalNumber, 'Fiberglass Summary Customer');
+  const proposal = {
+    ...base,
+    poolSpecs: {
+      ...base.poolSpecs,
+      poolType: 'fiberglass',
+      fiberglassSpecAutofillEnabled: true,
+      fiberglassModelName: 'Apollo 14',
+      maxWidth: 13.8333,
+      maxLength: 32,
+      shallowDepth: 3.5,
+      endDepth: 6.0833,
+      approximateGallons: 7700,
+      spaType: 'fiberglass',
+      spaFiberglassModelName: 'Mystic',
+      fiberglassSpaSpecifications: {
+        widthFeet: 9, widthInches: 8, lengthFeet: 9, lengthInches: 8,
+        gallons: 950,
+      },
+      fiberglassTanningLedgeName: 'Hermosa Tanning Ledge',
+      fiberglassLedgeSpecifications: { gallons: 250 },
+    },
+  };
+  let electronApp: ElectronApplication | null = null;
+
+  try {
+    const launched = await launchIsolatedApp(testInfo.outputPath('app-data'));
+    electronApp = launched.electronApp;
+    const window = launched.window;
+    await seedSessionAndProposals(window, [proposal]);
+    await window.context().setOffline(true);
+    await window.evaluate((route) => {
+      window.location.hash = route;
+      window.location.reload();
+    }, `/proposal/view/${proposalNumber}`);
+
+    const summary = window.locator('section[aria-labelledby="pool-specifications-heading"]');
+    await expect(summary).toBeVisible({ timeout: 20_000 });
+    const left = summary.locator('.hero-column').nth(0).locator('.hero-line');
+    const right = summary.locator('.hero-column').nth(1).locator('.hero-line');
+    await expect(left.nth(3)).toContainText('Spa Type:');
+    await expect(left.nth(3)).toContainText('Mystic');
+    await expect(right.nth(0)).toContainText('Approx. Gallons:');
+    await expect(right.nth(0)).toContainText('8,900');
+    await expect(right.nth(2)).toContainText('End Depth:');
+    await expect(right.nth(3)).toContainText('Spa Dimensions:');
+    await expect(right.nth(3)).toContainText('9\'8" × 9\'8"');
+    await expect(summary.getByText('Total Water Gallons:')).toHaveCount(0);
+    await summary.screenshot({ path: testInfo.outputPath('fiberglass-summary.png') });
+  } finally {
+    await electronApp?.close().catch(() => undefined);
+  }
+});
+
 test('creates and saves a new proposal version with its own creation date', async ({}, testInfo) => {
   const proposalNumber = 'TEST-PWTEST-NEW-VERSION';
   const original = buildLocalProposal(proposalNumber, 'Versioned Existing Customer');

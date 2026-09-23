@@ -3,12 +3,20 @@ import { expect, test, type Page } from '@playwright/test';
 const url = 'http://127.0.0.1:5173/tests/fixtures/fiberglass-specifications.html';
 const select = (page: Page, label: string) => page.locator('.spec-field').filter({ hasText: new RegExp(`^${label}`) }).locator('select').first();
 
-test('new proposal locks complete fiberglass specifications and totals separate water volumes', async ({ page }) => {
+test('new proposal locks complete fiberglass specifications and totals separate water volumes', async ({ page }, testInfo) => {
   await page.goto(url);
   await page.getByRole('button', { name: 'Fiberglass', exact: true }).first().click();
   await select(page, 'Fiberglass Size').selectOption('small');
   await select(page, 'Fiberglass Model').selectOption('Apollo 14');
   const pool = page.locator('.spec-block').filter({ has: page.getByRole('heading', { name: 'Pool Dimensions' }) });
+  const poolLabels = await pool.locator('label.spec-label').allTextContents();
+  const ledgeDropdownIndex = poolLabels.indexOf('Fiberglass Tanning Ledge');
+  expect(poolLabels.slice(ledgeDropdownIndex + 1, ledgeDropdownIndex + 9)).toEqual([
+    'Perimeter', 'Surface Area', 'Shallow Depth', 'End Depth',
+    'Max Width', 'Max Length', 'Total Steps & Bench', 'Decking Area',
+  ]);
+  await expect(pool.getByText('Approximate Gallons', { exact: true })).toBeVisible();
+  await expect(pool.getByText('Approximate Gallons (Auto-calculated)')).toHaveCount(0);
   await expect(pool.locator('input[readonly]')).toHaveCount(8);
   const specs = await page.evaluate(() => (window as any).fiberglassFixturePoolSpecs);
   expect(specs).toMatchObject({
@@ -19,6 +27,11 @@ test('new proposal locks complete fiberglass specifications and totals separate 
   await select(page, 'Fiberglass Tanning Ledge').selectOption('Hermosa Tanning Ledge');
   await page.getByRole('button', { name: 'Fiberglass Spa' }).click();
   await select(page, 'Fiberglass Spa Option').selectOption('Mystic');
+  const spaBlock = page.locator('.spec-block').filter({ has: page.getByRole('heading', { name: 'Spa', exact: true }) });
+  await expect(spaBlock.getByRole('heading', { name: 'Spa Specifications' })).toHaveCount(0);
+  await expect(spaBlock.getByText('Approximate Gallons', { exact: true })).toBeVisible();
+  await pool.screenshot({ path: testInfo.outputPath('fiberglass-pool-fields.png') });
+  await spaBlock.screenshot({ path: testInfo.outputPath('fiberglass-spa-fields.png') });
   const updated = await page.evaluate(() => (window as any).fiberglassFixturePoolSpecs);
   expect(updated.fiberglassSpaSpecifications).toMatchObject({ perimeter: 28, gallons: 950 });
   expect(updated.fiberglassLedgeSpecifications).toMatchObject({ perimeter: 27, gallons: 250 });
@@ -36,6 +49,61 @@ test('unmatched shell remains manually editable', async ({ page }) => {
   const pool = page.locator('.spec-block').filter({ has: page.getByRole('heading', { name: 'Pool Dimensions' }) });
   await expect(pool.locator('input[readonly]')).toHaveCount(1);
   expect(await page.evaluate(() => (window as any).fiberglassFixturePoolSpecs.fiberglassPoolSpecsAutoFilled)).toBe(false);
+});
+
+test('switching pool types clears both sets of pool dimensions and selections', async ({ page }) => {
+  await page.goto(url);
+  const pool = page.locator('.spec-block').filter({ has: page.getByRole('heading', { name: 'Pool Dimensions' }) });
+  const dimensionNames = [
+    'Perimeter', 'Surface Area', 'Shallow Depth', 'End Depth',
+    'Max Width', 'Max Length', 'Total Steps & Bench', 'Decking Area',
+  ];
+  const dimension = (name: string) => pool.getByText(name, { exact: true }).first().locator('..').locator('input');
+  const expectCleared = async () => {
+    for (const name of dimensionNames) {
+      await expect(dimension(name)).toHaveValue('');
+      await expect(dimension(name)).not.toHaveAttribute('readonly');
+    }
+    await expect(pool.getByText('Approximate Gallons', { exact: true }).locator('..').locator('input')).toHaveValue('0');
+    const specs = await page.evaluate(() => (window as any).fiberglassFixturePoolSpecs);
+    for (const key of ['perimeter', 'surfaceArea', 'shallowDepth', 'endDepth', 'maxWidth', 'maxLength', 'totalStepsAndBench', 'deckingArea', 'approximateGallons']) {
+      expect(specs[key], key).toBe(0);
+    }
+    expect(specs.fiberglassModelName).toBeUndefined();
+    expect(specs.fiberglassPoolSpecsAutoFilled).toBe(false);
+  };
+
+  await page.getByRole('button', { name: 'Fiberglass', exact: true }).first().click();
+  await select(page, 'Fiberglass Size').selectOption('small');
+  await select(page, 'Fiberglass Model').selectOption('Apollo 14');
+  await select(page, 'Fiberglass Tanning Ledge').selectOption('Hermosa Tanning Ledge');
+  await dimension('Decking Area').fill('500');
+  await expect(dimension('Perimeter')).toHaveValue('87');
+
+  await page.getByRole('button', { name: 'Shotcrete (Custom)' }).first().click();
+  await expectCleared();
+  expect(await page.evaluate(() => (window as any).fiberglassFixturePoolSpecs)).toMatchObject({
+    fiberglassSize: undefined, fiberglassTanningLedgeName: undefined, hasTanningShelf: false,
+  });
+
+  for (const [name, value] of [
+    ['Perimeter', '100'], ['Surface Area', '400'], ['Shallow Depth', '3.5'], ['End Depth', '6'],
+    ['Max Width', '15'], ['Max Length', '30'], ['Total Steps & Bench', '20'], ['Decking Area', '600'],
+  ]) {
+    await dimension(name).fill(value);
+  }
+  await expect(dimension('Perimeter')).toHaveValue('100');
+  await page.getByRole('button', { name: 'Shotcrete (Custom)' }).first().click();
+  await expect(dimension('Perimeter')).toHaveValue('100');
+
+  await page.getByRole('button', { name: 'Fiberglass', exact: true }).first().click();
+  await expectCleared();
+  await expect(select(page, 'Fiberglass Size')).toHaveValue('');
+  await expect(select(page, 'Fiberglass Model')).toHaveValue('');
+  await select(page, 'Fiberglass Size').selectOption('small');
+  await select(page, 'Fiberglass Model').selectOption('Apollo 14');
+  await expect(dimension('Perimeter')).toHaveValue('87');
+  await expect(dimension('Perimeter')).toHaveAttribute('readonly');
 });
 
 test('new franchise does not inherit specifications unless a populated model was copied', async ({ page }) => {

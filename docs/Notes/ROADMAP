@@ -8,6 +8,19 @@ Immediate Changes -
         - Ensure non-approved proposals (not auto approved) can be edited by the reviwer before approving
 - Local file saves that can be clicked to open, or sent
 - Creating a franchise from the Master menu should tie into the new way a franchise is setup and separated from the rest of them (dont think it currently is), zekrom is not tied to the global updates/individual updates
+### Proposal Safeguards
+- Reworked the safeguard gates that prevent missing key inputs from sneaking through
+    - Saving a proposal as a 'Draft' with missing inputs (ex- no name) warns the user
+    - If the user tries to 'Submit' or 'Sign' a proposal with missing inputs; it is prevented
+- Key Inputs:
+    - Every Proposal:
+        - Name,
+    - Conditional:
+        - Any spa must include a Heater
+        - Shotcrete spa must include Spa Plumbing Run
+        - Raised spa must include Facing
+        - 
+
 
 -------------------------------------
 Mid Term - 

@@ -76,17 +76,50 @@ const CompactInput = ({
   );
 };
 
+const poolDimensionFields = [
+  { key: 'perimeter', label: 'Perimeter', unit: 'ft', step: '1' },
+  { key: 'surfaceArea', label: 'Surface Area', unit: 'sqft', step: '1' },
+  { key: 'shallowDepth', label: 'Shallow Depth', unit: 'ft', step: '0.5' },
+  { key: 'endDepth', label: 'End Depth', unit: 'ft', step: '0.5' },
+  { key: 'maxWidth', label: 'Max Width', unit: 'ft', step: '0.5' },
+  { key: 'maxLength', label: 'Max Length', unit: 'ft', step: '0.5' },
+  { key: 'totalStepsAndBench', label: 'Total Steps & Bench', unit: 'ft', step: '1' },
+  { key: 'deckingArea', label: 'Decking Area', unit: 'sqft', step: '1' },
+] as const;
+
+function PoolDimensionInputs({ data, readOnly, onChange }: {
+  data: PoolSpecs;
+  readOnly: boolean;
+  onChange: (field: keyof PoolSpecs, value: number) => void;
+}) {
+  return <>
+    {[poolDimensionFields.slice(0, 4), poolDimensionFields.slice(4)].map((row, index) => (
+      <div className="spec-grid-4" key={index}>
+        {row.map(({ key, label, unit, step }) => (
+          <div className="spec-field" key={key}>
+            <label className="spec-label">{label}</label>
+            <CompactInput value={data[key]} readOnly={readOnly && key !== 'deckingArea'}
+              onChange={(event) => onChange(key, parseFloat(event.target.value) || 0)}
+              unit={unit} min="0" step={step} />
+          </div>
+        ))}
+      </div>
+    ))}
+  </>;
+}
+
 const accessoryDimensionFields = [
   ['width', 'Width'], ['length', 'Length'],
   ['shallowDepth', 'Shallow Depth'], ['deepDepth', 'Deep Depth'],
 ] as const;
 
 function AccessorySpecInputs({
-  title, specs, readOnly, onChange,
+  title, specs, readOnly, gallonsLabel = 'Gallons', onChange,
 }: {
-  title: string;
+  title?: string;
   specs?: FiberglassSpecifications;
   readOnly: boolean;
+  gallonsLabel?: string;
   onChange: (next: FiberglassSpecifications) => void;
 }) {
   const updateFeet = (key: typeof accessoryDimensionFields[number][0], decimal: number) => {
@@ -95,7 +128,7 @@ function AccessorySpecInputs({
   };
   return (
     <div style={{ marginTop: 15 }}>
-      <h3>{title} Specifications</h3>
+      {title && <h3>{title} Specifications</h3>}
       <div className="spec-grid-4">
         {accessoryDimensionFields.map(([key, label]) => (
           <div className="spec-field" key={key}>
@@ -112,7 +145,7 @@ function AccessorySpecInputs({
         {([
           ['surfaceArea', 'Water Surface Area', 'sqft'],
           ['perimeter', 'Perimeter', 'ft'],
-          ['gallons', 'Gallons', 'gal'],
+          ['gallons', gallonsLabel, 'gal'],
         ] as const).map(([key, label, unit]) => (
           <div className="spec-field" key={key}>
             <label className="spec-label">{label}</label>
@@ -208,6 +241,36 @@ function PoolSpecsSectionNew({
 
   const handleChange = (field: keyof PoolSpecs, value: any) => {
     onChange({ ...data, [field]: value });
+  };
+
+  const handlePoolTypeChange = (poolType: PoolSpecs['poolType']) => {
+    if (data.poolType === poolType) return;
+    onChange({
+      ...data,
+      poolType,
+      perimeter: 0,
+      surfaceArea: 0,
+      shallowDepth: 0,
+      endDepth: 0,
+      maxWidth: 0,
+      maxLength: 0,
+      totalStepsAndBench: 0,
+      deckingArea: 0,
+      approximateGallons: 0,
+      hasTanningShelf: false,
+      fiberglassSize: undefined,
+      fiberglassModelName: undefined,
+      fiberglassPoolSpecifications: undefined,
+      fiberglassPoolSpecsAutoFilled: false,
+      fiberglassTanningLedgeName: undefined,
+      fiberglassLedgeSpecifications: undefined,
+      fiberglassLedgeSpecsAutoFilled: false,
+      fiberglassFinishUpgradeName: undefined,
+      needsFiberglassCrane: false,
+      fiberglassModelPrice: undefined,
+      fiberglassPerimeter: undefined,
+      fiberglassCraneOption: 'no-crane',
+    });
   };
 
   const isFiberglass = data.poolType === 'fiberglass';
@@ -336,111 +399,20 @@ function PoolSpecsSectionNew({
           <button
             type="button"
             className={`pool-type-btn ${data.poolType === 'gunite' ? 'active' : ''}`}
-            onClick={() => handleChange('poolType', 'gunite')}
+            onClick={() => handlePoolTypeChange('gunite')}
           >
             Shotcrete (Custom)
           </button>
           <button
             type="button"
             className={`pool-type-btn ${data.poolType === 'fiberglass' ? 'active' : ''}`}
-            onClick={() => handleChange('poolType', 'fiberglass')}
+            onClick={() => handlePoolTypeChange('fiberglass')}
           >
             Fiberglass
           </button>
         </div>
 
-        <div className="spec-grid-4">
-          <div className="spec-field">
-            <label className="spec-label">Perimeter</label>
-            <CompactInput
-              value={data.perimeter}
-              readOnly={poolSpecsLocked}
-              onChange={(e) => handleChange('perimeter', parseFloat(e.target.value) || 0)}
-              unit="ft"
-              min="0"
-              step="1"
-            />
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">Surface Area</label>
-            <CompactInput
-              value={data.surfaceArea}
-              readOnly={poolSpecsLocked}
-              onChange={(e) => handleChange('surfaceArea', parseFloat(e.target.value) || 0)}
-              unit="sqft"
-              min="0"
-              step="1"
-            />
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">Shallow Depth</label>
-            <CompactInput
-              value={data.shallowDepth}
-              readOnly={poolSpecsLocked}
-              onChange={(e) => handleChange('shallowDepth', parseFloat(e.target.value) || 0)}
-              unit="ft"
-              min="0"
-              step="0.5"
-            />
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">End Depth</label>
-            <CompactInput
-              value={data.endDepth}
-              readOnly={poolSpecsLocked}
-              onChange={(e) => handleChange('endDepth', parseFloat(e.target.value) || 0)}
-              unit="ft"
-              min="0"
-              step="0.5"
-            />
-          </div>
-        </div>
-
-        <div className="spec-grid-4">
-          <div className="spec-field">
-            <label className="spec-label">Max Width</label>
-            <CompactInput
-              value={data.maxWidth}
-              readOnly={poolSpecsLocked}
-              onChange={(e) => handleChange('maxWidth', parseFloat(e.target.value) || 0)}
-              unit="ft"
-              min="0"
-              step="0.5"
-            />
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">Max Length</label>
-            <CompactInput
-              value={data.maxLength}
-              readOnly={poolSpecsLocked}
-              onChange={(e) => handleChange('maxLength', parseFloat(e.target.value) || 0)}
-              unit="ft"
-              min="0"
-              step="0.5"
-            />
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">Total Steps & Bench</label>
-            <CompactInput
-              value={data.totalStepsAndBench}
-              readOnly={poolSpecsLocked}
-              onChange={(e) => handleChange('totalStepsAndBench', parseFloat(e.target.value) || 0)}
-              unit="ft"
-              min="0"
-              step="1"
-            />
-          </div>
-          <div className="spec-field">
-            <label className="spec-label">Decking Area</label>
-            <CompactInput
-              value={data.deckingArea}
-              onChange={(e) => handleChange('deckingArea', parseFloat(e.target.value) || 0)}
-              unit="sqft"
-              min="0"
-              step="1"
-            />
-          </div>
-        </div>
+        {!isFiberglass && <PoolDimensionInputs data={data} readOnly={false} onChange={handleChange} />}
 
         {isFiberglass && (
           <>
@@ -537,6 +509,7 @@ function PoolSpecsSectionNew({
                 </select>
               </div>
             </div>
+            <PoolDimensionInputs data={data} readOnly={poolSpecsLocked} onChange={handleChange} />
             {data.fiberglassTanningLedgeName && data.fiberglassSpecAutofillEnabled && (
               <AccessorySpecInputs title="Tanning Ledge" specs={data.fiberglassLedgeSpecifications}
                 readOnly={ledgeSpecsLocked}
@@ -574,7 +547,7 @@ function PoolSpecsSectionNew({
           <>
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
-                <label className="spec-label">Approximate Gallons (Auto-calculated)</label>
+                <label className="spec-label">Approximate Gallons</label>
                 <CompactInput
                   type="text"
                   value={data.approximateGallons.toLocaleString()}
@@ -662,7 +635,8 @@ function PoolSpecsSectionNew({
               </div>
             </div>
             {data.spaFiberglassModelName && data.fiberglassSpecAutofillEnabled && (
-              <AccessorySpecInputs title="Spa" specs={data.fiberglassSpaSpecifications}
+              <AccessorySpecInputs specs={data.fiberglassSpaSpecifications}
+                gallonsLabel="Approximate Gallons"
                 readOnly={spaSpecsLocked}
                 onChange={(specs) => onChange({ ...data, fiberglassSpaSpecifications: specs })} />
             )}
