@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "bootstrapped": true,
-  "coreVersion": "3.3.12",
+  "coreVersion": "3.4.0",
   "masterBuild": 1,
   "franchises": {
     "5555": 1,
