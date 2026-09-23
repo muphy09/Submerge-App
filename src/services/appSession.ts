@@ -5,6 +5,7 @@ export const APP_SESSION_HEARTBEAT_INTERVAL_MS = 10000;
 const DEVICE_ID_STORAGE_KEY = 'submerge-device-id';
 
 type AppSessionAction = 'claim' | 'heartbeat' | 'release';
+type AppSessionChannel = 'production' | 'development';
 
 type AppSessionFunctionResponse = {
   status: 'claimed' | 'conflict' | 'active' | 'displaced' | 'released';
@@ -52,6 +53,10 @@ function getDeviceLabel() {
   return 'Submerge desktop app';
 }
 
+function getAppSessionChannel(): AppSessionChannel {
+  return import.meta.env.DEV ? 'development' : 'production';
+}
+
 export function getOrCreateDeviceId() {
   if (typeof localStorage === 'undefined') {
     return createRandomId();
@@ -76,6 +81,7 @@ async function invokeAppSessionAction(payload: {
   action: AppSessionAction;
   appSessionId: string;
   leaseToken: string;
+  channel: AppSessionChannel;
   deviceId?: string;
   deviceLabel?: string;
   takeover?: boolean;
@@ -108,6 +114,7 @@ export async function claimUserAppSession(options: {
 }) {
   return await invokeAppSessionAction({
     action: 'claim',
+    channel: getAppSessionChannel(),
     appSessionId: options.appSessionId,
     leaseToken: options.appSessionLeaseToken,
     deviceId: getOrCreateDeviceId(),
@@ -122,6 +129,7 @@ export async function heartbeatUserAppSession(options: {
 }) {
   return await invokeAppSessionAction({
     action: 'heartbeat',
+    channel: getAppSessionChannel(),
     appSessionId: options.appSessionId,
     leaseToken: options.appSessionLeaseToken,
   });
@@ -134,6 +142,7 @@ export async function releaseUserAppSession(options: {
   try {
     await invokeAppSessionAction({
       action: 'release',
+      channel: getAppSessionChannel(),
       appSessionId: options.appSessionId,
       leaseToken: options.appSessionLeaseToken,
     });

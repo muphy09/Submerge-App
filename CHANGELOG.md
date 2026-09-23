@@ -1,3 +1,19 @@
+## [3.4.0] - 9/23/26
+### Fiberglass Dimensions!
+- Fiberglass Dimensions automatically fill into their respective input fields (Pool and Spa)
+    - Decking Area does *not* automatically input
+- Admins can edit the dimensions for each shell inside of the Pricing Model Editor
+    - Pricing Model Editor updated to support dimensions
+- *This change only applies to NEW proposals*
+### Proposal Safeguards
+- Reworked the safeguard gates that prevent missing information from sneaking through
+    - Saving a proposal as a 'Draft' with missing information (ex- no pump) warns the user
+    - Submitting a proposal with missing information 
+### Feedback Tutorial
+- Removed the feedback tutorial window
+    - *Feedback button remains active*
+
+-----
 ## [3.3.11] - 9/22/26
 ### Remote Contract Templates
 - Converted Franchise 5555 to use remote contract templates instead of bundled

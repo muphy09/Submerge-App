@@ -69,6 +69,10 @@ function validateStagingEnvironment(requested) {
 }
 
 const requestedEnvironment = loadRequestedEnvironmentFile();
+// Local builds must not share the installed application's SQLite database or Electron storage.
+if (!process.env.SUBMERGE_DATA_PARTITION) {
+  process.env.SUBMERGE_DATA_PARTITION = 'development';
+}
 if (requestedEnvironment === '.env.staging.local') {
   process.env.SUBMERGE_DATA_PARTITION = 'staging';
   process.env.VITE_SUBMERGE_ENVIRONMENT = 'staging';

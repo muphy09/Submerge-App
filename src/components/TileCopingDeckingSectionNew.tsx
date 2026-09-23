@@ -317,7 +317,7 @@ function TileCopingDeckingSectionNew({
 
           <div className="spec-grid-3-fixed">
             <div className="spec-field">
-              <label className="spec-label required">Tile Option</label>
+              <label className="spec-label">Tile Option</label>
               <CompactSelect
                 value={selectedTileOptionId}
                 onChange={(e) => handleTileOptionChange(e.target.value)}
@@ -385,7 +385,7 @@ function TileCopingDeckingSectionNew({
 
         <div className="spec-grid-4-fixed">
           <div className="spec-field">
-            <label className="spec-label required">Coping Type</label>
+            <label className="spec-label">Coping Type</label>
             <CompactSelect
               value={selectedCopingType || 'none'}
               onChange={(e) => handleChange('copingType', e.target.value === 'none' ? 'none' : e.target.value)}
@@ -490,7 +490,7 @@ function TileCopingDeckingSectionNew({
 
         <div className="spec-grid-4-fixed">
           <div className="spec-field">
-            <label className="spec-label required">Decking Type</label>
+            <label className="spec-label">Decking Type</label>
             <CompactSelect
               value={selectedDeckingType || 'none'}
               onChange={(e) => handleChange('deckingType', e.target.value === 'none' ? 'none' : e.target.value)}

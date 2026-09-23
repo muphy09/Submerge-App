@@ -1,10 +1,7 @@
----
-
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
 - Text change bug 
 - Checkbox for 3 year warranty and 5 year warranty in pricing sheet & contract
-- Add dimensions of fiber shell
 - Bookkeeper Overhaul
     - When opening a proposal summary in the reviewer workspace, show cogs show be toggled ON by default
     - Approved proposals tooltip for Edit Proposal should say 'Approved Proposals in the reviewer workspace are Read-Only. Designer must create another version to make edits'
@@ -40,7 +37,5 @@ Help Needed -
 ----------------------------------------------------------------------------------------------------------
 KNOWN ISSUES -
 - Mac version does not print preview / print contracts
-- Submission workflow blocks are too large (vertically)
-
 ----------------------------------------------------------------------------------------------------------
 Confusion -

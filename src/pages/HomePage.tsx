@@ -25,15 +25,9 @@ import {
 
 type HomePageProps = {
   session?: UserSession | null;
-  onFeedbackInboxVisibilityChange?: (isOpen: boolean) => void;
-  onFeedbackInboxLoadingChange?: (isLoading: boolean) => void;
 };
 
-function HomePage({
-  session,
-  onFeedbackInboxVisibilityChange,
-  onFeedbackInboxLoadingChange,
-}: HomePageProps) {
+function HomePage({ session }: HomePageProps) {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [proposalLoadIssues, setProposalLoadIssues] = useState<LocalProposalLoadIssue[]>([]);
@@ -87,34 +81,19 @@ function HomePage({
     if (!session?.userId) {
       setPendingFeedbackReplies([]);
       setFeedbackInboxOpen(false);
-      onFeedbackInboxLoadingChange?.(false);
       return;
     }
-    onFeedbackInboxLoadingChange?.(true);
     try {
       const rows = await listPendingFeedbackReplies(session.userId, 20);
       setPendingFeedbackReplies(rows);
     } catch (error) {
       console.error('Failed to load feedback replies:', error);
-    } finally {
-      onFeedbackInboxLoadingChange?.(false);
     }
-  }, [onFeedbackInboxLoadingChange, session?.userId]);
+  }, [session?.userId]);
 
   useEffect(() => {
     setFeedbackInboxOpen(pendingFeedbackReplies.length > 0);
   }, [pendingFeedbackReplies.length]);
-
-  useEffect(() => {
-    onFeedbackInboxVisibilityChange?.(feedbackInboxOpen);
-  }, [feedbackInboxOpen, onFeedbackInboxVisibilityChange]);
-
-  useEffect(() => {
-    return () => {
-      onFeedbackInboxVisibilityChange?.(false);
-      onFeedbackInboxLoadingChange?.(false);
-    };
-  }, [onFeedbackInboxLoadingChange, onFeedbackInboxVisibilityChange]);
 
   useEffect(() => {
     void loadFeedbackReplies();

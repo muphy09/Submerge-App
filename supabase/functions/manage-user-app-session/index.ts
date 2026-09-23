@@ -2,6 +2,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SESSION_STALE_MS = 3 * 60 * 1000;
 const ALLOWED_ROLES = new Set(['master', 'owner', 'admin', 'bookkeeper', 'designer']);
+const PRODUCTION_SESSION_TABLE = 'user_app_sessions';
+const MASTER_DEVELOPMENT_SESSION_TABLE = 'master_dev_app_sessions';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -86,10 +88,11 @@ function isFresh(row: SessionRow | null) {
 
 async function getCurrentSessionRow(
   supabase: ReturnType<typeof getAdminClient>,
-  authUserId: string
+  authUserId: string,
+  sessionTable: string
 ): Promise<SessionRow | null> {
   const { data, error } = await supabase
-    .from('user_app_sessions')
+    .from(sessionTable)
     .select('auth_user_id,device_id,device_label,active_app_session_id,active_lease_token,claimed_at,last_seen_at')
     .eq('auth_user_id', authUserId)
     .maybeSingle();
@@ -104,6 +107,8 @@ async function getCurrentSessionRow(
 async function claimSession(options: {
   supabase: ReturnType<typeof getAdminClient>;
   authUserId: string;
+  sessionTable: string;
+  isMaster: boolean;
   authToken: string;
   appSessionId: string;
   leaseToken: string;
@@ -111,7 +116,7 @@ async function claimSession(options: {
   deviceLabel: string;
   takeover: boolean;
 }) {
-  const current = await getCurrentSessionRow(options.supabase, options.authUserId);
+  const current = await getCurrentSessionRow(options.supabase, options.authUserId, options.sessionTable);
   const now = new Date().toISOString();
   const fresh = isFresh(current);
   const currentSessionId = normalizeText(current?.active_app_session_id);
@@ -126,14 +131,16 @@ async function claimSession(options: {
     return json({ status: 'conflict', staleWindowMs: SESSION_STALE_MS });
   }
 
-  if (shouldReplaceFreshSession) {
+  // Revoking every other Supabase refresh token would also end the master's other slot.
+  // The app-session lease still displaces the prior instance in this slot.
+  if (shouldReplaceFreshSession && !options.isMaster) {
     const { error: signOutError } = await options.supabase.auth.admin.signOut(options.authToken, 'others');
     if (signOutError) {
       throw signOutError;
     }
   }
 
-  const { error: upsertError } = await options.supabase.from('user_app_sessions').upsert({
+  const { error: upsertError } = await options.supabase.from(options.sessionTable).upsert({
     auth_user_id: options.authUserId,
     device_id: options.deviceId,
     device_label: options.deviceLabel,
@@ -154,10 +161,11 @@ async function claimSession(options: {
 async function heartbeatSession(options: {
   supabase: ReturnType<typeof getAdminClient>;
   authUserId: string;
+  sessionTable: string;
   appSessionId: string;
   leaseToken: string;
 }) {
-  const current = await getCurrentSessionRow(options.supabase, options.authUserId);
+  const current = await getCurrentSessionRow(options.supabase, options.authUserId, options.sessionTable);
   const currentSessionId = normalizeText(current?.active_app_session_id);
   const currentLeaseToken = normalizeText(current?.active_lease_token);
 
@@ -167,7 +175,7 @@ async function heartbeatSession(options: {
 
   const now = new Date().toISOString();
   const { error: updateError } = await options.supabase
-    .from('user_app_sessions')
+    .from(options.sessionTable)
     .update({
       last_seen_at: now,
       updated_at: now,
@@ -186,10 +194,11 @@ async function heartbeatSession(options: {
 async function releaseSession(options: {
   supabase: ReturnType<typeof getAdminClient>;
   authUserId: string;
+  sessionTable: string;
   appSessionId: string;
   leaseToken: string;
 }) {
-  const current = await getCurrentSessionRow(options.supabase, options.authUserId);
+  const current = await getCurrentSessionRow(options.supabase, options.authUserId, options.sessionTable);
   const currentSessionId = normalizeText(current?.active_app_session_id);
   const currentLeaseToken = normalizeText(current?.active_lease_token);
 
@@ -199,7 +208,7 @@ async function releaseSession(options: {
 
   const now = new Date().toISOString();
   const { error: updateError } = await options.supabase
-    .from('user_app_sessions')
+    .from(options.sessionTable)
     .update({
       active_app_session_id: null,
       active_lease_token: crypto.randomUUID(),
@@ -255,6 +264,13 @@ Deno.serve(async (req) => {
       return json({ error: 'Unauthorized.' }, 401);
     }
 
+    // Only the server-trusted profile role can use the development slot.
+    // Older installed builds omit channel and continue using the production slot.
+    const isMaster = role === 'master';
+    const sessionTable = isMaster && body?.channel === 'development'
+      ? MASTER_DEVELOPMENT_SESSION_TABLE
+      : PRODUCTION_SESSION_TABLE;
+
     if (action === 'claim') {
       const deviceId = normalizeText(body?.deviceId);
       const deviceLabel = normalizeText(body?.deviceLabel) || 'Submerge desktop app';
@@ -265,6 +281,8 @@ Deno.serve(async (req) => {
       return await claimSession({
         supabase,
         authUserId,
+        sessionTable,
+        isMaster,
         authToken,
         appSessionId,
         leaseToken,
@@ -278,6 +296,7 @@ Deno.serve(async (req) => {
       return await heartbeatSession({
         supabase,
         authUserId,
+        sessionTable,
         appSessionId,
         leaseToken,
       });
@@ -286,6 +305,7 @@ Deno.serve(async (req) => {
     return await releaseSession({
       supabase,
       authUserId,
+      sessionTable,
       appSessionId,
       leaseToken,
     });

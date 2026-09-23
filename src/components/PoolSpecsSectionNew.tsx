@@ -214,7 +214,7 @@ function PoolSpecsSectionNew({
         <ProposalNote categoryKey="poolSpecs" subcategoryId="customerInformation" overrides={noteOverrides} />
         <div className="spec-grid-3">
           <div className="spec-field">
-            <label className="spec-label required">Customer Name</label>
+            <label className="spec-label">Customer Name</label>
             <input
               type="text"
               className="compact-input"
@@ -224,7 +224,7 @@ function PoolSpecsSectionNew({
             />
           </div>
           <div className="spec-field">
-            <label className="spec-label required">Customer City</label>
+            <label className="spec-label">Customer City</label>
             <input
               type="text"
               className="compact-input"
@@ -234,7 +234,7 @@ function PoolSpecsSectionNew({
             />
           </div>
           <div className="spec-field">
-            <label className="spec-label required">Customer State</label>
+            <label className="spec-label">Customer State</label>
             <select
               className="compact-input"
               value={customerInfo.state || 'NC'}
@@ -274,7 +274,7 @@ function PoolSpecsSectionNew({
 
         <div className="spec-grid-4">
           <div className="spec-field">
-            <label className="spec-label required">Perimeter</label>
+            <label className="spec-label">Perimeter</label>
             <CompactInput
               value={data.perimeter}
               onChange={(e) => handleChange('perimeter', parseFloat(e.target.value) || 0)}
@@ -284,7 +284,7 @@ function PoolSpecsSectionNew({
             />
           </div>
           <div className="spec-field">
-            <label className="spec-label required">Surface Area</label>
+            <label className="spec-label">Surface Area</label>
             <CompactInput
               value={data.surfaceArea}
               onChange={(e) => handleChange('surfaceArea', parseFloat(e.target.value) || 0)}
@@ -294,7 +294,7 @@ function PoolSpecsSectionNew({
             />
           </div>
           <div className="spec-field">
-            <label className="spec-label required">Shallow Depth</label>
+            <label className="spec-label">Shallow Depth</label>
             <CompactInput
               value={data.shallowDepth}
               onChange={(e) => handleChange('shallowDepth', parseFloat(e.target.value) || 0)}
@@ -304,7 +304,7 @@ function PoolSpecsSectionNew({
             />
           </div>
           <div className="spec-field">
-            <label className="spec-label required">End Depth</label>
+            <label className="spec-label">End Depth</label>
             <CompactInput
               value={data.endDepth}
               onChange={(e) => handleChange('endDepth', parseFloat(e.target.value) || 0)}
@@ -362,7 +362,7 @@ function PoolSpecsSectionNew({
           <>
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
-                <label className="spec-label required">Fiberglass Size</label>
+                <label className="spec-label">Fiberglass Size</label>
                 <select
                   className="compact-input"
                   value={selectedFiberglassSize || ''}
@@ -386,7 +386,7 @@ function PoolSpecsSectionNew({
                 </select>
               </div>
               <div className="spec-field">
-                <label className="spec-label required">Fiberglass Model</label>
+                <label className="spec-label">Fiberglass Model</label>
                 <TooltipAnchor as="div" tooltip={!selectedFiberglassSize ? 'Select a fiberglass size first' : undefined}>
                   <select
                     className="compact-input"
@@ -549,7 +549,7 @@ function PoolSpecsSectionNew({
           <>
             <div className="spec-grid-2" style={{ marginTop: '15px' }}>
               <div className="spec-field">
-                <label className="spec-label required">Fiberglass Spa Option</label>
+                <label className="spec-label">Fiberglass Spa Option</label>
                 <select
                   className="compact-input"
                   value={data.spaFiberglassModelName || ''}
@@ -610,7 +610,7 @@ function PoolSpecsSectionNew({
           <>
             <div className="spec-grid-4">
               <div className="spec-field">
-                <label className="spec-label required">Spa Length</label>
+                <label className="spec-label">Spa Length</label>
                 <CompactInput
                   value={data.spaLength}
                   onChange={(e) => handleChange('spaLength', parseFloat(e.target.value) || 0)}
@@ -620,7 +620,7 @@ function PoolSpecsSectionNew({
                 />
               </div>
               <div className="spec-field">
-                <label className="spec-label required">Spa Width</label>
+                <label className="spec-label">Spa Width</label>
                 <CompactInput
                   value={data.spaWidth}
                   onChange={(e) => handleChange('spaWidth', parseFloat(e.target.value) || 0)}

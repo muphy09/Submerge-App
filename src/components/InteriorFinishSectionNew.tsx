@@ -176,7 +176,7 @@ function InteriorFinishSectionNew({
 
         <div className="spec-grid spec-grid-2">
           <div className="spec-field">
-            <label className="spec-label required">Finish</label>
+            <label className="spec-label">Finish</label>
             <TooltipAnchor as="div" tooltip={isFiberglass ? fiberglassDisabledMessage : undefined}>
               <CompactSelect
                 value={effectiveFinishType}

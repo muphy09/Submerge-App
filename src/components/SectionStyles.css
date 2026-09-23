@@ -48,11 +48,6 @@
   font-size: 0.95rem;
 }
 
-.form-label.required::after {
-  content: ' *';
-  color: #ef4444;
-}
-
 .form-input, .form-textarea {
   width: 100%;
   padding: 10px 14px;
@@ -1006,11 +1001,6 @@ select.compact-input {
 .inline-overage-warning:focus-visible {
   outline: 2px solid rgba(220, 38, 38, 0.32);
   outline-offset: 2px;
-}
-
-.spec-label.required::after {
-  content: ' *';
-  color: #ef4444;
 }
 
 .spec-full-width {

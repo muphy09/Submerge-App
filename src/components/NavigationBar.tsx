@@ -5,7 +5,6 @@ import {
   useState,
   type FocusEvent as ReactFocusEvent,
   type MouseEvent as ReactMouseEvent,
-  type Ref,
 } from 'react';
 import FranchiseLogo from './FranchiseLogo';
 import FeedbackLauncher from './FeedbackLauncher';
@@ -27,7 +26,6 @@ interface NavigationBarProps {
   isAdminSettingsOpen?: boolean;
   showFeedback?: boolean;
   onFeedback?: () => void;
-  feedbackLauncherRef?: Ref<HTMLButtonElement>;
   actingLabel?: string | null;
   onStopActing?: () => void;
   appVersion?: string;
@@ -112,7 +110,6 @@ function NavigationBar({
   isAdminSettingsOpen = false,
   showFeedback = false,
   onFeedback,
-  feedbackLauncherRef,
   actingLabel,
   onStopActing,
   appVersion,
@@ -404,7 +401,6 @@ function NavigationBar({
 
             {showFeedback && onFeedback && (
               <FeedbackLauncher
-                ref={feedbackLauncherRef}
                 className="nav-feedback-button"
                 tooltip="Submit feedback"
                 onClick={onFeedback}
