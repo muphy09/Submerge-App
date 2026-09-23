@@ -42,19 +42,6 @@ const DEFAULT_FIELDS = contractFieldLayout as TemplateField[];
 const DEFAULT_STATE = 'NC';
 export const DEFAULT_CONTRACT_TEMPLATE_ID: ContractTemplateId = 'nc-gunite';
 
-const NC_GUNITE_URL = new URL('../../docs/Contracts/NEW 2026 Contract NC Shotcrete.pdf', import.meta.url);
-const NC_FIBERGLASS_URL = new URL('../../docs/Contracts/NEW 2026 Contract NC Fiberglass.pdf', import.meta.url);
-const NC_FIBERGLASS_REVISION_1_URL = new URL(
-  '../../docs/Contracts/NEW 2026 Contract NC Fiberglass Revision 1.pdf',
-  import.meta.url
-);
-const SC_GUNITE_URL = new URL('../../docs/Contracts/NEW 2026 Contract SC Shotcrete.pdf', import.meta.url);
-const SC_FIBERGLASS_URL = new URL('../../docs/Contracts/NEW 2026 Contract SC Fiberglass.pdf', import.meta.url);
-const SC_FIBERGLASS_REVISION_1_URL = new URL(
-  '../../docs/Contracts/NEW 2026 Contract SC Fiberglass Revision 1.pdf',
-  import.meta.url
-);
-
 type FieldOverride = {
   id: string;
   page: number;
@@ -426,7 +413,6 @@ const applyPageFieldTransforms = (templateId: ContractTemplateId, fields: Templa
 const buildTemplate = (
   id: ContractTemplateId,
   label: string,
-  url: URL,
   overrides: FieldOverride[] = [],
   staticPatches: ContractStaticPatch[] = []
 ): ContractTemplate => {
@@ -434,8 +420,10 @@ const buildTemplate = (
   return {
     id,
     label,
-    pdfUrl: url.href,
-    pdfPath: url.pathname,
+    // Historical layout metadata remains in the app so saved bundled IDs can
+    // be mapped to remote revisions. PDF files are never bundled in new builds.
+    pdfUrl: '',
+    pdfPath: '',
     fields: widenPaymentScheduleFields(
       applyFieldOverrides(applyPageFieldTransforms(id, applyInlineFieldAdjustments(DEFAULT_FIELDS)), fieldOverrides)
     ),
@@ -447,28 +435,24 @@ const CONTRACT_TEMPLATES: Record<ContractTemplateId, ContractTemplate> = {
   'nc-gunite': buildTemplate(
     'nc-gunite',
     '2026 Contract NC Shotcrete',
-    NC_GUNITE_URL,
     PAYMENT_SCHEDULE_OVERRIDES['nc-gunite'],
     STATIC_TEMPLATE_PATCHES['nc-gunite']
   ),
   'nc-fiberglass': buildTemplate(
     'nc-fiberglass',
     '2026 Contract NC Fiberglass',
-    NC_FIBERGLASS_URL,
     PAYMENT_SCHEDULE_OVERRIDES['nc-fiberglass'],
     STATIC_TEMPLATE_PATCHES['nc-fiberglass']
   ),
   'sc-gunite': buildTemplate(
     'sc-gunite',
     '2026 Contract SC Shotcrete',
-    SC_GUNITE_URL,
     PAYMENT_SCHEDULE_OVERRIDES['sc-gunite'],
     STATIC_TEMPLATE_PATCHES['sc-gunite']
   ),
   'sc-fiberglass': buildTemplate(
     'sc-fiberglass',
     '2026 Contract SC Fiberglass',
-    SC_FIBERGLASS_URL,
     PAYMENT_SCHEDULE_OVERRIDES['sc-fiberglass'],
     STATIC_TEMPLATE_PATCHES['sc-fiberglass']
   ),
@@ -512,7 +496,6 @@ const BUNDLED_CONTRACT_TEMPLATE_REVISIONS: Record<
         buildTemplate(
           'nc-fiberglass',
           '2026 Contract NC Fiberglass',
-          NC_FIBERGLASS_REVISION_1_URL,
           PAYMENT_SCHEDULE_OVERRIDES['nc-fiberglass'],
           STATIC_TEMPLATE_PATCHES['nc-fiberglass']
         ),
@@ -551,7 +534,6 @@ const BUNDLED_CONTRACT_TEMPLATE_REVISIONS: Record<
         buildTemplate(
           'sc-fiberglass',
           '2026 Contract SC Fiberglass',
-          SC_FIBERGLASS_REVISION_1_URL,
           PAYMENT_SCHEDULE_OVERRIDES['sc-fiberglass'],
           STATIC_TEMPLATE_PATCHES['sc-fiberglass']
         ),

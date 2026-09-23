@@ -4,7 +4,6 @@ import {
   ContractStaticPatch,
   ContractTemplate,
   ContractTemplateId,
-  getContractTemplate,
 } from './contractTemplates';
 
 export type ContractPdfFieldLayout = {
@@ -78,8 +77,8 @@ function resolvePatchFillColor(fill: ContractStaticPatch['fill']) {
   return WHITE_FILL;
 }
 
-async function loadTemplateBytes(templateId?: ContractTemplateId, templateOverride?: ContractTemplate): Promise<Uint8Array> {
-  const template = templateOverride || getContractTemplate(templateId);
+async function loadTemplateBytes(template: ContractTemplate): Promise<Uint8Array> {
+  if (!template?.pdfUrl) throw new Error('A published remote contract template is required.');
   // Browser
   if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
     const res = await fetch(template.pdfUrl);
@@ -149,10 +148,11 @@ export async function buildContractPdf(
   fields: ContractFieldRender[],
   options: ContractPdfBuildOptions = {}
 ): Promise<ContractPdfResult> {
-  const { flatten = false, includeFormFields = true, templateId, template: templateOverride } = options;
-  const template = templateOverride || getContractTemplate(templateId);
+  const { flatten = false, includeFormFields = true, template: templateOverride } = options;
+  const template = templateOverride;
+  if (!template?.pdfUrl) throw new Error('A published remote contract template is required.');
   const usePpasEastTypography = fields.some((field) => field.id === 'p1_house_water_well');
-  const templateBytes = await loadTemplateBytes(templateId, templateOverride);
+  const templateBytes = await loadTemplateBytes(template);
   const pdf = await PDFDocument.load(templateBytes);
   const form = pdf.getForm();
   const font = await pdf.embedFont(StandardFonts.Helvetica);

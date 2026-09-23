@@ -9,6 +9,7 @@ output/
 playwright-report/
 test-results/
 tmp/published-package-smoke-run/
+tmp/west-contract-dashboard/
 *.tsbuildinfo
 
 # Database files

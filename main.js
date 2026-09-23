@@ -1040,6 +1040,38 @@ ipcMain.handle('open-proposals-folder', async () => {
   }
 });
 
+function contractRevisionCachePath(payload) {
+  const franchiseId = String(payload?.franchiseId || '');
+  const revisionId = String(payload?.revisionId || '');
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(franchiseId) || !/^[a-zA-Z0-9_-]{1,128}$/.test(revisionId)) {
+    throw new Error('Invalid contract revision cache key.');
+  }
+  return path.join(app.getPath('userData'), 'contract-revision-cache', franchiseId, `${revisionId}.pdf`);
+}
+
+ipcMain.handle('get-contract-revision-pdf', async (_event, payload) => {
+  const filePath = contractRevisionCachePath(payload);
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath);
+});
+
+ipcMain.handle('save-contract-revision-pdf', async (_event, payload) => {
+  const filePath = contractRevisionCachePath(payload);
+  const bytes = Buffer.from(payload?.bytes || []);
+  if (bytes.length < 5 || bytes.length > 20 * 1024 * 1024 || bytes.subarray(0, 5).toString() !== '%PDF-') {
+    throw new Error('Invalid contract PDF cache bytes.');
+  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, bytes);
+    fs.renameSync(temporaryPath, filePath);
+  } finally {
+    if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+  }
+  return true;
+});
+
 function readFirstExistingText(possiblePaths, missingMessage) {
   for (const filePath of possiblePaths) {
     if (fs.existsSync(filePath)) {

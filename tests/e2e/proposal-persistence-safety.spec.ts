@@ -1,9 +1,11 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
 import MasterPricingEngine from '../../src/services/masterPricingEngine';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
+import { getBundledContractTemplateRevision } from '../../src/services/contractTemplates';
 
 const workspaceRoot = path.resolve(__dirname, '..', '..');
 const sessionStorageKey = 'submerge-user-session';
@@ -250,7 +252,7 @@ test('West contract revision choices stay with separate locally saved proposals'
   const firstNumber = 'TEST-PWTEST-CONTRACT-CHOICE-A';
   const secondNumber = 'TEST-PWTEST-CONTRACT-CHOICE-B';
   const oldRevision = `bundled:${testSession.franchiseId}:nc-gunite:r1`;
-  const newRevision = `bundled:${testSession.franchiseId}:nc-gunite:r2`;
+  const newRevision = 'remote-nc-gunite-r2';
   const makeProposal = (number: string, name: string) => ({
     ...buildLocalProposal(number, name),
     designerCode: '5555',
@@ -272,8 +274,41 @@ test('West contract revision choices stay with separate locally saved proposals'
       const session = JSON.parse(localStorage.getItem(sessionKey) || '{}');
       localStorage.setItem(sessionKey, JSON.stringify({ ...session, franchiseCode: '5555' }));
     }, sessionStorageKey);
-    await window.context().setOffline(true);
-
+    const pdfBytes = readFileSync(path.join(workspaceRoot, 'docs', 'Contracts', 'NEW 2026 Contract NC Shotcrete.pdf'));
+    const checksum = createHash('sha256').update(pdfBytes).digest('hex');
+    const revisions = [1, 2].map((number) => {
+      const source = getBundledContractTemplateRevision('nc-gunite', number)!;
+      return {
+        id: `remote-nc-gunite-r${number}`,
+        contract_template_id: 'remote-nc-gunite', franchise_id: testSession.franchiseId,
+        revision_number: number, storage_path: `playwright/nc-gunite/r${number}.pdf`,
+        original_file_name: 'NEW 2026 Contract NC Shotcrete.pdf', file_checksum: checksum,
+        field_layout_json: source.contractTemplate.fields,
+        autofill_rules_json: {
+          schemaVersion: 2, renderProfile: 'ppas-west-2026-v1',
+          defaultFieldValues: source.contractTemplate.defaultFieldValues,
+          changeNotes: [...(source.changeNotes || [])], effectivePublishedAt: source.publishedAt,
+          legacyBundledId: `bundled:${testSession.franchiseId}:nc-gunite:r${number}`,
+        },
+        published_at: source.publishedAt,
+      };
+    });
+    await window.evaluate(async ({ franchiseId, revisions: cachedRevisions, pdfBase64 }) => {
+      localStorage.setItem(`submerge-contract-template-catalog-v1:${franchiseId}`, JSON.stringify({
+        templates: [{
+          id: 'remote-nc-gunite', franchise_id: franchiseId, name: '2026 Contract NC Shotcrete',
+          jurisdiction_key: 'NC', pool_type: 'shotcrete', current_revision_id: 'remote-nc-gunite-r2',
+          is_active: false, remote_client_published: true,
+        }],
+        revisions: cachedRevisions,
+      }));
+      const bytes = Uint8Array.from(atob(pdfBase64), (char) => char.charCodeAt(0));
+      for (const revision of cachedRevisions) {
+        await window.electron.saveContractRevisionPdf({
+          franchiseId, revisionId: revision.id, bytes,
+        });
+      }
+    }, { franchiseId: testSession.franchiseId, revisions, pdfBase64: pdfBytes.toString('base64') });
     let firstVisit = true;
     const visit = async (number: string) => {
       await window.evaluate(({ route, reload }) => {
@@ -284,6 +319,7 @@ test('West contract revision choices stay with separate locally saved proposals'
       await expect(window.getByRole('button', { name: /View Contract/ })).toBeVisible({ timeout: 20_000 });
     };
     await visit(firstNumber);
+    await window.context().setOffline(true);
     await window.getByRole('button', { name: /View Contract/ }).click();
     await window.getByRole('dialog').getByRole('button', { name: 'Apply Update' }).click();
     await expect(window.locator('[data-field-id="p1_36"] input')).toHaveValue('3');

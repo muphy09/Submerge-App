@@ -24,6 +24,7 @@ import {
 import { ToastProvider, useToast } from './components/Toast';
 import LoginModal from './components/LoginModal';
 import { getSupabaseClient } from './services/supabaseClient';
+import { prefetchWestContractRevisions } from './services/contractTemplateRegistry';
 import CloudConnectionNotice from './components/CloudConnectionNotice';
 import useCloudConnection from './hooks/useCloudConnection';
 import useKeyboardNavigation from './hooks/useKeyboardNavigation';
@@ -350,6 +351,34 @@ function AppContent() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    if (!session?.userId) return;
+    let cancelled = false;
+    const prefetch = async () => {
+      if (cancelled || navigator.onLine === false) return;
+      try {
+        let westId = session.franchiseCode === '5555' ? session.franchiseId : null;
+        if (!westId && session.role === 'master') {
+          const supabase = getSupabaseClient();
+          const { data, error } = supabase
+            ? await supabase.from('franchises').select('id').eq('franchise_code', '5555').maybeSingle()
+            : { data: null, error: null };
+          if (error) throw error;
+          westId = data?.id;
+        }
+        if (westId && !cancelled) await prefetchWestContractRevisions(westId);
+      } catch (error) {
+        if (!cancelled) console.warn('PPAS West contracts could not be cached for offline use.', error);
+      }
+    };
+    void prefetch();
+    window.addEventListener('online', prefetch);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', prefetch);
+    };
+  }, [session?.userId, session?.franchiseId, session?.franchiseCode, session?.role]);
 
   useEffect(() => {
     if (!session?.userId) {

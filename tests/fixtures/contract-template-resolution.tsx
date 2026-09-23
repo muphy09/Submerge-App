@@ -5,7 +5,7 @@ import ProposalView from '../../src/pages/ProposalView';
 import ProposalForm from '../../src/pages/ProposalForm';
 import { ToastProvider } from '../../src/components/Toast';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
-import { checkProposalContractRevision, adoptContractRevision, declineContractRevision } from '../../src/services/contractTemplateRegistry';
+import { checkProposalContractRevision, adoptContractRevision, declineContractRevision, prefetchWestContractRevisions } from '../../src/services/contractTemplateRegistry';
 import { getEditableContractFields } from '../../src/services/contractGenerator';
 import { getActivePricingModelMeta } from '../../src/services/pricingDataStore';
 import '../../src/index.css';
@@ -70,6 +70,7 @@ fixture.returnValues = async (overrides: any = {}) => {
   };
 };
 fixture.pricingMeta = getActivePricingModelMeta;
+fixture.prefetchWest = () => prefetchWestContractRevisions(proposal.franchiseId === 'default' ? proposal.pricingModelFranchiseId : proposal.franchiseId);
 
 function Navigation() {
   const navigate = useNavigate();

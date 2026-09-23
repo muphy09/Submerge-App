@@ -29,6 +29,8 @@ declare global {
           notes: string;
         }>;
       }>;
+      getContractRevisionPdf: (payload: { franchiseId: string; revisionId: string }) => Promise<Uint8Array | null>;
+      saveContractRevisionPdf: (payload: { franchiseId: string; revisionId: string; bytes: Uint8Array }) => Promise<boolean>;
       onOpenProposal?: (callback: (proposal: any) => void) => void;
 
       // Reference data
