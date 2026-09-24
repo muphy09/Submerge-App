@@ -75,6 +75,7 @@ type LocalProposalFileEntry = {
 
 const PENDING_MESSAGE = 'Awaiting cloud sync';
 const ONLINE_SYNC_MESSAGE = 'Synced with cloud';
+const BLOCKED_SYNC_MESSAGE = 'Cloud sync blocked by permissions. Local changes are preserved.';
 const PENDING_DELETE_STORAGE_KEY = 'submerge.pendingProposalDeletes';
 const DELETED_TOMBSTONES_STORAGE_KEY = 'submerge.deletedProposalTombstones';
 const LOCAL_PROPOSAL_OWNERS_STORAGE_KEY = 'submerge.localProposalOwners.v1';
@@ -277,16 +278,22 @@ function canAttemptProposalWrite(proposal: Proposal, session?: UserSession | nul
     return false;
   }
 
-  if (role === 'master' || role === 'owner' || role === 'admin') {
-    return true;
-  }
+  // This guard is used only by background sync. Reviewer access to another
+  // designer's submitted proposal does not make its local cache an owned draft.
+  return isOwnProposal(proposal, session);
+}
 
-  if (!normalizeIdentity((proposal as any).designerName)) {
-    return true;
-  }
+function isProposalPermissionDenied(error: unknown) {
+  const candidate = error as { code?: string; status?: number; message?: string } | null;
+  return candidate?.code === '42501' || candidate?.status === 403 ||
+    /row-level security policy|permission denied/i.test(candidate?.message || '');
+}
 
-  const currentUserName = getCurrentUserIdentity(session) || normalizeIdentity(getSessionUserName());
-  return !currentUserName || isOwnProposal(proposal, session);
+function proposalPermissionError(message: string) {
+  const error = new Error(message);
+  (error as any).code = '42501';
+  (error as any).status = 403;
+  return error;
 }
 
 function canReadProposal(proposal: Proposal, session?: UserSession | null) {
@@ -721,6 +728,7 @@ function pickNewest(a?: Proposal | null, b?: Proposal | null): Proposal | null {
 }
 
 function shouldSyncLocal(local: Proposal, remote?: Proposal | null) {
+  if (local.syncStatus === 'error') return false;
   if (!remote) return true;
   const remoteTs = coerceTimestamp(remote.lastModified || remote.createdDate);
   const localTs = coerceTimestamp(local.lastModified || local.createdDate);
@@ -747,6 +755,12 @@ async function upsertToSupabase(
   // computer recovered or edited the proposal during synchronization.
   const freshlyStoredProposal = await fetchSupabaseProposal(normalized.proposalNumber, readSession());
   const existingProposal = freshlyStoredProposal || knownExistingProposal || null;
+  if (
+    freshlyStoredProposal?.designerAuthUserId &&
+    normalizeIdentity(freshlyStoredProposal.designerAuthUserId) !== normalizeIdentity(normalized.designerAuthUserId)
+  ) {
+    throw proposalPermissionError('The stored proposal belongs to a different designer.');
+  }
   const unsafeOverwriteReason = getUnsafeProposalOverwriteReason(normalized, existingProposal);
   if (unsafeOverwriteReason) {
     throw createUnsafeProposalOverwriteError(unsafeOverwriteReason);
@@ -772,13 +786,54 @@ async function upsertToSupabase(
       syncMessage: ONLINE_SYNC_MESSAGE,
     },
   };
-  let { error } = await supabase
-    .from(getProposalTableName())
-    .upsert(
-      proposalRow,
-      { onConflict: 'proposal_number', ignoreDuplicates: false }
-    );
-  if (error && proposalOwnershipColumnUnavailable(error)) {
+  const session = readSession();
+  const reviewerRole = getEffectiveRole(session);
+  const updatingAnotherDesigner = !isOwnProposal(normalized, session);
+  if (updatingAnotherDesigner) {
+    if (
+      isMasterSession() ||
+      !['owner', 'admin', 'bookkeeper'].includes(reviewerRole) ||
+      !freshlyStoredProposal ||
+      freshlyStoredProposal.franchiseId !== normalized.franchiseId ||
+      normalizeIdentity(freshlyStoredProposal.designerAuthUserId) !== normalizeIdentity(normalized.designerAuthUserId) ||
+      normalizeIdentity(freshlyStoredProposal.designerName) !== normalizeIdentity(normalized.designerName)
+    ) {
+      throw proposalPermissionError('This proposal cannot be changed by this account.');
+    }
+  }
+
+  let error: any;
+  if (updatingAnotherDesigner) {
+    // An upsert always passes through the owner-only INSERT policy, even when
+    // the row already exists. A reviewer must use the RLS-gated UPDATE path.
+    const reviewerUpdate = {
+      status: proposalRow.status,
+      pricing_model_id: proposalRow.pricing_model_id,
+      pricing_model_name: proposalRow.pricing_model_name,
+      last_modified: proposalRow.last_modified,
+      updated_at: proposalRow.updated_at,
+      proposal_json: proposalRow.proposal_json,
+    };
+    let updateQuery = supabase
+      .from(getProposalTableName())
+      .update(reviewerUpdate)
+      .eq('proposal_number', normalized.proposalNumber)
+      .eq('franchise_id', freshlyStoredProposal!.franchiseId!);
+    updateQuery = freshlyStoredProposal!.designerAuthUserId
+      ? updateQuery.eq('designer_auth_user_id', freshlyStoredProposal!.designerAuthUserId)
+      : updateQuery.is('designer_auth_user_id', null);
+    const updateResult = await updateQuery.select('proposal_number');
+    error = updateResult.error;
+    if (!error && updateResult.data?.length !== 1) {
+      throw proposalPermissionError('This proposal could not be updated with the current permissions.');
+    }
+  } else {
+    const upsertResult = await supabase
+      .from(getProposalTableName())
+      .upsert(proposalRow, { onConflict: 'proposal_number', ignoreDuplicates: false });
+    error = upsertResult.error;
+  }
+  if (error && !updatingAnotherDesigner && proposalOwnershipColumnUnavailable(error)) {
     const { designer_auth_user_id: _designerAuthUserId, ...legacyProposalRow } = proposalRow;
     const legacyResult = await supabase
       .from(getProposalTableName())
@@ -797,6 +852,7 @@ async function upsertToSupabase(
     (wrapped as any).code = (error as any).code;
     (wrapped as any).details = (error as any).details;
     (wrapped as any).hint = (error as any).hint;
+    (wrapped as any).status = (error as any).status;
     throw wrapped;
   }
 
@@ -844,9 +900,10 @@ async function syncLocalCollectionToSupabase(
       console.warn('Failed to sync local proposal to Supabase', local.proposalNumber, error);
       const pending = withSyncStatus(
         { ...local, franchiseId: local.franchiseId || franchiseId || DEFAULT_FRANCHISE_ID },
-        'pending',
-        PENDING_MESSAGE
+        isProposalPermissionDenied(error) ? 'error' : 'pending',
+        isProposalPermissionDenied(error) ? BLOCKED_SYNC_MESSAGE : PENDING_MESSAGE
       );
+      Object.assign(local, pending);
       await persistLocalProposal(pending);
     }
   }
@@ -869,7 +926,14 @@ export async function syncPendingProposals() {
     if (!pending.length) return;
     for (const proposal of pending) {
       if (!isProposalNumberForCurrentMode(proposal.proposalNumber)) continue;
-      if (!canAttemptProposalWrite(proposal, session)) continue;
+      if (!canAttemptProposalWrite(proposal, session)) {
+        // Earlier clients could leave reviewer-owned local caches pending after
+        // an RLS denial. Keep the file, but stop automatic full-row replays.
+        if (!isOwnProposal(proposal, session)) {
+          await persistLocalProposal(withSyncStatus(proposal, 'error', BLOCKED_SYNC_MESSAGE));
+        }
+        continue;
+      }
       try {
         const remote = await fetchSupabaseProposal(proposal.proposalNumber, session);
         const remoteTs = coerceTimestamp(remote?.lastModified || remote?.createdDate);
@@ -891,6 +955,9 @@ export async function syncPendingProposals() {
         await persistLocalProposal(synced);
       } catch (error) {
         console.warn('Still unable to sync pending proposal', proposal.proposalNumber, error);
+        if (isProposalPermissionDenied(error)) {
+          await persistLocalProposal(withSyncStatus(proposal, 'error', BLOCKED_SYNC_MESSAGE));
+        }
       }
     }
   } finally {
@@ -1180,15 +1247,22 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
       return synced;
     } catch (error) {
       console.warn('Unable to sync newer local proposal to Supabase', proposalNumber, error);
+      if (isProposalPermissionDenied(error)) {
+        const blocked = withSyncStatus(local, 'error', BLOCKED_SYNC_MESSAGE);
+        await persistLocalProposal(blocked);
+        return blocked;
+      }
     }
   }
 
-  if (supabaseOnline && cloud && local && !shouldSyncLocal(local, cloud)) {
+  if (supabaseOnline && cloud && local && local.syncStatus !== 'error' && !shouldSyncLocal(local, cloud)) {
     if (coerceTimestamp(local.lastModified || local.createdDate) !== coerceTimestamp(cloud.lastModified || cloud.createdDate)) {
       archiveLosingProposalSnapshot(local, 'cloud_newer', cloud);
     }
     await persistLocalProposal(cloud);
   }
+
+  if (local?.syncStatus === 'error') return local;
 
   if (!supabaseOnline) {
     const status = (best as any).syncStatus || 'pending';
@@ -1284,12 +1358,14 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
     if (options.requireOnline || isUnsafeProposalOverwriteError(error)) {
       throw error;
     }
+    const permissionDenied = isProposalPermissionDenied(error);
     const pending = withSyncStatus(
       { ...persistenceReady, franchiseId, lastModified: persistenceReady.lastModified || now },
-      'pending',
-      PENDING_MESSAGE
+      permissionDenied ? 'error' : 'pending',
+      permissionDenied ? BLOCKED_SYNC_MESSAGE : PENDING_MESSAGE
     );
     await persistLocalProposal(pending);
+    if (permissionDenied) throw error;
     return { ...pending, lastModified: pending.lastModified || now };
   }
 }
