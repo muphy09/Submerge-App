@@ -1226,7 +1226,18 @@
   padding: 0;
   border: 0;
   min-width: 0;
+  cursor: not-allowed;
 }
+.proposal-builder-readonly-shell input,
+.proposal-builder-readonly-shell select,
+.proposal-builder-readonly-shell textarea,
+.proposal-builder-readonly-shell button:not(.price-impact-trigger):not(.price-impact-close) {
+  pointer-events: none;
+}
+.proposal-builder-readonly-shell .price-impact-trigger,
+.proposal-builder-readonly-shell .price-impact-close { pointer-events: auto; }
+.proposal-builder-readonly-shell .price-impact-trigger { cursor: pointer; }
+.proposal-builder-readonly-shell :is(input, select, textarea, button):not(.price-impact-trigger) { cursor: not-allowed; }
 
 .section-title-actions .btn-success {
   text-shadow:
@@ -1910,4 +1921,15 @@
   .section-title-pricing .form-header-pricing-name {
     font-size: 0.86rem;
   }
+}
+.shared-proposal-builder-banner {
+  width: 100%;
+  padding: .8rem 1rem;
+  border-bottom: 1px solid #b7cde2;
+  background: #ccdfef;
+  color: #183c62;
+  font-size: .95rem;
+  font-weight: 800;
+  letter-spacing: .015em;
+  text-align: center;
 }

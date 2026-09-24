@@ -62,6 +62,12 @@ export function saveSession(session: UserSession) {
 export function clearSession() {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(SESSION_STORAGE_KEY);
+  // Shared proposal snapshots may contain internal costs. They are scoped to
+  // the signed-in account and must not remain on this device after sign-out.
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith('submerge.sharedProposalCache.v1.')) localStorage.removeItem(key);
+  }
+  if (typeof indexedDB !== 'undefined') indexedDB.deleteDatabase('submerge-shared-proposals-v1');
 }
 
 export function shouldShowRemoteSignoutNotice() {

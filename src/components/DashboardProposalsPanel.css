@@ -385,6 +385,10 @@
   flex-direction: column;
   gap: 0.24rem;
 }
+.dashboard-customer-primary { display: contents; }
+.dashboard-customer-primary.has-share { display: flex; align-items: center; gap: .3rem; min-width: 0; width: 100%; max-width: 15rem; }
+.dashboard-customer-primary.has-share .dashboard-customer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-customer-primary .app-tooltip-anchor { flex: 0 0 auto; }
 
 .dashboard-customer-name {
   color: #16324d;
@@ -777,3 +781,20 @@
   }
 
 }
+.dashboard-proposals-panel [hidden] { display: none !important; }
+.dashboard-collaboration-tabs { display: flex; gap: .4rem; padding: .35rem 1rem 0; }
+.dashboard-collaboration-tabs button { border: 0; border-bottom: 3px solid transparent; background: transparent; padding: .45rem .75rem; color: #334155; font: inherit; font-weight: 700; cursor: pointer; }
+.dashboard-collaboration-tabs button[aria-selected="true"] { color: #0c607d; border-color: #0c607d; }
+.dashboard-collaboration-updates { padding: .35rem 1.35rem; font-size: .83rem; color: #334155; }
+.dashboard-collaboration-updates ul { display: flex; gap: .5rem; list-style: none; padding: 0; margin: .35rem 0 0; overflow: auto; }
+.dashboard-collaboration-updates li button { display: flex; gap: .35rem; align-items: center; white-space: nowrap; border: 1px solid #cbd5e1; border-radius: .5rem; background: #fff; padding: .3rem .45rem; cursor: pointer; }
+.dashboard-collaboration-updates small { color: #64748b; }
+.dashboard-update-dot { width: .4rem; height: .4rem; border-radius: 50%; background: #0284c7; }
+.dashboard-shared-table-shell { display: flex; flex: 1; min-height: 0; flex-direction: column; padding: .4rem 1rem 1rem; }
+.dashboard-shared-table-shell .dashboard-proposals-table-shell { flex: 1; }
+.dashboard-shared-toolbar { flex: 0 0 auto; }
+.dashboard-shared-table { min-width: 900px; }
+.dashboard-shared-table thead th { padding: .78rem .9rem; color: #f8fbff; font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-align: left; text-transform: uppercase; }
+.dashboard-shared-request-pill { display: inline-flex; padding: .3rem .6rem; border: 1px solid #a9c7da; border-radius: 999px; background: #e9f4fa; color: #175173; font-size: .76rem; font-weight: 800; white-space: nowrap; }
+.dashboard-shared-icon { width: 18px; height: 18px; flex: 0 0 auto; margin-left: .4rem; fill: none; stroke: #1e6b8c; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+@media (max-width: 700px) { .dashboard-collaboration-updates ul { display: none; } .dashboard-collaboration-tabs { overflow-x: auto; } }

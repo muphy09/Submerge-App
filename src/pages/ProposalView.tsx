@@ -25,17 +25,19 @@ import AddendumPricingChoiceModal from '../components/AddendumPricingChoiceModal
 import './ProposalView.css';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
 import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
+import ProposalCollaborationPanel from '../components/ProposalCollaborationPanel';
+import ProposalSummaryIcon from '../components/ProposalSummaryIcon';
+import { hasEndedSharedAccess, isCollaborationAvailable, type CollaborationRequest } from '../services/proposalCollaboration';
 import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import { formatFiberglassSize } from '../utils/fiberglass';
 import customerBreakIconImg from '../../docs/img/custbreak.png';
 import cogsBreakIconImg from '../../docs/img/cogsbreak.png';
-import summaryIconImg from '../../docs/img/summary.png';
 import MasterPricingEngine from '../services/masterPricingEngine';
 import {
   DISABLED_SIGNED_WORKFLOW_MESSAGE,
   loadFranchiseSignedWorkflowDisabled,
 } from '../services/franchiseBranding';
-import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { getProposal as getProposalRemote, saveProposal as saveProposalAdapter } from '../services/proposalsAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import {
   initPricingDataStore,
@@ -858,6 +860,18 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const isOffline = cloudIssue === 'no-internet' || cloudIssue === 'server-issue';
   const offlineActionDisabledReason = isOffline ? 'Internet connection must be restored' : undefined;
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const saveProposalRemote = (candidate: Proposal, options?: Parameters<typeof saveProposalAdapter>[1]) =>
+    saveProposalAdapter({
+      ...candidate,
+      ownerAuthUserId: candidate.ownerAuthUserId || proposal?.ownerAuthUserId,
+      contentRevision: candidate.contentRevision ?? proposal?.contentRevision,
+      collaborationEnabled: candidate.collaborationEnabled ?? proposal?.collaborationEnabled,
+    }, options);
+  const [accessEnded, setAccessEnded] = useState(false);
+  const [collaborationRollout, setCollaborationRollout] = useState(false);
+  const [collaborationManageSignal, setCollaborationManageSignal] = useState(0);
+  const [collaborationSendSignal, setCollaborationSendSignal] = useState(0);
+  const [collaborationRequests, setCollaborationRequests] = useState<CollaborationRequest[]>([]);
   const [versions, setVersions] = useState<Proposal[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
   const [selectedVersionId, setSelectedVersionId] = useState<string>('original');
@@ -909,6 +923,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [submitNote, setSubmitNote] = useState('');
   const [isWorkflowHistoryExpanded, setIsWorkflowHistoryExpanded] = useState(false);
+  const [isWorkflowSummaryExpanded, setIsWorkflowSummaryExpanded] = useState(false);
+  useEffect(() => { setIsWorkflowSummaryExpanded(false); }, [proposalNumber]);
   const [isArchiveVersionsExpanded, setIsArchiveVersionsExpanded] = useState(false);
   const [versionContextMenu, setVersionContextMenu] = useState<VersionContextMenuState | null>(null);
   const [showWorkflowMessageComposer, setShowWorkflowMessageComposer] = useState(false);
@@ -941,7 +957,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   }, []);
   const locationState = (location.state as ProposalViewLocationState | null) ?? null;
   const sessionRole = getSessionRole();
-  const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const isProposalEditingRestricted = isMasterActingAsOwnerSession() || Boolean(proposal?.sharedPermission);
+  const { enabled: collaborationCapability } = useFranchiseCapability('sharedProposals', proposal?.franchiseId);
+  const collaborationAvailable = collaborationCapability && collaborationRollout;
+  const isCurrentProposalOwner = Boolean(proposal && readSession()?.userId
+    && (proposal.ownerAuthUserId || proposal.designerAuthUserId) === readSession()?.userId);
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
   const isReviewerWorkspaceView = Boolean(locationState?.reviewerReturnTo || locationState?.reviewerReturnPath);
   const isReadOnlyReviewerView = isReviewerRole && isReviewerWorkspaceView;
@@ -962,7 +982,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const canSendWorkflowMessages =
     !isProposalEditingRestricted && Boolean(proposal?.workflow?.submittedAt) && !isProposalCompleted;
   const editDisabledReason =
-    isProposalEditingRestricted
+    proposal?.sharedPermission
+      ? 'Shared recipients can propose changes through Collaboration, but cannot edit the owner draft directly.'
+      : isProposalEditingRestricted
       ? 'Master accounts acting as owner can view proposals but cannot edit them.'
       : isReadOnlyReviewerView
       ? 'Proposals opened from the reviewer workspace are read-only. Return to Dashboard to edit drafts.'
@@ -974,6 +996,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       ? 'Completed proposal versions are locked.'
       : undefined;
   const { disableSignedWorkflow } = useFranchiseSignedWorkflowDisabled(proposal?.franchiseId);
+  useEffect(() => {
+    if (!collaborationCapability || !proposal?.franchiseId) { setCollaborationRollout(false); return; }
+    let cancelled = false;
+    void isCollaborationAvailable(proposal.franchiseId).then((enabled) => {
+      if (!cancelled) setCollaborationRollout(enabled);
+    });
+    return () => { cancelled = true; };
+  }, [collaborationCapability, proposal?.franchiseId]);
   const { enabled: splitCustomerCostWarranty } = useFranchiseCapability(
     'splitCustomerCostWarranty',
     proposal?.franchiseId
@@ -1191,13 +1221,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       const data = await getProposalRemote(num);
       if (requestId !== loadRequestRef.current) return;
       if (!data) {
-        showToast({
-          type: 'error',
-          message: 'Proposal not found or access denied.',
-        });
-        navigate('/', { replace: true });
+        setAccessEnded(await hasEndedSharedAccess(num));
         return;
       }
+      setAccessEnded(false);
       let sourceProposal = ensureProposalWorkflow(JSON.parse(JSON.stringify(data)) as Proposal);
       const versionStateCleanup = reconcileWorkflowVersionStates(sourceProposal);
       const needsVersionStateCleanup = JSON.stringify(versionStateCleanup) !== JSON.stringify(sourceProposal);
@@ -1206,11 +1233,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       const needsApprovedCleanup = JSON.stringify(approvedVersionCleanup) !== JSON.stringify(sourceProposal);
       sourceProposal = approvedVersionCleanup;
       const currentUserId = readSession()?.userId;
-      const readUpdated = isProposalEditingRestricted
+      const readUpdated = isProposalEditingRestricted || Boolean(data.sharedPermission)
         ? sourceProposal
         : markWorkflowRead(sourceProposal, currentUserId);
       if (
-        !isProposalEditingRestricted &&
+        !isProposalEditingRestricted && !data.sharedPermission && !data.collaborationEnabled &&
         JSON.stringify(readUpdated.workflow?.history || []) !== JSON.stringify(sourceProposal.workflow?.history || [])
       ) {
         try {
@@ -1219,7 +1246,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           console.warn('Failed to persist workflow read state', markReadError);
           sourceProposal = readUpdated;
         }
-      } else if (!isProposalEditingRestricted && (needsVersionStateCleanup || needsApprovedCleanup)) {
+      } else if (!isProposalEditingRestricted && !data.sharedPermission && !data.collaborationEnabled
+        && (needsVersionStateCleanup || needsApprovedCleanup)) {
         try {
           sourceProposal = await saveProposalRemote(sourceProposal);
         } catch (cleanupError) {
@@ -1312,7 +1340,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       setActiveVersionId(activeId);
       setSelectedVersionId(initialSelectedVersionId);
       setVersionSyncMeta(initialVersionSyncMeta);
-      setProposal(ensureProposalWorkflow({ ...(activeVersion as Proposal), workflow: sourceProposal.workflow, status: sourceProposal.status }));
+      setProposal(ensureProposalWorkflow({ ...(activeVersion as Proposal), workflow: sourceProposal.workflow, status: sourceProposal.status,
+        ownerAuthUserId: sourceProposal.ownerAuthUserId, contentRevision: sourceProposal.contentRevision,
+        currentOwnerName: sourceProposal.currentOwnerName,
+        collaborationEnabled: sourceProposal.collaborationEnabled, sharedPermission: sourceProposal.sharedPermission }));
     } catch (error) {
       if (requestId !== loadRequestRef.current) return;
       console.error('Failed to load proposal:', error);
@@ -1326,11 +1357,21 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   useEffect(() => {
     if (proposalNumber) {
       setLoading(true);
+      setAccessEnded(false);
       setProposal(null);
       setVersions([]);
       void loadProposal(proposalNumber);
     }
   }, [location.state, navigate, proposalNumber, showToast]);
+
+  useEffect(() => {
+    if (!proposal?.sharedPermission || !proposalNumber) return;
+    const refresh = () => { if (document.visibilityState !== 'hidden') void loadProposal(proposalNumber); };
+    const interval = window.setInterval(refresh, 30000);
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(interval); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); };
+  }, [proposal?.sharedPermission, proposalNumber]);
 
   useEffect(() => {
     setContractVersionId(null);
@@ -1883,12 +1924,21 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     if (!version) return;
     if (!canOpenReadOnlyBuilder && !options?.readOnly && (isVersionPermanentlyLocked(version) || isProposalCompleted)) return;
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
+    const sharedRequest = proposal?.sharedPermission === 'contribute' ? collaborationRequests.find((request) =>
+      request.contributor_id === readSession()?.userId && request.target_version_id === targetVersionId
+      && ['working', 'revision_requested'].includes(request.status)) : undefined;
+    const submissionPending = collaborationRequests.some((request) =>
+      request.contributor_id === readSession()?.userId && request.status === 'submitted');
     navigate(`/proposal/edit/${proposalNumber}`, {
       state: {
         versionId: targetVersionId,
         versionName: version?.versionName,
-        versionSnapshot: { ...version, versions: [] },
+        versionSnapshot: { ...(sharedRequest?.working_version_json || version), versions: [] },
         readOnlyVersion: options?.readOnly === true,
+        sharedWorkingCopy: proposal?.sharedPermission === 'contribute',
+        sharedStartEditing: Boolean(sharedRequest) && !submissionPending,
+        sharedSubmissionPending: submissionPending,
+        sharedPermission: proposal?.sharedPermission,
       },
     });
   };
@@ -3714,7 +3764,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return (
       <div className="proposal-view">
         <div className="error-container">
-          <h2>Proposal not found</h2>
+          <h2>{accessEnded ? 'Access to this shared proposal has ended' : 'Proposal not found'}</h2>
+          {accessEnded && <p>The owner removed your access or you left this proposal. Its shared copy is no longer available here.</p>}
           <button className="btn btn-primary" onClick={() => navigate('/')}>
             Back to Home
           </button>
@@ -4553,9 +4604,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           }`}
         >
           <div className="hero-header">
-            <div className="hero-icon">
-              <img src={summaryIconImg} alt="Proposal summary icon" className="summary-icon" />
-            </div>
+            <div className="hero-icon"><ProposalSummaryIcon name="summary" size={28} /></div>
             <div className="hero-header-text">
               <h2 className="hero-title">
                 <span className="hero-title-text">{vm.customerLocation}</span>
@@ -4633,6 +4682,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const renderVersionActionsCard = (vm: ReturnType<typeof buildViewModel>) => {
     const versionId = vm.proposal.versionId || 'original';
+    const isSharedRecipient = Boolean(proposal?.sharedPermission);
+    const myWorkingRequest = isSharedRecipient ? collaborationRequests.find((request) =>
+      request.contributor_id === readSession()?.userId && request.target_version_id === versionId
+      && ['working', 'revision_requested'].includes(request.status)) : undefined;
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
     const isArchived = isArchivedVersion(vm.proposal);
     const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
@@ -4729,14 +4782,19 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         : null;
 
     return (
-      <div className="proposal-side-card">
+      <div className="proposal-side-card version-actions-card">
         <div className="proposal-side-card-header">
-          <div>
-            <p className="proposal-side-card-kicker">Selected Version Actions</p>
-            <h2>{getDisplayVersionLabel(vm.proposal)}</h2>
+          <div className="summary-card-title">
+            <span className="summary-card-icon"><ProposalSummaryIcon name="layers" size={28} /></span>
+            <h2>Selected Version Actions</h2>
           </div>
         </div>
         <div className="proposal-side-card-body">
+          <div className="selected-action-version">
+            <span className="workflow-block-icon tone-file"><ProposalSummaryIcon name="file" size={26} /></span>
+            <span className="workflow-block-copy"><span className="workflow-summary-label">Selected Version</span>
+              <strong>{getDisplayVersionLabel(vm.proposal)}</strong></span>
+          </div>
           <div className="side-action-stack">
             {showSignProposalButton && (
               <TooltipAnchor tooltip={signActionTooltip}>
@@ -4747,11 +4805,17 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                   }}
                   disabled={Boolean(signProposalDisabledReason) || reviewerActionSaving}
                 >
-                  Sign Proposal
+                  <ProposalSummaryIcon name="signature" size={21} />Sign Proposal<ProposalSummaryIcon name="arrow" size={21} className="action-trailing-icon" />
                 </button>
               </TooltipAnchor>
             )}
-            {shouldRenderSubmitAction && (
+            {isSharedRecipient && myWorkingRequest && (
+              <button className="action-button primary side-action-button" disabled={isOffline || myWorkingRequest.base_revision !== proposal?.contentRevision}
+                onClick={() => setCollaborationSendSignal((value) => value + 1)}>
+                <ProposalSummaryIcon name="upload" size={21} />Send Changes to {proposal?.currentOwnerName || proposal?.designerName || 'Owner'}<ProposalSummaryIcon name="arrow" size={21} className="action-trailing-icon" />
+              </button>
+            )}
+            {!isSharedRecipient && shouldRenderSubmitAction && (
               <TooltipAnchor tooltip={submitActionDisabledReason}>
                 <button
                   className="action-button primary side-action-button"
@@ -4760,7 +4824,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                   }}
                   disabled={!canUseSubmitAction}
                 >
-                  {submitActionLabel}
+                  <ProposalSummaryIcon name="submit" size={21} />{submitActionLabel}<ProposalSummaryIcon name="arrow" size={21} className="action-trailing-icon" />
                 </button>
               </TooltipAnchor>
             )}
@@ -4770,18 +4834,18 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 onClick={() => handleEdit(vm.proposal, { readOnly: isArchived })}
                 disabled={!canOpenVersionInBuilder}
               >
-                {archivedEditLabel}
+                <ProposalSummaryIcon name="edit" size={21} />{isSharedRecipient ? myWorkingRequest ? 'Continue Editing' : 'View Proposal' : archivedEditLabel}
               </button>
             </TooltipAnchor>
-            <TooltipAnchor tooltip={deleteVersionDisabledReason}>
+            {!isSharedRecipient && <TooltipAnchor tooltip={deleteVersionDisabledReason}>
               <button
                 className="action-button danger side-action-button"
                 onClick={() => handleDeleteVersion(versionId)}
                 disabled={!canDeleteVersion}
               >
-                Delete Version
+                <ProposalSummaryIcon name="trash" size={21} />Delete Version
               </button>
-            </TooltipAnchor>
+            </TooltipAnchor>}
           </div>
           {archivedNote && <p className="proposal-side-empty">{archivedNote}</p>}
         </div>
@@ -4867,10 +4931,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const renderWorkflowSummaryCard = () => (
-    <div className="proposal-side-card no-print">
+    <div className="proposal-side-card workflow-summary-card-new no-print">
       <div className="proposal-side-card-header">
         <div className="workflow-summary-heading">
-          <p className="proposal-side-card-kicker">Submission Workflow</p>
+          <span className="summary-card-icon"><ProposalSummaryIcon name="workflow" size={28} /></span>
+          <h2>Submission Workflow</h2>
         </div>
         <TooltipAnchor as="div" tooltip={selectedWorkflowStatusTooltip}>
           <div className={`workflow-summary-pill is-${selectedVersionStatusTone}`}>
@@ -4878,38 +4943,48 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           </div>
         </TooltipAnchor>
       </div>
-
-      <div className="proposal-side-card-body">
+      <button type="button" className="workflow-summary-details-toggle"
+        aria-expanded={isWorkflowSummaryExpanded} aria-controls="proposal-workflow-details"
+        onClick={() => setIsWorkflowSummaryExpanded((current) => !current)}>
+        <ProposalSummaryIcon name="chevron" size={18} />
+        <span>{isWorkflowSummaryExpanded ? 'Hide details' : 'Details'}</span>
+        <ProposalSummaryIcon name="chevron" size={18} />
+      </button>
+      {isWorkflowSummaryExpanded && <div id="proposal-workflow-details" className="proposal-side-card-body">
         <div className="workflow-summary-grid">
           <div className="workflow-summary-block">
-            <div className="workflow-summary-label">Selected Version</div>
-            <div className="workflow-summary-value">{getDisplayVersionLabel(selectedViewModel.proposal)}</div>
+            <span className="workflow-block-icon tone-file"><ProposalSummaryIcon name="file" size={26} /></span>
+            <span className="workflow-block-copy"><span className="workflow-summary-label">Selected Version</span>
+              <span className="workflow-summary-value">{getDisplayVersionLabel(selectedViewModel.proposal)}</span></span>
           </div>
           <div className="workflow-summary-block">
-            <div className="workflow-summary-label">Submitted</div>
-            <div className="workflow-summary-value">
+            <span className="workflow-block-icon tone-upload"><ProposalSummaryIcon name="upload" size={26} /></span>
+            <span className="workflow-block-copy"><span className="workflow-summary-label">Submitted</span>
+            <span className="workflow-summary-value">
               {formatWorkflowActorSummary(
                 selectedVersionSubmittedBy,
                 selectedVersionSubmittedAt,
                 'Not submitted'
               )}
-            </div>
+            </span></span>
           </div>
           <div className="workflow-summary-block">
-            <div className="workflow-summary-label">Approved By</div>
-            <div className="workflow-summary-value">
+            <span className="workflow-block-icon tone-check"><ProposalSummaryIcon name="check" size={26} /></span>
+            <span className="workflow-block-copy"><span className="workflow-summary-label">Approved By</span>
+            <span className="workflow-summary-value">
               {formatWorkflowActorSummary(
                 selectedVersionApprovalBy,
                 selectedVersionApprovalAt,
                 'Not approved'
               )}
-            </div>
+            </span></span>
           </div>
           <div className="workflow-summary-block">
-            <div className="workflow-summary-label">
+            <span className="workflow-block-icon tone-signature"><ProposalSummaryIcon name="signature" size={26} /></span>
+            <span className="workflow-block-copy"><span className="workflow-summary-label">
               {selectedVersionRecordStatus === 'completed' ? 'Completed By' : 'Signed By'}
-            </div>
-            <div className="workflow-summary-value">
+            </span>
+            <span className="workflow-summary-value">
               {selectedVersionRecordStatus === 'completed'
                 ? formatWorkflowActorSummary(
                     selectedVersionCompletedBy,
@@ -4921,7 +4996,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                     selectedVersionSignedAt,
                     'Not signed'
                   )}
-            </div>
+            </span></span>
           </div>
         </div>
 
@@ -4935,7 +5010,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             ))}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 
@@ -5043,7 +5118,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return (
       <div className="proposal-view">
         <div className="error-container">
-          <h2>Proposal versions are unavailable</h2>
+          <h2>{accessEnded ? 'Access to this shared proposal has ended' : 'Proposal is unavailable'}</h2>
+          <p>{accessEnded ? 'The owner removed access or you left this proposal. Your shared copy is no longer available here.' : 'This proposal could not be found or you do not have access.'}</p>
           <button className="btn btn-primary" onClick={() => navigate('/')}>
             Back to Home
           </button>
@@ -5068,7 +5144,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             {isOffline && <CloudConnectionNotice reason={cloudIssue} placement="inline" />}
           </div>
           <div className="action-bar-right">
-            {!isReadOnlyReviewerView && (
+            {isCurrentProposalOwner && collaborationAvailable && <button className="action-button summary-share-button" onClick={() => setCollaborationManageSignal((value) => value + 1)}>
+              <ProposalSummaryIcon name="share" size={19} />Share / Manage Access
+            </button>}
+            {!isReadOnlyReviewerView && !proposal?.sharedPermission && (
               <TooltipAnchor tooltip={completeActionDisabledReason}>
                 <button
                   className="action-button primary workflow-summary-submit-button"
@@ -5093,11 +5172,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         <aside className="proposal-column proposal-column--nav no-print">
           <div className="proposal-side-card proposal-nav-card">
             <div className="proposal-side-card-header proposal-nav-card-header">
-              <div>
-                <p className="proposal-side-card-kicker">Versions & Addendums</p>
-                <h2>{viewModels.length} Available</h2>
+              <div className="summary-card-title">
+                <span className="summary-card-icon"><ProposalSummaryIcon name="versions" size={28} /></span>
+                <span className="proposal-nav-heading-copy"><h2>Versions &amp; Addendums</h2>
+                  <span className="version-count-pill">{viewModels.length} Available</span></span>
               </div>
-              {!isReadOnlyReviewerView && (
+              {!isReadOnlyReviewerView && !proposal?.sharedPermission && (
                 <TooltipAnchor tooltip={buildVersionDisabledReason} className="proposal-nav-build-action">
                   <button
                     type="button"
@@ -5125,21 +5205,30 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                       setActiveVersionId(versionId);
                     }}
                   >
-                    <div className="proposal-nav-item-header">
-                      <div className="proposal-nav-item-top-row">
-                        <div className="proposal-nav-item-location">{vm.customerLocation}</div>
+                    <div className="proposal-nav-item-main">
+                      <span className="workflow-block-icon tone-file"><ProposalSummaryIcon name="file" size={26} /></span>
+                      <div className="proposal-nav-item-content">
+                        <div className="proposal-nav-item-header">
+                          <div className="proposal-nav-item-top-row">
+                            <OverflowTooltipText className="proposal-nav-item-location">{vm.customerLocation}</OverflowTooltipText>
+                            {isCurrentProposalOwner && collaborationRequests.some((request) => request.status === 'submitted' && request.target_version_id === versionId) &&
+                              <TooltipAnchor tooltip="Proposed changes awaiting your review" className="proposal-nav-review-anchor">
+                                <span className="proposal-nav-review-icon" role="img" aria-label="Proposed changes awaiting your review"><ProposalSummaryIcon name="request" size={23} /></span>
+                              </TooltipAnchor>}
+                          </div>
+                          <div className="proposal-nav-item-title-row">
+                            <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>
+                            <span className="proposal-nav-item-total">{formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}</span>
+                          </div>
+                        </div>
+                        <div className="proposal-nav-badges">
+                          {getVersionNavBadges(vm.proposal).map((badge) => (
+                            <span key={`${versionId}-${badge.label}`} className={`proposal-nav-badge tone-${badge.tone}`}>
+                              {badge.label}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <div className="proposal-nav-item-title-row">
-                        <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>
-                        <span className="proposal-nav-item-total">{formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}</span>
-                      </div>
-                    </div>
-                    <div className="proposal-nav-badges">
-                      {getVersionNavBadges(vm.proposal).map((badge) => (
-                        <span key={`${versionId}-${badge.label}`} className={`proposal-nav-badge tone-${badge.tone}`}>
-                          {badge.label}
-                        </span>
-                      ))}
                     </div>
                     <div className="proposal-nav-item-dates">
                       <span>Created {formatVersionDateTime(vm.proposal.createdDate || vm.proposal.lastModified)}</span>
@@ -5174,21 +5263,30 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                               setActiveVersionId(versionId);
                             }}
                           >
-                            <div className="proposal-nav-item-header">
-                              <div className="proposal-nav-item-top-row">
-                                <div className="proposal-nav-item-location">{vm.customerLocation}</div>
+                            <div className="proposal-nav-item-main">
+                              <span className="workflow-block-icon tone-file"><ProposalSummaryIcon name="file" size={26} /></span>
+                              <div className="proposal-nav-item-content">
+                                <div className="proposal-nav-item-header">
+                                  <div className="proposal-nav-item-top-row">
+                                    <OverflowTooltipText className="proposal-nav-item-location">{vm.customerLocation}</OverflowTooltipText>
+                                    {isCurrentProposalOwner && collaborationRequests.some((request) => request.status === 'submitted' && request.target_version_id === versionId) &&
+                                      <TooltipAnchor tooltip="Proposed changes awaiting your review" className="proposal-nav-review-anchor">
+                                        <span className="proposal-nav-review-icon" role="img" aria-label="Proposed changes awaiting your review"><ProposalSummaryIcon name="request" size={23} /></span>
+                                      </TooltipAnchor>}
+                                  </div>
+                                  <div className="proposal-nav-item-title-row">
+                                    <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>
+                                    <span className="proposal-nav-item-total">{formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}</span>
+                                  </div>
+                                </div>
+                                <div className="proposal-nav-badges">
+                                  {getVersionNavBadges(vm.proposal).map((badge) => (
+                                    <span key={`${versionId}-${badge.label}`} className={`proposal-nav-badge tone-${badge.tone}`}>
+                                      {badge.label}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
-                              <div className="proposal-nav-item-title-row">
-                                <span className="proposal-nav-item-title">{getDisplayVersionLabel(vm.proposal)}</span>
-                                <span className="proposal-nav-item-total">{formatCurrency(vm.retailPrice || vm.subtotal || vm.totalCost)}</span>
-                              </div>
-                            </div>
-                            <div className="proposal-nav-badges">
-                              {getVersionNavBadges(vm.proposal).map((badge) => (
-                                <span key={`${versionId}-${badge.label}`} className={`proposal-nav-badge tone-${badge.tone}`}>
-                                  {badge.label}
-                                </span>
-                              ))}
                             </div>
                             <div className="proposal-nav-item-dates">
                               <span>Created {formatVersionDateTime(vm.proposal.createdDate || vm.proposal.lastModified)}</span>
@@ -5208,8 +5306,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         <div ref={proposalRef} className="proposal-summary-page">
           <div className="proposal-summary-header">
             <div className="proposal-summary-heading">
-              <p className="proposal-side-card-kicker">Proposal Summary</p>
-              <h1 className="page-title">{getDisplayVersionLabel(selectedViewModel.proposal)}</h1>
+              <span className="summary-heading-icon"><ProposalSummaryIcon name="summary" size={28} /></span>
+              <span className="summary-heading-copy">
+                <h1 className="page-title">Proposal Summary</h1>
+                <span className="summary-selected-version">Version: <strong>{getDisplayVersionLabel(selectedViewModel.proposal)}</strong></span>
+              </span>
             </div>
             {renderCogsToggle()}
           </div>
@@ -5220,9 +5321,24 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           {renderVersionActionsCard(selectedViewModel)}
           {renderProposalActionsCard()}
           {proposal?.workflow && renderWorkflowSummaryCard()}
+          {proposal && (collaborationAvailable || proposal.collaborationEnabled) && <ProposalCollaborationPanel
+            proposal={proposal}
+            available={collaborationAvailable}
+            offline={isOffline}
+            manageSignal={collaborationManageSignal}
+            sendSignal={collaborationSendSignal}
+            sendVersionId={selectedVersionIdKey}
+            onRequestsLoaded={setCollaborationRequests}
+            onChanged={() => { if (proposalNumber) void loadProposal(proposalNumber); }}
+          />}
           {proposal?.workflow && renderWorkflowActivityCard()}
         </aside>
       </div>
+      {proposal?.sharedPermission && <div className="shared-proposal-view-pill no-print" role="status">
+        {collaborationRequests.some((request) => request.contributor_id === readSession()?.userId
+          && ['working', 'revision_requested'].includes(request.status)) ? 'Editing' : 'Viewing'}{' '}
+        {(proposal.currentOwnerName || proposal.designerName || 'Owner').replace(/\s*\([^)]*\)\s*$/, '')}'s Proposal
+      </div>}
       {versionContextMenu && (
         <>
           <div className="proposal-context-menu-backdrop" onClick={() => setVersionContextMenu(null)} />

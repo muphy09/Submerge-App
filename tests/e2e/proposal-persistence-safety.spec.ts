@@ -506,3 +506,50 @@ test('creates and saves a new proposal version with its own creation date', asyn
     await electronApp?.close().catch(() => undefined);
   }
 });
+
+test('summary workflow starts closed and expands its version details', async ({}, testInfo) => {
+  const proposalNumber = 'TEST-PWTEST-SUMMARY-WORKFLOW';
+  const original = buildLocalProposal(proposalNumber, 'Summary Layout Customer');
+  const proposal = {
+    ...original,
+    versions: [{ ...original, versionId: 'version-2', versionName: 'Version 2', isOriginalVersion: false,
+      createdDate: '2026-08-24T19:12:58.079Z', versions: [] }],
+    workflow: { status: 'draft' as const, history: [] },
+  };
+  let electronApp: ElectronApplication | null = null;
+
+  try {
+    const launched = await launchIsolatedApp(testInfo.outputPath('app-data'));
+    electronApp = launched.electronApp;
+    const window = launched.window;
+    await seedSessionAndProposals(window, [proposal]);
+    await window.context().setOffline(true);
+    await window.evaluate((route) => {
+      window.location.hash = route;
+      window.location.reload();
+    }, `/proposal/view/${proposalNumber}`);
+
+    await expect(window.getByRole('heading', { name: 'Proposal Summary' })).toBeVisible();
+    await expect(window.getByRole('heading', { name: 'Versions & Addendums' })).toBeVisible();
+    await expect(window.getByRole('heading', { name: 'Selected Version Actions' })).toBeVisible();
+    await expect(window.getByRole('heading', { name: 'Submission Workflow' })).toBeVisible();
+    const nav = await window.locator('.proposal-column--nav').boundingBox();
+    const summary = await window.locator('.proposal-summary-page').boundingBox();
+    const side = await window.locator('.proposal-column--side').boundingBox();
+    expect(nav && summary && side && nav.x + nav.width < summary.x && summary.x + summary.width < side.x).toBe(true);
+    const details = window.getByRole('button', { name: 'Details' });
+    await expect(details).toHaveAttribute('aria-expanded', 'false');
+    await expect(window.getByText('Not submitted')).toHaveCount(0);
+    await details.click();
+    await expect(details).toHaveAttribute('aria-expanded', 'true');
+    await expect(window.getByText('Not submitted')).toBeVisible();
+    await window.screenshot({ path: testInfo.outputPath('proposal-summary-refresh.png'), fullPage: true });
+    await window.setViewportSize({ width: 1600, height: 900 });
+    const versionHeading = window.locator('.proposal-nav-card-header h2');
+    expect(await versionHeading.evaluate((element) =>
+      element.getBoundingClientRect().height <= Number.parseFloat(getComputedStyle(element).lineHeight) * 1.5)).toBe(true);
+    await window.screenshot({ path: testInfo.outputPath('proposal-summary-refresh-1600.png') });
+  } finally {
+    await electronApp?.close().catch(() => undefined);
+  }
+});

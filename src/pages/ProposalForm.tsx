@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type SyntheticEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Proposal,
@@ -90,6 +90,7 @@ import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpS
 import { listAllFranchises, listAllPricingModels } from '../services/masterAdminAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { listChangeRequests, saveWorkingCopy } from '../services/proposalCollaboration';
 import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
   getSessionCommissionRates,
@@ -454,19 +455,43 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const sessionRole = getSessionRole();
   const isMasterUser = isMasterSession();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
+  const isSharedWorkingCopy = Boolean((location.state as any)?.sharedWorkingCopy);
+  const [sharedAccess, setSharedAccess] = useState<'view' | 'contribute' | null>(
+    (location.state as any)?.sharedPermission || null);
+  const [sharedEditing, setSharedEditing] = useState(Boolean((location.state as any)?.sharedStartEditing));
+  const [sharedSubmissionPending, setSharedSubmissionPending] = useState(Boolean((location.state as any)?.sharedSubmissionPending));
+  const modelDirectoryLoadKeyRef = useRef<string | null>(null);
   const isExplicitReadOnlyVersionView = Boolean((location.state as any)?.readOnlyVersion);
   const isReadOnlyBuilderView =
-    (isProposalEditingRestricted && Boolean(proposalNumber)) || isExplicitReadOnlyVersionView;
+    (isProposalEditingRestricted && Boolean(proposalNumber)) || isExplicitReadOnlyVersionView
+    || (isSharedWorkingCopy && (!sharedEditing || sharedSubmissionPending))
+    || (Boolean(sharedAccess) && (!isSharedWorkingCopy || sharedAccess !== 'contribute' || !sharedEditing || cloudIssue === 'no-internet' || cloudIssue === 'server-issue'));
   const readOnlyBuilderMessage = isExplicitReadOnlyVersionView
     ? 'Read-only mode for archived proposal versions. Review the builder, but changes are disabled.'
     : 'Read-only mode while acting as franchise owner. Review the proposal builder, but changes are disabled.';
   const isCreationRestricted = isProposalEditingRestricted && !proposalNumber;
   const canViewCostBreakdown =
-    sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner';
+    sessionRole === 'master' || sessionRole === 'admin' || sessionRole === 'owner' || Boolean(sharedAccess);
   const canOpenCogsBreakdown = canViewCostBreakdown;
   const versionIdFromState = (location.state as any)?.versionId as string | undefined;
   const versionNameFromState = (location.state as any)?.versionName as string | undefined;
   const versionSnapshotFromState = (location.state as any)?.versionSnapshot as Proposal | undefined;
+  const blockReadOnlyBuilderInteraction = (event: SyntheticEvent) => {
+    if ((event.target as HTMLElement).closest('.price-impact-trigger-wrap')) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  useEffect(() => {
+    if (!proposalNumber || !sharedAccess) return;
+    let cancelled = false;
+    void listChangeRequests(proposalNumber).then((requests) => {
+      if (cancelled) return;
+      const pending = requests.some((request) => request.contributor_id === readSession()?.userId && request.status === 'submitted');
+      setSharedSubmissionPending(pending);
+      if (pending) setSharedEditing(false);
+    }).catch((error) => console.warn('Unable to refresh pending collaboration request.', error));
+    return () => { cancelled = true; };
+  }, [proposalNumber, sharedAccess]);
   const getViewportWidth = () => (typeof window !== 'undefined' ? window.innerWidth : 1920);
   const getInitialLeftNav = () => {
     if (typeof window === 'undefined') return true;
@@ -1452,19 +1477,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   }, [isCreationRestricted, proposalNumber, loadRetryNonce]);
 
   useEffect(() => {
-    if (isCreationRestricted) return;
-    if (proposalNumber && existingProposalLoadStatus !== 'ready') return;
+    if (isCreationRestricted || !proposalNumber || existingProposalLoadStatus !== 'ready' || isLoading) return;
     const franchiseId = proposal.franchiseId || getSessionFranchiseId();
     const desiredModelId = proposal.pricingModelId || null;
     const desiredModelFranchiseId = proposal.pricingModelFranchiseId || null;
-    const desiredPricingTierId = normalizePricingTierId(proposal.pricingTierId || proposal.pricingTierName);
-    void initPricingDataStore(
-      franchiseId,
-      desiredModelId || undefined,
-      desiredModelFranchiseId || undefined,
-      desiredPricingTierId,
-      proposal.pricingModelRevisionId || undefined
-    );
+    const directoryKey = `${proposalNumber}:${franchiseId}:${desiredModelFranchiseId || ''}:${desiredModelId || ''}`;
+    if (modelDirectoryLoadKeyRef.current === directoryKey) return;
+    modelDirectoryLoadKeyRef.current = directoryKey;
     void loadPricingModels(franchiseId, desiredModelId, desiredModelFranchiseId);
   }, [
     existingProposalLoadStatus,
@@ -1472,9 +1491,6 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     proposal.franchiseId,
     proposal.pricingModelId,
     proposal.pricingModelFranchiseId,
-    proposal.pricingModelRevisionId,
-    proposal.pricingTierId,
-    proposal.pricingTierName,
     proposalNumber,
     isLoading,
   ]);
@@ -1497,6 +1513,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         return;
       }
       const sourceProposal = JSON.parse(JSON.stringify(data)) as Proposal;
+      setSharedAccess(sourceProposal.sharedPermission || null);
       const pricingCache = new Map<string, Awaited<ReturnType<typeof loadPricingSnapshotForExistingProposal>>>();
       const mergeWithPricingSnapshot = async (input: Partial<Proposal>): Promise<Partial<Proposal>> => {
         const resolvedFranchiseId = input.franchiseId || sourceProposal.franchiseId || getSessionFranchiseId();
@@ -1583,7 +1600,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       const shouldPreferStateSnapshot =
         Boolean(stateVersionSnapshot) &&
         (stateVersionSnapshot?.versionId || 'original') === desiredVersionId &&
-        (!fetchedRequestedVersion ||
+        (isSharedWorkingCopy || !fetchedRequestedVersion ||
           (isVersionPermanentlyLocked(fetchedRequestedVersion) &&
             !isVersionPermanentlyLocked(stateVersionSnapshot)));
       const hydratedVersions = shouldPreferStateSnapshot
@@ -1604,6 +1621,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ...cloneProposalData(targetVersion as Proposal),
         versions: [],
         workflow: sourceProposal.workflow,
+        sharedPermission: sourceProposal.sharedPermission,
+        ownerAuthUserId: sourceProposal.ownerAuthUserId,
+        contentRevision: sourceProposal.contentRevision,
+        collaborationEnabled: sourceProposal.collaborationEnabled,
       };
       const nextActiveId = sanitizedTarget.versionId || desiredVersionId || 'original';
 
@@ -2019,6 +2040,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     }
   ): Promise<Proposal | null> => {
     if (isProposalEditingRestricted) return null;
+    if (isReadOnlyBuilderView) return null;
     if (saveInFlightRef.current) return null;
 
     if (proposalNumber) {
@@ -2201,6 +2223,15 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             )
           : normalizedContainerToSave;
 
+      if (sharedAccess === 'contribute' && isSharedWorkingCopy) {
+        await saveWorkingCopy(finalProposal.proposalNumber, currentVersionId, finalProposal);
+        setHasEdits(false);
+        setHasUserEdits(false);
+        if (!options?.silent) showToast({ type: 'success', message: 'Working copy saved. The owner draft has not changed.' });
+        navigate(`/proposal/view/${finalProposal.proposalNumber}`, { state: { versionId: currentVersionId } });
+        return finalProposal;
+      }
+
       if (proposalNumber) {
         const unsafeOverwriteReason = getUnsafeProposalOverwriteReason(
           workflowReady,
@@ -2216,7 +2247,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       }
 
       const saved = await saveProposalRemote(
-        workflowReady,
+        {
+          ...workflowReady,
+          ownerAuthUserId: loadedProposalBaselineRef.current?.ownerAuthUserId || workflowReady.ownerAuthUserId,
+          contentRevision: loadedProposalBaselineRef.current?.contentRevision ?? workflowReady.contentRevision,
+          collaborationEnabled: loadedProposalBaselineRef.current?.collaborationEnabled ?? workflowReady.collaborationEnabled,
+          sharedPermission: loadedProposalBaselineRef.current?.sharedPermission || workflowReady.sharedPermission,
+        },
         effectiveMode === 'submit'
           ? { ledgerAction: 'proposal_submitted', requireOnline: true }
           : isSilentDraftAutosave && isOffline
@@ -2335,6 +2372,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     }
     if (
       !isOffline ||
+      Boolean(sharedAccess) ||
       isCreationRestricted ||
       isReadOnlyBuilderView ||
       isLoading ||
@@ -3199,7 +3237,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   const handleProposalSummaryClick = () => {
     if (isSaving) return;
-    if (isReadOnlyBuilderView && proposalNumber) {
+    if ((isReadOnlyBuilderView || (sharedAccess && !hasUserEdits)) && proposalNumber) {
       navigate(`/proposal/view/${proposalNumber}`, {
         state: { versionId: proposal.versionId || editingVersionId || versionIdFromState || 'original' },
       });
@@ -3219,6 +3257,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           </div>
         </div>
       </header>
+      {sharedAccess && <div className="shared-proposal-builder-banner" role="status">
+        {sharedEditing && !isReadOnlyBuilderView
+          ? `Shared Proposal · Editing ${proposal?.versionName || versionNameFromState || 'Original Version'} Copy`
+          : 'Shared Proposal · View Only'}
+      </div>}
 
       <div
         className={`form-layout ${isCompactLayout ? 'is-compact' : ''} ${isMobileLayout ? 'is-mobile' : ''} ${!showCostSidebar ? 'no-cost' : ''} ${!showLeftNav ? 'no-nav' : ''}`}
@@ -3321,6 +3364,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                   {pricingTierControl}
                 </div>
                 <div className="section-title-actions">
+                  {sharedAccess === 'contribute' && isSharedWorkingCopy && !sharedEditing && !sharedSubmissionPending
+                    && !isExplicitReadOnlyVersionView && getVersionRecordStatus(proposal) === 'draft'
+                    && !proposal.versionLocked && !isOffline &&
+                    <button className="btn btn-primary" onClick={() => setSharedEditing(true)} disabled={isSaving}>Propose Changes</button>}
                   <TooltipAnchor tooltip={proposalSummaryTooltip}>
                     <button
                       className="btn btn-success"
@@ -3334,15 +3381,26 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               </div>
               <h2 className="section-title">{sections[currentSection]?.label}</h2>
             </div>
-            {isReadOnlyBuilderView && (
+            {isReadOnlyBuilderView && !sharedAccess && (
               <div className="proposal-builder-readonly-note" role="status">
                 {readOnlyBuilderMessage}
               </div>
             )}
             {isReadOnlyBuilderView ? (
-              <fieldset className="proposal-builder-readonly-shell" disabled aria-label="Read-only proposal builder">
-                {renderSection()}
-              </fieldset>
+              <TooltipAnchor as="div" tooltip={sharedAccess === 'contribute'
+                ? sharedSubmissionPending
+                  ? 'VIEW ONLY. Withdraw Changes before proposing more changes'
+                  : 'VIEW ONLY. To modify, click Propose Changes at the top'
+                : undefined}>
+                <fieldset className="proposal-builder-readonly-shell" aria-label="Read-only proposal builder"
+                  onMouseDownCapture={blockReadOnlyBuilderInteraction}
+                  onClickCapture={blockReadOnlyBuilderInteraction}
+                  onKeyDownCapture={blockReadOnlyBuilderInteraction}
+                  onBeforeInputCapture={blockReadOnlyBuilderInteraction}
+                  onChangeCapture={blockReadOnlyBuilderInteraction}>
+                  {renderSection()}
+                </fieldset>
+              </TooltipAnchor>
             ) : (
               renderSection()
             )}

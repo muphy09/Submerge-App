@@ -920,6 +920,7 @@ function MasterFranchiseEditorModal({
                     ['offContractItems', 'Off-contract items'],
                     ['financingSection', 'Financing section'],
                     ['splitCustomerCostWarranty', 'Separate customer cost and warranty'],
+                    ['sharedProposals', 'Shared proposals with owner review'],
                   ].map(([key, label]) => (
                     <label className="master-editor-toggle compact" key={key}>
                       <input

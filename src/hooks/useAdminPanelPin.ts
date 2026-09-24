@@ -5,12 +5,13 @@ import {
   subscribeToStoredAdminPanelPinUpdates,
 } from '../services/adminPanelPin';
 
-export function useAdminPanelPin(franchiseId?: string) {
+export function useAdminPanelPin(franchiseId?: string, enabled = true) {
   const cached = franchiseId ? getCachedAdminPanelPin(franchiseId) : undefined;
   const [adminPanelPin, setAdminPanelPin] = useState<string>(() => cached || '');
   const [isLoading, setIsLoading] = useState<boolean>(Boolean(franchiseId) && cached === undefined);
 
   useEffect(() => {
+    if (!enabled) return;
     if (!franchiseId) {
       setAdminPanelPin('');
       setIsLoading(false);
@@ -47,7 +48,7 @@ export function useAdminPanelPin(franchiseId?: string) {
       cancelled = true;
       unsubscribe();
     };
-  }, [franchiseId]);
+  }, [franchiseId, enabled]);
 
   return { adminPanelPin, isLoading };
 }

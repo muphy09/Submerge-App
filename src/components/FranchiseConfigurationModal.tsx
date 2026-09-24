@@ -21,6 +21,7 @@ const CAPABILITIES = [
   ['offContractItems', 'Off-contract items'],
   ['financingSection', 'Financing section'],
   ['splitCustomerCostWarranty', 'Separate customer cost and warranty'],
+  ['sharedProposals', 'Shared proposals with owner review'],
 ] as const;
 
 export default function FranchiseConfigurationModal({ franchiseId, updatedBy, onClose }: Props) {

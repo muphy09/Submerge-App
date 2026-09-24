@@ -884,6 +884,12 @@ export interface Proposal {
   isOriginalVersion?: boolean;
   franchiseId?: string;
   designerAuthUserId?: string;
+  /** Current ownership is stored separately from historical designer attribution. */
+  ownerAuthUserId?: string;
+  currentOwnerName?: string;
+  contentRevision?: number;
+  collaborationEnabled?: boolean;
+  sharedPermission?: 'view' | 'contribute';
   designerName?: string;
   designerRole?: ProposalActorRole;
   designerCode?: string;

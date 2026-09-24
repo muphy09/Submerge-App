@@ -1,11 +1,32 @@
+## [3.4.1] - 9/23/26
+### Proposal Sharing!
+- Proposals can now be shared between members of the same franchise
+    - Proposals can be shared as 'Can View' and 'Can Propose Changes', and optionally include a note
+    - ANY Proposal state (Draft, Submitted, Signed) can be shared
+- Sharing covers the whole Proposal tree, including future versions and addendums made
+- Proposed changes can be reviewed by the original owner
+    - Original owner can 'Apply Changes to Draft', 'Request Revisions with Note' or 'Decline'
+    - Comparison breakdown of changed fields and financial totals
+        - The Proposed Change can be withdrawn and resubmitted if more modifications are needed after the initial submit
+- Owners can remove access at any time and recipients can leave at any time
+- Shared Proposals *REQUIRE* an online connection
+    - Once a Proposal has entered collaboration, its editing stays online-only, even if unshared
+    - The Proposal can still be viewed / exported offline but *CANNOT* be modified until online
+### Dashboard UI / UX
+- Updated the main dashboard to support Proposal Sharing
+- The dashboard now includes 2 tabs inside of the Proposal Table: My Proposals and Shared with Me
+- Proposals that have been shared will include an icon signifying who they are shared with
+### Proposal Summary UI / UX
+- Updated the Proposal Summary style to match a more modern look
+- Introduced the Collaborators block to show the status of a Shared Proposal
+-----
 ## [3.4.0] - 9/23/26
-### Fiberglass Dimensions!
+### Fiberglass Dimensions
+- *This change only applies to NEW proposals*
 - Fiberglass Dimensions automatically fill into their respective input fields (Pool and Spa)
     - Decking Area does *not* automatically fill
-    - Hydura options currently do not have dimensions
 - Admins can edit the dimensions for each shell inside of the Pricing Model Editor
     - Pricing Model Editor updated to support dimensions
-- *This change only applies to NEW proposals*
 ### Feedback Tutorial
 - Removed the feedback tutorial window
     - *Feedback button remains active*

@@ -17,6 +17,7 @@ import { applyActiveVersion } from '../utils/proposalVersions';
 import { sanitizeEditableProposalVersions } from '../utils/proposalSelectionSanitizer';
 import { removeHardcodedPapDiscountsFromProposal } from '../utils/papDiscounts';
 import { isCloudOnlyRenderRecoveryEnabled } from './renderRecovery';
+import { getSharedProposal, saveCollaborativeOwnerProposal } from './proposalCollaboration';
 import { logLedgerEventSafe } from './ledger';
 import { upgradeProposalContractTemplateRevision } from './contractTemplateUpgrade';
 import { countUnreadWorkflowEvents, ensureProposalWorkflow, getWorkflowStatus } from './proposalWorkflow';
@@ -41,6 +42,7 @@ type SaveProposalOptions = {
   ledgerAction?: 'proposal_submitted';
   requireOnline?: boolean;
   localOnly?: boolean;
+  collaborationSubmitConfirmed?: boolean;
 };
 type Tombstone = { proposalNumber: string; removedAt: string };
 type StoredProposalRow = {
@@ -51,6 +53,9 @@ type StoredProposalRow = {
   designer_role?: UserSession['role'] | null;
   designer_code?: string | null;
   status?: string | null;
+  owner_auth_user_id?: string | null;
+  content_revision?: number | null;
+  collaboration_enabled?: boolean | null;
 };
 type WorkflowUnreadProjectionRow = {
   proposal_number?: string | null;
@@ -245,7 +250,7 @@ function getEffectiveRole(session?: UserSession | null) {
 
 function isOwnProposal(proposal: Proposal, session?: UserSession | null) {
   const currentUserId = normalizeIdentity(session?.userId);
-  const proposalOwnerId = normalizeIdentity(proposal.designerAuthUserId);
+  const proposalOwnerId = normalizeIdentity(proposal.ownerAuthUserId || proposal.designerAuthUserId);
   if (proposalOwnerId) {
     return Boolean(currentUserId && currentUserId === proposalOwnerId);
   }
@@ -513,6 +518,9 @@ function ensureProposalReadMetadata(
     ...(designerName ? { designerName } : {}),
     ...(designerRole ? { designerRole } : {}),
     ...(designerCode ? { designerCode } : {}),
+    ...(stored?.owner_auth_user_id ? { ownerAuthUserId: stored.owner_auth_user_id } : {}),
+    ...(stored?.content_revision != null ? { contentRevision: Number(stored.content_revision) } : {}),
+    ...(stored?.collaboration_enabled != null ? { collaborationEnabled: Boolean(stored.collaboration_enabled) } : {}),
   };
 }
 
@@ -660,7 +668,7 @@ async function fetchSupabaseProposals(franchiseId: string, session: UserSession 
   if (!supabase) return [];
   const initialResult = await supabase
     .from(getProposalTableName())
-    .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status')
+    .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status, owner_auth_user_id, content_revision, collaboration_enabled')
     .eq('franchise_id', franchiseId || DEFAULT_FRANCHISE_ID)
     .order('updated_at', { ascending: false });
   let data = initialResult.data as StoredProposalRow[] | null;
@@ -688,7 +696,7 @@ async function fetchSupabaseProposal(proposalNumber: string, session: UserSessio
   if (!supabase) return null;
   const initialResult = await supabase
     .from(getProposalTableName())
-    .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status')
+    .select('proposal_json, franchise_id, designer_auth_user_id, designer_name, designer_role, designer_code, status, owner_auth_user_id, content_revision, collaboration_enabled')
     .eq('proposal_number', proposalNumber)
     .maybeSingle();
   let data = initialResult.data as StoredProposalRow | null;
@@ -746,6 +754,15 @@ async function upsertToSupabase(
   // before the upsert. The caller's snapshot may already be stale if another
   // computer recovered or edited the proposal during synchronization.
   const freshlyStoredProposal = await fetchSupabaseProposal(normalized.proposalNumber, readSession());
+  if (freshlyStoredProposal?.collaborationEnabled) {
+    if (!normalized.collaborationEnabled || normalized.contentRevision == null) {
+      throw new Error('COLLAB_CONFLICT: This proposal is shared. Reopen the latest cloud draft in a current client.');
+    }
+    if (normalized.contentRevision !== freshlyStoredProposal.contentRevision) {
+      throw new Error('COLLAB_CONFLICT: This proposal changed on another device. Reopen the latest draft.');
+    }
+    return saveCollaborativeOwnerProposal(normalized);
+  }
   const existingProposal = freshlyStoredProposal || knownExistingProposal || null;
   const unsafeOverwriteReason = getUnsafeProposalOverwriteReason(normalized, existingProposal);
   if (unsafeOverwriteReason) {
@@ -815,8 +832,24 @@ async function syncLocalCollectionToSupabase(
 ): Promise<Set<string>> {
   const blockedLocalProposalNumbers = new Set<string>();
   for (const local of locals) {
+    if (local.collaborationEnabled) {
+      blockedLocalProposalNumbers.add(local.proposalNumber);
+      continue;
+    }
     if (!canAttemptProposalWrite(local, session, franchiseId)) continue;
     const existing = supabaseMap.get(local.proposalNumber);
+    // A cloud-synced row that disappeared from this account's visible result
+    // may have been transferred, revoked, or deleted. Never resurrect it from
+    // the old owner's disk copy.
+    if (!existing && local.syncStatus === 'synced') {
+      blockedLocalProposalNumbers.add(local.proposalNumber);
+      continue;
+    }
+    if (existing?.collaborationEnabled) {
+      if (shouldSyncLocal(local, existing)) archiveLosingProposalSnapshot(local, 'cloud_newer', existing);
+      blockedLocalProposalNumbers.add(local.proposalNumber);
+      continue;
+    }
     if (!shouldSyncLocal(local, existing)) continue;
     const unsafeOverwriteReason = getUnsafeProposalOverwriteReason(local, existing);
     if (existing && unsafeOverwriteReason) {
@@ -834,6 +867,11 @@ async function syncLocalCollectionToSupabase(
       supabaseMap.set(local.proposalNumber, synced);
       await persistLocalProposal(synced);
     } catch (error) {
+      if (String((error as Error)?.message || '').includes('UPGRADE_REQUIRED')
+        || String((error as Error)?.message || '').includes('COLLAB_CONFLICT')) {
+        blockedLocalProposalNumbers.add(local.proposalNumber);
+        continue;
+      }
       if (existing && isUnsafeProposalOverwriteError(error)) {
         console.warn('Blocked unsafe local proposal overwrite', local.proposalNumber, error);
         archiveLosingProposalSnapshot(local, 'cloud_newer', existing);
@@ -861,7 +899,7 @@ export async function syncPendingProposals() {
   if (syncingPending) return;
   syncingPending = true;
   try {
-    const supabaseOnline = await hasSupabaseConnection(true);
+    const supabaseOnline = await hasSupabaseConnection();
     if (!supabaseOnline) return;
     const session = readSession();
     const locals = await loadLocalProposals(undefined, session, true);
@@ -869,9 +907,15 @@ export async function syncPendingProposals() {
     if (!pending.length) return;
     for (const proposal of pending) {
       if (!isProposalNumberForCurrentMode(proposal.proposalNumber)) continue;
+      if (proposal.collaborationEnabled) continue;
       if (!canAttemptProposalWrite(proposal, session)) continue;
       try {
         const remote = await fetchSupabaseProposal(proposal.proposalNumber, session);
+        if (remote?.collaborationEnabled) {
+          archiveLosingProposalSnapshot(proposal, 'cloud_newer', remote);
+          await persistLocalProposal(remote);
+          continue;
+        }
         const remoteTs = coerceTimestamp(remote?.lastModified || remote?.createdDate);
         const localTs = coerceTimestamp(proposal.lastModified || proposal.createdDate);
         if (remote && remoteTs >= localTs) {
@@ -905,11 +949,11 @@ export async function syncPendingDeletes() {
   if (syncingPendingDeletes) return;
   if (!isSupabaseEnabled()) return;
 
-  const supabaseOnline = await hasSupabaseConnection(true);
-  if (!supabaseOnline) return;
-
   const pendingDeletes = loadPendingDeletes();
   if (!pendingDeletes.length) return;
+
+  const supabaseOnline = await hasSupabaseConnection();
+  if (!supabaseOnline) return;
 
   const supabase = getSupabaseClient();
   if (!supabase) return;
@@ -969,7 +1013,7 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   const cloudOnlyRecovery = isCloudOnlyRenderRecoveryEnabled();
   const isMasterInspection = isMasterActingAsOwnerSession();
   const targetFranchiseId = franchiseId || getSessionFranchiseId();
-  const supabaseOnline = await hasSupabaseConnection(true);
+  const supabaseOnline = await hasSupabaseConnection();
   if (supabaseOnline) {
     await syncPendingDeletes();
   }
@@ -977,12 +1021,14 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   const deletedTombstones = isMasterInspection ? new Set<string>() : getDeletedTombstoneSet();
   const hiddenProposals = new Set<string>([...pendingDeletes, ...deletedTombstones]);
 
+  let cloudReadFailed = false;
   const supabasePromise = (async () => {
     if (!supabaseOnline) return [] as Proposal[];
     try {
       const rows = await fetchSupabaseProposals(targetFranchiseId || DEFAULT_FRANCHISE_ID, session);
       return rows.filter((p) => !hiddenProposals.has(p.proposalNumber));
     } catch (error) {
+      cloudReadFailed = true;
       console.warn('Failed to list proposals from Supabase; using local copies.', error);
       return [] as Proposal[];
     }
@@ -994,6 +1040,7 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   })();
 
   const [supabaseRows, localRows] = await Promise.all([supabasePromise, localPromise]);
+  const cloudReadAvailable = supabaseOnline && !cloudReadFailed;
   const supabaseMap = new Map<string, Proposal>();
   supabaseRows.forEach((p) => {
     if (p?.proposalNumber) supabaseMap.set(p.proposalNumber, p);
@@ -1016,7 +1063,7 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   }
 
   let blockedLocalProposalNumbers = new Set<string>();
-  if (!isMasterInspection && supabaseOnline && localRows.length) {
+  if (!isMasterInspection && cloudReadAvailable && localRows.length) {
     await syncPendingProposals();
     blockedLocalProposalNumbers = await syncLocalCollectionToSupabase(
       localRows,
@@ -1039,16 +1086,21 @@ export async function listProposals(franchiseId?: string): Promise<Proposal[]> {
   };
 
   supabaseMap.forEach((p) => upsert(withSyncStatus(p, 'synced', ONLINE_SYNC_MESSAGE)));
-  const visibleLocalRows = isMasterInspection && supabaseOnline ? [] : localRows;
+  const visibleLocalRows = isMasterInspection && cloudReadAvailable ? [] : localRows;
   visibleLocalRows.forEach((local) => {
     const cloud = supabaseMap.get(local.proposalNumber);
-    if (cloud && blockedLocalProposalNumbers.has(local.proposalNumber)) {
+    if (cloudReadAvailable && local.collaborationEnabled && !cloud) return;
+    if (cloud?.collaborationEnabled) {
       upsert(withSyncStatus(cloud, 'synced', ONLINE_SYNC_MESSAGE));
       return;
     }
-    if (supabaseOnline && shouldSyncLocal(local, cloud || null)) {
+    if (blockedLocalProposalNumbers.has(local.proposalNumber)) {
+      if (cloud) upsert(withSyncStatus(cloud, 'synced', ONLINE_SYNC_MESSAGE));
+      return;
+    }
+    if (cloudReadAvailable && shouldSyncLocal(local, cloud || null)) {
       upsert(withSyncStatus(local, 'pending', PENDING_MESSAGE));
-    } else if (!supabaseOnline) {
+    } else if (!cloudReadAvailable) {
       const status = (local as any).syncStatus || 'pending';
       const message = (local as any).syncMessage || (status === 'synced' ? ONLINE_SYNC_MESSAGE : PENDING_MESSAGE);
       upsert(withSyncStatus(local, status, message));
@@ -1131,17 +1183,19 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
   if (!isMasterInspection && (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber))) return null;
 
   const session = readSession();
-  const supabaseOnline = await hasSupabaseConnection(true);
+  const supabaseOnline = await hasSupabaseConnection();
   if (supabaseOnline) {
     await syncPendingDeletes();
     if (!isMasterInspection && (isPendingDelete(proposalNumber) || isDeletedTombstone(proposalNumber))) return null;
   }
 
+  let cloudReadFailed = false;
   const supabasePromise = (async () => {
     if (!supabaseOnline) return null;
     try {
       return await fetchSupabaseProposal(proposalNumber, session);
     } catch (error) {
+      cloudReadFailed = true;
       console.warn('Failed to load proposal from Supabase, will try local.', error);
       return null;
     }
@@ -1150,6 +1204,19 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
   const localPromise = loadLocalProposal(proposalNumber, session);
 
   const [cloud, local] = await Promise.all([supabasePromise, localPromise]);
+  if (supabaseOnline && !cloudReadFailed && !cloud && local?.collaborationEnabled) {
+    const shared = await getSharedProposal(proposalNumber);
+    return shared?.proposal || null;
+  }
+  if (cloud?.collaborationEnabled) {
+    if (isOwnProposal(cloud, session)) return cloud;
+    const shared = await getSharedProposal(proposalNumber);
+    return shared?.proposal || (canReadProposal(cloud, session) ? cloud : null);
+  }
+  if (!cloud && !local) {
+    const shared = await getSharedProposal(proposalNumber);
+    return shared?.proposal || null;
+  }
 
   if (isMasterInspection) {
     const inspectionCopy = cloud || local;
@@ -1230,6 +1297,9 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
       sanitizeEditableProposalVersions(normalizedWithVersions)
     )
   );
+  if (persistenceReady.sharedPermission) {
+    throw new Error('Shared recipients cannot save the owner proposal. Save a working copy and send it for review.');
+  }
   assertMasterProposalMutationAllowed(persistenceReady, session);
   clearDeletedTombstone(proposalNumber);
   const franchiseId = persistenceReady.franchiseId || DEFAULT_FRANCHISE_ID;
@@ -1239,6 +1309,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
   }
 
   if (options.localOnly) {
+    if (persistenceReady.collaborationEnabled) throw new Error('Shared proposals can only be edited while connected.');
     const pending = withSyncStatus(
       { ...persistenceReady, franchiseId, lastModified: persistenceReady.lastModified || now },
       'pending',
@@ -1250,6 +1321,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
 
   const supabaseOnline = await hasSupabaseConnection(true);
   if (!supabaseOnline) {
+    if (persistenceReady.collaborationEnabled) throw new Error('Shared proposals can only be edited while connected.');
     if (options.requireOnline) {
       throw new Error(OFFLINE_ERROR_MESSAGE);
     }
@@ -1263,7 +1335,22 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
   }
 
   try {
-    const synced = await upsertToSupabase(persistenceReady);
+    let synced: Proposal;
+    if (persistenceReady.collaborationEnabled) {
+      try {
+        synced = await saveCollaborativeOwnerProposal(persistenceReady, options.collaborationSubmitConfirmed);
+      } catch (error) {
+        if (!String((error as Error)?.message || '').includes('PENDING_CHANGES')
+          || options.collaborationSubmitConfirmed) throw error;
+        const confirmed = window.confirm(
+          'Contributors have changes awaiting your review. Submitting now will supersede those requests and notify them. Continue?'
+        );
+        if (!confirmed) throw new Error('Submission canceled so contributor changes can be reviewed.');
+        synced = await saveCollaborativeOwnerProposal(persistenceReady, true);
+      }
+    } else {
+      synced = await upsertToSupabase(persistenceReady);
+    }
     await persistLocalProposal({ ...synced, franchiseId });
     if (options.ledgerAction === 'proposal_submitted' && !isTestSession()) {
       await logLedgerEventSafe({
@@ -1281,7 +1368,9 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
     }
     return { ...synced, lastModified: synced.lastModified || now };
   } catch (error) {
-    if (options.requireOnline || isUnsafeProposalOverwriteError(error)) {
+    if (options.requireOnline || persistenceReady.collaborationEnabled || isUnsafeProposalOverwriteError(error)
+      || String((error as Error)?.message || '').includes('COLLAB_CONFLICT')
+      || String((error as Error)?.message || '').includes('UPGRADE_REQUIRED')) {
       throw error;
     }
     const pending = withSyncStatus(

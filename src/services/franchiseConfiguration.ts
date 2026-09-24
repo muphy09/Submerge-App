@@ -13,6 +13,7 @@ export type FranchiseCapabilities = {
   pricingRevisionReview?: boolean;
   offlineDraftRecovery?: boolean;
   splitCustomerCostWarranty?: boolean;
+  sharedProposals?: boolean;
   [key: string]: boolean | undefined;
 };
 

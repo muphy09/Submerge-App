@@ -41,6 +41,7 @@ export function useAdaptiveTablePagination({
   const measurePageSize = useCallback(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    if (viewport.getClientRects().length === 0) return;
 
     const viewportStyles = window.getComputedStyle(viewport);
     const paddingHeight =

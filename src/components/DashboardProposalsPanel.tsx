@@ -8,12 +8,21 @@ import { listAllVersions } from '../utils/proposalVersions';
 import { getPricingTierName } from '../services/pricingTiers';
 import { useAdaptiveTablePagination } from '../hooks/useAdaptiveTablePagination';
 import type { LocalProposalLoadIssue } from '../services/proposalsAdapter';
+import type { CollaborationEvent, SharedProposal } from '../services/proposalCollaboration';
 import './DashboardProposalsPanel.css';
 import TablePagination from './TablePagination';
 import { useHorizontalWheelScroll } from '../hooks/useHorizontalWheelScroll';
+import { TooltipAnchor } from './AppTooltip';
 
 type DashboardProposalsPanelProps = {
   proposals: Proposal[];
+  sharedProposals?: SharedProposal[];
+  sharedOwnedProposalNumbers?: string[];
+  sharedOwnedRecipients?: Record<string, string[]>;
+  collaborationEnabled?: boolean;
+  collaborationUpdates?: CollaborationEvent[];
+  collaborationAttention?: number;
+  onOpenUpdate?: (update: CollaborationEvent) => void;
   loading: boolean;
   onCreateProposal: () => void;
   onDeleteProposal: (proposalNumber: string) => Promise<void> | void;
@@ -245,6 +254,13 @@ function SortIndicator({
 
 function DashboardProposalsPanel({
   proposals,
+  sharedProposals = [],
+  sharedOwnedProposalNumbers = [],
+  sharedOwnedRecipients = {},
+  collaborationEnabled = false,
+  collaborationUpdates = [],
+  collaborationAttention = 0,
+  onOpenUpdate,
   loading,
   onCreateProposal,
   onDeleteProposal,
@@ -256,9 +272,11 @@ function DashboardProposalsPanel({
   recoveryMode = false,
   recoveryIssues = [],
 }: DashboardProposalsPanelProps) {
+  const [activeTab, setActiveTab] = useState<'mine' | 'shared'>('mine');
   const [sortField, setSortField] = useState<SortField>('lastModified');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sharedSearchTerm, setSharedSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pricingModelFilter, setPricingModelFilter] = useState('all');
   const [contractTypeFilter, setContractTypeFilter] = useState('all');
@@ -359,6 +377,15 @@ function DashboardProposalsPanel({
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
+  const sharedOwnedNumbers = new Set(sharedOwnedProposalNumbers);
+  const allProposalNames = new Map([...proposals, ...sharedProposals.map((entry) => entry.proposal)]
+    .map((proposal) => [proposal.proposalNumber,
+      getDisplayText(proposal.customerInfo?.customerName, proposal.proposalNumber)]));
+  const sharedByNumber = new Map(sharedProposals.map((entry) => [entry.proposal.proposalNumber, entry]));
+  const filteredSharedProposals = sharedProposals.filter(({ proposal, ownerName }) => {
+    const value = sharedSearchTerm.trim().toLowerCase();
+    return !value || `${proposal.customerInfo?.customerName || ''} ${ownerName}`.toLowerCase().includes(value);
+  });
 
   const dashboardPaginationResetKey = [
     searchTerm,
@@ -367,6 +394,7 @@ function DashboardProposalsPanel({
     contractTypeFilter,
     sortField,
     sortDirection,
+    activeTab,
   ].join('|');
   const {
     viewportRef: proposalTableViewportRef,
@@ -393,6 +421,24 @@ function DashboardProposalsPanel({
     proposalStartIndex,
     proposalStartIndex + proposalPageSize
   );
+  const {
+    viewportRef: sharedTableViewportRef,
+    currentPage: sharedPage,
+    totalPages: sharedTotalPages,
+    startIndex: sharedStartIndex,
+    endIndex: sharedEndIndex,
+    pageSize: sharedPageSize,
+    goToPage: goToSharedPage,
+  } = useAdaptiveTablePagination({
+    itemCount: filteredSharedProposals.length,
+    maxPageSize: Math.max(filteredSharedProposals.length, 1),
+    estimatedRowHeight: 54,
+    estimatedHeaderHeight: 44,
+    resetKey: `${sharedSearchTerm}|${activeTab}`,
+    fitToWindow: true,
+    windowBottomOffset: 80,
+  });
+  useHorizontalWheelScroll(sharedTableViewportRef, activeTab === 'shared' && filteredSharedProposals.length > 0);
 
   const hasActiveFilters =
     searchTerm.trim().length > 0 ||
@@ -453,7 +499,7 @@ function DashboardProposalsPanel({
         <div className="dashboard-proposals-header-copy">
           <p className="dashboard-proposals-kicker">Dashboard Workspace</p>
           <div className="dashboard-proposals-title-row">
-            <h2>My Proposals</h2>
+            <h2>{activeTab === 'shared' ? 'Shared with Me' : 'My Proposals'}</h2>
           </div>
         </div>
         <div className="dashboard-proposals-header-actions">
@@ -468,6 +514,26 @@ function DashboardProposalsPanel({
           </button>
         </div>
       </div>
+
+      {collaborationEnabled && <>
+        <div className="dashboard-collaboration-tabs" role="tablist" aria-label="Proposal ownership">
+          <button type="button" role="tab" aria-selected={activeTab === 'mine'} onClick={() => setActiveTab('mine')}>My Proposals ({proposals.length})</button>
+          <button type="button" role="tab" aria-selected={activeTab === 'shared'} onClick={() => setActiveTab('shared')}>Shared with Me ({sharedProposals.length})</button>
+        </div>
+        <div className="dashboard-collaboration-updates">
+          <div><strong>{collaborationAttention > 0 ? `${collaborationAttention} collaboration item${collaborationAttention === 1 ? '' : 's'} need attention` : 'Collaboration is up to date'}</strong>
+            <span> · Updates</span></div>
+          {collaborationUpdates.length > 0 && <ul>{collaborationUpdates.slice(0, 3).map((update) => <li key={update.id}>
+            <button onClick={() => onOpenUpdate?.(update)}>
+              {!update.read_at && <span className="dashboard-update-dot" aria-label="Unread" />}
+              {update.event_type === 'shared' && sharedByNumber.get(update.proposal_number)?.ownerName
+                ? `${sharedByNumber.get(update.proposal_number)?.ownerName} ` : ''}
+              {formatStatusLabel(update.event_type)} · {allProposalNames.get(update.proposal_number) || update.proposal_number}
+              <small>{new Date(update.created_at).toLocaleDateString()}</small>
+            </button>
+          </li>)}</ul>}
+        </div>
+      </>}
 
       {(recoveryMode || recoveryIssues.length > 0) && (
         <aside className="dashboard-recovery-notice" role="alert" aria-live="polite">
@@ -496,7 +562,37 @@ function DashboardProposalsPanel({
         </aside>
       )}
 
-      <div className="dashboard-proposals-body">
+      {collaborationEnabled && <div className="dashboard-shared-table-shell" hidden={activeTab !== 'shared'} role="tabpanel">
+        <div className="dashboard-proposals-toolbar dashboard-shared-toolbar">
+          <label className="dashboard-filter-field dashboard-filter-search"><span>Search shared proposals</span>
+            <input value={sharedSearchTerm} onChange={(event) => setSharedSearchTerm(event.target.value)} placeholder="Customer or owner name" />
+          </label>
+        </div>
+        <div className="dashboard-proposals-table-shell">
+        {sharedProposals.length === 0 ? <div className="dashboard-proposals-state"><h3>No shared proposals</h3><p>Proposals shared with you will appear here.</p></div>
+          : filteredSharedProposals.length === 0 ? <div className="dashboard-proposals-state"><h3>No matches</h3><p>Try a different customer or owner name.</p></div> :
+          <><div ref={sharedTableViewportRef} className="dashboard-proposals-table-scroll"><table className="dashboard-proposals-table dashboard-shared-table"><thead><tr>
+            <th>Customer Name</th><th>Owner</th><th>Your Permission</th><th>Proposal Status</th><th>Change Request</th><th>Date Modified</th>
+          </tr></thead><tbody>{filteredSharedProposals.slice(sharedStartIndex, sharedStartIndex + sharedPageSize).map(({ proposal, share, ownerName, requestStatus }) => <tr key={share.id}
+            className="dashboard-proposals-row" tabIndex={0} aria-label={`Open shared proposal ${proposal.customerInfo?.customerName || proposal.proposalNumber}`}
+            onClick={() => onOpenProposal(proposal.proposalNumber)} onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenProposal(proposal.proposalNumber); }
+            }}>
+            <td><div className="dashboard-customer-cell"><span className="dashboard-customer-name">
+              {getDisplayText(proposal.customerInfo?.customerName, 'Untitled Proposal')}
+            </span></div></td>
+            <td>{ownerName}</td>
+            <td>{share.permission === 'contribute' ? 'Can propose changes' : 'Can view'}</td>
+            <td><span className={getStatusBadgeClass(getDashboardStatus(proposal))}>{formatStatusLabel(getDashboardStatus(proposal))}</span></td>
+            <td>{requestStatus ? <span className="dashboard-shared-request-pill">{formatStatusLabel(requestStatus)}</span> : 'No request'}</td>
+            <td>{formatProposalDate(proposal)}</td>
+          </tr>)}</tbody></table></div><TablePagination currentPage={sharedPage} totalPages={sharedTotalPages}
+            totalItems={filteredSharedProposals.length} startIndex={sharedStartIndex} endIndex={sharedEndIndex}
+            onPageChange={goToSharedPage} /></>}
+        </div>
+      </div>}
+
+      <div className="dashboard-proposals-body" hidden={collaborationEnabled && activeTab !== 'mine'}>
           <div className="dashboard-proposals-toolbar">
             <label className="dashboard-filter-field dashboard-filter-search">
               <span>Search</span>
@@ -662,8 +758,13 @@ function DashboardProposalsPanel({
                         >
                           <td>
                             <div className="dashboard-customer-cell">
-                              <span className="dashboard-customer-name">
-                                {getDisplayText(proposal.customerInfo?.customerName, 'Untitled Proposal')}
+                              <span className={`dashboard-customer-primary${sharedOwnedNumbers.has(proposal.proposalNumber) ? ' has-share' : ''}`}><span className="dashboard-customer-name">
+                                  {getDisplayText(proposal.customerInfo?.customerName, 'Untitled Proposal')}
+                                </span>
+                                {sharedOwnedNumbers.has(proposal.proposalNumber) && <TooltipAnchor tooltip={`Shared with ${sharedOwnedRecipients[proposal.proposalNumber]?.join(', ') || 'collaborators'}`}><svg className="dashboard-shared-icon" viewBox="0 0 24 24" role="img" aria-label="Shared with collaborators">
+                                  <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" />
+                                  <path d="M3.5 19v-1.2a5.5 5.5 0 0 1 11 0V19H3.5Zm12.4-5.4a4.6 4.6 0 0 1 4.6 4.6V19h-3.8" />
+                                </svg></TooltipAnchor>}
                               </span>
                               {proposal.syncStatus === 'pending' && (
                                 <span className="dashboard-sync-note">Local changes pending sync</span>

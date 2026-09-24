@@ -9,6 +9,8 @@ import {
 import FranchiseLogo from './FranchiseLogo';
 import FeedbackLauncher from './FeedbackLauncher';
 import { useFranchiseAppName } from '../hooks/useFranchiseAppName';
+import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
+import { getCollaborationAttentionCount, isCollaborationAvailable } from '../services/proposalCollaboration';
 import './NavigationBar.css';
 
 interface NavigationBarProps {
@@ -120,6 +122,23 @@ function NavigationBar({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const { displayName } = useFranchiseAppName(franchiseId);
+  const { enabled: collaborationCapability } = useFranchiseCapability('sharedProposals', franchiseId);
+  const [dashboardAttention, setDashboardAttention] = useState(0);
+  useEffect(() => {
+    if (!franchiseId || !collaborationCapability) { setDashboardAttention(0); return; }
+    let canceled = false;
+    const refresh = async () => {
+      try {
+        if (!(await isCollaborationAvailable(franchiseId))) return;
+        const count = await getCollaborationAttentionCount();
+        if (!canceled) setDashboardAttention(count);
+      } catch (error) { console.warn('Could not load collaboration attention count', error); }
+    };
+    void refresh();
+    const interval = window.setInterval(() => { if (document.visibilityState !== 'hidden') void refresh(); }, 30000);
+    window.addEventListener('focus', refresh);
+    return () => { canceled = true; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
+  }, [collaborationCapability, franchiseId]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -226,7 +245,7 @@ function NavigationBar({
               onBlur={hideNavItemTooltip}
             >
               <NavigationIcon name="dashboard" />
-              <span className="nav-link-content">Dashboard</span>
+              <span className="nav-link-content">Dashboard{dashboardAttention > 0 && <span className="nav-unread-pill">{dashboardAttention}</span>}</span>
             </NavLink>
 
             <NavLink

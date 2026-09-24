@@ -35,6 +35,8 @@ import PdfCanvasViewer from '../components/PdfCanvasViewer';
 import TablePagination from '../components/TablePagination';
 import { useAdaptiveTablePagination } from '../hooks/useAdaptiveTablePagination';
 import { useHorizontalWheelScroll } from '../hooks/useHorizontalWheelScroll';
+import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
+import ProposalOwnershipRecoveryModal from '../components/ProposalOwnershipRecoveryModal';
 
 const DEFAULT_FRANCHISE_ID = 'default';
 type SessionInfo = {
@@ -169,6 +171,8 @@ const renderAdminActionIcon = (type: 'pricing' | 'contracts' | 'users' | 'messag
 
 function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
   const navigate = useNavigate();
+  const { enabled: sharedProposalsEnabled } = useFranchiseCapability('sharedProposals', session?.franchiseId);
+  const [showOwnershipRecovery, setShowOwnershipRecovery] = useState(false);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(true);
   const [pricingModels, setPricingModels] = useState<any[]>([]);
@@ -1256,6 +1260,10 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
               <span className="admin-page-action-icon">{renderAdminActionIcon('messages')}</span>
               Message Center
             </button>
+            {sharedProposalsEnabled && <button type="button" className="admin-page-action" onClick={() => setShowOwnershipRecovery(true)}>
+              <span className="admin-page-action-icon">{renderAdminActionIcon('users')}</span>
+              Proposal Ownership
+            </button>}
           </div>
         </header>
 
@@ -1878,6 +1886,10 @@ function AdminPanelPage({ onOpenPricingData, session }: AdminPanelPageProps) {
           description="Copy this password now. It will only be shown once."
         />
       )}
+      {showOwnershipRecovery && <ProposalOwnershipRecoveryModal
+        franchiseId={session?.franchiseId || DEFAULT_FRANCHISE_ID}
+        onClose={() => setShowOwnershipRecovery(false)}
+      />}
       {contractPreview && (
         <div className="admin-contract-preview-backdrop" role="dialog" aria-modal="true" aria-label="Blank contract template">
           <div className="admin-contract-preview-modal">

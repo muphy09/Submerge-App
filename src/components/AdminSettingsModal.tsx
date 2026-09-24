@@ -52,7 +52,7 @@ function AdminSettingsModal({ isOpen, onClose, onEditProposalNotes }: AdminSetti
   const sessionFranchiseCode = getSessionFranchiseCode() || '';
   const { appName: savedAppName, displayName, isLoading: appNameLoading } = useFranchiseAppName(franchiseId);
   const { logoUrl: savedLogoUrl, isLoading: logoLoading } = useFranchiseLogo(franchiseId);
-  const { adminPanelPin: currentAdminPin, isLoading: adminPinLoading } = useAdminPanelPin(franchiseId);
+  const { adminPanelPin: currentAdminPin, isLoading: adminPinLoading } = useAdminPanelPin(franchiseId, isOpen);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
