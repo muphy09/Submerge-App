@@ -1,4 +1,4 @@
-## [3.4.1] - 9/23/26
+## [3.4.2] - 9/23/26
 ### Proposal Sharing!
 - Proposals can now be shared between members of the same franchise
     - Proposals can be shared as 'Can View' and 'Can Propose Changes', and optionally include a note
