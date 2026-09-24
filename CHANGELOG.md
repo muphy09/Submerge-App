@@ -1,8 +1,15 @@
+## [3.4.1] - 9/24/26
+### Cloud Backend Update
+- Reduced Edge Function Invocations by changing heartbeat time from 10 seconds to 1 minute
+- Fixed RLS upsert errors caused by Admins viewing Proposals that were not owned by them
+    - *Should improve load times for Admins*
+- Laid framework down for the Proposal Sharing Update
+-----
 ## [3.4.0] - 9/23/26
 ### Fiberglass Dimensions!
 - Fiberglass Dimensions automatically fill into their respective input fields (Pool and Spa)
     - Decking Area does *not* automatically fill
-    - Hydura options currently do not have dimensions
+    - Hydura Shell options need dimensions inserted from an Admin to autofill
 - Admins can edit the dimensions for each shell inside of the Pricing Model Editor
     - Pricing Model Editor updated to support dimensions
 - *This change only applies to NEW proposals*
