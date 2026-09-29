@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { BreakdownCostExportPage, BreakdownWarrantyExportPages } from '../../src/components/BreakdownExportPages';
 import useGlobalModalScrollLock from '../../src/hooks/useGlobalModalScrollLock';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
+import MaterialsOrderForm from '../../src/components/MaterialsOrderForm';
+import { buildMaterialsOrderForm } from '../../src/utils/materialsOrderForm';
+import pricingData from '../../src/services/pricingData';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import '../../src/index.css';
 import '../../src/App.css';
@@ -22,8 +25,50 @@ const proposal = {
   })),
 };
 const original = JSON.stringify(proposal);
+pricingData.equipment.packageOptions.push({
+  id: 'pmf03-standard-automation', name: 'PMF03 Standard Automation Package', mode: 'fixed', enabled: true,
+  includedPumpName: 'Jandy 1.65HP Variable Pump', includedPumpQuantity: 1,
+  includedFilterName: 'CV3030 Filter', includedFilterQuantity: 1,
+  includedAutomationName: 'HL Base', includedAutomationQuantity: 1,
+  includedSaltSystemName: 'Included Salt Cell', includedSaltSystemQuantity: 1,
+  includedPoolLightName: 'Pool Light', includedPoolLightQuantity: 1,
+  includeCheckValve: true,
+});
+const orderProposal = {
+  ...proposal,
+  proposalNumber: 'ORDER-100',
+  versionName: 'Original',
+  poolSpecs: { ...proposal.poolSpecs, perimeter: 100, hasAutomaticCover: true },
+  tileCopingDecking: { ...proposal.tileCopingDecking, tileLevel: 1 as const, copingType: 'flagstone', copingLength: 110,
+    deckingType: 'paver', deckingArea: 200 },
+  waterFeatures: { ...proposal.waterFeatures, selections: [{ featureId: 'wok-fire-30', quantity: 2, includeValveActuator: false }] },
+  equipment: { ...proposal.equipment, packageSelectionId: 'pmf03-standard-automation', packageSelectionTouched: true,
+    pump: { ...proposal.equipment.pump, name: 'Jandy 1.65HP Variable Pump' }, pumpQuantity: 1,
+    filter: { ...proposal.equipment.filter, name: 'CV3030 Filter' }, filterQuantity: 1,
+    automation: { ...proposal.equipment.automation, name: 'HL Base' }, automationQuantity: 1,
+    saltSystem: { name: 'Included Salt Cell' }, saltSystemQuantity: 1,
+    poolLights: [{ type: 'pool' as const, name: 'Pool Light' }],
+    additionalFilters: [{ name: 'Extra Filter' }],
+  },
+  costBreakdown: { ...proposal.costBreakdown,
+    stoneRockworkLabor: [{ category: 'Masonry Labor', description: '18" RBB Panel Ledge Facing', quantity: 25, unitPrice: 0, total: 0 }],
+    stoneRockworkMaterial: [{ category: 'Masonry Material', description: '18" RBB Panel Ledge Facing', quantity: 28.75, unitPrice: 0, total: 0 }],
+  },
+};
+const customOrderProposal = {
+  ...orderProposal,
+  equipment: { ...orderProposal.equipment, packageSelectionId: 'custom',
+    pump: { ...orderProposal.equipment.pump, name: 'Custom Package Pump' },
+    filter: { ...orderProposal.equipment.filter, name: 'Custom Package Filter' },
+    saltSystem: { name: 'Custom Salt System' },
+  },
+};
+const orderFixtureMode = new URLSearchParams(location.search).get('mode');
+const activeOrderProposal = orderFixtureMode === 'materials-custom' ? customOrderProposal : orderProposal;
+const orderData = buildMaterialsOrderForm(activeOrderProposal, activeOrderProposal.costBreakdown);
 (window as any).breakdownFixture = {
   unchanged: () => JSON.stringify(proposal) === original,
+  orderData: () => orderData,
   readPdf: async (bytes: number[], renderPage?: number) => {
     // Electron 29 predates Promise.withResolvers, required by the PDF test reader.
     (Promise as any).withResolvers ??= () => {
@@ -62,10 +107,11 @@ function Fixture() {
       <div style={{ height: 1400 }}>Proposal screen behind the modal</div>
       <div className="modal-overlay" data-scroll-lock="true">Open breakdown modal</div>
       <div className="export-print-area print-mode">
-        {mode !== 'warranty' && <div className="export-breakdown-page export-breakdown-page--cost">
+        {mode.startsWith('materials') && <MaterialsOrderForm proposal={activeOrderProposal} data={orderData} />}
+        {mode !== 'warranty' && !mode.startsWith('materials') && <div className="export-breakdown-page export-breakdown-page--cost">
           <BreakdownCostExportPage costBreakdown={proposal.costBreakdown!} customerName={proposal.customerInfo.customerName} proposal={proposal} />
         </div>}
-        {mode !== 'cost' && <BreakdownWarrantyExportPages proposal={proposal} />}
+        {mode !== 'cost' && !mode.startsWith('materials') && <BreakdownWarrantyExportPages proposal={proposal} />}
       </div>
     </div></div>
   </div>;

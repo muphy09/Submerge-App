@@ -243,6 +243,14 @@ test('still opens and saves a normal existing proposal without changing its iden
     expect(saved.customerInfo.customerName).toBe('Normal Existing Customer Updated');
     expect(saved.createdDate).toBe(createdDate);
     expect(saved.proposalNumber).toBe(proposalNumber);
+    await window.getByRole('button', { name: /Materials & Equipment Order Form/ }).click();
+    const orderModal = window.locator('.materials-order-modal');
+    await expect(orderModal.getByRole('heading', { name: 'Order Form' }).first()).toBeVisible();
+    await expect(orderModal.getByText('Normal Existing Customer Updated')).toBeVisible();
+    await orderModal.getByRole('button', { name: 'Export' }).click();
+    await expect(orderModal.getByRole('option', { name: 'PDF' })).toBeVisible();
+    await orderModal.getByRole('button', { name: 'Close materials and equipment order form' }).click();
+    expect(await window.evaluate((number) => window.electron.getProposal(number), proposalNumber)).toEqual(saved);
   } finally {
     await electronApp?.close().catch(() => undefined);
   }
