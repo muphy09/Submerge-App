@@ -1,33 +1,48 @@
-.materials-order-document { display: flex; flex-direction: column; gap: 20px; align-items: center; padding: 18px; background: #edf2f8; }
-.materials-order-page { width: 8.5in; min-height: 11in; box-sizing: border-box; padding: .38in .42in .32in; background: #fff; color: #16253f; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; border: 1px solid #d7e0ee; box-shadow: 0 8px 28px rgba(23, 43, 75, .1); display: flex; flex-direction: column; }
-.materials-order-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; border-bottom: 1px solid #dce5f2; padding-bottom: 17px; }
-.materials-order-header .breakdown-export-title { font-size: 31px; }
-.materials-order-subtitle { margin: 9px 0 0; color: #4a5f7b; font-size: 16px; }
-.materials-order-meta { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 13px 0 18px; color: #4a5f7b; font-size: 12px; }
-.materials-order-meta b { color: #20375b; margin-right: 5px; }
-.materials-order-package-note { margin: -8px 0 14px; color: #885517; font-size: 11px; }
-.materials-order-groups { display: flex; flex-direction: column; gap: 13px; flex: 1; }
-.materials-order-group { border: 1px solid #dce5f0; border-radius: 11px; overflow: hidden; background: #fff; }
-.materials-order-group h3 { margin: 0; padding: 10px 15px; background: #eff5fb; color: #17345a; font-size: 15px; line-height: 1.3; }
-.materials-order-item { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 9px 15px; border-top: 1px solid #edf1f6; min-height: 35px; }
-.materials-order-item-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-.materials-order-item-copy strong { color: #172a47; font-size: 13px; line-height: 1.35; }
-.materials-order-item-copy span, .materials-order-item-copy small { color: #61718a; font-size: 11px; line-height: 1.3; }
+.materials-order-document { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 18px; background: #fff; }
+.materials-order-page { width: 8.5in; min-height: 11in; box-sizing: border-box; display: flex; flex-direction: column; padding: .32in .35in .24in; overflow: hidden; border: 2px solid #102847; background: #fff; box-shadow: 0 16px 38px rgba(16, 40, 71, .14); color: #17263d; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+.materials-order-page *, .materials-order-page *::before, .materials-order-page *::after { box-sizing: border-box; }
+
+.materials-order-header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 1.08in; margin: -.32in -.35in 0; padding: .18in .35in; border-left: 8px solid #e7ad2b; background: #102847; color: #fff; }
+.materials-order-heading { min-width: 0; }
+.materials-order-heading > p:first-child { margin: 0 0 4px; color: #b9c9dd; font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.materials-order-heading h2 { margin: 0; color: #fff; font-size: 29px; line-height: 1.08; font-weight: 800; }
+.materials-order-subtitle { margin: 7px 0 0; color: #e4ebf4; font-size: 12px; }
+.materials-order-logo { flex: 0 0 auto; width: .94in; height: .7in; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 12px; background: #fff; overflow: hidden; }
+.materials-order-logo img { max-width: 100%; max-height: 100%; width: auto; height: auto; }
+
+.materials-order-meta { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, .65fr); gap: 10px; margin: .18in 0 .2in; }
+.materials-order-meta > div { min-width: 0; padding: 9px 12px; border: 1px solid #d5deea; border-top: 3px solid #3b80cc; border-radius: 8px; background: #f5f7fa; }
+.materials-order-meta span { display: block; margin-bottom: 3px; color: #526884; font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.materials-order-meta strong { display: block; color: #17263d; font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+.materials-order-package-note { margin: -.08in 0 .14in; color: #795313; font-size: 10px; }
+
+.materials-order-groups { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.materials-order-group { min-width: 0; }
+.materials-order-group h3 { margin: 0 0 5px; padding: 8px 11px; border-left: 5px solid #3b80cc; border-radius: 0 8px 8px 0; background: #e5eff9; color: #17263d; font-size: 14px; line-height: 1.25; font-weight: 800; }
+.materials-order-item { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 43px; padding: 7px 11px; border-bottom: 1px solid #d5deea; }
+.materials-order-item:nth-of-type(even) { background: #f5f7fa; }
+.materials-order-item-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.materials-order-item-copy strong { color: #17263d; font-size: 12px; line-height: 1.3; }
+.materials-order-item-copy span, .materials-order-item-copy small { color: #61718a; font-size: 10px; line-height: 1.3; }
 .materials-order-item-copy small { color: #46648a; }
-.materials-order-measures { flex: 0 0 auto; display: flex; gap: 16px; align-items: center; text-align: right; }
-.materials-order-measure { display: flex; flex-direction: column; gap: 2px; min-width: 65px; }
-.materials-order-measure span { color: #65748a; font-size: 10px; white-space: nowrap; }
-.materials-order-measure strong { color: #163a5d; font-size: 13px; white-space: nowrap; }
-.materials-order-footer { display: flex; justify-content: space-between; padding-top: 18px; color: #718198; font-size: 10px; }
+.materials-order-measures { flex: 0 0 auto; display: flex; align-items: center; gap: 15px; text-align: right; }
+.materials-order-measure { display: flex; flex-direction: column; gap: 2px; min-width: 80px; }
+.materials-order-measure span { color: #526884; font-size: 9px; font-weight: 750; white-space: nowrap; }
+.materials-order-measure strong { color: #102847; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.materials-order-footer { flex: 0 0 auto; display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 7px; border-top: 1px solid #ccd7e5; color: #71839e; font-size: 9px; }
 .materials-order-empty { padding: 24px; color: #66768a; text-align: center; }
-.export-print-area .materials-order-document { gap: 0; padding: 0; background: #fff; }
-.export-print-area .materials-order-page { width: 7.7in; max-width: 7.7in; min-height: 10.2in; height: 10.2in; padding: .28in .32in .2in; display: flex; break-after: page; }
-.materials-order-modal .modal-body-scroll { background: #edf2f8; }
-.materials-order-modal .materials-order-document { padding: 12px; }
+
+.export-print-area .materials-order-document { gap: 0; padding: 0; }
+.export-print-area .materials-order-page { width: 7.7in; max-width: 7.7in; min-height: 10.2in; height: 10.2in; padding: .28in .32in .2in; border: 1.5px solid #102847; box-shadow: none; break-after: page; }
+.export-print-area .materials-order-header { margin: -.28in -.32in 0; padding: .15in .32in; }
+.materials-order-modal .modal-body-scroll { background: #fff; }
+.materials-order-modal .materials-order-document { padding: 18px; }
+
 .summary-tile.materials-order-tile { border: 2px solid #75a7cf; background: #fff; box-shadow: 0 4px 16px rgba(54, 114, 165, .18); }
 .summary-tile.materials-order-tile:hover { border-color: #4c8cbd; box-shadow: 0 8px 24px rgba(54, 114, 165, .28); }
 .summary-tile.materials-order-tile .tile-header { background: linear-gradient(135deg, #eaf4fc, #dcebf7); border-radius: 10px; padding: 14px 12px; margin: -2px -2px 14px; }
 .summary-tile.materials-order-tile .tile-icon { background: #c9e2f5; color: #27618e; }
 .summary-tile.materials-order-tile .tile-link { color: #27618e; font-weight: 700; }
+
 @media (max-width: 930px) { .materials-order-modal .materials-order-document { overflow-x: auto; align-items: flex-start; } }
-@media print { .materials-order-document { padding: 0; gap: 0; background: #fff; } .materials-order-page { border: 0; box-shadow: none; break-after: page; } }
+@media print { .materials-order-document { padding: 0; gap: 0; background: #fff; } .materials-order-page { box-shadow: none; break-after: page; } }

@@ -31,8 +31,7 @@ const amount = (value: unknown) => {
 const rounded = (value: number) => Math.round(value * 100) / 100;
 const selected = (name?: string | null) => Boolean(name?.trim()) && !/^(none|no\s|select\b)/i.test(name!.trim());
 const quantity = (value: unknown, fallback = 0) => value == null ? fallback : amount(value);
-const sfMeasures = (actual: number, withWaste: number, linearFeet?: number): OrderFormItem['measures'] => [
-  ...(linearFeet == null ? [] : [{ label: 'Linear Feet', value: rounded(linearFeet), unit: 'LNFT' as const }]),
+const sfMeasures = (actual: number, withWaste: number): OrderFormItem['measures'] => [
   { label: 'Actual SF', value: rounded(actual), unit: 'SF' },
   { label: 'SF with Waste', value: rounded(withWaste), unit: 'SF' },
 ];
@@ -101,9 +100,10 @@ const packageIncludedEquipment = (pkg: EquipmentPackageOption): EquipmentLine[] 
   return items;
 };
 
-const equipmentGroups = (proposal: Proposal, pkg: EquipmentPackageOption | null): OrderFormGroup[] => {
+const equipmentGroups = (proposal: Proposal, pkg: EquipmentPackageOption | null, packageName: string): OrderFormGroup[] => {
   const actual = getSelectedEquipment(proposal, proposal.equipment, pkg);
-  if (!pkg || pkg.mode === 'custom') return [{ title: 'Equipment', items: actual.map((item) => equipmentItem(item)) }];
+  const packageTitle = `Equipment Package: ${packageName}`;
+  if (!pkg || pkg.mode === 'custom') return [{ title: packageTitle, items: actual.map((item) => equipmentItem(item)) }];
   const remaining = actual.map((item) => ({ ...item }));
   const included = packageIncludedEquipment(pkg).map((base) => {
     const match = remaining.find((item) => item.category === base.category && item.name.toLowerCase() === base.name.toLowerCase());
@@ -112,7 +112,7 @@ const equipmentGroups = (proposal: Proposal, pkg: EquipmentPackageOption | null)
     return equipmentItem(base, used < base.quantity ? 'Package standard — changed or removed in this proposal' : undefined);
   });
   return [
-    { title: 'Included in Package', items: included },
+    { title: packageTitle, items: included },
     { title: 'Additional or Changed Equipment', items: remaining.filter((item) => item.quantity > 0).map((item) => equipmentItem(item)) },
   ];
 };
@@ -157,23 +157,23 @@ export const buildMaterialsOrderForm = (
     const materialLength = getMaterialQuantity(costBreakdown, 'Coping Material', `${coping.name} Coping Material`);
     const withWaste = (materialLength || (coping.id === 'flagstone'
       ? length * amount(prices.flagstoneQuantityMultiplier ?? 1.1) : length)) * sizeFactor;
-    if (length > 0) surfaces.push({ name: `Coping: ${coping.name}`, detail: `Size: ${tile.copingSize || '12x12'}`, measures: sfMeasures(actual, withWaste, length) });
+    if (length > 0) surfaces.push({ name: `Coping: ${coping.name}`, detail: `Size: ${tile.copingSize || '12x12'}`, measures: sfMeasures(actual, withWaste) });
   }
   const tileChoice = getTileOptionById(prices, getTileSelectionId(tile));
   if (specs.poolType !== 'fiberglass' && tileChoice) {
     const poolFeet = amount(specs.perimeter);
-    if (poolFeet > 0) surfaces.push({ name: `Pool Tile: ${tileChoice.name}`, measures: sfMeasures(poolFeet, poolFeet, poolFeet),
+    if (poolFeet > 0) surfaces.push({ name: `Pool Tile: ${tileChoice.name}`, measures: sfMeasures(poolFeet, poolFeet),
       note: 'Tile SF based on Pool Perimeter' });
     const additionalFeet = amount(tile.additionalTileLength);
-    if (additionalFeet > 0) surfaces.push({ name: `Additional Tile: ${tileChoice.name}`, measures: sfMeasures(additionalFeet, additionalFeet, additionalFeet),
+    if (additionalFeet > 0) surfaces.push({ name: `Additional Tile: ${tileChoice.name}`, measures: sfMeasures(additionalFeet, additionalFeet),
       note: 'Tile SF based on Additional Tile Length' });
     const spaFeet = amount(specs.spaPerimeter);
-    if (spaFeet > 0) surfaces.push({ name: `Spa Tile: ${tileChoice.name}`, measures: sfMeasures(spaFeet, spaFeet, spaFeet),
+    if (spaFeet > 0) surfaces.push({ name: `Spa Tile: ${tileChoice.name}`, measures: sfMeasures(spaFeet, spaFeet),
       note: 'Tile SF based on Spa Perimeter' });
     const trim = getTrimTileOptionById(prices, tile.trimTileOptionId || (tile.hasTrimTileOnSteps ? 'step-trim' : ''));
     if (trim && amount(specs.totalStepsAndBench) > 0) {
       const trimFeet = spaFeet + amount(specs.totalStepsAndBench);
-      surfaces.push({ name: `Trim Tile: ${trim.name}`, measures: sfMeasures(trimFeet, trimFeet, trimFeet),
+      surfaces.push({ name: `Trim Tile: ${trim.name}`, measures: sfMeasures(trimFeet, trimFeet),
         note: 'Tile SF based on Spa Perimeter and Step/Bench Length' });
     }
   }
@@ -222,6 +222,6 @@ export const buildMaterialsOrderForm = (
       note: `Valve actuator: ${entry.includeValveActuator === false ? 'No' : 'Yes'}` }];
   });
   if (waterItems.length) groups.push({ title: 'Water & Fire Features', items: waterItems });
-  groups.push(...equipmentGroups(proposal, pkg).filter((group) => group.items.length > 0));
+  groups.push(...equipmentGroups(proposal, pkg, packageName).filter((group) => group.items.length > 0));
   return { groups, packageName, packageNote };
 };

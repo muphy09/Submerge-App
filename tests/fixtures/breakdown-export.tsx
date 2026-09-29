@@ -38,6 +38,8 @@ const orderProposal = {
   ...proposal,
   proposalNumber: 'ORDER-100',
   versionName: 'Original',
+  pricingModelName: 'Test Price Model',
+  pricingTierId: 'normal',
   poolSpecs: { ...proposal.poolSpecs, perimeter: 100, hasAutomaticCover: true },
   tileCopingDecking: { ...proposal.tileCopingDecking, tileLevel: 1 as const, copingType: 'flagstone', copingLength: 110,
     deckingType: 'paver', deckingArea: 200 },
@@ -57,6 +59,7 @@ const orderProposal = {
 };
 const customOrderProposal = {
   ...orderProposal,
+  pricingTierId: 'bronze',
   equipment: { ...orderProposal.equipment, packageSelectionId: 'custom',
     pump: { ...orderProposal.equipment.pump, name: 'Custom Package Pump' },
     filter: { ...orderProposal.equipment.filter, name: 'Custom Package Filter' },

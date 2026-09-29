@@ -1,7 +1,6 @@
 import FranchiseLogo from './FranchiseLogo';
 import type { Proposal } from '../types/proposal-new';
 import type { MaterialsOrderFormData, OrderFormGroup, OrderFormItem } from '../utils/materialsOrderForm';
-import './BreakdownExportPages.css';
 import './MaterialsOrderForm.css';
 
 interface Props {
@@ -11,6 +10,17 @@ interface Props {
 
 const formatQuantity = (value: number, unit: string) =>
   `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit === 'items' ? '' : unit}`.trim();
+
+const getVersionName = (proposal: Proposal) => {
+  const name = proposal.versionName?.trim();
+  if (name && name.toLowerCase() !== 'version') return name;
+  return (proposal.isOriginalVersion ?? (proposal.versionId || 'original') === 'original')
+    ? 'Original' : 'Version';
+};
+
+const getTierName = (proposal: Proposal) =>
+  (proposal.pricingTierId || proposal.pricingTierName || '').trim().toLowerCase() === 'bronze'
+    ? 'Bronze' : 'Standard';
 
 // Small sections stay together; long equipment lists continue under the same heading.
 const paginateGroups = (groups: OrderFormGroup[]): OrderFormGroup[][] => {
@@ -64,17 +74,17 @@ export default function MaterialsOrderForm({ proposal, data }: Props) {
       {pages.map((groups, pageIndex) => (
         <article className="export-breakdown-page materials-order-page" key={pageIndex}>
           <header className="materials-order-header">
-            <div>
-              <p className="breakdown-export-eyebrow">Materials &amp; Equipment</p>
-              <h2 className="breakdown-export-title">Order Form</h2>
+            <div className="materials-order-heading">
+              <p>Materials &amp; Equipment</p>
+              <h2>Order Form</h2>
               <p className="materials-order-subtitle">Prepared for {proposal.customerInfo.customerName || 'Customer'}</p>
             </div>
-            <div className="breakdown-export-logo"><FranchiseLogo alt="Franchise Logo" franchiseId={proposal.franchiseId} /></div>
+            <div className="materials-order-logo"><FranchiseLogo alt="Franchise Logo" franchiseId={proposal.franchiseId} /></div>
           </header>
           <div className="materials-order-meta">
-            <span><b>Proposal</b> {proposal.proposalNumber}</span>
-            <span><b>Version</b> {proposal.versionName || 'Original'}</span>
-            <span><b>Equipment package</b> {data.packageName}</span>
+            <div><span>Version</span><strong>{getVersionName(proposal)}</strong></div>
+            <div><span>Price Model</span><strong>{proposal.pricingModelName?.trim() || proposal.pricingModelId?.trim() || 'Not available'}</strong></div>
+            <div><span>Tier</span><strong>{getTierName(proposal)}</strong></div>
           </div>
           {data.packageNote && <p className="materials-order-package-note">{data.packageNote}</p>}
           <div className="materials-order-groups">

@@ -61,22 +61,25 @@ for (const { mode, franchise, height } of [
       if (mode.startsWith('materials')) {
         const allText = texts.join(' ');
         expect(allText).toContain('Tile SF based on Pool Perimeter');
+        expect(allText).toMatch(/PRICE MODEL\s+Test Price Model/);
+        expect(allText).toMatch(mode === 'materials-custom' ? /TIER\s+Bronze/ : /TIER\s+Standard/);
+        expect(allText).not.toContain('Linear Feet');
+        expect(allText).not.toContain('ORDER-100');
         expect(allText).toContain('Automatic Cover');
         expect(allText).toContain('Extra Filter');
         expect(allText).toContain('Valve actuator: No');
         expect(allText).not.toContain('RETAIL PRICE:');
         if (mode === 'materials') {
           expect(allText).toContain('PMF03 Standard Automation Package');
-          expect(allText).toContain('Included in Package');
+          expect(allText).toContain('Equipment Package: PMF03 Standard Automation Package');
           expect(allText).toContain('Additional or Changed Equipment');
         } else {
+          expect(allText).toContain('Equipment Package: Custom');
           expect(allText).toContain('Custom Package Pump');
           expect(allText).toContain('Custom Package Filter');
-          expect(allText).not.toContain('Included in Package');
         }
         const data = await page.evaluate(() => (window as any).breakdownFixture.orderData());
         expect(data.groups[0].items.find((item: any) => item.name.startsWith('Pool Tile')).measures).toEqual([
-          { label: 'Linear Feet', value: 100, unit: 'LNFT' },
           { label: 'Actual SF', value: 100, unit: 'SF' },
           { label: 'SF with Waste', value: 100, unit: 'SF' },
         ]);
