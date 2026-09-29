@@ -21,6 +21,9 @@
 .materials-order-group h3 { margin: 0 0 5px; padding: 8px 11px; border-left: 5px solid #3b80cc; border-radius: 0 8px 8px 0; background: #e5eff9; color: #17263d; font-size: 14px; line-height: 1.25; font-weight: 800; }
 .materials-order-item { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 43px; padding: 7px 11px; border-bottom: 1px solid #d5deea; }
 .materials-order-item:nth-of-type(even) { background: #f5f7fa; }
+.materials-order-item--facing { margin-left: 15px; padding-left: 14px; border-left: 3px solid #77a9d7; background: #f2f7fc; }
+.materials-order-item--facing:nth-of-type(even) { background: #edf4fb; }
+.materials-order-item--facing .materials-order-item-copy strong { color: #285b89; }
 .materials-order-item-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .materials-order-item-copy strong { color: #17263d; font-size: 12px; line-height: 1.3; }
 .materials-order-item-copy span, .materials-order-item-copy small { color: #61718a; font-size: 10px; line-height: 1.3; }

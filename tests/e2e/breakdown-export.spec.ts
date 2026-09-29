@@ -9,6 +9,13 @@ test('Materials and Equipment stays on one continuous page in the app', async ({
   await expect(viewer.locator('.materials-order-page--viewer')).toHaveCount(1);
   await expect(viewer.getByRole('heading', { name: 'Materials and Equipment' })).toBeVisible();
   await expect(viewer.locator('.materials-order-group')).toHaveCount(5);
+  const excavation = viewer.locator('.materials-order-group').filter({ has: page.getByRole('heading', { name: 'Excavation' }) });
+  await expect(excavation.getByRole('heading', { name: 'Excavation' })).toBeVisible();
+  await expect(excavation.locator('.materials-order-item--facing')).toHaveCount(6);
+  await expect(viewer.getByRole('heading', { name: 'Facing & Rockwork' })).toHaveCount(0);
+  const excavationScreenshot = testInfo.outputPath('materials-order-excavation.png');
+  await excavation.screenshot({ path: excavationScreenshot });
+  await testInfo.attach('Excavation order section', { path: excavationScreenshot, contentType: 'image/png' });
   await expect(viewer.getByRole('heading', { name: 'Equipment Package: PMF03 Standard Automation Package' })).toBeVisible();
   await expect(viewer.locator('.materials-order-footer')).not.toContainText('Page 1 of');
   await expect(viewer.locator('.materials-order-group h3').filter({ hasText: '(continued)' })).toHaveCount(0);
@@ -85,6 +92,11 @@ for (const { mode, franchise, height } of [
         expect(allText).not.toContain('Linear Feet');
         expect(allText).not.toContain('ORDER-100');
         expect(allText).toContain('Automatic Cover');
+        expect(allText).toContain('Excavation');
+        expect(allText).toContain('Retaining Wall: 12" High - Standard');
+        expect(allText).toContain('Exposed Pool Wall Stacked Stone Facing');
+        expect(allText).toContain('Column Panel Ledge Facing');
+        expect(allText).not.toContain('Facing & Rockwork');
         expect(allText).toContain('Extra Filter');
         expect(allText).toContain('Valve actuator: No');
         expect(allText).not.toContain('RETAIL PRICE:');
@@ -102,6 +114,21 @@ for (const { mode, franchise, height } of [
           { label: 'Actual SF', value: 100, unit: 'SF' },
           { label: 'SF with Waste', value: 100, unit: 'SF' },
         ]);
+        const excavation = data.groups.find((group: any) => group.title === 'Excavation');
+        expect(excavation.items.map((item: any) => item.name)).toEqual([
+          'RBB 1: 18" High', '18" RBB Panel Ledge Facing', 'Backside Panel Ledge Facing',
+          'RBB 2: 18" High', '18" RBB Panel Ledge Facing',
+          'Exposed Pool Wall 1: 24" High', 'Exposed Pool Wall Stacked Stone Facing',
+          'Columns: 2', 'Column Panel Ledge Facing',
+          'Retaining Wall: 12" High - Standard',
+          'Raised Spa: 18" High', 'Raised Spa Tile Facing',
+        ]);
+        expect(excavation.items[1].measures.map((measure: any) => measure.value)).toEqual([30, 34.5]);
+        expect(excavation.items[4].measures.map((measure: any) => measure.value)).toEqual([15, 17.25]);
+        expect(excavation.items[6].measures.map((measure: any) => measure.value)).toEqual([20, 23]);
+        expect(excavation.items[9].measures.map((measure: any) => measure.value)).toEqual([20, 20]);
+        expect(excavation.items[11].measures.map((measure: any) => measure.value)).toEqual([15, 19.55]);
+        expect(excavation.items.every((item: any) => item.measures.map((measure: any) => measure.label).join('|') === 'Actual SF|SF with Waste')).toBe(true);
       }
       if (mode !== 'cost' && !mode.startsWith('materials')) {
         for (let section = 1; section <= 12; section++) {

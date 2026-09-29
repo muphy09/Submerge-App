@@ -38,7 +38,13 @@ const paginateGroups = (groups: OrderFormGroup[]): OrderFormGroup[][] => {
     for (let offset = 0; offset < group.items.length;) {
       if (used >= limit) { pages.push(page); page = []; used = 0; }
       const room = Math.max(1, limit - used - 1);
-      const take = Math.min(room, group.items.length - offset);
+      let take = Math.min(room, group.items.length - offset);
+      // Keep a parent excavation item with its facing when there is room on a fresh page.
+      while (take > 1 && group.items[offset + take]?.isFacing) take--;
+      if (take === 1 && group.items[offset + 1]?.isFacing && page.length) {
+        pages.push(page); page = []; used = 0;
+        continue;
+      }
       page.push({ title: offset ? `${group.title} (continued)` : group.title, items: group.items.slice(offset, offset + take) });
       offset += take;
       used += take + 1;
@@ -50,7 +56,7 @@ const paginateGroups = (groups: OrderFormGroup[]): OrderFormGroup[][] => {
 
 function Item({ item }: { item: OrderFormItem }) {
   return (
-    <div className="materials-order-item">
+    <div className={`materials-order-item${item.isFacing ? ' materials-order-item--facing' : ''}`}>
       <div className="materials-order-item-copy">
         <strong>{item.name}</strong>
         {item.detail && <span>{item.detail}</span>}
