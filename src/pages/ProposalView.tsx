@@ -5814,7 +5814,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           <div className="modal-overlay" data-scroll-lock="true" onClick={() => setMaterialsOrderVersionId(null)}>
             <div className="modal-content wide materials-order-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
-                <div><p className="modal-eyebrow">Materials &amp; Equipment</p><h2>Order Form</h2></div>
+                <div><p className="modal-eyebrow">Order Form</p><h2>Materials and Equipment</h2></div>
                 <div className="breakdown-header-actions">
                   <div className="export-control" ref={breakdownExportControlRef}>
                     <button className={`action-button export-button ${breakdownExportOpen ? 'open' : ''}`} type="button"
@@ -5828,13 +5828,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 </div>
               </div>
               <div className="modal-body-scroll">
-                <MaterialsOrderForm proposal={materialsOrderView.proposal} data={materialsOrderView.materialsOrder} />
+                <MaterialsOrderForm proposal={materialsOrderView.proposal} data={materialsOrderView.materialsOrder} mode="viewer" />
               </div>
             </div>
           </div>
           {shouldRenderBreakdownExport && <div className={`export-print-area ${breakdownExportActive ? 'print-mode' : ''}`}
             ref={breakdownExportAreaRef} aria-hidden="true">
-            <MaterialsOrderForm proposal={materialsOrderView.proposal} data={materialsOrderView.materialsOrder} />
+            <MaterialsOrderForm proposal={materialsOrderView.proposal} data={materialsOrderView.materialsOrder} mode="export" />
           </div>}
         </>
       )}

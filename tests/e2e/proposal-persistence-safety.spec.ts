@@ -245,7 +245,8 @@ test('still opens and saves a normal existing proposal without changing its iden
     expect(saved.proposalNumber).toBe(proposalNumber);
     await window.getByRole('button', { name: /Materials & Equipment Order Form/ }).click();
     const orderModal = window.locator('.materials-order-modal');
-    await expect(orderModal.getByRole('heading', { name: 'Order Form' }).first()).toBeVisible();
+    await expect(orderModal.getByRole('heading', { name: 'Materials and Equipment' }).first()).toBeVisible();
+    await expect(orderModal.locator('.materials-order-page--viewer')).toHaveCount(1);
     await expect(orderModal.getByText('Normal Existing Customer Updated')).toBeVisible();
     await orderModal.getByRole('button', { name: 'Export' }).click();
     await expect(orderModal.getByRole('option', { name: 'PDF' })).toBeVisible();

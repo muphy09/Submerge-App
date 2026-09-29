@@ -3,6 +3,25 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { _electron as electron } from 'playwright';
 
+test('Materials and Equipment stays on one continuous page in the app', async ({ page }, testInfo) => {
+  await page.goto('http://127.0.0.1:5173/tests/fixtures/breakdown-export.html?mode=materials-viewer&franchise=playwright-west');
+  const viewer = page.locator('.materials-order-modal');
+  await expect(viewer.locator('.materials-order-page--viewer')).toHaveCount(1);
+  await expect(viewer.getByRole('heading', { name: 'Materials and Equipment' })).toBeVisible();
+  await expect(viewer.locator('.materials-order-group')).toHaveCount(5);
+  await expect(viewer.getByRole('heading', { name: 'Equipment Package: PMF03 Standard Automation Package' })).toBeVisible();
+  await expect(viewer.locator('.materials-order-footer')).not.toContainText('Page 1 of');
+  await expect(viewer.locator('.materials-order-group h3').filter({ hasText: '(continued)' })).toHaveCount(0);
+  const scrollArea = viewer.locator('.modal-body-scroll');
+  expect(await scrollArea.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await scrollArea.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect(viewer.getByRole('heading', { name: 'Equipment Package: PMF03 Standard Automation Package' })).toBeInViewport();
+  await expect(viewer.locator('.materials-order-footer')).toBeInViewport();
+  const screenshot = testInfo.outputPath('materials-order-viewer-bottom.png');
+  await scrollArea.screenshot({ path: screenshot });
+  await testInfo.attach('Continuous materials order form bottom', { path: screenshot, contentType: 'image/png' });
+});
+
 for (const { mode, franchise, height } of [
   { mode: 'combined', franchise: 'playwright-west', height: 768 },
   { mode: 'warranty', franchise: 'playwright-east', height: 900 },

@@ -6,6 +6,7 @@ import './MaterialsOrderForm.css';
 interface Props {
   proposal: Proposal;
   data: MaterialsOrderFormData;
+  mode: 'viewer' | 'export';
 }
 
 const formatQuantity = (value: number, unit: string) =>
@@ -67,16 +68,16 @@ function Item({ item }: { item: OrderFormItem }) {
   );
 }
 
-export default function MaterialsOrderForm({ proposal, data }: Props) {
-  const pages = paginateGroups(data.groups);
+export default function MaterialsOrderForm({ proposal, data, mode }: Props) {
+  const pages = mode === 'export' ? paginateGroups(data.groups) : [data.groups];
   return (
-    <div className="materials-order-document">
+    <div className={`materials-order-document materials-order-document--${mode}`}>
       {pages.map((groups, pageIndex) => (
-        <article className="export-breakdown-page materials-order-page" key={pageIndex}>
+        <article className={`materials-order-page ${mode === 'export' ? 'export-breakdown-page' : 'materials-order-page--viewer'}`} key={pageIndex}>
           <header className="materials-order-header">
             <div className="materials-order-heading">
-              <p>Materials &amp; Equipment</p>
-              <h2>Order Form</h2>
+              <p>Order Form</p>
+              <h2>Materials and Equipment</h2>
               <p className="materials-order-subtitle">Prepared for {proposal.customerInfo.customerName || 'Customer'}</p>
             </div>
             <div className="materials-order-logo"><FranchiseLogo alt="Franchise Logo" franchiseId={proposal.franchiseId} /></div>
@@ -97,7 +98,7 @@ export default function MaterialsOrderForm({ proposal, data }: Props) {
           </div>
           <footer className="materials-order-footer">
             <span>Materials and Equipment Order Form</span>
-            <span>Page {pageIndex + 1} of {pages.length}</span>
+            {mode === 'export' && <span>Page {pageIndex + 1} of {pages.length}</span>}
           </footer>
         </article>
       ))}

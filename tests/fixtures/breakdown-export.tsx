@@ -108,9 +108,17 @@ function Fixture() {
   return <div className="app app--with-navigation">
     <div className="app-route-shell"><div className="proposal-view">
       <div style={{ height: 1400 }}>Proposal screen behind the modal</div>
-      <div className="modal-overlay" data-scroll-lock="true">Open breakdown modal</div>
+      <div className="modal-overlay" data-scroll-lock="true">
+        {mode === 'materials-viewer'
+          ? <div className="modal-content wide materials-order-modal">
+              <div className="modal-body-scroll">
+                <MaterialsOrderForm proposal={activeOrderProposal} data={orderData} mode="viewer" />
+              </div>
+            </div>
+          : 'Open breakdown modal'}
+      </div>
       <div className="export-print-area print-mode">
-        {mode.startsWith('materials') && <MaterialsOrderForm proposal={activeOrderProposal} data={orderData} />}
+        {mode.startsWith('materials') && mode !== 'materials-viewer' && <MaterialsOrderForm proposal={activeOrderProposal} data={orderData} mode="export" />}
         {mode !== 'warranty' && !mode.startsWith('materials') && <div className="export-breakdown-page export-breakdown-page--cost">
           <BreakdownCostExportPage costBreakdown={proposal.costBreakdown!} customerName={proposal.customerInfo.customerName} proposal={proposal} />
         </div>}

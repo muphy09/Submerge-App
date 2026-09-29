@@ -32,6 +32,8 @@
 .materials-order-footer { flex: 0 0 auto; display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 7px; border-top: 1px solid #ccd7e5; color: #71839e; font-size: 9px; }
 .materials-order-empty { padding: 24px; color: #66768a; text-align: center; }
 
+.materials-order-document--viewer { gap: 0; }
+.materials-order-page--viewer { max-width: 100%; height: auto; overflow: visible; }
 .export-print-area .materials-order-document { gap: 0; padding: 0; }
 .export-print-area .materials-order-page { width: 7.7in; max-width: 7.7in; min-height: 10.2in; height: 10.2in; padding: .28in .32in .2in; border: 1.5px solid #102847; box-shadow: none; break-after: page; }
 .export-print-area .materials-order-header { margin: -.28in -.32in 0; padding: .15in .32in; }
