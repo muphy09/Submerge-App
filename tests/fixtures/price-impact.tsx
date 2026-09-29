@@ -86,6 +86,7 @@ const useFixedPackage = fixtureParams.get('package') === 'fixed';
 const useLegacyPartialEquipment = fixtureParams.get('legacyPartial') === 'true';
 const hidePriceImpact = fixtureParams.get('priceImpact') === 'off';
 const useSpa = fixtureParams.get('spa') === 'on';
+const useAutoWaterFeaturePump = fixtureParams.get('autoWaterFeaturePump') === 'on';
 const displayBasis = fixtureParams.get('basis') === 'cogs' ? 'cogs' : 'retail';
 const fixedPackage = {
   id: 'fixture-fixed-bundle',
@@ -279,6 +280,11 @@ let proposalChangeCount = 0;
 (window as Window & { getProposalChangeCount?: () => number })
   .getProposalChangeCount = () => proposalChangeCount;
 
+(window as Window & { getFixtureEquipment?: () => Equipment })
+  .getFixtureEquipment = () => fixtureEquipment;
+
+let fixtureEquipment: Equipment;
+
 function PriceImpactFixture() {
   const initialEquipment = useMemo<Equipment>(() => {
     const base = getDefaultEquipment();
@@ -307,6 +313,7 @@ function PriceImpactFixture() {
         {
           ...additionalPump,
           price: getEquipmentItemCost(additionalPump, pumpOverhead),
+          ...(useAutoWaterFeaturePump ? { autoAddedReason: 'waterFeature' as const } : {}),
         },
       ],
       auxiliaryPumps: [
@@ -459,6 +466,7 @@ function PriceImpactFixture() {
     };
   }, []);
   const [equipment, setEquipment] = useState(initialEquipment);
+  fixtureEquipment = equipment;
   const [plumbingRuns, setPlumbingRuns] = useState({
     ...getDefaultPlumbingRuns(),
     mainDrainRun: 50,

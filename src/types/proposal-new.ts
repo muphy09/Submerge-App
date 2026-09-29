@@ -432,6 +432,7 @@ export interface Equipment {
   pump: PumpSelection;
   pumpQuantity?: number;
   additionalPumps?: PumpSelection[];
+  waterFeatureAutoPumpDismissed?: boolean;
   auxiliaryPump?: PumpSelection; // Deprecated: use auxiliaryPumps
   auxiliaryPumps?: PumpSelection[]; // Blower selections (single-select in current UI)
   filter: FilterSelection;

@@ -68,6 +68,28 @@ test('explains why Automation sanitation and Spa blowers cannot be removed', asy
   await expect(page.getByRole('tooltip')).toHaveText('Blower is required for Spa');
 });
 
+test('lets users remove a water-feature pump while showing why it was added', async ({ page }) => {
+  await page.goto(`${fixtureUrl}?autoWaterFeaturePump=on`);
+
+  const pumpBlock = categoryBlock(page, 'Pump');
+  await expect(pumpBlock.getByText('Added Automatically for Water Features')).toBeVisible();
+  const removePump = pumpBlock.getByRole('button', { name: 'Remove Additional Pump 1' });
+  await expect(removePump).toBeEnabled();
+  await removePump.click();
+  await expect(pumpBlock.getByRole('button', { name: 'Remove Additional Pump 1' })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { getFixtureEquipment: () => { waterFeatureAutoPumpDismissed?: boolean } })
+      .getFixtureEquipment().waterFeatureAutoPumpDismissed
+  )).toBe(true);
+
+  await pumpBlock.getByRole('button', { name: 'Add Another' }).click();
+  await expect(pumpBlock.getByRole('button', { name: 'Remove Additional Pump 1' })).toBeEnabled();
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { getFixtureEquipment: () => { waterFeatureAutoPumpDismissed?: boolean } })
+      .getFixtureEquipment().waterFeatureAutoPumpDismissed
+  )).toBe(true);
+});
+
 test('uses compact two-column Equipment cards with toggle-driven editing', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.goto(fixtureUrl);

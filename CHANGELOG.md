@@ -1,3 +1,10 @@
+## [3.4.2] - 9/28/26
+### Off Contract Fix
+- Fixed an issue that caused some Off Contract amounts to silently appear in the Contract Total Price (and breakdown)
+    - If this issue affected your proposal, you will be prompted to adjust the contract automatically when entering that contract
+### PMF03 Package Adjustment
+- Additional Pump that is automatically added from a Water Feature can now be removed
+-----
 ## [3.4.1] - 9/24/26
 ### Cloud Backend Update
 - Reduced Edge Function Invocations by changing heartbeat time from 10 seconds to 1 minute

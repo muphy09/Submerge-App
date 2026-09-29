@@ -1353,7 +1353,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const allowance = getPackageWaterFeaturesWithoutExtraPump(selectedPackage);
     const needsAdditionalPump = selectedWaterFeatureCategoryCount > allowance;
 
-    if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0) {
+    if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0 && !equipment.waterFeatureAutoPumpDismissed) {
       const selection = buildWaterFeaturePump(
         findActivePumpOption(equipment.pump?.name) || activePumpOptions[0]
       );
@@ -1374,7 +1374,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       return;
     }
 
-    if (!needsAdditionalPump && waterFeatureAutoPumps.length > 0) {
+    if (!needsAdditionalPump && (waterFeatureAutoPumps.length > 0 || equipment.waterFeatureAutoPumpDismissed)) {
       setProposal((prev) => {
         const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
         const currentAdditionalSelections = getAdditionalPumpSelections(baseEquipment);
@@ -1384,6 +1384,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           equipment: {
             ...baseEquipment,
             additionalPumps: nextAdditionalSelections,
+            waterFeatureAutoPumpDismissed: false,
           } as Proposal['equipment'],
         } as Proposal);
       });
@@ -1770,6 +1771,19 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             spaRun: 0,
           },
         };
+      }
+
+      if (section === 'waterFeatures') {
+        const activeFeatureIds = (selections: Proposal['waterFeatures']['selections'] = []) =>
+          [...new Set(selections
+            .filter((selection) => selection && (selection.quantity ?? 0) > 0)
+            .map((selection) => selection.featureId))].sort().join('|');
+        if (activeFeatureIds(prev.waterFeatures?.selections) !== activeFeatureIds(data?.selections)) {
+          nextProposal.equipment = {
+            ...(prev.equipment || getDefaultEquipment()),
+            waterFeatureAutoPumpDismissed: false,
+          };
+        }
       }
 
       return sanitizeCurrentProposalState(nextProposal);
