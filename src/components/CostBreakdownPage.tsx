@@ -106,7 +106,8 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
     pricing.offContractTotal ??
     proposal.pricing?.offContractTotal ??
     0;
-  const retailTarget = (pricing.retailPrice || proposal.totalCost || costBasis) - offContractTotal;
+  const hasLegacyInclusiveRetail = pricing.offContractSeparated !== true;
+  const retailTarget = (pricing.retailPrice || proposal.totalCost || costBasis) - (hasLegacyInclusiveRetail ? offContractTotal : 0);
   const retailFactor = viewMode === 'retail' && costBasis > 0 ? retailTarget / costBasis : 1;
 
   const getRetailOverride = (item?: CostLineItem): number | null => {
@@ -668,7 +669,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                   <span>Retail Price:</span>
                   <span className="cost-breakdown-summary-value">{formatCurrency(pricing.retailPrice)}</span>
                 </div>
-                {offContractTotal > 0 && (
+                {hasLegacyInclusiveRetail && offContractTotal > 0 && (
                   <div className="cost-breakdown-summary-row muted">
                     <span>Off Contract Items:</span>
                     <span>{formatCurrency(offContractTotal)}</span>

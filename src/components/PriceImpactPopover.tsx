@@ -284,11 +284,21 @@ function PriceImpactPopover({
               )}
 
               <section className="price-impact-total">
-                <h4>Estimated customer price change</h4>
+                <h4>{Math.abs(result.offContractPriceChange) >= 0.01
+                  ? 'Estimated contract price change'
+                  : 'Estimated customer price change'}</h4>
                 <strong className={result.customerPriceChange < 0 ? 'is-negative' : undefined}>
                   {formatCustomerChange(result.customerPriceChange)}
                 </strong>
               </section>
+              {Math.abs(result.offContractPriceChange) >= 0.01 && (
+                <section className="price-impact-total">
+                  <h4>Off Contract addendum price change</h4>
+                  <strong className={result.offContractPriceChange < 0 ? 'is-negative' : undefined}>
+                    {formatCustomerChange(result.offContractPriceChange)}
+                  </strong>
+                </section>
+              )}
 
               <p className="price-impact-comparison">{result.comparisonLabel}.</p>
               <p className="price-impact-footnote">

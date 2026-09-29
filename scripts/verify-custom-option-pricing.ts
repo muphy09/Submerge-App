@@ -12,6 +12,7 @@ import {
   createCorrectedPricingVersion,
 } from '../src/utils/customOptionPricingCorrection';
 import { listAllVersions, upsertVersionInContainer } from '../src/utils/proposalVersions';
+import { applyOffContractSeparation, needsOffContractSeparation } from '../src/utils/offContractSeparation';
 import {
   applyHistoricalPricingProtection,
   buildHistoricalPricingReview,
@@ -314,9 +315,11 @@ const offContractBaselinePricing = calculate(offContractBaseline, getDefaultPAPD
 const offContractPricing = calculate(offContractProposal, getDefaultPAPDiscounts());
 assert.equal(
   offContractPricing.pricing.retailPrice,
-  offContractBaselinePricing.pricing.retailPrice + 4228.814625,
-  'Off-contract work was not added dollar-for-dollar to retail'
+  offContractBaselinePricing.pricing.retailPrice,
+  'Off-contract work changed contract retail'
 );
+assert.equal(offContractPricing.pricing.offContractSeparated, true);
+assert.equal(offContractPricing.totalCost, offContractBaselinePricing.totalCost);
 assert.equal(
   offContractPricing.pricing.totalCOGS,
   offContractBaselinePricing.pricing.totalCOGS,
@@ -348,9 +351,123 @@ assert.equal(
     pricing: offContractPricing.pricing,
     totalCost: offContractPricing.totalCost,
   }),
-  offContractPricing.pricing.retailPrice,
-  'Contract cash price no longer matched total retail'
+  offContractBaselinePricing.pricing.retailPrice,
+  'Contract cash price includes Off-Contract work'
 );
+
+for (const section of [
+  'excavation', 'plumbing', 'electrical', 'tileCopingDecking',
+  'drainage', 'equipment', 'waterFeatures', 'interiorFinish',
+] as const) {
+  const withSeparateOption = clone(offContractBaseline);
+  withSeparateOption[section]!.customOptions = [{
+    name: `Separate ${section}`,
+    description: 'Addendum only',
+    laborCost: 0,
+    materialCost: 0,
+    totalCost: 1000,
+    isOffContract: true,
+  }];
+  const calculation = calculate(withSeparateOption, getDefaultPAPDiscounts());
+  assert.equal(calculation.pricing.retailPrice, offContractBaselinePricing.pricing.retailPrice, `${section} changed contract retail`);
+  assert.equal(calculation.pricing.totalCOGS, offContractBaselinePricing.pricing.totalCOGS, `${section} changed COGS`);
+  assert.equal(calculation.pricing.offContractTotal, 1000, `${section} is missing from the addendum`);
+}
+
+const legacyInclusiveVersion: Proposal = {
+  ...offContractProposal,
+  pricing: {
+    ...offContractPricing.pricing,
+    retailPrice: offContractPricing.pricing.retailPrice + 4228.814625 + 100000,
+    manualAdjustmentsTotal: (offContractPricing.pricing.manualAdjustmentsTotal || 0) + 4228.814625,
+    offContractSeparated: undefined,
+  },
+  totalCost: offContractPricing.totalCost + 4228.814625 + 100000,
+  contractOverrides: { p1_7: '$4,228.81', p1_pay_excavation: '$1,000.00', p1_pay_deposit: '$5,000.00' },
+  versions: [],
+};
+assert.equal(needsOffContractSeparation(legacyInclusiveVersion), true);
+const corrected = applyOffContractSeparation(legacyInclusiveVersion, legacyInclusiveVersion);
+assert.equal(corrected.createdVersion, false);
+assert.equal(corrected.correctedVersion.versionId, legacyInclusiveVersion.versionId);
+assert.equal(corrected.container.versions.length, 0);
+assert.equal(corrected.correctedVersion.pricing.retailPrice, offContractPricing.pricing.retailPrice + 100000);
+assert.equal(corrected.correctedVersion.totalCost, offContractPricing.totalCost + 100000);
+assert.equal(corrected.correctedVersion.pricing.totalCOGS, legacyInclusiveVersion.pricing.totalCOGS);
+assert.equal(corrected.correctedVersion.pricing.offContractSeparated, true);
+assert.equal(corrected.correctedVersion.contractOverrides?.p1_7, undefined);
+assert.equal(corrected.correctedVersion.contractOverrides?.p1_pay_excavation, undefined);
+assert.equal(corrected.correctedVersion.contractOverrides?.p1_pay_deposit, '$5,000.00');
+assert.equal(needsOffContractSeparation(corrected.correctedVersion), false);
+assert.equal(legacyInclusiveVersion.pricing.retailPrice, offContractPricing.pricing.retailPrice + 4228.814625 + 100000);
+
+const alternateInclusiveVersion: Proposal = {
+  ...clone(legacyInclusiveVersion),
+  versionId: 'alternate',
+  versionName: 'Alternate Draft',
+  isOriginalVersion: false,
+  versions: [],
+};
+const multipleVersionContainer: Proposal = {
+  ...clone(legacyInclusiveVersion),
+  versionId: 'original',
+  activeVersionId: 'original',
+  versions: [alternateInclusiveVersion],
+};
+const correctedAlternate = applyOffContractSeparation(multipleVersionContainer, alternateInclusiveVersion);
+assert.equal(correctedAlternate.createdVersion, false);
+assert.equal(correctedAlternate.container.activeVersionId, 'original');
+assert.equal(correctedAlternate.container.pricing.retailPrice, legacyInclusiveVersion.pricing.retailPrice);
+assert.equal(correctedAlternate.container.versions.length, 1);
+assert.equal(correctedAlternate.container.versions[0].versionId, 'alternate');
+assert.equal(correctedAlternate.container.versions[0].pricing.retailPrice, offContractPricing.pricing.retailPrice + 100000);
+
+const correctedContractFields = await getEditableContractFields(
+  corrected.correctedVersion,
+  corrected.correctedVersion.contractOverrides,
+  undefined,
+  {
+    id: 'off-contract-total-test', label: 'Off Contract total test', pdfUrl: '', pdfPath: '', staticPatches: [],
+    fields: [
+      { id: 'p1_7', page: 1, rect: [0, 0, 100, 10], label: 'Cash Price', color: 'blue' },
+      { id: 'p1_pay_excavation', page: 1, rect: [0, 10, 100, 20], label: 'Prior to excavation', color: 'blue' },
+    ],
+  }
+);
+assert.equal(
+  correctedContractFields.find((field) => field.id === 'p1_7')?.value,
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(offContractPricing.pricing.retailPrice + 100000)
+);
+assert.equal(
+  correctedContractFields.find((field) => field.id === 'p1_pay_excavation')?.value,
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+    (offContractPricing.pricing.retailPrice + 100000 - 5000) * 0.3
+  )
+);
+
+const separatedDeckingProposal = clone(corrected.correctedVersion);
+separatedDeckingProposal.tileCopingDecking = {
+  ...separatedDeckingProposal.tileCopingDecking,
+  deckingType: 'travertine-level1',
+  deckingArea: 100,
+  isDeckingOffContract: true,
+  additionalDeckingSelections: [{ deckingType: 'concrete', area: 50, isOffContract: false }],
+};
+const deckingContractFields = await getEditableContractFields(
+  separatedDeckingProposal,
+  undefined,
+  undefined,
+  {
+    id: 'off-contract-decking-test', label: 'Off Contract decking test', pdfUrl: '', pdfPath: '', staticPatches: [],
+    fields: [
+      { id: 'p1_38', page: 1, rect: [0, 0, 100, 10], label: 'Decking', color: 'blue' },
+      { id: 'p1_38_qty', page: 1, rect: [0, 10, 100, 20], label: 'Decking quantity', color: 'blue' },
+    ],
+  }
+);
+assert.doesNotMatch(deckingContractFields[0].value, /travertine|off contract/i);
+assert.match(deckingContractFields[0].value, /Additional Decking/i);
+assert.equal(deckingContractFields[1].value, '50');
 
 const contractFeatureProposal = clone(offContractBaseline);
 contractFeatureProposal.createdDate = '2026-01-01T00:00:00.000Z';

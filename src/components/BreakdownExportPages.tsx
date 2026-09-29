@@ -177,6 +177,8 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
       pricing?.offContractTotal ??
       proposal?.pricing?.offContractTotal ??
       0;
+    const hasLegacyInclusiveRetail =
+      (pricing?.offContractSeparated ?? proposal?.pricing?.offContractSeparated) !== true;
 
     let retailPrice =
       pricing?.retailPrice ??
@@ -188,7 +190,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
       retailPrice = costBasis;
     }
 
-    const retailTarget = retailPrice - adjustmentsTotal - offContractTotal;
+    const retailTarget = retailPrice - adjustmentsTotal - (hasLegacyInclusiveRetail ? offContractTotal : 0);
     const retailFactor = costBasis > 0 ? retailTarget / costBasis : 1;
     const overrideItems = allItems(displayCostBreakdown).filter((item) => getRetailOverride(item) !== null);
     const overrideCostBasis = overrideItems.reduce((sum, item) => sum + (item.total ?? 0), 0);
@@ -263,7 +265,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
       value: adjustment.amount,
     }));
     const offContractRows =
-      roundToTwo(offContractTotal) !== 0
+      hasLegacyInclusiveRetail && roundToTwo(offContractTotal) !== 0
         ? [{ label: 'Off Contract Items', value: offContractTotal }]
         : [];
     const combined = [...visibleRetailRows, ...offContractRows, ...adjustmentRows];
@@ -272,7 +274,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
     return {
       left: combined.slice(0, split),
       right: combined.slice(split),
-      displayRetailPrice: roundToTwo(retailPrice || (runningRetailTotal + adjustmentsTotal + offContractTotal)),
+      displayRetailPrice: roundToTwo(retailPrice || (runningRetailTotal + adjustmentsTotal + (hasLegacyInclusiveRetail ? offContractTotal : 0))),
     };
   }, [displayCostBreakdown, pricing, proposal]);
   const maxColumnRows = Math.max(rows.left.length, rows.right.length);

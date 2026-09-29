@@ -33,7 +33,7 @@ function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div className="confirm-backdrop" role="dialog" aria-modal="true">
+    <div className="confirm-backdrop" role="dialog" aria-modal="true" aria-label={title}>
       <div className="confirm-modal">
         <div className="confirm-header">
           <h3>{title}</h3>

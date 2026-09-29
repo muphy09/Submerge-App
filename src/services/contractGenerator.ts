@@ -33,6 +33,7 @@ import {
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import { NORMAL_PRICING_TIER_ID, getProposalPricingTierId } from './pricingTiers';
 import { resolveFeenstraMay2026ContractCashPrice } from './legacy/feenstraMay2026Contract';
+import { needsOffContractSeparation } from '../utils/offContractSeparation';
 
 export type ContractOverrides = Record<string, string | number | null>;
 
@@ -221,6 +222,9 @@ function resolveMirroredContractOverride(
 }
 
 function normalizeProposal(pr: Proposal): ProposalWithPricing {
+  // A saved inclusive contract remains exactly as it was until its owner accepts
+  // the correction on a new editable version.
+  if (needsOffContractSeparation(pr)) return pr;
   try {
     const calc = MasterPricingEngine.calculateCompleteProposal(
       pr,
@@ -228,7 +232,9 @@ function normalizeProposal(pr: Proposal): ProposalWithPricing {
     );
     return {
       ...pr,
-      pricing: calc?.pricing || pr.pricing,
+      // A saved separated total is the reviewed contract amount. Recalculating
+      // here can use a different active pricing snapshot than this version's.
+      pricing: pr.pricing?.offContractSeparated ? pr.pricing : calc?.pricing || pr.pricing,
       costBreakdown: calc?.costBreakdown || pr.costBreakdown,
     };
   } catch (error) {
@@ -965,10 +971,13 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
       : 'None';
   }
   if (field.id === 'p1_38_qty') {
+    const excludeOffContract = proposal.pricing?.offContractSeparated === true;
     const quantities = [
-      primaryDeckingType !== 'none' && primaryDeckingArea > 0 ? formatNumberValue(primaryDeckingArea) : '',
+      primaryDeckingType !== 'none' && primaryDeckingArea > 0 &&
+      !(excludeOffContract && proposal.tileCopingDecking?.isDeckingOffContract)
+        ? formatNumberValue(primaryDeckingArea) : '',
       ...additionalDeckingSelections
-        .filter((selection) => selection.area > 0)
+        .filter((selection) => selection.area > 0 && !(excludeOffContract && selection.isOffContract))
         .map((selection) => formatNumberValue(selection.area)),
     ].filter(Boolean);
 
@@ -976,14 +985,19 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
       return quantities.join(' + ');
     }
 
-    return formatNumberValue(primaryDeckingArea);
+    return excludeOffContract && proposal.tileCopingDecking?.isDeckingOffContract
+      ? ''
+      : formatNumberValue(primaryDeckingArea);
   }
   if (/decking drainage/.test(label)) return proposal.drainage?.deckDrainTotalLF ? 'BY BUILDER' : overrideDefault;
   if (field.id === 'p1_40_qty') return formatNumberValue(proposal.drainage?.downspoutTotalLF);
   if (/decking\b/i.test(label)) {
+    const excludeOffContract = proposal.pricing?.offContractSeparated === true;
     const selections = [
-      formatDeckingContractLabel(primaryDeckingType, Boolean(proposal.tileCopingDecking?.isDeckingOffContract)),
-      ...additionalDeckingSelections.map((selection) =>
+      excludeOffContract && proposal.tileCopingDecking?.isDeckingOffContract
+        ? ''
+        : formatDeckingContractLabel(primaryDeckingType, Boolean(proposal.tileCopingDecking?.isDeckingOffContract)),
+      ...additionalDeckingSelections.filter((selection) => !(excludeOffContract && selection.isOffContract)).map((selection) =>
         formatDeckingContractLabel(selection.deckingType, selection.isOffContract, 'Additional Decking')
       ),
     ].filter(Boolean);
@@ -992,7 +1006,10 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
       return selections.join(' + ');
     }
 
-    return primaryDeckingType === 'none' ? 'None' : getDeckingTypeFullLabel(primaryDeckingType);
+    return primaryDeckingType === 'none' ||
+      (excludeOffContract && proposal.tileCopingDecking?.isDeckingOffContract)
+      ? 'None'
+      : getDeckingTypeFullLabel(primaryDeckingType);
   }
 
   if (/skimmer/.test(label)) {

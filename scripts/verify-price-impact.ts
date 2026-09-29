@@ -909,8 +909,10 @@ const plumbingOffContractResult = calculatePlumbingPriceImpact({
 });
 assert.deepEqual(
   plumbingOffContractResult.directCharges.map((line) => [line.label, line.amount]),
-  [['Off-Contract Retail Price', 750]]
+  []
 );
+assert.equal(plumbingOffContractResult.offContractPriceChange, 750);
+assert.equal(plumbingOffContractResult.customerPriceChange, 0);
 
 const plumbingComparison = buildPlumbingPriceImpactComparisonProposal(
   comprehensiveProposal,
@@ -929,8 +931,10 @@ const offContractResult = calculateEquipmentPriceImpact({
 });
 assert.deepEqual(
   offContractResult.directCharges.map((line) => [line.label, line.amount]),
-  [['Off-Contract Retail Price', 900]]
+  []
 );
+assert.equal(offContractResult.offContractPriceChange, 900);
+assert.equal(offContractResult.customerPriceChange, 0);
 
 const packageSnapshot = clone(snapshot);
 packageSnapshot.equipment.packageOptions = [
@@ -1315,19 +1319,9 @@ assert.equal(
   'Compared with no primary decking'
 );
 assert.equal(deckingOffContractResult.totalCogsChange, 0);
-assert.equal(
-  deckingOffContractResult.directCharges.length,
-  1,
-  'The primary off-contract Decking impact should contain only its retail-only charge.'
-);
-assert.equal(
-  deckingOffContractResult.directCharges[0]?.label,
-  'Off-Contract Retail Price'
-);
-assert.equal(
-  deckingOffContractResult.directCharges[0]?.amount,
-  deckingOffContractResult.customerPriceChange
-);
+assert.equal(deckingOffContractResult.directCharges.length, 0);
+assert.equal(deckingOffContractResult.customerPriceChange, 0);
+assert.ok(deckingOffContractResult.offContractPriceChange > 0);
 
 const tileCogsResult = calculateTileCopingDeckingPriceImpact({
   proposal: tileProposal,
@@ -1402,7 +1396,12 @@ drainageTargets.forEach((target) => {
     Math.abs(targetResult.reconciliationDifference) < 0.02,
     `${JSON.stringify(target)} should reconcile within one cent.`
   );
-  assert.ok(targetResult.directCharges.length > 0);
+  if (target.kind === 'customOption' && target.index === 1) {
+    assert.equal(targetResult.directCharges.length, 0);
+    assert.ok(targetResult.offContractPriceChange > 0);
+  } else {
+    assert.ok(targetResult.directCharges.length > 0);
+  }
   assert.equal(targetResult.automaticEffects.length, 0);
 });
 assert.equal(
@@ -1472,12 +1471,8 @@ const offContractDrainageResult = calculateDrainagePriceImpact({
   pricingSnapshot: drainageSnapshot,
   calculateProposal: calculate,
 });
-assert.ok(
-  offContractDrainageResult.directCharges.some(
-    (line) => line.label === 'Off-Contract Retail Price' && line.amount === 300
-  ),
-  'Off-contract Drainage options should show their retail-only amount.'
-);
+assert.equal(offContractDrainageResult.customerPriceChange, 0);
+assert.equal(offContractDrainageResult.offContractPriceChange, 300);
 
 const noDownspoutProposal = clone(drainageProposal);
 noDownspoutProposal.drainage.downspoutTotalLF = 0;

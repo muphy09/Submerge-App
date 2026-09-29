@@ -97,6 +97,7 @@ import {
   createCorrectedPricingVersion,
   type CustomOptionPricingCorrectionReview,
 } from '../utils/customOptionPricingCorrection';
+import { applyOffContractSeparation, getSavedOffContractTotal, needsOffContractSeparation } from '../utils/offContractSeparation';
 import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } from '../utils/equipmentPackages';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
@@ -926,6 +927,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [customOptionPricingCorrectionBusy, setCustomOptionPricingCorrectionBusy] = useState(false);
   const [customOptionPricingCorrectionError, setCustomOptionPricingCorrectionError] = useState<string | null>(null);
   const dismissedCustomOptionCorrectionVersionRef = useRef<string | null>(null);
+  const [offContractReviewVersionId, setOffContractReviewVersionId] = useState<string | null>(null);
+  const [offContractReviewBusy, setOffContractReviewBusy] = useState(false);
+  const [offContractReviewError, setOffContractReviewError] = useState<string | null>(null);
+  const dismissedOffContractReviewRef = useRef<Set<string>>(new Set());
   const [versionSyncMeta, setVersionSyncMeta] = useState<Record<string, ProposalVersionSyncMeta>>({});
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
@@ -1857,6 +1862,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       setCustomOptionPricingCorrection(null);
       return;
     }
+    if (needsOffContractSeparation(proposal)) {
+      setCustomOptionPricingCorrection(null);
+      return;
+    }
     const versionKey = proposal.versionId || activeVersionId || 'original';
     if (dismissedCustomOptionCorrectionVersionRef.current === versionKey) return;
     try {
@@ -1877,6 +1886,73 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     proposal?.versionId,
     versionSyncMeta,
   ]);
+
+  useEffect(() => {
+    const selected = versions.find((entry) => (entry.versionId || 'original') === selectedVersionId);
+    const key = `${proposalNumber}:${selectedVersionId}`;
+    const selectedIsSigned = Boolean(selected && isVersionPermanentlyLocked(selected));
+    const canCorrectSignedBaseline = Boolean(
+      selectedIsSigned && hasSignedBaseline && proposalWorkflowStatus === 'signed' &&
+      selectedVersionId === getLatestSignedBaselineVersionId(proposal as Proposal) &&
+      !versions.some((entry) => !isVersionPermanentlyLocked(entry))
+    );
+    if (
+      !selected || !canManageVersionDrafts || isProposalCompleted ||
+      isProposalEditingRestricted || isReadOnlyReviewerView ||
+      (selectedIsSigned && !canCorrectSignedBaseline) ||
+      !needsOffContractSeparation(selected) ||
+      dismissedOffContractReviewRef.current.has(key)
+    ) {
+      setOffContractReviewVersionId(null);
+      return;
+    }
+    setOffContractReviewVersionId(selected.versionId || 'original');
+  }, [canManageVersionDrafts, hasSignedBaseline, isProposalCompleted, isProposalEditingRestricted, isReadOnlyReviewerView, proposal, proposalNumber, proposalWorkflowStatus, selectedVersionId, versions]);
+
+  const handleApplyOffContractSeparation = async () => {
+    if (!proposal || !offContractReviewVersionId || offContractReviewBusy) return;
+    const source = versions.find((entry) => (entry.versionId || 'original') === offContractReviewVersionId);
+    if (!source || !canManageVersionDrafts || isProposalCompleted) return;
+    setOffContractReviewBusy(true);
+    setOffContractReviewError(null);
+    try {
+      const container = {
+        ...ensureProposalWorkflow(proposal),
+        versions,
+        activeVersionId,
+      } as Proposal;
+      const correction = applyOffContractSeparation(container, source);
+      const saved = await saveProposalRemote(correction.container);
+      const savedVersions = listAllVersions(saved as Proposal).map((entry) => ({
+        ...(mergeProposalWithDefaults(entry) as Proposal),
+        versionId: entry.versionId || 'original',
+        versionName: entry.versionName || (entry.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: entry.isOriginalVersion,
+        activeVersionId: entry.activeVersionId,
+        versions: [],
+      }));
+      const correctedId = correction.correctedVersion.versionId || 'original';
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+      setVersions(savedVersions);
+      setProposal(activeApplied as Proposal);
+      setActiveVersionId((saved as Proposal).activeVersionId || correctedId);
+      setSelectedVersionId(correctedId);
+      setOffContractReviewVersionId(null);
+      setVersionSyncMeta(await resolveVersionSyncMetaEntries(savedVersions, saved as Proposal));
+      showToast({
+        type: (saved as any).syncStatus === 'pending' ? 'warning' : 'success',
+        message: (saved as any).syncStatus === 'pending'
+          ? 'Corrected contract total saved locally. It will sync when back online.'
+          : correction.createdVersion
+          ? 'Corrected proposal addendum draft created. The signed version was left unchanged.'
+          : 'Contract total corrected in this version.',
+      });
+    } catch (error: any) {
+      setOffContractReviewError(error?.message || 'Could not apply the contract-total correction.');
+    } finally {
+      setOffContractReviewBusy(false);
+    }
+  };
 
   const handleEdit = (version?: Proposal, options?: { readOnly?: boolean }) => {
     if (!canManageVersionDrafts && !canOpenReadOnlyBuilder && !options?.readOnly) return;
@@ -3376,12 +3452,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const buildViewModel = (input: Proposal) => {
+    const hasPendingOffContractCorrection = needsOffContractSeparation(input);
     const syncMeta = getCachedVersionSyncMeta(input) ?? getFrozenVersionSyncMeta(input);
     const livePricingSnapshot = syncMeta.pricingSnapshot;
     const canUsePricingSnapshot =
       Boolean(proposal) &&
       Boolean(livePricingSnapshot) &&
-      syncMeta.priceModelStatus !== 'removed';
+      syncMeta.priceModelStatus !== 'removed' &&
+      !hasPendingOffContractCorrection &&
+      input.pricing?.offContractSeparated !== true;
     let mergedProposal = canUsePricingSnapshot
       ? (withTemporaryPricingSnapshot(livePricingSnapshot!, () => mergeProposalWithDefaults(input)) as Proposal)
       : (input as Proposal);
@@ -3419,7 +3498,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const retailPrice = pricing?.retailPrice ?? totalCost ?? subtotal ?? 0;
     const offContractTotal =
       pricing?.offContractTotal ?? getOffContractTotal(mergedProposal, offContractDeckingLineItems);
-    const retailPriceForMargin = Math.max(0, retailPrice - offContractTotal);
+    const retailPriceForMargin = Math.max(0, retailPrice - (pricing?.offContractSeparated ? 0 : offContractTotal));
     const digCommission = pricing?.digCommission ?? 0;
     const adminFee = pricing?.adminFee ?? 0;
     const closeoutCommission = pricing?.closeoutCommission ?? 0;
@@ -3849,6 +3928,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
   const selectedViewModel = selectedView || primaryView;
   const selectedVersionIdKey = selectedViewModel?.proposal.versionId || 'original';
+  const offContractReviewVersion = versions.find(
+    (entry) => (entry.versionId || 'original') === offContractReviewVersionId
+  );
   const signableApprovedVersionIds = approvedVersionIds.filter(
     (versionId) => !hasEquipmentChangeRequired(versionSyncMeta[versionId]?.equipmentFlags)
   );
@@ -5803,7 +5885,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       />
 
       <ConfirmDialog
-        open={Boolean(customOptionPricingCorrection)}
+        open={Boolean(customOptionPricingCorrection) && !offContractReviewVersionId}
         title="Custom-option pricing correction available"
         message={
           customOptionPricingCorrection
@@ -5820,6 +5902,35 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             proposal?.versionId || activeVersionId || 'original';
           setCustomOptionPricingCorrection(null);
           setCustomOptionPricingCorrectionError(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(offContractReviewVersionId && offContractReviewVersion)}
+        title="Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?"
+        message={
+          offContractReviewVersion
+            ? `The saved contract total is ${formatCurrency(offContractReviewVersion.pricing?.retailPrice ?? offContractReviewVersion.totalCost ?? 0)}. The corrected contract total will be ${formatCurrency((offContractReviewVersion.pricing?.retailPrice ?? offContractReviewVersion.totalCost ?? 0) - getSavedOffContractTotal(offContractReviewVersion))}. ${isVersionPermanentlyLocked(offContractReviewVersion)
+              ? 'Accepting creates a proposal addendum draft. The signed contract remains unchanged.'
+              : getVersionRecordStatus(offContractReviewVersion) === 'submitted' ||
+                getVersionRecordStatus(offContractReviewVersion) === 'needs_approval' ||
+                getVersionRecordStatus(offContractReviewVersion) === 'approved' ||
+                hasVersionSubmissionHistory(proposal as Proposal, offContractReviewVersion.versionId)
+              ? 'Accepting updates this version and returns it to Draft. It must be resubmitted for approval.'
+              : 'Accepting updates this draft version.'}`
+            : ''
+        }
+        confirmLabel={offContractReviewVersion && isVersionPermanentlyLocked(offContractReviewVersion)
+          ? 'Create addendum draft'
+          : 'Update this version'}
+        cancelLabel="Not now"
+        isLoading={offContractReviewBusy}
+        errorMessage={offContractReviewError}
+        onConfirm={() => void handleApplyOffContractSeparation()}
+        onCancel={() => {
+          dismissedOffContractReviewRef.current.add(`${proposalNumber}:${offContractReviewVersionId}`);
+          setOffContractReviewVersionId(null);
+          setOffContractReviewError(null);
         }}
       />
 

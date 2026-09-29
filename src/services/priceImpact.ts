@@ -101,6 +101,7 @@ export interface PriceImpactResult {
   automaticEffects: PriceImpactLine[];
   overheadAmount: number;
   customerPriceChange: number;
+  offContractPriceChange: number;
   costChangeBeforeOverhead: number;
   totalCogsChange: number;
   overheadCogsAmount: number;
@@ -433,6 +434,7 @@ const unavailableResult = (
   automaticEffects: [],
   overheadAmount: 0,
   customerPriceChange: 0,
+  offContractPriceChange: 0,
   costChangeBeforeOverhead: 0,
   totalCogsChange: 0,
   overheadCogsAmount: 0,
@@ -485,6 +487,9 @@ export function calculatePriceImpact({
   const overheadCogsAmount = roundCurrency(totalCogsChange - costChangeBeforeOverhead);
   const exactRetailPriceChange = roundCurrency(
     current.pricing.retailPrice - comparison.pricing.retailPrice
+  );
+  const offContractPriceChange = roundCurrency(
+    (current.pricing.offContractTotal || 0) - (comparison.pricing.offContractTotal || 0)
   );
   const targetMargin = Number(current.pricing.targetMargin);
   const retailMultiplier = targetMargin > 0 ? 1 / targetMargin : 1;
@@ -550,6 +555,7 @@ export function calculatePriceImpact({
     automaticEffects: lines.filter((line) => line.effect === 'automatic'),
     overheadAmount,
     customerPriceChange,
+    offContractPriceChange,
     costChangeBeforeOverhead,
     totalCogsChange,
     overheadCogsAmount,

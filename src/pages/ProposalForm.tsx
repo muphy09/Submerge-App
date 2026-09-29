@@ -90,6 +90,7 @@ import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpS
 import { listAllFranchises, listAllPricingModels } from '../services/masterAdminAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { needsOffContractSeparation } from '../utils/offContractSeparation';
 import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
   getSessionCommissionRates,
@@ -1622,6 +1623,17 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         });
         return;
       }
+      if (!isReadOnlyBuilderView && needsOffContractSeparation(sanitizedTarget)) {
+        showToast({
+          type: 'warning',
+          message: 'Review the Off-Contract contract-total correction on the proposal summary before editing this version.',
+        });
+        navigate(`/proposal/view/${num}`, {
+          replace: true,
+          state: { versionId: nextActiveId },
+        });
+        return;
+      }
 
       const targetTierId = normalizePricingTierId(
         sanitizedTarget.pricingTierId || sanitizedTarget.pricingTierName
@@ -2020,6 +2032,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   ): Promise<Proposal | null> => {
     if (isProposalEditingRestricted) return null;
     if (saveInFlightRef.current) return null;
+    if (proposalNumber && needsOffContractSeparation(proposal)) {
+      showToast({
+        type: 'warning',
+        message: 'Review the Off-Contract contract-total correction on the proposal summary before saving.',
+      });
+      return null;
+    }
 
     if (proposalNumber) {
       const loadBlockReason = getExistingProposalSaveBlockReason({

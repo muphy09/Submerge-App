@@ -44,10 +44,10 @@ const westRevisions = westTypes.flatMap(([id, , , latest]) =>
   })
 );
 
-async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean } = {}) {
+async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean } = {}) {
   const errors: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals }) => {
+  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted }) => {
     window.__APP_ENV__ = {
       VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
       VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder', VITE_SUPABASE_ONLY: 'false',
@@ -61,7 +61,12 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
       secondProposalNumber: twoProposals ? `${proposalNumber}-B` : undefined,
       proposal: {
         proposalNumber, franchiseId: lawrence || westContract ? west : 'default', designerAuthUserId: 'playwright-master',
-        designerName: 'Playwright Master', designerRole: lawrence || westContract ? 'designer' : 'master', status: 'draft',
+        designerName: 'Playwright Master', designerRole: lawrence || westContract ? 'designer' : 'master', status: signed ? 'signed' : submitted ? 'needs_approval' : 'draft',
+        ...(signed ? { versionLocked: true, workflow: { status: 'signed', signedVersionId: 'original', signedAt: '2026-09-20T00:00:00.000Z' } } : {}),
+        ...(submitted ? { versionSubmittedAt: '2026-09-20T00:00:00.000Z', workflow: {
+          status: 'needs_approval', reviewVersionId: 'original', submittedVersionId: 'original',
+          submittedAt: '2026-09-20T00:00:00.000Z', history: [{ id: 'submitted-original', type: 'submitted', versionId: 'original', createdAt: '2026-09-20T00:00:00.000Z' }],
+        } } : {}),
         pricingModelId: model, pricingModelName: 'Sizzlin Summer 2026',
         pricingModelFranchiseId: west, pricingModelRevisionId: revision, pricingModelRevisionNumber: 1,
         customerInfo: { customerName: lawrence ? 'State Change Regression' : 'CONTRACT TEST', state: lawrence ? 'SC' : 'NC', city: 'Charlotte' },
@@ -71,12 +76,18 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
           contractTemplateRevisionId: `bundled:${west}:nc-${oldFiberglass ? 'fiberglass' : 'gunite'}:r1`,
         } : {}),
         ...(manualReturns ? { contractOverrides: { p1_36: '5' } } : {}),
+        ...(offContract ? {
+          excavation: { customOptions: [{ name: 'Separate excavation', description: 'Addendum only', laborCost: 0, materialCost: 0, totalCost: 1000, isOffContract: true }] },
+          pricing: { retailPrice: 100000, totalCOGS: 60000, offContractTotal: 1000, manualAdjustmentsTotal: 1000 },
+          totalCost: 100000,
+          contractOverrides: { p1_7: '$100,000.00', p1_pay_excavation: '$29,000.00' },
+        } : {}),
         createdDate: lawrence || westContract ? '2026-09-10T12:00:00.000Z' : '2026-09-23T00:00:00.000Z',
         lastModified: '2026-09-10T12:00:00.000Z',
         versionId: 'original', activeVersionId: 'original', isOriginalVersion: true,
       },
     };
-  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false });
+  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false });
 
   let releasePricing = () => {};
   const pricingGate = options.delayPricing ? new Promise<void>((resolve) => { releasePricing = resolve; }) : Promise.resolve();
@@ -163,6 +174,88 @@ test('master proposal opens the West contract and keeps its owner and pricing re
   await expect.poll(() => page.locator('.contract-page-canvas').first().evaluate((canvas: HTMLCanvasElement) => canvas.width)).toBeGreaterThan(300);
   await page.screenshot({ path: testInfo.outputPath('master-west-contract.png') });
   expect(errors.filter((message) => /Failed to load proposal|contract PDF|contract template/i.test(message))).toEqual([]);
+});
+
+test('Off Contract total correction requires consent and preserves the saved contract version', async ({ page }, testInfo) => {
+  await setup(page, { westContract: true, offContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('$100,000.00');
+  await expect(prompt).toContainText('$99,000.00');
+  await page.getByRole('button', { name: 'Go to test summary' }).evaluate((button) => {
+    (button as HTMLElement).style.display = 'none';
+  });
+  await page.screenshot({ path: testInfo.outputPath('off-contract-consent.png') });
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await expect(prompt).not.toBeVisible();
+  const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(before.pricing.retailPrice).toBe(100000);
+  expect(before.pricing.totalCOGS).toBe(60000);
+  expect(before.versions).toEqual([]);
+});
+
+test('accepting the Off Contract correction updates the current draft version', async ({ page }) => {
+  await setup(page, { westContract: true, offContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole('button', { name: 'Update this version' }).click();
+  await expect(prompt).not.toBeVisible();
+  await expect(page.getByRole('button', { name: /Contract Retail Price:/ })).toContainText('$99,000.00');
+  const after = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(after.pricing.retailPrice).toBe(99000);
+  expect(after.totalCost).toBe(99000);
+  expect(after.pricing.offContractTotal).toBe(1000);
+  expect(after.pricing.offContractSeparated).toBe(true);
+  expect(after.pricing.totalCOGS).toBe(60000);
+  expect(after.contractOverrides.p1_7).toBeUndefined();
+  expect(after.contractOverrides.p1_pay_excavation).toBeUndefined();
+  expect(after.versionId).toBe('original');
+  expect(after.status).toBe('draft');
+  expect(after.versions).toEqual([]);
+});
+
+test('accepting the Off Contract correction returns the submitted version to draft for resubmission', async ({ page }) => {
+  await setup(page, { westContract: true, offContract: true, submitted: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('must be resubmitted for approval');
+  await prompt.getByRole('button', { name: 'Update this version' }).click();
+  await expect(prompt).not.toBeVisible();
+  const after = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(after.versionId).toBe('original');
+  expect(after.versions).toEqual([]);
+  expect(after.pricing.retailPrice).toBe(99000);
+  expect(after.pricing.totalCOGS).toBe(60000);
+  expect(after.status).toBe('draft');
+  expect(after.workflow.status).toBe('draft');
+  expect(after.workflow.reviewVersionId).toBeNull();
+  expect(after.versionSubmittedAt).toBeNull();
+  expect(after.workflow.history.some((entry: any) => entry.type === 'submitted')).toBe(true);
+});
+
+test('signed Off Contract contract remains frozen while correction creates an addendum draft', async ({ page }) => {
+  await setup(page, { westContract: true, offContract: true, signed: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole('button', { name: 'Create addendum draft' }).click();
+  await expect(prompt).not.toBeVisible();
+  const after = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(after.workflow.signedVersionId).toBe('original');
+  expect(after.workflow.status).toBe('signed');
+  expect(after.pricing.retailPrice).toBe(99000);
+  expect(after.versionName).toBe('Proposal Addendum 1');
+  const signed = after.versions.find((entry: any) => entry.versionId === 'original');
+  expect(signed.status).toBe('signed');
+  expect(signed.versionLocked).toBe(true);
+  expect(signed.pricing.retailPrice).toBe(100000);
 });
 
 for (const useMatching of [false, true]) {

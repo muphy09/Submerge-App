@@ -726,6 +726,7 @@ export interface PricingCalculations {
   overheadMultiplier: number; // Default 1.01 (1% overhead)
   totalCOGS: number; // totalCostsBeforeOverhead × overheadMultiplier
   offContractTotal: number; // Separately reported work excluded from pool retail and COGS
+  offContractSeparated?: boolean; // True when retailPrice and totalCost exclude off-contract work
 
   // Retail price calculation
   targetMargin: number; // Default 0.70 (70% - meaning 30% profit)
