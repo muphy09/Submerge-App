@@ -8,10 +8,24 @@ test('Materials and Equipment stays on one continuous page in the app', async ({
   const viewer = page.locator('.materials-order-modal');
   await expect(viewer.locator('.materials-order-page--viewer')).toHaveCount(1);
   await expect(viewer.getByRole('heading', { name: 'Materials and Equipment' })).toBeVisible();
-  await expect(viewer.locator('.materials-order-group')).toHaveCount(5);
-  const excavation = viewer.locator('.materials-order-group').filter({ has: page.getByRole('heading', { name: 'Excavation' }) });
-  await expect(excavation.getByRole('heading', { name: 'Excavation' })).toBeVisible();
-  await expect(excavation.locator('.materials-order-item--facing')).toHaveCount(6);
+  const metaWidths = await viewer.locator('.materials-order-meta > div').evaluateAll((blocks) =>
+    blocks.map((block) => block.getBoundingClientRect().width));
+  expect(metaWidths).toHaveLength(3);
+  expect(Math.max(...metaWidths) - Math.min(...metaWidths)).toBeLessThan(1);
+  const metaScreenshot = testInfo.outputPath('materials-order-header-blocks.png');
+  await viewer.locator('.materials-order-meta').screenshot({ path: metaScreenshot });
+  await testInfo.attach('Equal order form header blocks', { path: metaScreenshot, contentType: 'image/png' });
+  await expect(viewer.locator('.materials-order-group')).toHaveCount(6);
+  const excavation = viewer.locator('.materials-order-group').filter({ has: page.getByRole('heading', { name: 'Excavation', exact: true }) });
+  await expect(excavation.getByRole('heading', { name: 'Excavation', exact: true })).toBeVisible();
+  await expect(excavation.locator('.materials-order-item--facing')).toHaveCount(7);
+  const totals = viewer.locator('.materials-order-group--totals');
+  await expect(totals.getByRole('heading', { name: 'Excavation Material Totals' })).toBeVisible();
+  await expect(totals.locator('.materials-order-item')).toHaveCount(5);
+  expect(await totals.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe('2px');
+  const totalsScreenshot = testInfo.outputPath('materials-order-excavation-totals.png');
+  await totals.screenshot({ path: totalsScreenshot });
+  await testInfo.attach('Excavation material totals', { path: totalsScreenshot, contentType: 'image/png' });
   await expect(viewer.getByRole('heading', { name: 'Facing & Rockwork' })).toHaveCount(0);
   const excavationScreenshot = testInfo.outputPath('materials-order-excavation.png');
   await excavation.screenshot({ path: excavationScreenshot });
@@ -85,6 +99,10 @@ for (const { mode, franchise, height } of [
       expect(contentPages).toHaveLength(expectedPages);
       expect(contentPages.every((text) => text.includes('Export Regression Customer'))).toBe(true);
       if (mode.startsWith('materials')) {
+        const metaWidths = await page.locator('.export-print-area .materials-order-page').first().locator('.materials-order-meta > div')
+          .evaluateAll((blocks) => blocks.map((block) => block.getBoundingClientRect().width));
+        expect(metaWidths).toHaveLength(3);
+        expect(Math.max(...metaWidths) - Math.min(...metaWidths)).toBeLessThan(1);
         const allText = texts.join(' ');
         expect(allText).toContain('Tile SF based on Pool Perimeter');
         expect(allText).toMatch(/PRICE MODEL\s+Test Price Model/);
@@ -93,9 +111,13 @@ for (const { mode, franchise, height } of [
         expect(allText).not.toContain('ORDER-100');
         expect(allText).toContain('Automatic Cover');
         expect(allText).toContain('Excavation');
-        expect(allText).toContain('Retaining Wall: 12" High - Standard');
+        expect(allText).toContain('Retaining Wall 1: 12" High - Standard');
         expect(allText).toContain('Exposed Pool Wall Stacked Stone Facing');
+        expect(allText).toContain('Exposed Pool Wall Panel Ledge Facing');
         expect(allText).toContain('Column Panel Ledge Facing');
+        expect(allText).toContain('Excavation Material Totals');
+        expect(allText).toContain('Total Panel Ledge Facing');
+        expect(allText).toContain('Total Retaining Wall: 24" High - Standard');
         expect(allText).not.toContain('Facing & Rockwork');
         expect(allText).toContain('Extra Filter');
         expect(allText).toContain('Valve actuator: No');
@@ -119,16 +141,30 @@ for (const { mode, franchise, height } of [
           'RBB 1: 18" High', '18" RBB Panel Ledge Facing', 'Backside Panel Ledge Facing',
           'RBB 2: 18" High', '18" RBB Panel Ledge Facing',
           'Exposed Pool Wall 1: 24" High', 'Exposed Pool Wall Stacked Stone Facing',
+          'Exposed Pool Wall 2: 12" High', 'Exposed Pool Wall Panel Ledge Facing',
           'Columns: 2', 'Column Panel Ledge Facing',
-          'Retaining Wall: 12" High - Standard',
+          'Retaining Wall 1: 12" High - Standard',
+          'Retaining Wall 2: 12" High - Standard',
+          'Retaining Wall 3: 24" High - Standard',
           'Raised Spa: 18" High', 'Raised Spa Tile Facing',
         ]);
         expect(excavation.items[1].measures.map((measure: any) => measure.value)).toEqual([30, 34.5]);
         expect(excavation.items[4].measures.map((measure: any) => measure.value)).toEqual([15, 17.25]);
         expect(excavation.items[6].measures.map((measure: any) => measure.value)).toEqual([20, 23]);
-        expect(excavation.items[9].measures.map((measure: any) => measure.value)).toEqual([20, 20]);
-        expect(excavation.items[11].measures.map((measure: any) => measure.value)).toEqual([15, 19.55]);
+        expect(excavation.items[8].measures.map((measure: any) => measure.value)).toEqual([10, 11.5]);
+        expect(excavation.items[11].measures.map((measure: any) => measure.value)).toEqual([20, 20]);
+        expect(excavation.items[15].measures.map((measure: any) => measure.value)).toEqual([15, 19.55]);
         expect(excavation.items.every((item: any) => item.measures.map((measure: any) => measure.label).join('|') === 'Actual SF|SF with Waste')).toBe(true);
+        const totals = data.groups.find((group: any) => group.title === 'Excavation Material Totals');
+        expect(totals.kind).toBe('totals');
+        expect(data.groups.indexOf(totals)).toBe(data.groups.indexOf(excavation) + 1);
+        expect(totals.items.map((item: any) => [item.name, ...item.measures.map((measure: any) => measure.value)])).toEqual([
+          ['Total Panel Ledge Facing', 133, 152.95],
+          ['Total Stacked Stone Facing', 20, 23],
+          ['Total Tile Facing', 15, 19.55],
+          ['Total Retaining Wall: 12" High - Standard', 30, 30],
+          ['Total Retaining Wall: 24" High - Standard', 12, 12],
+        ]);
       }
       if (mode !== 'cost' && !mode.startsWith('materials')) {
         for (let section = 1; section <= 12; section++) {

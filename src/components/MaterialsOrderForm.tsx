@@ -45,7 +45,7 @@ const paginateGroups = (groups: OrderFormGroup[]): OrderFormGroup[][] => {
         pages.push(page); page = []; used = 0;
         continue;
       }
-      page.push({ title: offset ? `${group.title} (continued)` : group.title, items: group.items.slice(offset, offset + take) });
+      page.push({ ...group, title: offset ? `${group.title} (continued)` : group.title, items: group.items.slice(offset, offset + take) });
       offset += take;
       used += take + 1;
     }
@@ -96,7 +96,7 @@ export default function MaterialsOrderForm({ proposal, data, mode }: Props) {
           {data.packageNote && <p className="materials-order-package-note">{data.packageNote}</p>}
           <div className="materials-order-groups">
             {groups.length ? groups.map((group, groupIndex) => (
-              <section className="materials-order-group" key={`${pageIndex}-${groupIndex}`}>
+              <section className={`materials-order-group${group.kind === 'totals' ? ' materials-order-group--totals' : ''}`} key={`${pageIndex}-${groupIndex}`}>
                 <h3>{group.title}</h3>
                 {group.items.map((item, itemIndex) => <Item item={item} key={`${item.name}-${itemIndex}`} />)}
               </section>

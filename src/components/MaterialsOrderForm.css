@@ -10,7 +10,7 @@
 .materials-order-logo { flex: 0 0 auto; width: .94in; height: .7in; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 12px; background: #fff; overflow: hidden; }
 .materials-order-logo img { max-width: 100%; max-height: 100%; width: auto; height: auto; }
 
-.materials-order-meta { flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, .65fr); gap: 10px; margin: .18in 0 .2in; }
+.materials-order-meta { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: .18in 0 .2in; }
 .materials-order-meta > div { min-width: 0; padding: 9px 12px; border: 1px solid #d5deea; border-top: 3px solid #3b80cc; border-radius: 8px; background: #f5f7fa; }
 .materials-order-meta span { display: block; margin-bottom: 3px; color: #526884; font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .materials-order-meta strong { display: block; color: #17263d; font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
@@ -19,6 +19,9 @@
 .materials-order-groups { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .materials-order-group { min-width: 0; }
 .materials-order-group h3 { margin: 0 0 5px; padding: 8px 11px; border-left: 5px solid #3b80cc; border-radius: 0 8px 8px 0; background: #e5eff9; color: #17263d; font-size: 14px; line-height: 1.25; font-weight: 800; }
+.materials-order-group--totals { padding-top: 12px; border-top: 2px solid #d5a332; }
+.materials-order-group--totals h3 { border-left-color: #d5a332; background: #fbf4e5; }
+.materials-order-group--totals .materials-order-item-copy strong { color: #102847; }
 .materials-order-item { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 43px; padding: 7px 11px; border-bottom: 1px solid #d5deea; }
 .materials-order-item:nth-of-type(even) { background: #f5f7fa; }
 .materials-order-item--facing { margin-left: 15px; padding-left: 14px; border-left: 3px solid #77a9d7; background: #f2f7fc; }

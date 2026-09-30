@@ -18,6 +18,7 @@ export interface OrderFormItem {
 export interface OrderFormGroup {
   title: string;
   items: OrderFormItem[];
+  kind?: 'totals';
 }
 
 export interface MaterialsOrderFormData {
@@ -130,17 +131,18 @@ const getDeckingMaterialQuantity = (costBreakdown: CostBreakdown, key: string) =
     .filter((item) => !/tax|waste|steps/i.test(item.description))
     .reduce((total, item) => total + (Number(item.quantity) || 0), 0));
 
-const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): OrderFormItem[] => {
+const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): { details: OrderFormItem[]; totals: OrderFormItem[] } => {
   const excavation = proposal.excavation;
   const items: OrderFormItem[] = [];
-  const facingRows: Array<{ description: string; actual: number; item: OrderFormItem }> = [];
+  const facingRows: Array<{ description: string; actual: number; item: OrderFormItem; materialId: string; materialName: string }> = [];
+  const retainingRows: Array<{ type: string; item: OrderFormItem }> = [];
   const rbbOptions = getMasonryFacingOptions(pricingData.masonry, 'rbb');
   const backsideOptions = getMasonryFacingOptions(pricingData.masonry, 'backside');
   const raisedSpaOptions = getMasonryFacingOptions(pricingData.masonry, 'raisedSpa');
-  const addFacing = (description: string, actual: number) => {
+  const addFacing = (description: string, actual: number, materialId: string, materialName: string) => {
     const item: OrderFormItem = { name: description, measures: sfMeasures(actual, actual), isFacing: true };
     items.push(item);
-    facingRows.push({ description, actual, item });
+    facingRows.push({ description, actual, item, materialId, materialName });
   };
 
   (excavation.rbbLevels || []).forEach((level, index) => {
@@ -150,17 +152,17 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): Orde
     const front = normalizeMasonryFacingId(level.facing);
     if (front && front !== 'none') {
       const label = formatMasonryFacingLabel(level.facing, rbbOptions);
-      addFacing(`${level.height}" RBB ${label} Facing`, actual);
+      addFacing(`${level.height}" RBB ${label} Facing`, actual, front, label);
       const explicitBack = normalizeMasonryFacingId(level.backsideFacing);
       if (explicitBack && explicitBack !== 'none') {
         const backLabel = formatMasonryFacingLabel(level.backsideFacing, backsideOptions);
         const explicitDescription = `Backside ${backLabel} Facing`;
         const legacyDescription = `Backside ${label} Facing`;
         const hasExplicitLine = (costBreakdown.stoneRockworkLabor || []).some((line) => line.description === explicitDescription);
-        if (hasExplicitLine) addFacing(explicitDescription, actual);
-        else if (level.hasBacksideFacing) addFacing(legacyDescription, actual);
+        if (hasExplicitLine) addFacing(explicitDescription, actual, explicitBack, backLabel);
+        else if (level.hasBacksideFacing) addFacing(legacyDescription, actual, front, label);
       } else if (level.hasBacksideFacing) {
-        addFacing(`Backside ${label} Facing`, actual);
+        addFacing(`Backside ${label} Facing`, actual, front, label);
       }
     }
   });
@@ -171,7 +173,8 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): Orde
     items.push({ name: `Exposed Pool Wall ${index + 1}: ${level.height}" High`, measures: sfMeasures(actual, actual) });
     const facing = normalizeMasonryFacingId(level.facing);
     if (facing && facing !== 'none') {
-      addFacing(`Exposed Pool Wall ${formatMasonryFacingLabel(level.facing, rbbOptions)} Facing`, actual);
+      const label = formatMasonryFacingLabel(level.facing, rbbOptions);
+      addFacing(`Exposed Pool Wall ${label} Facing`, actual, facing, label);
     }
   });
 
@@ -181,7 +184,10 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): Orde
     items.push({ name: `Columns: ${columns.count}`, detail: `${columns.width} × ${columns.depth} × ${columns.height} FT each`,
       measures: sfMeasures(columnActual, columnActual) });
     const facing = normalizeMasonryFacingId(columns.facing);
-    if (facing && facing !== 'none') addFacing(`Column ${formatMasonryFacingLabel(columns.facing, rbbOptions)} Facing`, columnActual);
+    if (facing && facing !== 'none') {
+      const label = formatMasonryFacingLabel(columns.facing, rbbOptions);
+      addFacing(`Column ${label} Facing`, columnActual, facing, label);
+    }
   }
 
   const walls = excavation.retainingWalls?.length ? excavation.retainingWalls
@@ -190,8 +196,12 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): Orde
   walls.forEach((wall, index) => {
     const option = pricingData.masonry.retainingWalls.find((entry) => entry.name === wall.type);
     const actual = amount(option?.heightFt) * amount(wall.length);
-    if (actual > 0) items.push({ name: walls.length > 1 ? `Retaining Wall ${index + 1}: ${wall.type}` : `Retaining Wall: ${wall.type}`,
-      measures: sfMeasures(actual, actual) });
+    if (actual > 0) {
+      const item = { name: walls.length > 1 ? `Retaining Wall ${index + 1}: ${wall.type}` : `Retaining Wall: ${wall.type}`,
+        measures: sfMeasures(actual, actual) };
+      items.push(item);
+      retainingRows.push({ type: wall.type, item });
+    }
   });
 
   if (proposal.poolSpecs.isRaisedSpa) {
@@ -202,7 +212,8 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): Orde
     const facing = normalizeMasonryFacingId(proposal.poolSpecs.raisedSpaFacing);
     if (actual > 0 && facing && facing !== 'none') {
       items.push({ name: 'Raised Spa: 18" High', measures: sfMeasures(actual, actual) });
-      addFacing(`Raised Spa ${formatMasonryFacingLabel(proposal.poolSpecs.raisedSpaFacing, raisedSpaOptions)} Facing`, actual);
+      const label = formatMasonryFacingLabel(proposal.poolSpecs.raisedSpaFacing, raisedSpaOptions);
+      addFacing(`Raised Spa ${label} Facing`, actual, facing, label);
     }
   }
 
@@ -227,7 +238,21 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): Orde
       row.item.measures = sfMeasures(row.actual, withWaste);
     });
   });
-  return items;
+  const totalsByMaterial = new Map<string, { name: string; actual: number; withWaste: number }>();
+  const addTotal = (key: string, name: string, item: OrderFormItem) => {
+    const total = totalsByMaterial.get(key) || { name, actual: 0, withWaste: 0 };
+    total.actual += item.measures[0].value;
+    total.withWaste += item.measures[1].value;
+    totalsByMaterial.set(key, total);
+  };
+  facingRows.forEach(({ materialId, materialName, item }) =>
+    addTotal(`facing:${materialId}`, `Total ${materialName} Facing`, item));
+  retainingRows.forEach(({ type, item }) =>
+    addTotal(`retaining:${type.trim().toLowerCase()}`, `Total Retaining Wall: ${type}`, item));
+  const totals = Array.from(totalsByMaterial.values(), (total) => ({
+    name: total.name, measures: sfMeasures(total.actual, total.withWaste),
+  }));
+  return { details: items, totals };
 };
 
 export const buildMaterialsOrderForm = (
@@ -299,7 +324,8 @@ export const buildMaterialsOrderForm = (
   if (surfaces.length) groups.push({ title: 'Tile, Coping & Decking', items: surfaces });
 
   const excavation = excavationItems(proposal, costBreakdown);
-  if (excavation.length) groups.push({ title: 'Excavation', items: excavation });
+  if (excavation.details.length) groups.push({ title: 'Excavation', items: excavation.details });
+  if (excavation.totals.length) groups.push({ title: 'Excavation Material Totals', items: excavation.totals, kind: 'totals' });
 
   const featureCatalog = flattenWaterFeatures(pricingData.waterFeatures);
   const waterItems: OrderFormItem[] = (proposal.waterFeatures?.selections || []).filter((entry) => amount(entry.quantity) > 0).flatMap((entry): OrderFormItem[] => {
