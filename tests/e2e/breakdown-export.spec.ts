@@ -19,6 +19,7 @@ test('Materials and Equipment stays on one continuous page in the app', async ({
   const excavation = viewer.locator('.materials-order-group').filter({ has: page.getByRole('heading', { name: 'Excavation', exact: true }) });
   await expect(excavation.getByRole('heading', { name: 'Excavation', exact: true })).toBeVisible();
   await expect(excavation.locator('.materials-order-item--facing')).toHaveCount(7);
+  await expect(excavation.locator('.materials-order-item').filter({ hasText: 'Retaining Wall 1:' })).toContainText('10 LF');
   const totals = viewer.locator('.materials-order-group--totals');
   await expect(totals.getByRole('heading', { name: 'Excavation Material Totals' })).toBeVisible();
   await expect(totals.locator('.materials-order-item')).toHaveCount(5);
@@ -118,6 +119,8 @@ for (const { mode, franchise, height } of [
         expect(allText).toContain('Excavation Material Totals');
         expect(allText).toContain('Total Panel Ledge Facing');
         expect(allText).toContain('Total Retaining Wall: 24" High - Standard');
+        expect(allText).toContain('Actual LF');
+        expect(allText).toContain('LF with Waste');
         expect(allText).not.toContain('Facing & Rockwork');
         expect(allText).toContain('Extra Filter');
         expect(allText).toContain('Valve actuator: No');
@@ -152,9 +155,15 @@ for (const { mode, franchise, height } of [
         expect(excavation.items[4].measures.map((measure: any) => measure.value)).toEqual([15, 17.25]);
         expect(excavation.items[6].measures.map((measure: any) => measure.value)).toEqual([20, 23]);
         expect(excavation.items[8].measures.map((measure: any) => measure.value)).toEqual([10, 11.5]);
-        expect(excavation.items[11].measures.map((measure: any) => measure.value)).toEqual([20, 20]);
+        expect(excavation.items[11].measures).toEqual([
+          { label: 'Actual LF', value: 10, unit: 'LF' },
+          { label: 'LF with Waste', value: 10, unit: 'LF' },
+        ]);
+        expect(excavation.items[12].measures.map((measure: any) => measure.value)).toEqual([5, 5]);
+        expect(excavation.items[13].measures.map((measure: any) => measure.value)).toEqual([4, 4]);
         expect(excavation.items[15].measures.map((measure: any) => measure.value)).toEqual([15, 19.55]);
-        expect(excavation.items.every((item: any) => item.measures.map((measure: any) => measure.label).join('|') === 'Actual SF|SF with Waste')).toBe(true);
+        expect(excavation.items.filter((item: any) => !item.name.startsWith('Retaining Wall'))
+          .every((item: any) => item.measures.map((measure: any) => measure.label).join('|') === 'Actual SF|SF with Waste')).toBe(true);
         const totals = data.groups.find((group: any) => group.title === 'Excavation Material Totals');
         expect(totals.kind).toBe('totals');
         expect(data.groups.indexOf(totals)).toBe(data.groups.indexOf(excavation) + 1);
@@ -162,9 +171,11 @@ for (const { mode, franchise, height } of [
           ['Total Panel Ledge Facing', 133, 152.95],
           ['Total Stacked Stone Facing', 20, 23],
           ['Total Tile Facing', 15, 19.55],
-          ['Total Retaining Wall: 12" High - Standard', 30, 30],
-          ['Total Retaining Wall: 24" High - Standard', 12, 12],
+          ['Total Retaining Wall: 12" High - Standard', 15, 15],
+          ['Total Retaining Wall: 24" High - Standard', 4, 4],
         ]);
+        expect(totals.items.filter((item: any) => item.name.startsWith('Total Retaining Wall'))
+          .every((item: any) => item.measures.map((measure: any) => `${measure.label}:${measure.unit}`).join('|') === 'Actual LF:LF|LF with Waste:LF')).toBe(true);
       }
       if (mode !== 'cost' && !mode.startsWith('materials')) {
         for (let section = 1; section <= 12; section++) {

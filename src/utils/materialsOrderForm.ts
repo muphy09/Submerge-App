@@ -10,7 +10,7 @@ import { flattenWaterFeatures, isWaterFeaturePlaceholderLabel } from './waterFea
 export interface OrderFormItem {
   name: string;
   detail?: string;
-  measures: Array<{ label: string; value: number; unit: 'SF' | 'LNFT' | 'items' }>;
+  measures: Array<{ label: string; value: number; unit: 'SF' | 'LF' | 'items' }>;
   note?: string;
   isFacing?: boolean;
 }
@@ -37,6 +37,10 @@ const quantity = (value: unknown, fallback = 0) => value == null ? fallback : am
 const sfMeasures = (actual: number, withWaste: number): OrderFormItem['measures'] => [
   { label: 'Actual SF', value: rounded(actual), unit: 'SF' },
   { label: 'SF with Waste', value: rounded(withWaste), unit: 'SF' },
+];
+const lfMeasures = (actual: number, withWaste: number): OrderFormItem['measures'] => [
+  { label: 'Actual LF', value: rounded(actual), unit: 'LF' },
+  { label: 'LF with Waste', value: rounded(withWaste), unit: 'LF' },
 ];
 const countMeasure = (count: number): OrderFormItem['measures'] => [{ label: 'Quantity', value: count, unit: 'items' }];
 
@@ -194,11 +198,10 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): { de
     : selected(excavation.retainingWallType) && amount(excavation.retainingWallLength) > 0
       ? [{ type: excavation.retainingWallType!, length: excavation.retainingWallLength! }] : [];
   walls.forEach((wall, index) => {
-    const option = pricingData.masonry.retainingWalls.find((entry) => entry.name === wall.type);
-    const actual = amount(option?.heightFt) * amount(wall.length);
-    if (actual > 0) {
+    const length = amount(wall.length);
+    if (selected(wall.type) && length > 0) {
       const item = { name: walls.length > 1 ? `Retaining Wall ${index + 1}: ${wall.type}` : `Retaining Wall: ${wall.type}`,
-        measures: sfMeasures(actual, actual) };
+        measures: lfMeasures(length, length) };
       items.push(item);
       retainingRows.push({ type: wall.type, item });
     }
@@ -238,9 +241,10 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): { de
       row.item.measures = sfMeasures(row.actual, withWaste);
     });
   });
-  const totalsByMaterial = new Map<string, { name: string; actual: number; withWaste: number }>();
+  const totalsByMaterial = new Map<string, { name: string; actual: number; withWaste: number; unit: 'SF' | 'LF' }>();
   const addTotal = (key: string, name: string, item: OrderFormItem) => {
-    const total = totalsByMaterial.get(key) || { name, actual: 0, withWaste: 0 };
+    const unit = item.measures[0].unit === 'LF' ? 'LF' : 'SF';
+    const total = totalsByMaterial.get(key) || { name, actual: 0, withWaste: 0, unit };
     total.actual += item.measures[0].value;
     total.withWaste += item.measures[1].value;
     totalsByMaterial.set(key, total);
@@ -250,7 +254,8 @@ const excavationItems = (proposal: Proposal, costBreakdown: CostBreakdown): { de
   retainingRows.forEach(({ type, item }) =>
     addTotal(`retaining:${type.trim().toLowerCase()}`, `Total Retaining Wall: ${type}`, item));
   const totals = Array.from(totalsByMaterial.values(), (total) => ({
-    name: total.name, measures: sfMeasures(total.actual, total.withWaste),
+    name: total.name, measures: total.unit === 'LF'
+      ? lfMeasures(total.actual, total.withWaste) : sfMeasures(total.actual, total.withWaste),
   }));
   return { details: items, totals };
 };

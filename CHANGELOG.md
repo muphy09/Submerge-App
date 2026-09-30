@@ -1,11 +1,9 @@
-## [3.4.3] - 9/29/26
+## [3.4.2] - 9/29/26
 ### Materials and Equipment Order Form
 - Introduced a new breakdown inside of the Proposal Summary for Materials and Equipment
     - *Only* shows quantity amounts, no prices
     - Exportable to PDF and Print
------
-## [3.4.2] - 9/29/26
-### Off Contract Fix
+### Off Contract Bugfix
 - Fixed an issue that caused some Off Contract amounts to silently appear in the Contract Total Price (and breakdown)
     - If this issue affected your proposal, you will be prompted to adjust the contract automatically when entering that contract
 ### PMF03 Package Adjustment
