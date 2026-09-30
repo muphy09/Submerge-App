@@ -768,6 +768,14 @@ const getEquipmentPackageLabel = (equipment: Proposal['equipment']): string | nu
   return normalizedPackageName.includes('package') ? packageName : `${packageName} Equipment Package`;
 };
 
+const getOrderFormPackageSummaryName = (packageName: string, packageId?: string): string => {
+  const name = packageName.trim();
+  if (!name || /^no package selected$/i.test(name)) return 'None';
+  if (packageId === 'custom' || /^custom\b/i.test(name)) return 'Custom';
+  const packageCode = name.match(/^(?:PMF|PFM)\d+/i);
+  return packageCode ? packageCode[0].toUpperCase() : name.split(/[\s-]/)[0];
+};
+
 const buildEquipmentSummary = (
   equipment: Proposal['equipment'],
   equipmentFlags: RetiredEquipmentFlags = getEmptyRetiredEquipmentFlags()
@@ -4486,9 +4494,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           </div>
           <div className="tile-content-box">
             <div className="tile-metrics">
-              <div className="metric-row"><span className="metric-label">Equipment Package:</span><OverflowTooltipText as="span" className="metric-value">{vm.materialsOrder.packageName}</OverflowTooltipText></div>
-              <div className="metric-divider" />
-              <div className="metric-row"><span className="metric-label">Item Groups:</span><span className="metric-value">{vm.materialsOrder.groups.length}</span></div>
+              <div className="metric-row"><span className="metric-label">Equipment Package:</span><OverflowTooltipText as="span" className="metric-value">{getOrderFormPackageSummaryName(vm.materialsOrder.packageName, vm.proposal.equipment.packageSelectionId)}</OverflowTooltipText></div>
             </div>
           </div>
           <span className="tile-link">View Order Form <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>

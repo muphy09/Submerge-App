@@ -1230,6 +1230,14 @@
   background: #ffefcf;
 }
 
+.summary-tile.contract-tile .metric-row:nth-child(odd) {
+  background: #f2f7ff;
+}
+
+.summary-tile.contract-tile .metric-row:nth-child(even) {
+  background: #e7f0ff;
+}
+
 .summary-tile.warranty-tile .tile-content-box {
   border-top-color: rgba(212, 175, 55, 0.22);
   border-bottom-color: rgba(212, 175, 55, 0.28);

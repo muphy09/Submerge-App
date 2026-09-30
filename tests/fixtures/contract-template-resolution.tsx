@@ -16,6 +16,7 @@ const proposal = {
   ...fixture.proposal,
   customerInfo: { ...getDefaultProposal().customerInfo, ...fixture.proposal.customerInfo },
   excavation: { ...getDefaultProposal().excavation, ...fixture.proposal.excavation },
+  equipment: { ...getDefaultProposal().equipment, ...fixture.proposal.equipment },
   pricing: { ...getDefaultProposal().pricing, ...fixture.proposal.pricing },
   versions: [],
 };

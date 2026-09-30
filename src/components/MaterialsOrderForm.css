@@ -46,11 +46,14 @@
 .materials-order-modal .modal-body-scroll { background: #fff; }
 .materials-order-modal .materials-order-document { padding: 18px; }
 
-.summary-tile.materials-order-tile { border: 2px solid #75a7cf; background: #fff; box-shadow: 0 4px 16px rgba(54, 114, 165, .18); }
-.summary-tile.materials-order-tile:hover { border-color: #4c8cbd; box-shadow: 0 8px 24px rgba(54, 114, 165, .28); }
-.summary-tile.materials-order-tile .tile-header { background: linear-gradient(135deg, #eaf4fc, #dcebf7); border-radius: 10px; padding: 14px 12px; margin: -2px -2px 14px; }
-.summary-tile.materials-order-tile .tile-icon { background: #c9e2f5; color: #27618e; }
-.summary-tile.materials-order-tile .tile-link { color: #27618e; font-weight: 700; }
+.summary-tile.materials-order-tile { border: 2px solid #b58acb; background: #fff; box-shadow: 0 4px 16px rgba(129, 79, 156, .18); }
+.summary-tile.materials-order-tile:hover { border-color: #9665b0; box-shadow: 0 8px 24px rgba(129, 79, 156, .28); }
+.summary-tile.materials-order-tile .tile-header { background: linear-gradient(135deg, #f6edf9, #e9d7f1); border-radius: 10px; padding: 14px 12px; margin: -2px -2px 14px; }
+.summary-tile.materials-order-tile .tile-content-box { border-top-color: rgba(129, 79, 156, .24); border-bottom-color: rgba(129, 79, 156, .24); }
+.summary-tile.materials-order-tile .metric-row { background: #faf5fc; }
+.summary-tile.materials-order-tile .metric-divider { background: rgba(129, 79, 156, .22); }
+.summary-tile.materials-order-tile .tile-icon { background: #ead6f3; color: #703d8d; }
+.summary-tile.materials-order-tile .tile-link { color: #703d8d; font-weight: 700; }
 
 @media (max-width: 930px) { .materials-order-modal .materials-order-document { overflow-x: auto; align-items: flex-start; } }
 @media print { .materials-order-document { padding: 0; gap: 0; background: #fff; } .materials-order-page { box-shadow: none; break-after: page; } }

@@ -44,10 +44,10 @@ const westRevisions = westTypes.flatMap(([id, , , latest]) =>
   })
 );
 
-async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean } = {}) {
+async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string } = {}) {
   const errors: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted }) => {
+  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted, orderPackageId }) => {
     window.__APP_ENV__ = {
       VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
       VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder', VITE_SUPABASE_ONLY: 'false',
@@ -69,6 +69,7 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
         } } : {}),
         pricingModelId: model, pricingModelName: 'Sizzlin Summer 2026',
         pricingModelFranchiseId: west, pricingModelRevisionId: revision, pricingModelRevisionNumber: 1,
+        ...(orderPackageId ? { equipment: { packageSelectionId: orderPackageId, packageSelectionTouched: true } } : {}),
         customerInfo: { customerName: lawrence ? 'State Change Regression' : 'CONTRACT TEST', state: lawrence ? 'SC' : 'NC', city: 'Charlotte' },
         ...(oldFiberglass ? { poolSpecs: { poolType: 'fiberglass' } } : {}),
         ...(lawrence || westContract ? {
@@ -87,7 +88,7 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
         versionId: 'original', activeVersionId: 'original', isOriginalVersion: true,
       },
     };
-  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false });
+  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false, orderPackageId: options.orderPackageId });
 
   let releasePricing = () => {};
   const pricingGate = options.delayPricing ? new Promise<void>((resolve) => { releasePricing = resolve; }) : Promise.resolve();
@@ -156,6 +157,22 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
   });
   await page.goto(fixtureUrl);
   return { errors, releasePricing, pricingRequests: () => pricingRequests };
+}
+
+for (const [orderPackageId, shortName] of [
+  ['pmf03-standard-automation', 'PMF03'],
+  ['pfm01-basic-chlorine', 'PFM01'],
+  ['custom', 'Custom'],
+] as const) {
+  test(`Materials order tile shows ${shortName} without item groups`, async ({ page }) => {
+    await setup(page, { orderPackageId });
+    const tile = page.locator('.summary-tile.materials-order-tile');
+    await expect(tile).toBeVisible();
+    await expect(tile.locator('.metric-row')).toHaveCount(1);
+    await expect(tile.locator('.metric-label')).toHaveText('Equipment Package:');
+    await expect(tile.locator('.metric-value')).toHaveText(shortName);
+    await expect(tile).not.toContainText('Item Groups');
+  });
 }
 
 test('master proposal opens the West contract and keeps its owner and pricing revision', async ({ page }, testInfo) => {
