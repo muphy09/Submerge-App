@@ -44,10 +44,10 @@ const westRevisions = westTypes.flatMap(([id, , , latest]) =>
   })
 );
 
-async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string } = {}) {
+async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string; multiVersionSubmittedOffContract?: boolean } = {}) {
   const errors: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted, orderPackageId }) => {
+  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted, orderPackageId, multiVersionSubmittedOffContract }) => {
     window.__APP_ENV__ = {
       VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
       VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder', VITE_SUPABASE_ONLY: 'false',
@@ -58,11 +58,12 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
     }));
     (window as any).contractFixture = {
       edit,
+      multiVersionSubmittedOffContract,
       secondProposalNumber: twoProposals ? `${proposalNumber}-B` : undefined,
       proposal: {
         proposalNumber, franchiseId: lawrence || westContract ? west : 'default', designerAuthUserId: 'playwright-master',
         designerName: 'Playwright Master', designerRole: lawrence || westContract ? 'designer' : 'master', status: signed ? 'signed' : submitted ? 'needs_approval' : 'draft',
-        ...(signed ? { versionLocked: true, workflow: { status: 'signed', signedVersionId: 'original', signedAt: '2026-09-20T00:00:00.000Z' } } : {}),
+        ...(signed ? { versionLocked: true, versionLockedAt: '2026-09-20T00:00:00.000Z', versionSubmittedAt: '2026-09-20T00:00:00.000Z', workflow: { status: 'signed', signedVersionId: 'original', signedAt: '2026-09-20T00:00:00.000Z' } } : {}),
         ...(submitted ? { versionSubmittedAt: '2026-09-20T00:00:00.000Z', workflow: {
           status: 'needs_approval', reviewVersionId: 'original', submittedVersionId: 'original',
           submittedAt: '2026-09-20T00:00:00.000Z', history: [{ id: 'submitted-original', type: 'submitted', versionId: 'original', createdAt: '2026-09-20T00:00:00.000Z' }],
@@ -88,7 +89,7 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
         versionId: 'original', activeVersionId: 'original', isOriginalVersion: true,
       },
     };
-  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false, orderPackageId: options.orderPackageId });
+  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false, orderPackageId: options.orderPackageId, multiVersionSubmittedOffContract: options.multiVersionSubmittedOffContract || false });
 
   let releasePricing = () => {};
   const pricingGate = options.delayPricing ? new Promise<void>((resolve) => { releasePricing = resolve; }) : Promise.resolve();
@@ -233,6 +234,132 @@ test('accepting the Off Contract correction updates the current draft version', 
   expect(after.versionId).toBe('original');
   expect(after.status).toBe('draft');
   expect(after.versions).toEqual([]);
+});
+
+for (const status of ['draft', 'submitted', 'signed'] as const) {
+  test(`declining Off Contract correction stays declined after remount and reload for ${status}`, async ({ page }, testInfo) => {
+    // Reload recreates synthetic records; keep their workflow normalization timestamps stable.
+    await page.clock.setFixedTime(new Date('2026-10-01T12:00:00.000Z'));
+    await setup(page, { westContract: true, offContract: true, twoProposals: true,
+      submitted: status === 'submitted', signed: status === 'signed' });
+    const prompt = page.getByRole('dialog', {
+      name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+    });
+    await expect(prompt).toBeVisible();
+    const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+    await prompt.getByRole('button', { name: 'Not now' }).click();
+    await expect(prompt).not.toBeVisible();
+
+    // A background remount can occur without the designer navigating anywhere.
+    await page.evaluate(() => (window as any).contractFixture.remountSummary());
+    await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await expect(prompt).not.toBeVisible();
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+
+    // Reproduce the old edit -> summary redirect. The builder save guard remains intact.
+    if (status === 'draft' || status === 'submitted') {
+      await page.evaluate((number) => (window as any).contractFixture.navigateToEditor(number), proposalNumber);
+      await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+      await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+      await expect(prompt).not.toBeVisible();
+      await page.getByRole('button', { name: 'Open Read-Only Builder', exact: true }).click();
+      await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/edit/${proposalNumber}`);
+      await expect(page.getByRole('group', { name: 'Read-only proposal builder' }).getByRole('textbox', { name: 'Enter customer name' })).toBeDisabled();
+      await expect(page.locator('.proposal-builder-readonly-note')).toContainText('preserves the saved contract total');
+      await page.getByRole('button', { name: 'Go to test summary' }).click();
+      await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+      await expect(prompt).not.toBeVisible();
+    }
+
+    // A decline is scoped to one proposal/version, not all of the designer's proposals.
+    await page.getByRole('button', { name: 'Go to second proposal' }).click();
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole('button', { name: 'Not now' }).click();
+    await page.getByRole('button', { name: 'Go to test summary' }).click();
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await expect(prompt).not.toBeVisible();
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+
+    await page.reload();
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await expect(prompt).not.toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`off-contract-declined-${status}.png`) });
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+    await page.getByRole('button', { name: 'Review Contract Total Correction', exact: true }).click();
+    await expect(prompt).toBeVisible();
+    await expect(prompt).toContainText('$100,000.00');
+    await expect(prompt).toContainText('$99,000.00');
+    await prompt.getByRole('button', { name: 'Not now' }).click();
+    await expect(prompt).not.toBeVisible();
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+    if (status === 'draft') {
+      await page.getByRole('button', { name: 'Review Contract Total Correction', exact: true }).click();
+      await prompt.getByRole('button', { name: 'Update this version' }).click();
+      await expect(prompt).not.toBeVisible();
+      await expect(page.getByRole('button', { name: /Contract Retail Price:/ })).toContainText('$99,000.00');
+      await expect(page.getByRole('button', { name: 'Edit Proposal', exact: true })).toBeVisible();
+    }
+  });
+}
+
+test('Off Contract decline survives route remount when local storage is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key) {
+      if (key.startsWith('submerge.offContractReview.declined.')) throw new Error('Storage unavailable');
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('submerge.offContractReview.declined.')) throw new Error('Storage unavailable');
+      return setItem.call(this, key, value);
+    };
+  });
+  await setup(page, { westContract: true, offContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await page.getByRole('button', { name: 'Open Read-Only Builder', exact: true }).click();
+  await expect(page.locator('.proposal-builder-readonly-note')).toBeVisible();
+  await page.getByRole('button', { name: 'Go to test summary' }).click();
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await expect(prompt).not.toBeVisible();
+  expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+});
+
+test('submitted West Off Contract decking decline preserves all seven versions and approval state', async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date('2026-10-01T12:00:00.000Z'));
+  await setup(page, { westContract: true, offContract: true, submitted: true, multiVersionSubmittedOffContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('$130,000.00');
+  await expect(prompt).toContainText('$112,925.80');
+  const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(before.workflow.reviewVersionId).toBe('submitted-decking');
+  expect(before.versions).toHaveLength(6);
+  const savesBeforeDecline = await page.evaluate(() => (window as any).contractFixture.saved.length);
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await expect(prompt).not.toBeVisible();
+  expect(await page.evaluate(() => (window as any).contractFixture.saved.length)).toBe(savesBeforeDecline);
+  await page.evaluate(() => (window as any).contractFixture.remountSummary());
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await expect(prompt).not.toBeVisible();
+  expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+  await page.evaluate(() => (window as any).contractFixture.selectVersion('sibling-1'));
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('$131,958.20');
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await page.evaluate(() => (window as any).contractFixture.selectVersion('submitted-decking'));
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await expect(prompt).not.toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('submitted-west-seven-versions-declined.png') });
+  expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
 });
 
 test('accepting the Off Contract correction returns the submitted version to draft for resubmission', async ({ page }) => {

@@ -1,3 +1,7 @@
+## [3.4.3] - 10/1/26
+### Contract Correction Bugfix
+- Fixed a loop that occured when declining the Off Contract modification adjustment
+-----
 ## [3.4.2] - 9/29/26
 ### Materials and Equipment Order Form
 - Introduced a new breakdown inside of the Proposal Summary for Materials and Equipment

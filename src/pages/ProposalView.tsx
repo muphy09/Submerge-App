@@ -99,6 +99,7 @@ import {
   type CustomOptionPricingCorrectionReview,
 } from '../utils/customOptionPricingCorrection';
 import { applyOffContractSeparation, getSavedOffContractTotal, needsOffContractSeparation } from '../utils/offContractSeparation';
+import { dismissOffContractReview, getOffContractReviewKey, isOffContractReviewDismissed } from '../utils/offContractReviewDismissal';
 import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } from '../utils/equipmentPackages';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
@@ -941,7 +942,6 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [offContractReviewVersionId, setOffContractReviewVersionId] = useState<string | null>(null);
   const [offContractReviewBusy, setOffContractReviewBusy] = useState(false);
   const [offContractReviewError, setOffContractReviewError] = useState<string | null>(null);
-  const dismissedOffContractReviewRef = useRef<Set<string>>(new Set());
   const [versionSyncMeta, setVersionSyncMeta] = useState<Record<string, ProposalVersionSyncMeta>>({});
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
@@ -1898,21 +1898,23 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     versionSyncMeta,
   ]);
 
-  useEffect(() => {
-    const selected = versions.find((entry) => (entry.versionId || 'original') === selectedVersionId);
-    const key = `${proposalNumber}:${selectedVersionId}`;
-    const selectedIsSigned = Boolean(selected && isVersionPermanentlyLocked(selected));
+  const canReviewOffContractVersion = (selected: Proposal) => {
+    const selectedIsSigned = isVersionPermanentlyLocked(selected);
     const canCorrectSignedBaseline = Boolean(
       selectedIsSigned && hasSignedBaseline && proposalWorkflowStatus === 'signed' &&
-      selectedVersionId === getLatestSignedBaselineVersionId(proposal as Proposal) &&
+      (selected.versionId || 'original') === getLatestSignedBaselineVersionId(proposal as Proposal) &&
       !versions.some((entry) => !isVersionPermanentlyLocked(entry))
     );
+    return canManageVersionDrafts && !isProposalCompleted &&
+      !isProposalEditingRestricted && !isReadOnlyReviewerView &&
+      (!selectedIsSigned || canCorrectSignedBaseline) && needsOffContractSeparation(selected);
+  };
+
+  useEffect(() => {
+    const selected = versions.find((entry) => (entry.versionId || 'original') === selectedVersionId);
     if (
-      !selected || !canManageVersionDrafts || isProposalCompleted ||
-      isProposalEditingRestricted || isReadOnlyReviewerView ||
-      (selectedIsSigned && !canCorrectSignedBaseline) ||
-      !needsOffContractSeparation(selected) ||
-      dismissedOffContractReviewRef.current.has(key)
+      !selected || !canReviewOffContractVersion(selected) ||
+      isOffContractReviewDismissed(getOffContractReviewKey(selected, readSession()?.userId))
     ) {
       setOffContractReviewVersionId(null);
       return;
@@ -1976,6 +1978,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         versionName: version?.versionName,
         versionSnapshot: { ...version, versions: [] },
         readOnlyVersion: options?.readOnly === true,
+        readOnlyOffContractCorrection: options?.readOnly === true && needsOffContractSeparation(version),
       },
     });
   };
@@ -4845,7 +4848,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : versionHasSubmissionHistory || versionRecordStatus === 'changes_requested'
       ? 'Resubmit Proposal'
       : 'Submit Proposal';
-    const archivedEditLabel = isArchived ? 'Open Read-Only Builder' : 'Edit Proposal';
+    const hasPendingOffContractCorrection = needsOffContractSeparation(vm.proposal);
+    const openBuilderReadOnly = isArchived || hasPendingOffContractCorrection;
+    const archivedEditLabel = openBuilderReadOnly ? 'Open Read-Only Builder' : 'Edit Proposal';
     const canUseSubmitAction = shouldRenderSubmitAction && !submitActionDisabledReason;
     const signActionTooltip = showSignProposalButton ? signProposalDisabledReason : undefined;
     const shouldRenderArchivedNote =
@@ -4897,12 +4902,23 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             <TooltipAnchor tooltip={editVersionDisabledReason}>
               <button
                 className="action-button side-action-button"
-                onClick={() => handleEdit(vm.proposal, { readOnly: isArchived })}
+                onClick={() => handleEdit(vm.proposal, { readOnly: openBuilderReadOnly })}
                 disabled={!canOpenVersionInBuilder}
               >
                 {archivedEditLabel}
               </button>
             </TooltipAnchor>
+            {canReviewOffContractVersion(vm.proposal) && (
+              <button
+                className="action-button side-action-button"
+                onClick={() => {
+                  setOffContractReviewError(null);
+                  setOffContractReviewVersionId(versionId);
+                }}
+              >
+                Review Contract Total Correction
+              </button>
+            )}
             <TooltipAnchor tooltip={deleteVersionDisabledReason}>
               <button
                 className="action-button danger side-action-button"
@@ -4914,6 +4930,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             </TooltipAnchor>
           </div>
           {archivedNote && <p className="proposal-side-empty">{archivedNote}</p>}
+          {hasPendingOffContractCorrection && (
+            <p className="proposal-side-empty">The saved contract total is unchanged. The builder is read-only until you choose to apply the Off-Contract correction.</p>
+          )}
         </div>
       </div>
     );
@@ -6005,7 +6024,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         errorMessage={offContractReviewError}
         onConfirm={() => void handleApplyOffContractSeparation()}
         onCancel={() => {
-          dismissedOffContractReviewRef.current.add(`${proposalNumber}:${offContractReviewVersionId}`);
+          if (offContractReviewVersion) {
+            dismissOffContractReview(getOffContractReviewKey(offContractReviewVersion, readSession()?.userId));
+          }
           setOffContractReviewVersionId(null);
           setOffContractReviewError(null);
         }}

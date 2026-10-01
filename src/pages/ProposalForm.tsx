@@ -459,7 +459,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const isReadOnlyBuilderView =
     (isProposalEditingRestricted && Boolean(proposalNumber)) || isExplicitReadOnlyVersionView;
   const readOnlyBuilderMessage = isExplicitReadOnlyVersionView
-    ? 'Read-only mode for archived proposal versions. Review the builder, but changes are disabled.'
+    ? (location.state as any)?.readOnlyOffContractCorrection
+      ? 'Read-only mode preserves the saved contract total. Apply the Off-Contract correction on the proposal summary before editing this version.'
+      : 'Read-only mode for archived proposal versions. Review the builder, but changes are disabled.'
     : 'Read-only mode while acting as franchise owner. Review the proposal builder, but changes are disabled.';
   const isCreationRestricted = isProposalEditingRestricted && !proposalNumber;
   const canViewCostBreakdown =
