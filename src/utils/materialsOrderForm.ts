@@ -285,7 +285,9 @@ export const buildMaterialsOrderForm = (
     const spaPerimeter = amount(specs.spaPerimeter);
     const length = amount(tile.copingLength) || Math.ceil(amount(specs.perimeter) * 1.1 + spaPerimeter * 2.15);
     const sizeFactor = tile.copingSize === '12x24' ? 2 : tile.copingSize === '16x16' ? 1.33 : 1;
-    const actual = length * sizeFactor;
+    // The priced coping length already includes allowances. Installed coping
+    // uses the pool perimeter plus the two spa runs before those allowances.
+    const actual = (amount(specs.perimeter) + spaPerimeter * 2) * sizeFactor;
     const materialLength = getMaterialQuantity(costBreakdown, 'Coping Material', `${coping.name} Coping Material`);
     const withWaste = (materialLength || (coping.id === 'flagstone'
       ? length * amount(prices.flagstoneQuantityMultiplier ?? 1.1) : length)) * sizeFactor;

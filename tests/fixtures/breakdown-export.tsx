@@ -108,6 +108,21 @@ const orderData = buildMaterialsOrderForm(activeOrderProposal, activeOrderPropos
 (window as any).breakdownFixture = {
   unchanged: () => JSON.stringify(proposal) === original && JSON.stringify(activeOrderProposal) === originalOrder,
   orderData: () => orderData,
+  orderWithCoping: (perimeter: number, spaPerimeter: number, copingType: string, copingSize: string,
+    copingLength = 0, materialQuantity?: number) => {
+    const input = structuredClone(activeOrderProposal);
+    input.poolSpecs.perimeter = perimeter;
+    input.poolSpecs.spaPerimeter = spaPerimeter;
+    input.tileCopingDecking = { ...input.tileCopingDecking, copingType, copingSize: copingSize as typeof input.tileCopingDecking.copingSize, copingLength };
+    if (materialQuantity !== undefined) {
+      input.costBreakdown.copingDeckingMaterial = [{ category: 'Coping Material',
+        description: `${copingType === 'flagstone' ? 'Flagstone' : 'Paver'} Coping Material`,
+        quantity: materialQuantity, unitPrice: 9, total: materialQuantity * 9 }];
+    }
+    const before = JSON.stringify(input);
+    const data = buildMaterialsOrderForm(input, input.costBreakdown);
+    return { data, unchanged: JSON.stringify(input) === before };
+  },
   orderWithDrainage: (drainage: typeof proposal.drainage | undefined) => buildMaterialsOrderForm(
     { ...activeOrderProposal, drainage: drainage as typeof proposal.drainage }, activeOrderProposal.costBreakdown),
   readPdf: async (bytes: number[], renderPage?: number) => {

@@ -8,6 +8,12 @@ test('Materials and Equipment stays on one continuous page in the app', async ({
   const viewer = page.locator('.materials-order-modal');
   await expect(viewer.locator('.materials-order-page--viewer')).toHaveCount(1);
   await expect(viewer.getByRole('heading', { name: 'Materials and Equipment' })).toBeVisible();
+  const coping = viewer.locator('.materials-order-item').filter({ hasText: 'Coping: Flagstone' });
+  await expect(coping.locator('.materials-order-measure span')).toHaveText(['Actual SF', 'SF with Waste']);
+  await expect(coping.locator('.materials-order-measure strong')).toHaveText(['120 SF', '121 SF']);
+  const copingScreenshot = testInfo.outputPath('materials-order-coping.png');
+  await coping.screenshot({ path: copingScreenshot });
+  await testInfo.attach('Installed coping and material allowance', { path: copingScreenshot, contentType: 'image/png' });
   const metaWidths = await viewer.locator('.materials-order-meta > div').evaluateAll((blocks) =>
     blocks.map((block) => block.getBoundingClientRect().width));
   expect(metaWidths).toHaveLength(3);
@@ -52,6 +58,33 @@ test('Materials and Equipment stays on one continuous page in the app', async ({
   const screenshot = testInfo.outputPath('materials-order-viewer-bottom.png');
   await scrollArea.screenshot({ path: screenshot });
   await testInfo.attach('Continuous materials order form bottom', { path: screenshot, contentType: 'image/png' });
+});
+
+test('Coping separates installed area from existing material allowances without changing proposal data', async ({ page }) => {
+  await page.goto('http://127.0.0.1:5173/tests/fixtures/breakdown-export.html?mode=materials-viewer');
+  const results = await page.evaluate(() => {
+    const fixture = (window as any).breakdownFixture;
+    return [
+      [80, 0, 'paver', '12x12'],
+      [93, 28, 'paver', '12x12'],
+      [93, 28, 'paver', '12x24'],
+      [93, 28, 'paver', '16x16'],
+      [80, 0, 'flagstone', '12x12'],
+      [100, 0, 'paver', '12x12', 200],
+      [93, 28, 'paver', '12x12', 0, 175],
+      [100, 0, 'flagstone', '12x12', 0, 130],
+    ].map((args) => {
+      const result = fixture.orderWithCoping(...args);
+      return { measures: result.data.groups[0].items.find((item: any) => item.name.startsWith('Coping:')).measures,
+        unchanged: result.unchanged };
+    });
+  });
+  expect(results.map((result) => result.measures.map((measure: any) => measure.value))).toEqual([
+    [80, 88], [149, 163], [298, 326], [198.17, 216.79],
+    [80, 96.8], [100, 200], [149, 175], [100, 130],
+  ]);
+  expect(results.every((result) => result.unchanged)).toBe(true);
+  expect(await page.evaluate(() => (window as any).breakdownFixture.unchanged())).toBe(true);
 });
 
 test('Drainage order rows omit empty or invalid runs and tolerate missing legacy data', async ({ page }) => {
