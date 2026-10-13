@@ -11,6 +11,7 @@ import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { CUSTOM_OPTIONS_SUBCATEGORY } from '../utils/costBreakdownSubcategories';
 import { isPpasEastProposal } from '../utils/franchiseScope';
 import { getSelectedEquipmentPackage, isFixedEquipmentPackage } from '../utils/equipmentPackages';
+import { syncAdditionalDiggingFromContract } from '../utils/additionalDigging';
 import {
   DEFAULT_CLOSEOUT_COMMISSION_RATE,
   DEFAULT_DIG_COMMISSION_RATE,
@@ -189,7 +190,7 @@ export class MasterPricingEngine {
       ...proposal.poolSpecs!,
       waterfallCount,
     };
-    const excavation = proposal.excavation!;
+    const excavation = syncAdditionalDiggingFromContract(proposal).excavation!;
     const normalizedExcavation = {
       ...excavation,
       totalRBBSqft: ExcavationCalculations.calculateTotalRBBSqft(excavation),

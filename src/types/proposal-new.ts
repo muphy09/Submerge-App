@@ -129,6 +129,8 @@ export interface Excavation {
   // Additional work
   additionalSitePrepHours: number;
   hasAdditionalSitePrep?: boolean;
+  hasAdditionalDigging?: boolean;
+  additionalDiggingDays?: number;
   hasTightAccessJob?: boolean;
   hasGravelInstall: boolean;
   gravelInstallQuantity?: number;

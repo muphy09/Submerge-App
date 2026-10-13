@@ -594,6 +594,8 @@ function extractExcavationFields(
     { key: 'exposedPoolWalls', label: 'Exposed Pool Walls', value: summarizeRbbLevels(excavation.exposedPoolWallLevels) },
     { key: 'columns', label: 'Columns', value: summarizeColumns(excavation.columns) },
     { key: 'sitePrepHours', label: 'Site Prep Hours', value: formatNumber(excavation.additionalSitePrepHours, ' HRS') },
+    { key: 'additionalDigging', label: 'Additional Digging (Days)', value: formatNumber(
+      excavation.hasAdditionalDigging ? excavation.additionalDiggingDays ?? 1 : 0, ' DAYS') },
     {
       key: 'gravelInstall',
       label: 'Gravel Install',

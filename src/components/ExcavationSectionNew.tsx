@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Excavation, RBBLevel } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
+import { normalizeAdditionalDiggingDays } from '../utils/additionalDigging';
 import {
   getExcavationPriceImpactTargetKey,
   type ExcavationPriceImpactTarget,
@@ -61,6 +62,7 @@ const CompactInput = ({
   min = '0',
   step = '1',
   priceImpact,
+  ariaLabel,
 }: {
   value: number;
   onChange: (value: number) => void;
@@ -68,10 +70,12 @@ const CompactInput = ({
   min?: string;
   step?: string;
   priceImpact?: ReactNode;
+  ariaLabel?: string;
 }) => (
   <div className={`compact-input-wrapper${priceImpact ? ' has-price-impact' : ''}`}>
     <input
       type="number"
+      aria-label={ariaLabel}
       className="compact-input"
       value={value === 0 ? '' : value}
       min={min}
@@ -443,6 +447,7 @@ function ExcavationSectionNew({
     disabled = false,
     extra,
     warning,
+    extraAfterImpact = false,
   }: {
     label: string;
     checked: boolean;
@@ -451,13 +456,15 @@ function ExcavationSectionNew({
     disabled?: boolean;
     extra?: ReactNode;
     warning?: ReactNode;
+    extraAfterImpact?: boolean;
   }) => <div className={`excavation-option-row${disabled ? ' is-disabled' : ''}`}>
     <div className="excavation-option-copy">
       <div className="spec-label-row"><span className="excavation-option-title">{label}</span>{warning}</div>
     </div>
     <div className="excavation-option-actions">
-      {checked && extra}
+      {checked && !extraAfterImpact && extra}
       {checked && !disabled && renderImpact(target, label)}
+      {checked && extraAfterImpact && extra}
       <Toggle label={label} checked={checked} disabled={disabled} onChange={onToggle} />
     </div>
   </div>;
@@ -799,6 +806,18 @@ function ExcavationSectionNew({
                     />
                   </div>
                 ) : undefined,
+              })}
+              {optionRow({
+                label: 'Additional Digging (Days)',
+                checked: Boolean(data.hasAdditionalDigging),
+                target: { kind: 'additionalDigging' },
+                onToggle: (checked) => onChange({ ...data, hasAdditionalDigging: checked, additionalDiggingDays: 1 }),
+                extraAfterImpact: true,
+                extra: <div className="excavation-inline-option-input excavation-digging-days-input">
+                  <CompactInput value={normalizeAdditionalDiggingDays(data.additionalDiggingDays)}
+                    ariaLabel="Additional Digging (Days)" unit="days" min="1"
+                    onChange={(value) => change('additionalDiggingDays', normalizeAdditionalDiggingDays(value))} />
+                </div>,
               })}
               {isPpasEast && optionRow({
                 label: 'Tight Access Job',

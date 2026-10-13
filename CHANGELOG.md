@@ -1,3 +1,19 @@
+## [3.4.4] - 10/12/26
+### Materials and Equipment Order Form
+- Updated to support the Drainage category (LF)
+### Excavation Category
+- Introduced ability to add more included dig days in Additional Options
+    - Additional dig days are reflected in the Contract under 'General Construction', line 10
+    - Option in Admin Price Panel to adjust cost per dig day increase (default set to $0)
+        - *If a Franchise wants to include a cost per dig day increase, the verbage in the contract should be adjusted*
+### Contract Date Adjustment
+- Construction Commence and Completion wording adjusted from date format to text:
+    - "Construction to substantially commence approximately 2-4 weeks after the permit is issued and full HOA approval."
+    - "Construction to be substantially complete approximately 8-12 weeks from the dig date."
+### Bug Fixes
+- Fixed an issue allowing Admins to see the 'Price Revision' / 'Contract Revision' change window on a proposal not owned by them
+    - Admins will *now* always see the verison of the proposal / contract the original owner has chosen
+-----
 ## [3.4.3] - 10/1/26
 ### Contract Correction Bugfix
 - Fixed a loop that occured when declining the Off Contract modification adjustment

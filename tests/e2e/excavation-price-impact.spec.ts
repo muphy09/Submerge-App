@@ -2,6 +2,39 @@ import { expect, test } from '@playwright/test';
 
 const fixtureUrl = 'http://127.0.0.1:5173/tests/fixtures/excavation-price-impact.html';
 
+for (const ppasEast of [false, true]) {
+  test(`Additional Digging starts off, defaults to one day and resets when disabled (${ppasEast ? '9724' : '5555'})`, async ({ page }, testInfo) => {
+    await page.goto(`${fixtureUrl}?ppasEast=${ppasEast}`);
+    const row = page.locator('.excavation-option-row').filter({ hasText: 'Additional Digging (Days)' });
+    const toggle = row.getByRole('switch');
+    const input = row.getByRole('spinbutton', { name: 'Additional Digging (Days)' });
+    await expect(toggle).not.toBeChecked();
+    await expect(input).toHaveCount(0);
+    await toggle.click();
+    await expect(input).toHaveValue('1');
+    const impact = row.getByRole('button', { name: 'Show Price Impact for Additional Digging (Days)' });
+    const boxes = await Promise.all([impact.boundingBox(), input.boundingBox(), toggle.boundingBox()]);
+    expect(boxes[0]!.x).toBeLessThan(boxes[1]!.x);
+    expect(boxes[1]!.x).toBeLessThan(boxes[2]!.x);
+    expect(boxes[1]!.width).toBe(65);
+    await input.fill('3');
+    await impact.click();
+    const dialog = page.getByRole('dialog', { name: 'Price Impact for Additional Digging (Days)' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('~$0');
+    await page.keyboard.press('Escape');
+    await row.screenshot({ path: testInfo.outputPath('additional-digging.png') });
+    await toggle.click();
+    await expect(input).toHaveCount(0);
+    await toggle.click();
+    await expect(input).toHaveValue('1');
+    await input.fill('0');
+    await expect(input).toHaveValue('1');
+    await input.fill('1.5');
+    await expect(input).toHaveValue('1');
+  });
+}
+
 test('uses the modern one-column Excavation controls and actions', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1180, height: 900 });
   await page.goto(fixtureUrl);

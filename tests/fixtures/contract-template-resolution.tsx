@@ -98,6 +98,54 @@ fixture.returnValues = async (overrides: any = {}) => {
   };
 };
 fixture.pricingMeta = getActivePricingModelMeta;
+fixture.diggingChecks = async () => {
+  const [{ default: pricingData }, { default: Engine }, { getContractTemplate },
+    { syncAdditionalDiggingFromContract }, { sanitizeEditableProposalVersions },
+    { calculateExcavationPriceImpact }, { buildContractPdf }, { PDFDocument }] = await Promise.all([
+    import('../../src/services/pricingData'), import('../../src/services/masterPricingEngine'),
+    import('../../src/services/contractTemplates'), import('../../src/utils/additionalDigging'),
+    import('../../src/utils/proposalSelectionSanitizer'), import('../../src/services/priceImpact'),
+    import('../../src/services/contractPdf'), import('pdf-lib'),
+  ]);
+  const previousRate = pricingData.excavation.additionalDiggingPerDay;
+  try {
+    const results = [];
+    for (const code of ['5555', '9724']) {
+      for (const templateId of ['nc-gunite', 'sc-gunite', 'nc-fiberglass', 'sc-fiberglass'] as const) {
+        const input = getDefaultProposal();
+        input.designerCode = code;
+        input.franchiseId = code === '9724' ? 'aa414a3a-f9b2-4c96-b3c0-8ea496105354' : 'playwright-west';
+        input.poolSpecs = { ...input.poolSpecs, poolType: templateId.includes('fiberglass') ? 'fiberglass' : 'shotcrete',
+          surfaceArea: 500, perimeter: 100, maxLength: 25, maxWidth: 20, shallowDepth: 3, endDepth: 6 };
+        pricingData.excavation.additionalDiggingPerDay = 0;
+        const before = JSON.stringify(input);
+        const base = Engine.calculateCompleteProposal(input);
+        input.excavation = { ...input.excavation, hasAdditionalDigging: true, additionalDiggingDays: 2 };
+        const selected = Engine.calculateCompleteProposal(input);
+        const template = { ...getContractTemplate(templateId), pdfUrl: 'http://127.0.0.1:54321/storage/v1/object/sign/fixture.pdf' };
+        const fields = await getEditableContractFields(input, {}, templateId, template);
+        const pdf = await buildContractPdf(fields.filter((field) => field.page === 1), { template });
+        const document = await PDFDocument.load(pdf.pdfBytes);
+        pricingData.excavation.additionalDiggingPerDay = 350;
+        const charged = Engine.calculateCompleteProposal(input);
+        const impact = calculateExcavationPriceImpact({ proposal: input, target: { kind: 'additionalDigging' } });
+        const manual = syncAdditionalDiggingFromContract({ ...input, contractOverrides: { p1_30: '4', p1_7: '$123' } });
+        const signed = { ...input, status: 'signed' as const, versionLocked: true, contractOverrides: { p1_30: '4' } };
+        const signedBefore = JSON.stringify(signed);
+        const signedAfter = sanitizeEditableProposalVersions(signed);
+        results.push({ code, templateId, zeroPriceChange: selected.pricing.retailPrice - base.pricing.retailPrice,
+          field: fields.find((field) => field.id === 'p1_30')?.value,
+          pdfField: document.getForm().getTextField('p1_30').getText(),
+          charge: charged.costBreakdown.excavation.find((line) => line.description === 'Additional Digging (Days)'),
+          impact: impact.costChangeBeforeOverhead, manual: manual.excavation, manualOverrides: manual.contractOverrides,
+          signedUnchanged: JSON.stringify(signedAfter) === signedBefore,
+          baseUnchanged: before === JSON.stringify({ ...input, excavation: getDefaultProposal().excavation }),
+        });
+      }
+    }
+    return results;
+  } finally { pricingData.excavation.additionalDiggingPerDay = previousRate; }
+};
 fixture.prefetchWest = () => prefetchWestContractRevisions(proposal.franchiseId === 'default' ? proposal.pricingModelFranchiseId : proposal.franchiseId);
 
 function Navigation() {

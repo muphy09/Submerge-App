@@ -15,7 +15,17 @@ test('Materials and Equipment stays on one continuous page in the app', async ({
   const metaScreenshot = testInfo.outputPath('materials-order-header-blocks.png');
   await viewer.locator('.materials-order-meta').screenshot({ path: metaScreenshot });
   await testInfo.attach('Equal order form header blocks', { path: metaScreenshot, contentType: 'image/png' });
-  await expect(viewer.locator('.materials-order-group')).toHaveCount(6);
+  await expect(viewer.locator('.materials-order-group')).toHaveCount(7);
+  const drainage = viewer.locator('.materials-order-group').filter({ has: page.getByRole('heading', { name: 'Drainage', exact: true }) });
+  await expect(drainage.locator('.materials-order-item')).toHaveCount(4);
+  for (const [name, length] of [['Downspout Drain', 25], ['Deck Drain', 40.5], ['French Drain', 75], ['Box Drain', 12]] as const) {
+    const row = drainage.locator('.materials-order-item').filter({ hasText: name });
+    await expect(row.locator('.materials-order-measure span')).toHaveText(['Actual LF', 'LF with Waste']);
+    await expect(row.locator('.materials-order-measure strong')).toHaveText([`${length} LF`, `${length} LF`]);
+  }
+  const drainageScreenshot = testInfo.outputPath('materials-order-drainage.png');
+  await drainage.screenshot({ path: drainageScreenshot });
+  await testInfo.attach('Drainage order section', { path: drainageScreenshot, contentType: 'image/png' });
   const excavation = viewer.locator('.materials-order-group').filter({ has: page.getByRole('heading', { name: 'Excavation', exact: true }) });
   await expect(excavation.getByRole('heading', { name: 'Excavation', exact: true })).toBeVisible();
   await expect(excavation.locator('.materials-order-item--facing')).toHaveCount(7);
@@ -42,6 +52,24 @@ test('Materials and Equipment stays on one continuous page in the app', async ({
   const screenshot = testInfo.outputPath('materials-order-viewer-bottom.png');
   await scrollArea.screenshot({ path: screenshot });
   await testInfo.attach('Continuous materials order form bottom', { path: screenshot, contentType: 'image/png' });
+});
+
+test('Drainage order rows omit empty or invalid runs and tolerate missing legacy data', async ({ page }) => {
+  await page.goto('http://127.0.0.1:5173/tests/fixtures/breakdown-export.html?mode=materials-viewer');
+  const groups = await page.evaluate(() => {
+    const fixture = (window as any).breakdownFixture;
+    return [undefined,
+      { downspoutTotalLF: 0, deckDrainTotalLF: 0, frenchDrainTotalLF: 0, boxDrainTotalLF: 0 },
+      { downspoutTotalLF: -5, deckDrainTotalLF: 'invalid', frenchDrainTotalLF: 18.25, boxDrainTotalLF: 0 },
+    ].map((drainage) => fixture.orderWithDrainage(drainage).groups.filter((group: any) => group.title === 'Drainage'));
+  });
+  expect(groups[0]).toEqual([]);
+  expect(groups[1]).toEqual([]);
+  expect(groups[2]).toEqual([{ title: 'Drainage', items: [{ name: 'French Drain', measures: [
+    { label: 'Actual LF', value: 18.25, unit: 'LF' },
+    { label: 'LF with Waste', value: 18.25, unit: 'LF' },
+  ] }] }]);
+  expect(await page.evaluate(() => (window as any).breakdownFixture.unchanged())).toBe(true);
 });
 
 for (const { mode, franchise, height } of [
@@ -135,6 +163,15 @@ for (const { mode, franchise, height } of [
           expect(allText).toContain('Custom Package Filter');
         }
         const data = await page.evaluate(() => (window as any).breakdownFixture.orderData());
+        const drainage = data.groups.find((group: any) => group.title === 'Drainage');
+        expect(drainage.items.map((item: any) => [item.name, ...item.measures.map((measure: any) => measure.value)])).toEqual([
+          ['Downspout Drain', 25, 25], ['Deck Drain', 40.5, 40.5], ['French Drain', 75, 75], ['Box Drain', 12, 12],
+        ]);
+        for (const item of drainage.items) {
+          expect(allText).toContain(item.name);
+          expect(allText).toContain(`${item.measures[0].value} LF`);
+          expect(item.measures.map((measure: any) => `${measure.label}:${measure.unit}`)).toEqual(['Actual LF:LF', 'LF with Waste:LF']);
+        }
         expect(data.groups[0].items.find((item: any) => item.name.startsWith('Pool Tile')).measures).toEqual([
           { label: 'Actual SF', value: 100, unit: 'SF' },
           { label: 'SF with Waste', value: 100, unit: 'SF' },

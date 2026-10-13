@@ -2087,6 +2087,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
             },
           },
           {
+            title: 'Additional Digging (Days)',
+            scalars: [{
+              label: 'Additional Digging (per day)',
+              path: ['excavation', 'additionalDiggingPerDay'],
+              type: 'number',
+              prefix: '$',
+              tooltip: 'COGS per additional digging day. Defaults to $0. Applies when Additional Digging (Days) is enabled.',
+            }],
+          },
+          {
             title: 'Base excavation (surface area breakpoints)',
             lists: [
               {

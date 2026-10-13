@@ -332,6 +332,18 @@ export const buildMaterialsOrderForm = (
   if (excavation.details.length) groups.push({ title: 'Excavation', items: excavation.details });
   if (excavation.totals.length) groups.push({ title: 'Excavation Material Totals', items: excavation.totals, kind: 'totals' });
 
+  const drainageItems: OrderFormItem[] = [
+    { name: 'Downspout Drain', length: proposal.drainage?.downspoutTotalLF },
+    { name: 'Deck Drain', length: proposal.drainage?.deckDrainTotalLF },
+    { name: 'French Drain', length: proposal.drainage?.frenchDrainTotalLF },
+    { name: 'Box Drain', length: proposal.drainage?.boxDrainTotalLF },
+  ].flatMap(({ name, length }) => {
+    const actual = amount(length);
+    // Drainage has no waste allowance; preserve the selected proposal's length.
+    return actual > 0 ? [{ name, measures: lfMeasures(actual, actual) }] : [];
+  });
+  if (drainageItems.length) groups.push({ title: 'Drainage', items: drainageItems });
+
   const featureCatalog = flattenWaterFeatures(pricingData.waterFeatures);
   const waterItems: OrderFormItem[] = (proposal.waterFeatures?.selections || []).filter((entry) => amount(entry.quantity) > 0).flatMap((entry): OrderFormItem[] => {
     const option = featureCatalog.find((candidate) => candidate.id === entry.featureId || candidate.name === entry.featureId);

@@ -36,7 +36,7 @@ import {
   DISABLED_SIGNED_WORKFLOW_MESSAGE,
   loadFranchiseSignedWorkflowDisabled,
 } from '../services/franchiseBranding';
-import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { getProposal as getProposalRemote, saveProposal as saveProposalRemote, isOwnProposal } from '../services/proposalsAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import {
   initPricingDataStore,
@@ -106,6 +106,7 @@ import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import { buildBreakdownPdfBytes, downloadBreakdownPdf } from '../utils/breakdownPdf';
 import { buildMaterialsOrderForm } from '../utils/materialsOrderForm';
+import { EXCAVATION_DAYS_CONTRACT_FIELD, getAdditionalDiggingDays, syncAdditionalDiggingFromContract } from '../utils/additionalDigging';
 import {
   applyHistoricalPricingProtection,
   buildHistoricalPricingReview,
@@ -961,6 +962,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
   const isReviewerWorkspaceView = Boolean(locationState?.reviewerReturnTo || locationState?.reviewerReturnPath);
   const isReadOnlyReviewerView = isReviewerRole && isReviewerWorkspaceView;
+  // Review permission does not authorize changing the owner's revision choices.
+  const canChooseProposalRevisions = Boolean(
+    proposal && isOwnProposal(proposal, readSession()) &&
+    !isProposalEditingRestricted && !isReadOnlyReviewerView
+  );
   const canViewCogsBreakdown = showCogsBreakdown;
   const activeEditableVersion =
     (versions.length
@@ -1077,7 +1083,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       };
       merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
     }
-    return merged;
+    return syncAdditionalDiggingFromContract(merged);
   };
 
   const resolveVersionSyncMetaEntries = async (
@@ -1635,7 +1641,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleDeclinePricingRevision = async () => {
-    if (isProposalEditingRestricted) return;
+    if (!canChooseProposalRevisions) return;
     if (!proposal || !pricingRevisionComparison) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
@@ -1663,7 +1669,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleUpgradePricingRevision = async () => {
-    if (isProposalEditingRestricted) return;
+    if (!canChooseProposalRevisions) return;
     if (!proposal || !pricingRevisionComparison) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
@@ -1727,12 +1733,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         openContractWithRevision(version, check.pinned);
         return;
       }
-      if (isProposalEditingRestricted) {
-        if (check.requiresReview) {
-          setPendingContractRevision({ version, check });
-          setContractRevisionPromptOpen(true);
-          return;
-        }
+      if (!canChooseProposalRevisions || !isOwnProposal(version, readSession())) {
         openContractWithRevision(version, check.pinned);
         return;
       }
@@ -1763,7 +1764,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleKeepCurrentContract = async () => {
     if (!pendingContractRevision) return;
-    if (isProposalEditingRestricted) {
+    if (!canChooseProposalRevisions || !isOwnProposal(pendingContractRevision.version, readSession())) {
       const { version, check } = pendingContractRevision;
       setContractRevisionPromptOpen(false);
       setPendingContractRevision(null);
@@ -1789,16 +1790,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleUpgradeContract = async () => {
     if (!pendingContractRevision) return;
-    if (isProposalEditingRestricted) {
+    if (!canChooseProposalRevisions || !isOwnProposal(pendingContractRevision.version, readSession())) {
       const { version, check } = pendingContractRevision;
       setContractRevisionPromptOpen(false);
       setPendingContractRevision(null);
       setContractRevisionError(null);
-      openContractWithRevision(version, check.latest);
-      showToast({
-        type: 'info',
-        message: 'Previewing the latest contract template. The proposal was not changed.',
-      });
+      openContractWithRevision(version, check.pinned);
       return;
     }
     setContractRevisionBusy(true);
@@ -1820,7 +1817,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   useEffect(() => {
     let cancelled = false;
     const detectPricingRevision = async () => {
-      if (isProposalEditingRestricted) {
+      if (!canChooseProposalRevisions) {
         setPricingRevisionComparison(null);
         setPricingRevisionPromptOpen(false);
         setPricingRevisionComparisonOpen(false);
@@ -1866,7 +1863,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [isProposalEditingRestricted, proposal?.pricingModelId, proposal?.pricingModelRevisionId, proposal?.lastModified]);
+  }, [canChooseProposalRevisions, proposal?.pricingModelId, proposal?.pricingModelRevisionId, proposal?.lastModified]);
 
   useEffect(() => {
     if (!proposal || isProposalEditingRestricted || isVersionPermanentlyLocked(proposal)) {
@@ -2350,11 +2347,27 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       const updated = all.map((v) => {
         const id = v.versionId || 'original';
         if (id !== versionId) return v;
-        return {
+        let nextVersion = syncAdditionalDiggingFromContract({
           ...(v as Proposal),
           contractOverrides: overrides,
           lastModified: new Date().toISOString(),
-        };
+        });
+        if (getAdditionalDiggingDays(nextVersion.excavation) !== getAdditionalDiggingDays(v.excavation)) {
+          const syncMeta = getCachedVersionSyncMeta(v) ?? getFrozenVersionSyncMeta(v);
+          if (!syncMeta.pricingSnapshot) throw new Error('The saved pricing revision is required to update excavation days.');
+          const dayRate = Number(syncMeta.pricingSnapshot?.excavation?.additionalDiggingPerDay ?? 0);
+          const hadCharge = v.costBreakdown?.excavation?.some((line) =>
+            line.description === 'Additional Digging (Days)' && line.total > 0);
+          if (dayRate > 0 || hadCharge) {
+            const recalculated = calculateCurrentCategoryCustomOptionPricing(nextVersion);
+            if (!recalculated) throw new Error('The saved pricing revision is required to update excavation days.');
+            nextVersion = { ...nextVersion, ...recalculated.calculation };
+          }
+        }
+        // The proposal now owns this count. Keep other manual contract fields intact.
+        nextVersion.contractOverrides = { ...overrides };
+        delete nextVersion.contractOverrides[EXCAVATION_DAYS_CONTRACT_FIELD];
+        return nextVersion;
       });
 
       const desiredActiveId =
@@ -2395,6 +2408,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     } catch (error) {
       console.error('Failed to save contract overrides', error);
       showToast({ type: 'error', message: 'Could not save contract overrides.' });
+      throw error;
     }
   };
 
@@ -5950,6 +5964,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       <PricingRevisionPromptModal
         isOpen={
           pricingRevisionPromptOpen &&
+          canChooseProposalRevisions &&
           Boolean(pricingRevisionComparison) &&
           !customOptionPricingCorrection
         }
@@ -6033,7 +6048,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       />
 
       <PricingRevisionComparisonModal
-        isOpen={pricingRevisionComparisonOpen}
+        isOpen={canChooseProposalRevisions && pricingRevisionComparisonOpen}
         comparison={pricingRevisionComparison}
         loading={pricingRevisionBusy}
         error={pricingRevisionError}
@@ -6050,7 +6065,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         }}
       />
       <ContractRevisionPromptModal
-        isOpen={contractRevisionPromptOpen && Boolean(pendingContractRevision)}
+        isOpen={canChooseProposalRevisions && contractRevisionPromptOpen && Boolean(pendingContractRevision)}
         currentRevision={pendingContractRevision?.check.pinned.revisionNumber}
         latestRevision={pendingContractRevision?.check.latest.revisionNumber}
         currentTemplateName={pendingContractRevision?.check.pinned.templateName}

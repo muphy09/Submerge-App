@@ -240,6 +240,7 @@ export type ExcavationPriceImpactTarget =
   | { kind: 'soilSampleEngineer' }
   | { kind: 'doubleCurtain' }
   | { kind: 'additionalSitePrep' }
+  | { kind: 'additionalDigging' }
   | { kind: 'tightAccessJob' }
   | { kind: 'customOption'; index: number };
 
@@ -2486,6 +2487,15 @@ const buildExcavationComparison = (
       clear: () => {
         comparison.excavation.hasAdditionalSitePrep = false;
         comparison.excavation.additionalSitePrepHours = 0;
+      },
+    },
+    additionalDigging: {
+      enabled: Boolean(excavation.hasAdditionalDigging),
+      controlLabel: 'Additional Digging (Days)',
+      clear: () => {
+        comparison.excavation.hasAdditionalDigging = false;
+        comparison.excavation.additionalDiggingDays = 1;
+        if (comparison.contractOverrides) delete comparison.contractOverrides.p1_30;
       },
     },
     tightAccessJob: {

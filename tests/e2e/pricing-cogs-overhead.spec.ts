@@ -2,6 +2,17 @@ import { expect, test } from '@playwright/test';
 
 const fixtureUrl = 'http://127.0.0.1:5173/tests/fixtures/pricing-cogs-overhead.html';
 
+test('Admin Excavation exposes Additional Digging with a zero per-day rate', async ({ page }, testInfo) => {
+  await page.goto(fixtureUrl);
+  await page.getByRole('button', { name: 'Excavation', exact: true }).click();
+  const field = page.locator('label.pricing-field').filter({ hasText: 'Additional Digging (per day)' });
+  await expect(field).toBeVisible();
+  await expect(field.locator('input')).toHaveValue('0');
+  await field.locator('input').fill('350');
+  await expect(field.locator('input')).toHaveValue('350');
+  await field.screenshot({ path: testInfo.outputPath('additional-digging-admin.png') });
+});
+
 test('shows and edits the pricing revision COGS overhead rate', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(fixtureUrl);

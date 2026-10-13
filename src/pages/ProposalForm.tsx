@@ -89,7 +89,7 @@ import {
 import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpSelections';
 import { listAllFranchises, listAllPricingModels } from '../services/masterAdminAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
-import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { getProposal as getProposalRemote, saveProposal as saveProposalRemote, isOwnProposal } from '../services/proposalsAdapter';
 import { needsOffContractSeparation } from '../utils/offContractSeparation';
 import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
@@ -131,6 +131,7 @@ import {
 } from '../services/proposalWorkflow';
 import { countSelectedWaterFeatureCategories, sanitizeWaterFeatureSelections } from '../utils/waterFeatureCost';
 import { sanitizeProposalSelectionState } from '../utils/proposalSelectionSanitizer';
+import { EXCAVATION_DAYS_CONTRACT_FIELD } from '../utils/additionalDigging';
 import {
   FEENSTRA_MAY_2026_CALCULATION_PROFILE,
   FEENSTRA_PROPOSAL_NUMBER,
@@ -894,6 +895,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
+  const canChooseProposalRevisions = !isReadOnlyBuilderView &&
+    (!proposalNumber || isOwnProposal(proposal as Proposal, readSession()));
   const proposalNotesFranchiseId = proposal.franchiseId || getSessionFranchiseId();
   const { notes: proposalNoteOverrides } = useProposalNotes(proposalNotesFranchiseId);
   const { enabled: franchisePriceImpactEnabled } = useFranchiseCapability(
@@ -919,6 +922,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const review = proposal.pricingRevisionReview;
     if (
       isLoading ||
+      !canChooseProposalRevisions ||
       !proposalNumber ||
       review?.decision !== 'declined' ||
       !proposal.pricingModelRevisionId ||
@@ -960,6 +964,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     };
   }, [
     isLoading,
+    canChooseProposalRevisions,
     proposal.pricingModelId,
     proposal.pricingModelRevisionId,
     proposal.pricingRevisionReview,
@@ -1761,6 +1766,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         lastModified: new Date().toISOString(),
       } as Proposal;
 
+      if (section === 'excavation' && (
+        data.hasAdditionalDigging !== prev.excavation?.hasAdditionalDigging ||
+        data.additionalDiggingDays !== prev.excavation?.additionalDiggingDays
+      )) {
+        nextProposal.contractOverrides = { ...prev.contractOverrides };
+        delete nextProposal.contractOverrides[EXCAVATION_DAYS_CONTRACT_FIELD];
+      }
+
       if (
         section === 'poolSpecs' &&
         (prev.poolSpecs?.spaType ?? 'none') !== 'none' &&
@@ -2424,7 +2437,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleSelectPricingModel = async (id: string) => {
-    if (isReadOnlyBuilderView) return;
+    if (!canChooseProposalRevisions) return;
     const model = pricingModels.find((entry) => entry.id === id);
     await applyPricingModelSelection(
       id,
@@ -2439,7 +2452,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleOpenDeclinedPricingComparison = async () => {
-    if (isReadOnlyBuilderView) return;
+    if (!canChooseProposalRevisions) return;
     setShowDeclinedPricingComparison(true);
     setDeclinedPricingComparisonLoading(true);
     setPricingRevisionError(null);
@@ -2462,7 +2475,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleUpgradeDeclinedPricing = async () => {
-    if (!declinedPricingComparison || pricingRevisionBusy || isReadOnlyBuilderView) return;
+    if (!declinedPricingComparison || pricingRevisionBusy || !canChooseProposalRevisions) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
     try {
@@ -2503,7 +2516,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleSelectPricingTier = (tierValue: string) => {
-    if (isReadOnlyBuilderView) return;
+    if (!canChooseProposalRevisions) return;
     const pricingTierId = normalizePricingTierId(tierValue);
     if (pricingTierId === selectedPricingTierId) return;
     if (isBronzePricingTier(pricingTierId)) {
@@ -2514,6 +2527,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleConfirmBronzePricingTier = () => {
+    if (!canChooseProposalRevisions) return;
     const pricingTierId = normalizePricingTierId(pendingPricingTierId);
     setPendingPricingTierId(null);
     void applyPricingTierSelection(pricingTierId);
@@ -3105,6 +3119,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? 'This proposal is locked to the May 11, 2026 calculation engine and pricing revision.'
           : isReadOnlyBuilderView
           ? readOnlyBuilderMessage
+          : !canChooseProposalRevisions
+          ? 'Pricing selections are controlled by the proposal owner.'
           : 'Click to change from the Active Price Model'
       }
       aria-label={
@@ -3112,6 +3128,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? `Current pricing model: ${pricingModelDisplayName}. Locked to May 11, 2026 pricing.`
           : isReadOnlyBuilderView
           ? `Current pricing model: ${pricingModelDisplayName}. ${readOnlyBuilderMessage}`
+          : !canChooseProposalRevisions
+          ? `Current pricing model: ${pricingModelDisplayName}. Pricing selections are controlled by the proposal owner.`
           : `Current pricing model: ${pricingModelDisplayName}. Click to change from the Active Price Model`
       }
     >
@@ -3122,7 +3140,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         disabled={
           pricingModels.length === 0 ||
           isSaving ||
-          isReadOnlyBuilderView ||
+          !canChooseProposalRevisions ||
           isFeenstraMay2026Pricing
         }
         aria-label={`Pricing Model. Current selection: ${pricingModelDisplayName}`}
@@ -3157,6 +3175,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     </label>
   );
   const hasDeclinedPricingUpgrade =
+    canChooseProposalRevisions &&
     proposal.pricingRevisionReview?.decision === 'declined' &&
     Boolean(proposal.pricingModelId) &&
     Boolean(proposal.pricingModelRevisionId) &&
@@ -3201,6 +3220,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? 'The pricing tier is locked for the May 11, 2026 calculation profile.'
           : isReadOnlyBuilderView
           ? readOnlyBuilderMessage
+          : !canChooseProposalRevisions
+          ? 'Pricing selections are controlled by the proposal owner.'
           : 'Select the pricing tier for this proposal'
       }
       aria-label={
@@ -3208,6 +3229,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? `Current pricing tier: ${pricingTierDisplayName}. Locked to May 11, 2026 pricing.`
           : isReadOnlyBuilderView
           ? `Current pricing tier: ${pricingTierDisplayName}. ${readOnlyBuilderMessage}`
+          : !canChooseProposalRevisions
+          ? `Current pricing tier: ${pricingTierDisplayName}. Pricing selections are controlled by the proposal owner.`
           : `Current pricing tier: ${pricingTierDisplayName}. Select the pricing tier for this proposal`
       }
     >
@@ -3215,7 +3238,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         value={normalizedSelectedPricingTierId}
         onChange={(e) => handleSelectPricingTier(e.target.value)}
         className="form-header-pricing-select"
-        disabled={isSaving || isReadOnlyBuilderView || isFeenstraMay2026Pricing}
+        disabled={isSaving || !canChooseProposalRevisions || isFeenstraMay2026Pricing}
         aria-label={`Pricing Tier. Current selection: ${pricingTierDisplayName}`}
       >
         {PRICING_TIER_OPTIONS.map((tier) => (

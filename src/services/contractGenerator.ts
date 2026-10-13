@@ -34,6 +34,7 @@ import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import { NORMAL_PRICING_TIER_ID, getProposalPricingTierId } from './pricingTiers';
 import { resolveFeenstraMay2026ContractCashPrice } from './legacy/feenstraMay2026Contract';
 import { needsOffContractSeparation } from '../utils/offContractSeparation';
+import { getAdditionalDiggingDays } from '../utils/additionalDigging';
 
 export type ContractOverrides = Record<string, string | number | null>;
 
@@ -1105,10 +1106,10 @@ export async function getEditableContractFields(
       ) {
         autoValue = getContractDepositFieldAutoValue(field.id, depositSourceValue, totalCashPrice, schedulePercentages);
       }
-      if (field.id === 'p1_30') autoValue = '1';
+      if (field.id === 'p1_30') autoValue = String(1 + getAdditionalDiggingDays(normalized.excavation));
       const { hasOverride, value: overrideVal } = resolveMirroredContractOverride(field.id, overrides);
       const value = hasOverride && overrideVal !== null && overrideVal !== undefined ? String(overrideVal) : autoValue;
-      const shouldAutoFill = field.id === 'p1_30' ? false : !hasOverride && isMeaningfulAutoValue(autoValue);
+      const shouldAutoFill = !hasOverride && isMeaningfulAutoValue(autoValue);
       return {
         id: field.id,
         page: field.page,

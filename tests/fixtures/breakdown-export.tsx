@@ -60,6 +60,8 @@ const orderProposal = {
   },
   tileCopingDecking: { ...proposal.tileCopingDecking, tileLevel: 1 as const, copingType: 'flagstone', copingLength: 110,
     deckingType: 'paver', deckingArea: 200 },
+  drainage: { ...proposal.drainage, downspoutTotalLF: 25, deckDrainTotalLF: 40.5,
+    frenchDrainTotalLF: 75, boxDrainTotalLF: 12 },
   waterFeatures: { ...proposal.waterFeatures, selections: [{ featureId: 'wok-fire-30', quantity: 2, includeValveActuator: false }] },
   equipment: { ...proposal.equipment, packageSelectionId: 'pmf03-standard-automation', packageSelectionTouched: true,
     pump: { ...proposal.equipment.pump, name: 'Jandy 1.65HP Variable Pump' }, pumpQuantity: 1,
@@ -101,10 +103,13 @@ const customOrderProposal = {
 };
 const orderFixtureMode = new URLSearchParams(location.search).get('mode');
 const activeOrderProposal = orderFixtureMode === 'materials-custom' ? customOrderProposal : orderProposal;
+const originalOrder = JSON.stringify(activeOrderProposal);
 const orderData = buildMaterialsOrderForm(activeOrderProposal, activeOrderProposal.costBreakdown);
 (window as any).breakdownFixture = {
-  unchanged: () => JSON.stringify(proposal) === original,
+  unchanged: () => JSON.stringify(proposal) === original && JSON.stringify(activeOrderProposal) === originalOrder,
   orderData: () => orderData,
+  orderWithDrainage: (drainage: typeof proposal.drainage | undefined) => buildMaterialsOrderForm(
+    { ...activeOrderProposal, drainage: drainage as typeof proposal.drainage }, activeOrderProposal.costBreakdown),
   readPdf: async (bytes: number[], renderPage?: number) => {
     // Electron 29 predates Promise.withResolvers, required by the PDF test reader.
     (Promise as any).withResolvers ??= () => {

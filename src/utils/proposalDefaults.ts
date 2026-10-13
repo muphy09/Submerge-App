@@ -92,6 +92,8 @@ export function getDefaultExcavation(): Excavation {
       facing: 'none',
     },
     additionalSitePrepHours: 0,
+    hasAdditionalDigging: false,
+    additionalDiggingDays: 1,
     hasAdditionalSitePrep: isAdditionalFeatureEnabled('additionalSitePrep', false),
     hasTightAccessJob: isAdditionalFeatureEnabled('tightAccessJob', false),
     hasGravelInstall,

@@ -187,6 +187,7 @@ const pricingData = {
     baseSpa: 200,
     raisedSpa: 350,
     sitePrep: 200,
+    additionalDiggingPerDay: 0,
     tightAccessJob: 6400,
     backfill: 600,
     gravelPerSqft: 2.75,

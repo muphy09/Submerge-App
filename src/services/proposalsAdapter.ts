@@ -244,7 +244,7 @@ function getEffectiveRole(session?: UserSession | null) {
   return String(role || session?.role || 'designer').trim().toLowerCase();
 }
 
-function isOwnProposal(proposal: Proposal, session?: UserSession | null) {
+export function isOwnProposal(proposal: Proposal, session?: UserSession | null) {
   const currentUserId = normalizeIdentity(session?.userId);
   const proposalOwnerId = normalizeIdentity(proposal.designerAuthUserId);
   if (proposalOwnerId) {

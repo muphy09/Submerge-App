@@ -909,7 +909,9 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
       const normalizedValue = value;
       const next = { ...overrides };
       const mirroredFieldIds = getMirroredContractFieldIds(cellAddress);
-      const shouldClearOverrides = normalizedValue === autoValue || (!normalizedValue && !autoValue);
+      const shouldClearOverrides = cellAddress === 'p1_30'
+        ? !normalizedValue.trim()
+        : normalizedValue === autoValue || (!normalizedValue && !autoValue);
 
       if (shouldClearOverrides) {
         mirroredFieldIds.forEach((fieldId) => {
@@ -968,6 +970,13 @@ const ContractView = forwardRef<ContractViewHandle, ContractViewProps>(function 
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (!onSave || !hasUnsavedChanges) return true;
     if (latestSavePromiseRef.current) return latestSavePromiseRef.current;
+
+    const excavationDays = overrides.p1_30;
+    if (excavationDays != null && String(excavationDays).trim() !== '' &&
+      (!Number.isSafeInteger(Number(excavationDays)) || Number(excavationDays) < 1)) {
+      showToast({ type: 'error', message: 'Excavation days must be a whole number of at least 1.' });
+      return false;
+    }
 
     const overridesToSave = overrides;
     const savePromise = (async () => {
