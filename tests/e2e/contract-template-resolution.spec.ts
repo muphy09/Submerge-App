@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getBundledContractTemplateRevision } from '../../src/services/contractTemplates';
+import { withWestConstructionTiming } from '../../src/services/westContractConstructionTiming';
 
 const fixtureOrigin = process.env.SUBMERGE_TEST_ORIGIN || 'http://127.0.0.1:5173';
 const fixtureUrl = `${fixtureOrigin}/tests/fixtures/contract-template-resolution.html`;
@@ -44,7 +45,7 @@ const westRevisions = westTypes.flatMap(([id, , , latest]) =>
   })
 );
 
-async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bookkeeper' | 'designer' | 'master'; ownsProposal?: boolean; newerPricing?: boolean; edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string; multiVersionSubmittedOffContract?: boolean } = {}) {
+async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bookkeeper' | 'designer' | 'master'; ownsProposal?: boolean; newerPricing?: boolean; edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string; multiVersionSubmittedOffContract?: boolean; newTreeTimingRevision?: boolean } = {}) {
   const errors: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
   await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted, orderPackageId, multiVersionSubmittedOffContract, viewerRole, ownsProposal }) => {
@@ -97,7 +98,7 @@ async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bo
   const templates = options.futureWestRevision
     ? westTemplates.map((row) => row.id === 'west-nc-gunite' ? { ...row, current_revision_id: 'west-nc-gunite-r3' } : row)
     : westTemplates;
-  const revisions = options.futureWestRevision
+  let revisions = options.futureWestRevision
     ? [...westRevisions, {
         ...westRevisions.find((row) => row.id === 'west-nc-gunite-r2')!,
         id: 'west-nc-gunite-r3', revision_number: 3,
@@ -110,6 +111,19 @@ async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bo
         published_at: '2026-10-01T00:00:00.000Z',
       }]
     : westRevisions;
+  if (options.newTreeTimingRevision) {
+    revisions = [...revisions, ...westTypes.map(([id, , , latest]) => {
+      const base = westRevisions.find((row) => row.id === `west-${id}-r${latest}`)!;
+      const template = withWestConstructionTiming(getBundledContractTemplateRevision(id)!.contractTemplate, id);
+      return { ...base, id: `west-${id}-r${latest + 1}`, revision_number: latest + 1,
+        field_layout_json: template.fields,
+        autofill_rules_json: { ...base.autofill_rules_json, legacyBundledId: undefined,
+          newProposalTreesOnly: true, westConstructionTimingVersion: 'permit-and-dig-v1',
+          effectivePublishedAt: null, staticPatches: template.staticPatches,
+          changeNotes: ['Construction timing changed for new proposal trees only.'] },
+        published_at: '2026-10-13T00:00:00.000Z' };
+    })];
+  }
   // All backend traffic is synthetic; no account or production records are used.
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
@@ -820,4 +834,161 @@ test('leaving a loading builder for the summary cancels obsolete loads', async (
   fixture.releasePricing();
   await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
   expect(fixture.errors.filter((message) => message.includes('Failed to load proposal'))).toEqual([]);
+});
+
+for (const [id, state, poolType, latest] of westTypes) {
+  test(`West construction timing: ${id} preserves autofill and every pixel outside the two lines`, async ({ page }, testInfo) => {
+    await setup(page, { newTreeTimingRevision: true });
+    // Summary loading selects the pricing snapshot shared by the generator.
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    const result = await page.evaluate(({ state, poolType }) => (window as any).contractFixture.timingChecks({
+      createdDate: '2026-10-13T12:00:00.000Z',
+      contractTemplateRevisionId: undefined,
+      westConstructionTimingVersion: 'permit-and-dig-v1',
+      customerInfo: { customerName: 'TIMING EXPORT TEST', state, city: 'Charlotte', address: '123 Test Street' },
+      poolSpecs: { poolType, surfaceArea: 500, perimeter: 100, maxLength: 25, maxWidth: 20, shallowDepth: 3, endDepth: 6 },
+      contractOverrides: { p1_8: '10/18/2026', p1_9: '4/18/2027', p1_36: '5', p1_pay_excavation: '$25,000.00' },
+    }, true), { state, poolType });
+    expect(result.dateFields).toEqual([]);
+    expect(result.editableDateFieldNames).toEqual([]);
+    expect(result.requiresReview).toBe(false);
+    expect(result.revisionId).toBe(`west-${id}-r${latest + 1}`);
+    expect(result.otherFieldDifferences).toEqual([]);
+    expect(result.flattenedFields).toBe(0);
+    expect(result.pageCount).toBe(6);
+    expect(result.changedPixelsOutsideTiming).toBe(0);
+    expect(result.changedPixelsInsideTiming).toBeGreaterThan(0);
+    expect(result.text).toContain('Construction to substantially commence approximately 2-4 weeks after the permit is issued and full HOA approval.');
+    expect(result.text).toContain('Construction to be substantially complete approximately 8-12 weeks from the dig date.');
+    expect(result.versions).toEqual([
+      { mode: 'scratch', marker: 'permit-and-dig-v1', dateFieldCount: 0 },
+      { mode: 'copy', marker: 'permit-and-dig-v1', dateFieldCount: 0 },
+    ]);
+    const screenshotPath = testInfo.outputPath(`${id}-construction-timing.png`);
+    writeFileSync(screenshotPath, Buffer.from(result.image, 'base64'));
+    await testInfo.attach('Exported contract page one', { path: screenshotPath, contentType: 'image/png' });
+  });
+}
+
+test('West construction timing: older trees, signed contracts and new scratch/copy versions keep dates', async ({ page }) => {
+  await setup(page, { newTreeTimingRevision: true });
+  const results = await page.evaluate(async () => {
+    const fixture = (window as any).contractFixture;
+    return Promise.all([false, true].map((signed) => fixture.timingChecks({
+      createdDate: '2026-09-23T00:00:00.000Z',
+      contractTemplateRevisionId: 'west-nc-gunite-r2',
+      westConstructionTimingVersion: undefined,
+      status: signed ? 'signed' : 'draft', versionLocked: signed,
+      contractOverrides: { p1_8: '10/18/2026', p1_9: '4/18/2027' },
+    })));
+  });
+  for (const result of results) {
+    expect(result.requiresReview).toBe(false);
+    expect(result.patches).toEqual([]);
+    expect(result.dateFields.map((field: any) => field.value)).toEqual(['10/18/2026', '4/18/2027']);
+    expect(result.versions).toEqual([
+      { mode: 'scratch', marker: null, dateFieldCount: 2 },
+      { mode: 'copy', marker: null, dateFieldCount: 2 },
+    ]);
+  }
+});
+
+test('West construction timing: East ignores the marker even in a master proposal', async ({ page }) => {
+  await setup(page, { newTreeTimingRevision: true });
+  const results = await page.evaluate(async (east) => {
+    const fixture = (window as any).contractFixture;
+    return Promise.all([east, 'default'].map((franchiseId) => fixture.timingChecks({
+      franchiseId, pricingModelFranchiseId: east,
+      westConstructionTimingVersion: 'permit-and-dig-v1',
+    })));
+  }, east);
+  for (const result of results) {
+    expect(result.dateFields).toHaveLength(2);
+    expect(result.patches).toEqual([]);
+  }
+});
+
+test('West construction timing: editor shows plain timing text without date pickers or a revision prompt', async ({ page }, testInfo) => {
+  await setup(page, { westContract: true, newTreeTimingRevision: true });
+  await page.evaluate(() => {
+    const fixture = (window as any).contractFixture;
+    const input = fixture.storedProposals.get(fixture.proposal.proposalNumber);
+    Object.assign(input, { westConstructionTimingVersion: 'permit-and-dig-v1',
+      createdDate: '2026-10-13T12:00:00.000Z', contractTemplateRevisionId: undefined });
+    fixture.remountSummary();
+  });
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toBeVisible();
+  await expect(page.locator('[data-field-id="p1_8"], [data-field-id="p1_9"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Keep Current', exact: true })).toHaveCount(0);
+  await page.locator('.contract-page').first().screenshot({ path: testInfo.outputPath('west-timing-editor.png') });
+});
+
+test('West construction timing: only starting a new proposal marks the format, and saving preserves it', async ({ page }) => {
+  await setup(page, { westContract: true, newTreeTimingRevision: true });
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await page.evaluate(() => (window as any).contractFixture.navigateToNewProposal());
+  await expect(page.locator('.proposal-form')).toBeVisible();
+  await expect(page.getByTestId('fixture-route')).toHaveText('/proposal/new');
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect.poll(() => page.evaluate((oldNumber) =>
+    (window as any).contractFixture.saved.some((entry: any) => entry.proposalNumber !== oldNumber), proposalNumber)).toBe(true);
+  const saved = await page.evaluate((oldNumber) =>
+    (window as any).contractFixture.saved.findLast((entry: any) => entry.proposalNumber !== oldNumber), proposalNumber);
+  expect(saved.westConstructionTimingVersion).toBe('permit-and-dig-v1');
+  expect(saved.proposalNumber).not.toBe(proposalNumber);
+  await page.evaluate((number) => (window as any).contractFixture.navigateToEditor(number), saved.proposalNumber);
+  await expect(page.locator('.proposal-form')).toBeVisible();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.at(-1)?.westConstructionTimingVersion))
+    .toBe('permit-and-dig-v1');
+});
+
+test('West construction timing: opening and saving an old proposal never marks it', async ({ page }) => {
+  await setup(page, { westContract: true, edit: true, newTreeTimingRevision: true });
+  await expect(page.locator('.proposal-form')).toBeVisible();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.length)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => (window as any).contractFixture.saved.at(-1)?.westConstructionTimingVersion)).toBeUndefined();
+});
+
+test('West construction timing: an older client and an unmarked future-dated proposal both retain the legacy head', async ({ page }) => {
+  await setup(page, { newTreeTimingRevision: true });
+  const result = await page.evaluate(async (west) => {
+    const check = await (window as any).contractFixture.check({
+      createdDate: '2030-01-01T00:00:00.000Z', westConstructionTimingVersion: undefined,
+    });
+    const catalog = JSON.parse(localStorage.getItem(`submerge-contract-template-catalog-v1:${west}`)!);
+    const template = catalog.templates.find((row: any) => row.id === 'west-nc-gunite');
+    // Reproduce the older client's original creation-date inference, which
+    // knows nothing about the new-proposal-only rule or proposal marker.
+    const atCreation = catalog.revisions.filter((row: any) => row.contract_template_id === template.id &&
+      Date.parse(row.autofill_rules_json.effectivePublishedAt || '') <= Date.parse('2030-01-01T00:00:00.000Z'))
+      .sort((left: any, right: any) => left.revision_number - right.revision_number);
+    return { check: check.check, legacyCurrent: template.current_revision_id, legacyInferred: atCreation.at(-1)?.id };
+  }, west);
+  expect(result.check.pinned.revisionId).toBe('west-nc-gunite-r2');
+  expect(result.check.latest.revisionId).toBe('west-nc-gunite-r2');
+  expect(result.check.requiresReview).toBe(false);
+  expect(result.check.changeNotes).toEqual([]);
+  expect(result.legacyCurrent).toBe('west-nc-gunite-r2');
+  expect(result.legacyInferred).toBe('west-nc-gunite-r2');
+});
+
+test('West construction timing: cached new revisions keep their own fields and text offline', async ({ page }) => {
+  await setup(page, { westContract: true, newTreeTimingRevision: true });
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await page.evaluate(() => (window as any).contractFixture.prefetchWest());
+  const result = await page.evaluate(async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+    return (window as any).contractFixture.timingChecks({ westConstructionTimingVersion: 'permit-and-dig-v1',
+      createdDate: '2026-10-13T12:00:00.000Z', contractTemplateRevisionId: 'west-nc-gunite-r3' });
+  });
+  expect(result.revisionId).toBe('west-nc-gunite-r3');
+  expect(result.dateFields).toEqual([]);
+  expect(result.requiresReview).toBe(false);
+  expect(result.patches[0].texts.map((text: any) => text.text)).toEqual([
+    'Construction to substantially commence approximately 2-4 weeks after the permit is issued and full HOA approval.',
+    'Construction to be substantially complete approximately 8-12 weeks from the dig date.',
+  ]);
 });

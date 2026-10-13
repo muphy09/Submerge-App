@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import ProposalView from '../../src/pages/ProposalView';
 import ProposalForm from '../../src/pages/ProposalForm';
@@ -98,6 +99,89 @@ fixture.returnValues = async (overrides: any = {}) => {
   };
 };
 fixture.pricingMeta = getActivePricingModelMeta;
+fixture.timingChecks = async (overrides: any = {}, render = false) => {
+  const input = { ...proposal, ...overrides };
+  const check = await checkProposalContractRevision(input);
+  if (!check) throw new Error('Missing timing test contract');
+  const fields = await getEditableContractFields(input, input.contractOverrides, undefined, check.pinned.contractTemplate);
+  const { createVersionFromProposal, applyActiveVersion, upsertVersionInContainer } = await import('../../src/utils/proposalVersions');
+  const versions = await Promise.all(['scratch', 'copy'].map(async (mode) => {
+    const created = createVersionFromProposal(input, { mode } as any);
+    const reloaded = applyActiveVersion(JSON.parse(JSON.stringify(upsertVersionInContainer(
+      created.container, created.newVersion, created.newVersion.versionId
+    ))));
+    const versionCheck = await checkProposalContractRevision(reloaded);
+    return { mode, marker: reloaded.westConstructionTimingVersion || null,
+      dateFieldCount: versionCheck?.pinned.contractTemplate.fields.filter((field) => ['p1_8', 'p1_9'].includes(field.id)).length };
+  }));
+  const result: any = {
+    dateFields: fields.filter((field) => ['p1_8', 'p1_9'].includes(field.id)),
+    patches: check.pinned.contractTemplate.staticPatches,
+    requiresReview: check.requiresReview,
+    revisionId: check.pinned.revisionId,
+    versions,
+  };
+  if (!render) return result;
+
+  const [{ buildContractPdf }, { PDFDocument }, { getDocument, GlobalWorkerOptions }] = await Promise.all([
+    import('../../src/services/contractPdf'), import('pdf-lib'), import('pdfjs-dist'),
+  ]);
+  GlobalWorkerOptions.workerSrc = pdfWorker;
+  const legacy = await checkProposalContractRevision({ ...input, westConstructionTimingVersion: undefined });
+  if (!legacy) throw new Error('Missing legacy timing test contract');
+  const oldTemplate = legacy.pinned.contractTemplate;
+  const oldFields = await getEditableContractFields(input, input.contractOverrides, undefined, oldTemplate);
+  const otherOldFields = oldFields.filter((field) => !['p1_8', 'p1_9'].includes(field.id));
+  result.otherFieldDifferences = fields.flatMap((field, index) =>
+    JSON.stringify(field) === JSON.stringify(otherOldFields[index]) ? [] : [{ before: otherOldFields[index], after: field }]);
+  const file = `NEW 2026 Contract ${input.customerInfo.state} ${input.poolSpecs.poolType === 'fiberglass' ? 'Fiberglass' : 'Shotcrete'}.pdf`;
+  const pdfUrl = `/docs/Contracts/${encodeURIComponent(file)}`;
+  const template = { ...check.pinned.contractTemplate, pdfUrl };
+  const after = await buildContractPdf(fields, { template, flatten: true });
+  const before = await buildContractPdf(oldFields, { template: { ...oldTemplate, pdfUrl }, flatten: true });
+  // The editor draws HTML inputs over this PDF, rather than creating duplicate
+  // AcroForm fields for cells mirrored on later pages.
+  const editable = await buildContractPdf(fields, { template, includeFormFields: false });
+  result.editableDateFieldNames = (await PDFDocument.load(editable.pdfBytes)).getForm().getFields()
+    .map((field) => field.getName()).filter((id) => ['p1_8', 'p1_9'].includes(id));
+  result.flattenedFields = (await PDFDocument.load(after.pdfBytes)).getForm().getFields().length;
+  const oldDoc = await getDocument({ data: before.pdfBytes }).promise;
+  const newDoc = await getDocument({ data: after.pdfBytes }).promise;
+  try {
+    result.pageCount = newDoc.numPages;
+    result.changedPixelsOutsideTiming = 0;
+    result.changedPixelsInsideTiming = 0;
+    const patch = template.staticPatches[template.staticPatches.length - 1];
+    for (let pageNumber = 1; pageNumber <= newDoc.numPages; pageNumber += 1) {
+      const oldPage = await oldDoc.getPage(pageNumber);
+      const newPage = await newDoc.getPage(pageNumber);
+      const viewport = newPage.getViewport({ scale: 2 });
+      const canvases = await Promise.all([oldPage, newPage].map(async (pdfPage) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const canvasContext = canvas.getContext('2d')!;
+        await pdfPage.render({ canvas, canvasContext, viewport }).promise;
+        return canvas;
+      }));
+      const [oldPixels, newPixels] = canvases.map((canvas) => canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data);
+      for (let index = 0; index < oldPixels.length; index += 4) {
+        if (oldPixels[index] === newPixels[index] && oldPixels[index + 1] === newPixels[index + 1] && oldPixels[index + 2] === newPixels[index + 2]) continue;
+        const x = ((index / 4) % canvases[0].width) / 2;
+        const y = Math.floor(index / 4 / canvases[0].width) / 2;
+        const inside = pageNumber === 1 && x >= patch.rect[0] - 1 && x <= patch.rect[0] + patch.rect[2] + 1 &&
+          y >= 792 - patch.rect[1] - patch.rect[3] - 1 && y <= 792 - patch.rect[1] + 1;
+        if (inside) result.changedPixelsInsideTiming += 1;
+        else result.changedPixelsOutsideTiming += 1;
+      }
+      if (pageNumber === 1) {
+        result.image = canvases[1].toDataURL('image/png').split(',')[1];
+        result.text = (await newPage.getTextContent()).items.map((item: any) => item.str || '').join('\n');
+      }
+    }
+  } finally { await oldDoc.destroy(); await newDoc.destroy(); }
+  return result;
+};
 fixture.diggingChecks = async () => {
   const [{ default: pricingData }, { default: Engine }, { getContractTemplate },
     { syncAdditionalDiggingFromContract }, { sanitizeEditableProposalVersions },
@@ -153,6 +237,7 @@ function Navigation() {
   const location = useLocation();
   fixture.navigateTo = (number: string) => navigate(`/proposal/view/${number}`);
   fixture.navigateToEditor = (number: string) => navigate(`/proposal/edit/${number}`);
+  fixture.navigateToNewProposal = () => navigate('/proposal/new');
   fixture.selectVersion = (versionId: string) => navigate(`/proposal/view/${proposal.proposalNumber}`, { state: { versionId } });
   return <>
     <span data-testid="fixture-route" hidden>{location.pathname}</span>
@@ -167,6 +252,7 @@ function FixtureRoutes() {
   return <Routes key={mountId}>
     <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
     <Route path="/proposal/edit/:proposalNumber" element={<ProposalForm />} />
+    <Route path="/proposal/new" element={<ProposalForm />} />
   </Routes>;
 }
 

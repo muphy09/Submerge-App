@@ -869,6 +869,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const shouldUseActiveDefault = Boolean(modelMeta.isDefault && modelMeta.pricingModelId);
     return {
       ...base,
+      ...(designerCode === '5555' || isMasterUser
+        ? { westConstructionTimingVersion: 'permit-and-dig-v1' as const }
+        : {}),
       poolSpecs: { ...base.poolSpecs!, fiberglassSpecAutofillEnabled: true },
       franchiseId,
       designerName,

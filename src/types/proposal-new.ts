@@ -950,5 +950,7 @@ export interface Proposal {
   contractTemplateRevisionNumber?: number;
   contractRevisionReview?: ContractRevisionReviewState | null;
   contractTemplateRevision?: string;
+  /** Set only when a new proposal tree starts in the updated app; versions inherit it. */
+  westConstructionTimingVersion?: 'permit-and-dig-v1';
   warrantySections?: WarrantySection[] | null;
 }

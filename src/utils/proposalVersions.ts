@@ -63,6 +63,7 @@ const inheritSharedVersionMetadata = (container: Proposal, version: Proposal): P
     ...version,
     proposalNumber: version.proposalNumber || container.proposalNumber,
     franchiseId: resolvedFranchiseId,
+    westConstructionTimingVersion: container.westConstructionTimingVersion,
     designerName: version.designerName || container.designerName,
     designerRole: version.designerRole || container.designerRole,
     designerCode: version.designerCode || container.designerCode,
@@ -228,6 +229,8 @@ const buildVersionDraftSeed = (
     sourceSnapshot.calculationProfile || container.calculationProfile;
   const sharedMetadata = {
     proposalNumber: sourceSnapshot.proposalNumber || container.proposalNumber || defaults.proposalNumber,
+    // A scratch version is still part of this proposal tree, not a new proposal.
+    westConstructionTimingVersion: container.westConstructionTimingVersion,
     franchiseId: sourceSnapshot.franchiseId || container.franchiseId || defaults.franchiseId,
     designerName: sourceSnapshot.designerName || container.designerName || defaults.designerName,
     designerRole: sourceSnapshot.designerRole || container.designerRole || defaults.designerRole,
