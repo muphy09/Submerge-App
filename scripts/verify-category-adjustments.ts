@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { MasterPricingEngine } from '../src/services/masterPricingEngine';
-import { getPricingDataSnapshot, loadPricingSnapshotForFranchise, withTemporaryPricingSnapshot } from '../src/services/pricingDataStore';
+import { getPricingDataSnapshot, loadPricingSnapshotForFranchise, loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from '../src/services/pricingDataStore';
 import { getDefaultProposal } from '../src/utils/proposalDefaults';
-import { CATEGORY_ADJUSTMENT_CATEGORIES, isCategoryAdjustmentItem, validateCategoryAdjustments } from '../src/utils/categoryAdjustments';
+import { CATEGORY_ADJUSTMENT_CATEGORIES, getConditionBillingCategory, isCategoryAdjustmentItem, validateCategoryAdjustments } from '../src/utils/categoryAdjustments';
 import { CONDITION_SECTIONS, getCategoryConditionTargets, matchesAdjustmentCondition, describeCategoryAdjustment } from '../src/utils/categoryAdjustmentConditions';
 import type { CategoryAdjustment, ConditionOperator } from '../src/types/categoryAdjustments';
-import { buildPricingRevisionComparison, upgradeProposalPricingRevision } from '../src/services/pricingRevisionReview';
+import { buildPricingRevisionComparison, markPricingRevisionDeclined, upgradeProposalPricingRevision } from '../src/services/pricingRevisionReview';
 import { normalizeCostBreakdownForDisplay } from '../src/utils/costBreakdownDisplay';
+import { resolvePricingForTier, type PricingTierId } from '../src/services/pricingTiers';
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 const snapshot = clone(getPricingDataSnapshot());
@@ -115,22 +116,104 @@ for (const [id, count] of [['first', 1], ['second', 0], ['historical', 0]] as co
 const cache = new Map<string, string>();
 (globalThis as any).localStorage = { getItem: (key: string) => cache.get(key) ?? null, setItem: (key: string, value: string) => cache.set(key, value) };
 const model = (revisionId: string, adjustments: CategoryAdjustment[]) => ({ franchiseId: 'revision-test', pricingModelId: 'model', pricingModelName: 'Model', revisionId, revisionNumber: revisionId === 'before' ? 1 : 2, version: 'v1', pricing: { ...snapshot, categoryAdjustments: adjustments } });
-const beforeModel = model('before', []);
+const beforeModel: any = model('before', []);
+delete beforeModel.pricing.categoryAdjustments;
 const afterModel = model('after', [adjustment({ id: 'credit', amount: -125, basis: 'retail' }), adjustment({ id: 'charge', title: 'Retail charge', amount: 125, basis: 'retail' })]);
 cache.set('submerge.pricingModelSnapshot.revision-test.model.before', JSON.stringify(beforeModel));
 cache.set('submerge.pricingModelSnapshot.revision-test.model.after', JSON.stringify(afterModel));
 (globalThis as any).window.electron.loadPricingModel = async () => afterModel;
 const revisionProposal = { ...getDefaultProposal(), franchiseId: 'revision-test', pricingModelId: 'model', pricingModelRevisionId: 'before' };
 Object.assign(revisionProposal.poolSpecs!, { maxLength: 30, maxWidth: 15, surfaceArea: 450, perimeter: 90, shallowDepth: 3.5, endDepth: 6 });
+Object.assign(revisionProposal, withTemporaryPricingSnapshot(beforeModel.pricing, () => MasterPricingEngine.calculateCompleteProposal(revisionProposal)));
 const revisionBefore = JSON.stringify(revisionProposal);
 const comparison = await buildPricingRevisionComparison(revisionProposal);
 assert.ok(comparison?.affectsProposal);
 assert.equal(comparison.rows.filter(row => row.label.endsWith('(Retail)')).length, 2);
 assert.ok(comparison.rows.some(row => row.afterAmount === -125));
 assert.equal(JSON.stringify(revisionProposal), revisionBefore, 'Review changed the original saved proposal');
+const declined = markPricingRevisionDeclined(revisionProposal, comparison);
+assert.equal(declined.pricingModelRevisionId, 'before');
+assert.equal(declined.totalCost, revisionProposal.totalCost);
+assert.deepEqual(declined.pricing, revisionProposal.pricing);
 const upgraded = await upgradeProposalPricingRevision(revisionProposal, comparison);
 assert.equal(upgraded.pricingModelRevisionId, 'after');
 assert.equal(upgraded.costBreakdown!.tileLabor.filter(isCategoryAdjustmentItem).length, 2);
 assert.equal(revisionProposal.pricingModelRevisionId, 'before');
 await assert.rejects(upgradeProposalPricingRevision({ ...revisionProposal, status: 'signed' }, comparison), /Signed proposals cannot change pricing revisions/);
+
+// Final review: conditions follow the same field sources and applicability as the designer.
+const auditProposal = getDefaultProposal();
+auditProposal.poolSpecs!.deckingArea = 300;
+auditProposal.tileCopingDecking!.deckingArea = 0;
+assert.equal(matches('decking.primaryArea', 'eq', 300, auditProposal), true, 'Decking condition ignored Pool Specifications area');
+auditProposal.tileCopingDecking!.isDeckingOffContract = true;
+assert.equal(matches('decking.area', 'active', undefined, auditProposal), false);
+auditProposal.tileCopingDecking!.isDeckingOffContract = false;
+auditProposal.tileCopingDecking!.copingType = 'none';
+auditProposal.tileCopingDecking!.bullnoseLnft = 10;
+assert.equal(matches('coping.bullnose', 'gt', 0, auditProposal), true, 'An enabled Bullnose field was incorrectly gated by Coping Type');
+assert.equal(getConditionBillingCategory(targets.find(t => t.id === 'coping.bullnose')), 'stoneRockwork');
+auditProposal.poolSpecs!.spaType = 'fiberglass';
+auditProposal.poolSpecs!.spaLength = 12;
+auditProposal.poolSpecs!.isRaisedSpa = true;
+auditProposal.poolSpecs!.raisedSpaFacing = 'tile';
+assert.equal(matches('spa.spaLength', 'gt', 0, auditProposal), false, 'Hidden shotcrete spa dimensions triggered on fiberglass');
+assert.equal(matches('spa.facing', 'active', undefined, auditProposal), false);
+auditProposal.customFeatures!.features = [{}] as any;
+auditProposal.plumbing!.customOptions = [{}] as any;
+assert.equal(matches('custom.manual', 'active', undefined, auditProposal), false, 'An empty manual feature counted as active');
+assert.equal(matches('plumbing.customOptions', 'active', undefined, auditProposal), false);
+const extraCatalog: any = clone(snapshot);
+extraCatalog.tileCoping.decking.additionalOptions.push({ id: 'audit-extra', name: 'Audit Additional Decking', laborRate: 1, materialRate: 1 });
+auditProposal.tileCopingDecking!.additionalDeckingSelections = [{ deckingType: 'audit-extra', area: 25 }];
+assert.equal(matchesAdjustmentCondition({ targetId: 'decking.additionalType', operator: 'equals', value: 'audit-extra' }, auditProposal, getCategoryConditionTargets(extraCatalog)), true, 'Additional Decking used the primary decking catalog');
+extraCatalog.tileCoping.decking.additionalOptions.push({ name: 'Legacy Extra Stone', laborRate: 1, materialRate: 1 });
+auditProposal.tileCopingDecking!.additionalDeckingSelections = [{ deckingType: 'legacy-extra-stone', area: 25 }];
+assert.equal(matchesAdjustmentCondition({ targetId: 'decking.additionalType', operator: 'equals', value: 'legacy-extra-stone' }, auditProposal, getCategoryConditionTargets(extraCatalog)), true);
+auditProposal.waterFeatures!.selections = [{ featureId: 'deck-jet', quantity: 1 }];
+assert.equal(matches('waterFeatures.actuator', 'active', undefined, auditProposal), true, 'Included default actuator was ignored');
+auditProposal.waterFeatures!.selections[0].includeValveActuator = false;
+assert.equal(matches('waterFeatures.actuator', 'active', undefined, auditProposal), false);
+auditProposal.waterFeatures!.selections = [{ featureId: 'deleted-feature', quantity: 5 }];
+assert.equal(matches('waterFeatures.quantity', 'active', undefined, auditProposal), false, 'Removed water feature counted toward a condition');
+auditProposal.poolSpecs!.spaType = 'gunite';
+auditProposal.poolSpecs!.spaWidth = 0;
+auditProposal.tileCopingDecking!.doubleBullnoseLnft = 10;
+assert.equal(matches('spa.doubleBullnose', 'active', undefined, auditProposal), false, 'Disabled spa Bullnose input triggered a condition');
+
+// Re-evaluation removes and restores one flat adjustment without accumulating rows.
+const toggledProposal = clone(revisionProposal);
+const gasRule = adjustment({ category: 'gas', mode: 'conditional', condition: { targetId: 'electrical.gas', operator: 'gt', value: 100 } });
+for (const [run, expectedRows] of [[101, 1], [100, 0], [150, 1], [0, 0], [101, 1]]) {
+  toggledProposal.plumbing!.runs.gasRun = run;
+  const calculation = calculate([gasRule], toggledProposal);
+  assert.equal(calculation.costBreakdown.gas.filter(isCategoryAdjustmentItem).length, expectedRows);
+}
+
+// A current model with new charges must not leak into an unpinned older proposal.
+const originalCacheKey = 'pricing-model-initial-revision:revision-test:model';
+const chargedModel = model('charges', [adjustment({ amount: 800 })]);
+cache.set('submerge.pricingModelSnapshot.revision-test.model.charges', JSON.stringify(chargedModel));
+(globalThis as any).window.electron.loadPricingModel = async () => chargedModel;
+cache.set(originalCacheKey, 'before');
+for (const tier of ['normal', 'bronze']) {
+  const originalTierPricing = resolvePricingForTier(beforeModel.pricing, tier as PricingTierId);
+  const originalTierCost = withTemporaryPricingSnapshot(originalTierPricing, () => MasterPricingEngine.calculateCompleteProposal(revisionProposal)).totalCost;
+  const saved = await loadPricingSnapshotForExistingProposal('revision-test', 'model', undefined, tier, 'before');
+  assert.equal(saved.pricing.categoryAdjustments.length, 0);
+  const legacy = await loadPricingSnapshotForExistingProposal('revision-test', 'model', undefined, tier);
+  assert.equal(legacy.pricingModelRevisionId, 'before');
+  assert.equal(legacy.pricing.categoryAdjustments.length, 0);
+  const loadedAgain = withTemporaryPricingSnapshot(chargedModel.pricing as any, () => {
+    assert.equal(MasterPricingEngine.calculateCompleteProposal(revisionProposal).costBreakdown.tileLabor.filter(isCategoryAdjustmentItem).length, 1);
+    const pinned = withTemporaryPricingSnapshot(saved.pricing, () => MasterPricingEngine.calculateCompleteProposal(revisionProposal));
+    assert.equal(MasterPricingEngine.calculateCompleteProposal(revisionProposal).costBreakdown.tileLabor.filter(isCategoryAdjustmentItem).length, 1);
+    return pinned;
+  });
+  assert.equal(loadedAgain.costBreakdown.tileLabor.filter(isCategoryAdjustmentItem).length, 0);
+  assert.equal(loadedAgain.totalCost, originalTierCost);
+}
+cache.delete(originalCacheKey);
+await assert.rejects(loadPricingSnapshotForExistingProposal('revision-test', 'model'), /original pricing revision/);
+await assert.rejects(loadPricingSnapshotForExistingProposal('revision-test', 'model', undefined, 'normal', 'missing-revision'), /saved pricing revision/);
 console.log(`Category adjustments verified: ${CATEGORY_ADJUSTMENT_CATEGORIES.length * 8} pricing cases, numeric boundaries, applicability, defaults, Off-Contract, once-only rows, and historical/franchise isolation.`);

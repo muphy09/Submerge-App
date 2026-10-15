@@ -56,9 +56,9 @@ export const getDeckingTypeFullLabel = (deckingType?: string | null): string => 
   );
 };
 
-export const getAdditionalDeckingOptions = (): AdditionalDeckingOption[] => {
+export const getAdditionalDeckingOptions = (tileCoping = pricingData.tileCoping): AdditionalDeckingOption[] => {
   const rawOptions =
-    (pricingData.tileCoping?.decking?.additionalOptions || []) as Array<Record<string, unknown>>;
+    (tileCoping?.decking?.additionalOptions || []) as Array<Record<string, unknown>>;
   if (!Array.isArray(rawOptions)) return [];
 
   const seenIds = new Set<string>();

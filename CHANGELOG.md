@@ -9,7 +9,9 @@
         - Off Contract work is *not* included
     - Adjustments show a readable explanation of when they apply
     - Category Adjustments appear as line items in the COGS Breakdown in their respective category
-
+### Customer Cost Breakdown
+- Manual adjustments now update in realtime without hitting 'Save Changes'
+    - *You still need to use 'Save Changes' to save the adjustment made!*
 -----
 ## [3.4.4] - 10/12/26
 ### Materials and Equipment Order Form

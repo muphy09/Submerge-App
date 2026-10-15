@@ -1002,13 +1002,17 @@ export async function loadPricingSnapshotForExistingProposal(
       resolvedModelId
     );
   }
-  return loadPricingSnapshotForFranchise(
+  const snapshot = await loadPricingSnapshotForFranchise(
     franchiseId,
     resolvedModelId || undefined,
     pricingModelFranchiseId,
     pricingTierId,
     resolvedRevisionId
   );
+  if (!resolvedRevisionId && snapshot.pricing.categoryAdjustments?.length) {
+    throw new Error('The proposal\'s original pricing revision could not be verified. Reconnect before editing this proposal.');
+  }
+  return snapshot;
 }
 
 export function withTemporaryPricingSnapshot<T>(snapshot: PricingData, callback: () => T): T {

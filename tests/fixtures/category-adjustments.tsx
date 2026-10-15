@@ -40,13 +40,15 @@ async function mount() {
     { id: 'custom-cost', title: 'Site cost credit', category: 'customFeatures', amount: -50, basis: 'cogs', mode: 'static' },
   ]);
   const result = (window as any).categoryAdjustmentFixture.calculate(100);
+  const baseline = store.withTemporaryPricingSnapshot({ ...store.getPricingDataSnapshot(), categoryAdjustments: [] }, () => (window as any).categoryAdjustmentFixture.calculate(100));
+  (window as any).categoryAdjustmentReport = { result, baseline };
   const proposal = { ...getDefaultProposal(), customerInfo: { ...getDefaultProposal().customerInfo, customerName: 'Category Adjustment Customer' }, ...result };
   Object.assign(proposal.poolSpecs, { perimeter: 90, surfaceArea: 450, maxLength: 30, maxWidth: 15, shallowDepth: 3.5, endDepth: 6 });
   proposal.plumbing.runs.gasRun = 100;
   const extraBuckets: Record<string, string> = { shotcrete: 'shotcreteMaterial', tile: 'tileMaterial', copingDecking: 'copingDeckingMaterial', stoneRockwork: 'stoneRockworkMaterial' };
   const categories = helpers.CATEGORY_ADJUSTMENT_CATEGORIES.map(c => ({ name: c.label, items: [...result.costBreakdown[c.bucket], ...(result.costBreakdown[extraBuckets[c.id]] || [])] }));
   root.render(view === 'cogs' ? <CostBreakdownPage proposal={proposal} onClose={() => undefined} />
-    : view === 'customer' ? <CostBreakdownView costBreakdown={result.costBreakdown} customerName="Category Adjustment Customer" proposal={proposal} pricing={result.pricing} showWarranty={false} showZoomControl={false} />
+    : view === 'customer' || view === 'customer-export-layout' ? <CostBreakdownView costBreakdown={result.costBreakdown} customerName="Category Adjustment Customer" proposal={proposal} pricing={result.pricing} showWarranty={false} showZoomControl={false} exportLayout={view === 'customer-export-layout'} />
     : view === 'export' ? <exports.BreakdownCostExportPage costBreakdown={result.costBreakdown} customerName="Category Adjustment Customer" proposal={proposal} pricing={result.pricing} />
     : <CogsReportDocument categories={categories} customerName="Category Adjustment Customer" totalValue={result.pricing.totalCOGS} mode="export" />);
 }

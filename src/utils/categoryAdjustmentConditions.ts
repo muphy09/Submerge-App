@@ -6,6 +6,9 @@ import { isBronzeProposal } from '../services/pricingTiers';
 import { flattenWaterFeatures, getWaterFeatureRunEntries } from './waterFeatureCost';
 import { getMasonryFacingOptions } from './masonryFacing';
 import { normalizeEquipmentPackageOptions, packageSupportsSpa, packageAllowsWaterFeatures } from './equipmentPackages';
+import { getAdditionalDeckingOptions, getAdditionalDeckingSelections, getResolvedProposalPrimaryDeckingArea } from './decking';
+import { getCustomFeatureTotal, hasCustomFeatureContent } from './customFeatures';
+import { getCustomOptionTotal } from './customOptions';
 
 type Context = Partial<Proposal>;
 export interface ConditionTarget {
@@ -49,7 +52,7 @@ export function getCategoryConditionTargets(pricing: any): ConditionTarget[] {
   for (const [key, label, unit] of [['perimeter', 'Perimeter', 'feet'], ['surfaceArea', 'Surface Area', 'sqft'], ['shallowDepth', 'Shallow Depth', 'feet'], ['endDepth', 'End Depth', 'feet'], ['maxWidth', 'Max Width', 'feet'], ['maxLength', 'Max Length', 'feet'], ['totalStepsAndBench', 'Total Steps & Bench', 'feet']] as const) {
     num(`pool.${key}`, [S[0], 'Pool Dimensions', label], p => p.poolSpecs?.[key], unit);
   }
-  num('pool.deckingArea', [S[0], 'Pool Dimensions', 'Decking Area'], p => p.poolSpecs?.deckingArea, 'sqft', p => !p.tileCopingDecking?.isDeckingOffContract);
+  num('pool.deckingArea', [S[0], 'Pool Dimensions', 'Decking Area'], p => getResolvedProposalPrimaryDeckingArea(p), 'sqft', p => !p.tileCopingDecking?.isDeckingOffContract);
   choice('pool.fiberglassSize', [S[0], 'Pool Dimensions', 'Fiberglass Size'], p => p.poolSpecs?.fiberglassSize, fixed(['small', 'medium', 'large']), fiberglass);
   const models = Object.values(pricing.fiberglass?.poolModels || {}).flat() as any[];
   choice('pool.fiberglassModel', [S[0], 'Pool Dimensions', 'Fiberglass Model'], p => p.poolSpecs?.fiberglassModelName, models.map(e => ({ value: e.name, label: e.name })), fiberglass);
@@ -68,12 +71,12 @@ export function getCategoryConditionTargets(pricing: any): ConditionTarget[] {
     }, 'feet', gate);
     for (const [field, name, unit] of [['perimeter', 'Perimeter', 'feet'], ['surfaceArea', 'Surface Area', 'sqft'], ['gallons', 'Gallons', 'gallons']] as const) num(`${key}.${field}`, [S[0], parent, label, name], p => p.poolSpecs?.[key]?.[field], unit, gate);
   }
-  for (const [key, label] of [['spaLength', 'Spa Length'], ['spaWidth', 'Spa Width'], ['spaPerimeter', 'Spa Perimeter']] as const) num(`spa.${key}`, [S[0], 'Spa', label], p => p.poolSpecs?.[key], 'feet', spa);
+  for (const [key, label] of [['spaLength', 'Spa Length'], ['spaWidth', 'Spa Width'], ['spaPerimeter', 'Spa Perimeter']] as const) num(`spa.${key}`, [S[0], 'Spa', label], p => p.poolSpecs?.[key], 'feet', p => p.poolSpecs?.spaType === 'gunite');
   choice('spa.shape', [S[0], 'Spa', 'Spa Shape'], p => p.poolSpecs?.spaShape, fixed(['round', 'square']), p => spa(p) && p.poolSpecs?.spaType === 'gunite');
   flag('spa.raised', [S[0], 'Spa', 'Raised Spa'], p => p.poolSpecs?.isRaisedSpa, p => spa(p) && p.poolSpecs?.spaType === 'gunite');
-  choice('spa.facing', [S[0], 'Spa', 'Raised Spa Facing'], p => p.poolSpecs?.raisedSpaFacing, options(pricing.masonry?.raisedSpaFacingOptions), p => spa(p) && !!p.poolSpecs?.isRaisedSpa);
+  choice('spa.facing', [S[0], 'Spa', 'Raised Spa Facing'], p => p.poolSpecs?.raisedSpaFacing, options(pricing.masonry?.raisedSpaFacingOptions), p => p.poolSpecs?.spaType === 'gunite' && !!p.poolSpecs?.isRaisedSpa);
   flag('spa.spillover', [S[0], 'Spa', 'Spillover'], p => p.poolSpecs?.hasSpillover, spa);
-  num('spa.doubleBullnose', [S[0], 'Spa', 'Double Bullnose'], p => p.tileCopingDecking?.doubleBullnoseLnft, 'feet', p => spa(p) && p.poolSpecs?.spaType === 'gunite');
+  num('spa.doubleBullnose', [S[0], 'Spa', 'Double Bullnose'], p => p.tileCopingDecking?.doubleBullnoseLnft, 'feet', p => p.poolSpecs?.spaType === 'gunite' && positive(p.poolSpecs.spaLength) && positive(p.poolSpecs.spaWidth));
   for (const [key, label] of [['hasTanningShelf', 'Tanning Shelf'], ['hasSiltFence', 'Silt Fence'], ['hasAutomaticCover', 'Automatic Cover']] as const) flag(`pool.${key}`, [S[0], 'Additional Options', label], p => p.poolSpecs?.[key], key === 'hasTanningShelf' ? shotcrete : undefined);
   num('pool.coverCost', [S[0], 'Additional Options', 'Automatic Cover Manufacturer Cost'], p => p.poolSpecs?.automaticCoverManufacturerCost, 'dollars', p => !!p.poolSpecs?.hasAutomaticCover);
   num('pool.travel', [S[0], 'Travel', 'Travel Distance'], p => p.poolSpecs?.travelDistance, 'miles');
@@ -104,22 +107,23 @@ export function getCategoryConditionTargets(pricing: any): ConditionTarget[] {
   choice('tile.option', [S[4], 'Tile', 'Tile Option'], p => getTileSelectionId(p.tileCopingDecking), options(getTileOptions(pricing.tileCoping)), shotcrete);
   num('tile.extra', [S[4], 'Tile', 'Additional Tile Length'], p => p.tileCopingDecking?.additionalTileLength, 'feet', shotcrete);
   choice('tile.trim', [S[4], 'Tile', 'Trim Tile on Steps & Bench'], p => getTrimTileSelectionId(p.tileCopingDecking), options(getTrimTileOptions(pricing.tileCoping)), shotcrete);
-  const coping = (p: Context) => present(p.tileCopingDecking?.copingType);
+  const coping = (p: Context) => getCopingOptions(pricing.tileCoping).some(option => option.id === normalizeCopingOptionId(p.tileCopingDecking?.copingType));
   choice('coping.type', [S[4], 'Coping', 'Coping Type'], p => normalizeCopingOptionId(p.tileCopingDecking?.copingType), options(getCopingOptions(pricing.tileCoping)), coping);
   choice('coping.size', [S[4], 'Coping', 'Coping Size'], p => p.tileCopingDecking?.copingSize, fixed(['12x12', '12x24', '16x16']), coping);
-  num('coping.bullnose', [S[4], 'Coping', 'Bullnose'], p => p.tileCopingDecking?.bullnoseLnft, 'feet', coping);
-  num('coping.spillway', [S[4], 'Coping', 'Spillway Length'], p => p.tileCopingDecking?.spillwayLnft, 'feet', coping);
+  num('coping.bullnose', [S[4], 'Coping', 'Bullnose'], p => p.tileCopingDecking?.bullnoseLnft, 'feet');
+  num('coping.spillway', [S[4], 'Coping', 'Spillway Length'], p => p.tileCopingDecking?.spillwayLnft, 'feet');
   const decks = (p: Context, kind: 'all' | 'primary' | 'additional' = 'all') => {
     const t = p.tileCopingDecking;
     if (!t) return [];
-    const extra = t.additionalDeckingSelections?.length ? t.additionalDeckingSelections : [{ deckingType: t.additionalDeckingType, area: t.additionalDeckingArea, isOffContract: t.isAdditionalDeckingOffContract }];
-    const primary = [{ deckingType: t.deckingType, area: t.deckingArea, isOffContract: t.isDeckingOffContract }];
+    const extra = getAdditionalDeckingSelections(t);
+    const primary = [{ deckingType: t.deckingType, area: getResolvedProposalPrimaryDeckingArea(p), isOffContract: t.isDeckingOffContract }];
     return (kind === 'primary' ? primary : kind === 'additional' ? extra : [...primary, ...extra]).filter(d => !d.isOffContract && present(d.deckingType) && positive(d.area));
   };
   choice('decking.type', [S[4], 'Decking', 'Decking Type'], p => decks(p, 'primary').map(d => normalizeDeckingOptionId(d.deckingType)), options(getDeckingOptions(pricing.tileCoping)));
   num('decking.area', [S[4], 'Decking', 'Total Included Decking Area'], p => decks(p).reduce((n, d) => n + Number(d.area), 0), 'sqft');
   num('decking.primaryArea', [S[4], 'Decking', 'Primary Decking SQFT'], p => decks(p, 'primary').reduce((n, d) => n + Number(d.area), 0), 'sqft');
-  choice('decking.additionalType', [S[4], 'Decking', 'Additional Decking'], p => decks(p, 'additional').map(d => normalizeDeckingOptionId(d.deckingType)), options(getDeckingOptions(pricing.tileCoping)));
+  const additionalDeckOptions = [...options(getDeckingOptions(pricing.tileCoping)), ...getAdditionalDeckingOptions(pricing.tileCoping).map(option => ({ value: option.id, label: option.label }))];
+  choice('decking.additionalType', [S[4], 'Decking', 'Additional Decking'], p => decks(p, 'additional').map(d => additionalDeckOptions.some(option => option.value === d.deckingType) ? d.deckingType : normalizeDeckingOptionId(d.deckingType)), additionalDeckOptions.filter((option, index, entries) => entries.findIndex(e => e.value === option.value) === index));
   num('decking.additionalArea', [S[4], 'Decking', 'Additional Decking SQFT of Any Entry'], p => decks(p, 'additional').map(d => d.area), 'sqft', p => decks(p, 'additional').length > 0);
   num('decking.steps', [S[4], 'Decking', 'Concrete Steps Length'], p => p.tileCopingDecking?.concreteStepsLength, 'feet', p => !p.tileCopingDecking?.isDeckingOffContract);
   flag('decking.grading', [S[4], 'Rough Grading'], p => p.tileCopingDecking?.hasRoughGrading);
@@ -158,16 +162,17 @@ export function getCategoryConditionTargets(pricing: any): ConditionTarget[] {
   num('equipment.autoFillElectricRun', [S[6], 'Auto-fill', 'Conduit Run'], p => p.plumbing?.runs?.autoFillElectricRun, 'feet', p => realEquipment(p.equipment?.autoFillSystem) && Number(p.equipment?.autoFillSystemQuantity ?? 1) > 0 && !!pricing.equipment?.autoFillSystem?.find((e: any) => e.name === p.equipment?.autoFillSystem?.name)?.requiresElectricRun);
 
   const waterOptions = flattenWaterFeatures(pricing.waterFeatures);
-  choice('waterFeatures.option', [S[7], 'Selected Water Feature'], p => (p.waterFeatures?.selections || []).filter(e => positive(e.quantity)).map(e => e.featureId), options(waterOptions));
-  num('waterFeatures.quantity', [S[7], 'Total Quantity'], p => (p.waterFeatures?.selections || []).reduce((n, e) => n + Math.max(0, e.quantity || 0), 0), 'features');
-  flag('waterFeatures.actuator', [S[7], 'Valve Actuator'], p => (p.waterFeatures?.selections || []).some(e => positive(e.quantity) && e.includeValveActuator));
+  const waterEntries = (p: Context) => getWaterFeatureRunEntries(p.waterFeatures?.selections, p.plumbing?.runs, pricing.waterFeatures).filter(e => e.feature && positive(e.selection.quantity));
+  choice('waterFeatures.option', [S[7], 'Selected Water Feature'], p => waterEntries(p).map(e => e.feature!.id), options(waterOptions));
+  num('waterFeatures.quantity', [S[7], 'Total Quantity'], p => waterEntries(p).reduce((n, e) => n + e.selection.quantity, 0), 'features');
+  flag('waterFeatures.actuator', [S[7], 'Valve Actuator'], p => waterEntries(p).some(e => e.selection.includeValveActuator !== false));
   for (const category of [...new Set(waterOptions.map(e => e.category))]) {
-    const entries = (p: Context) => getWaterFeatureRunEntries(p.waterFeatures?.selections, p.plumbing?.runs, pricing.waterFeatures).filter(e => e.feature?.category === category && positive(e.selection.quantity));
+    const entries = (p: Context) => waterEntries(p).filter(e => e.feature?.category === category);
     const id = `waterFeatures.category:${category}`;
-    choice(`${id}.option`, [S[7], category, 'Selected Option'], p => entries(p).map(e => e.selection.featureId), options(waterOptions.filter(e => e.category === category)));
+    choice(`${id}.option`, [S[7], category, 'Selected Option'], p => entries(p).map(e => e.feature!.id), options(waterOptions.filter(e => e.category === category)));
     num(`${id}.quantity`, [S[7], category, 'Total Quantity'], p => entries(p).reduce((n, e) => n + e.selection.quantity, 0), 'features');
     num(`${id}.run`, [S[7], category, 'Run Length of Any Entry'], p => entries(p).map(e => e.run), 'feet', p => entries(p).length > 0);
-    flag(`${id}.actuator`, [S[7], category, 'Valve Actuator'], p => entries(p).some(e => e.selection.includeValveActuator));
+    flag(`${id}.actuator`, [S[7], category, 'Valve Actuator'], p => entries(p).some(e => e.selection.includeValveActuator !== false));
   }
   choice('interior.finish', [S[8], 'Finish Type', 'Finish'], p => {
     const finishes = pricing.interiorFinish?.finishes || [];
@@ -181,16 +186,17 @@ export function getCategoryConditionTargets(pricing: any): ConditionTarget[] {
   choice('custom.grouped', [S[9], 'Grouped Features', 'Selected Feature'], p => features(p).filter(e => e.source === 'grouped').map(e => e.groupedOptionId), options(groupedOptions));
   num('custom.groupedSqft', [S[9], 'Grouped Features', 'Square Footage of Any Entry'], p => features(p).filter(e => e.source === 'grouped' && e.groupedPricingMode === 'sqft').map(e => e.groupedSqft || 0), 'sqft', p => features(p).some(e => e.source === 'grouped' && e.groupedPricingMode === 'sqft'));
   num('custom.addonQuantity', [S[9], 'Grouped Features', 'Additional Option Quantity'], p => features(p).filter(e => e.groupedAddonOptionId).map(e => e.groupedAddonQuantity || 0), 'items', p => features(p).some(e => e.groupedAddonOptionId));
-  flag('custom.manual', [S[9], 'Manual Custom Features'], p => features(p).some(e => e.source !== 'grouped' && (e.name?.trim() || e.description?.trim() || Number(e.totalCost) !== 0)));
+  const manualFeatures = (p: Context) => features(p).filter(e => e.source !== 'grouped' && hasCustomFeatureContent(e));
+  flag('custom.manual', [S[9], 'Manual Custom Features'], p => manualFeatures(p).length > 0);
   for (const group of [...new Set<string>(groupedOptions.map((e: any) => e.subcategory || 'Other'))]) {
     const entries = groupedOptions.filter((e: any) => (e.subcategory || 'Other') === group);
     choice(`custom.group:${group}`, [S[9], 'Grouped Features', group], p => features(p).filter(e => e.source === 'grouped').map(e => e.groupedOptionId), options(entries));
   }
-  for (const [key, label] of [['laborCost', 'Labor Cost of Any Entry'], ['materialCost', 'Material Cost of Any Entry'], ['totalCost', 'Total Cost of Any Entry']] as const) num(`custom.manual.${key}`, [S[9], 'Manual Custom Features', label], p => features(p).filter(e => e.source !== 'grouped').map(e => e[key]), 'dollars', p => features(p).some(e => e.source !== 'grouped'));
+  for (const [key, label] of [['laborCost', 'Labor Cost of Any Entry'], ['materialCost', 'Material Cost of Any Entry'], ['totalCost', 'Total Cost of Any Entry']] as const) num(`custom.manual.${key}`, [S[9], 'Manual Custom Features', label], p => manualFeatures(p).map(e => key === 'totalCost' ? getCustomFeatureTotal(e) : e[key]), 'dollars', p => manualFeatures(p).length > 0);
   for (const [section, key] of [[S[1], 'excavation'], [S[2], 'plumbing'], [S[3], 'electrical'], [S[4], 'tileCopingDecking'], [S[5], 'drainage'], [S[6], 'equipment'], [S[7], 'waterFeatures'], [S[8], 'interiorFinish']] as const) {
-    const entries = (p: Context) => onContractCustom((p[key] as any)?.customOptions).filter(e => e.name?.trim() || e.description?.trim() || Number(e.totalCost) !== 0);
+    const entries = (p: Context) => onContractCustom((p[key] as any)?.customOptions).filter(e => e.name?.trim() || e.description?.trim() || getCustomOptionTotal(e) !== 0);
     flag(`${key}.customOptions`, [section, 'Custom Options'], p => entries(p).length > 0);
-    for (const [field, label] of [['laborCost', 'Labor Cost of Any Entry'], ['materialCost', 'Material Cost of Any Entry'], ['totalCost', 'Total Cost of Any Entry']] as const) num(`${key}.customOptions.${field}`, [section, 'Custom Options', label], p => entries(p).map(e => e[field]), 'dollars', p => entries(p).length > 0);
+    for (const [field, label] of [['laborCost', 'Labor Cost of Any Entry'], ['materialCost', 'Material Cost of Any Entry'], ['totalCost', 'Total Cost of Any Entry']] as const) num(`${key}.customOptions.${field}`, [section, 'Custom Options', label], p => entries(p).map(e => field === 'totalCost' ? getCustomOptionTotal(e) : e[field]), 'dollars', p => entries(p).length > 0);
   }
 
   const packages = normalizeEquipmentPackageOptions(pricing.equipment?.packageOptions);

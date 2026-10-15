@@ -6,7 +6,6 @@ import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay'
 import { hasIncludedDecking } from '../utils/decking';
 import { resolveFeenstraMay2026CustomerBreakdown } from '../services/legacy/feenstraMay2026CustomerBreakdown';
 import './CostBreakdownView.css';
-import { categoryAdjustmentSummary } from '../utils/categoryAdjustments';
 
 interface Props {
   costBreakdown: CostBreakdown;
@@ -459,7 +458,7 @@ function CostBreakdownView({
     transformOrigin: 'top center',
   };
   const exportSummaryRows = [
-    ...visibleRetailRows.map((row) => ({ label: `${row.label}:\n${categoryAdjustmentSummary(row.items, safeAdjustedRetailFactor).join('\n')}`.trim(), value: formatCurrency(row.retail) })),
+    ...visibleRetailRows.map((row) => ({ label: `${row.label}:`, value: formatCurrency(row.retail) })),
     ...(hasLegacyInclusiveRetail && roundToTwo(offContractTotal) !== 0
       ? [{ label: 'Off Contract Items:', value: formatCurrency(offContractTotal) }]
       : []),
@@ -515,7 +514,7 @@ function CostBreakdownView({
             <div className="summary-grid">
               {visibleRetailRows.map((row) => (
                 <div className="summary-row" key={row.label}>
-                  <span>{row.label}:{categoryAdjustmentSummary(row.items, safeAdjustedRetailFactor).map(detail => <small className="category-adjustment-customer-detail" key={detail}>{detail}</small>)}</span>
+                  <span>{row.label}:</span>
                   <span>{formatCurrency(row.retail)}</span>
                 </div>
               ))}

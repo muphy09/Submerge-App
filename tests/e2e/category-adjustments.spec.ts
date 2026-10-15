@@ -142,13 +142,38 @@ test('COGS and retail views keep the discount in its category and outside COGS',
   await tile.screenshot({ path: testInfo.outputPath('tile-breakdown.png') });
 });
 
-for (const view of ['customer', 'export', 'cogs-export']) test(`${view} shows adjustment titles and the retail-only discount`, async ({ page }, testInfo) => {
+test('detailed COGS export retains category adjustment line items', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1500, height: 1100 });
-  await page.goto(`${url}?view=${view}`);
+  await page.goto(`${url}?view=cogs-export`);
   await expect(page.getByText(/Tile setup/).first()).toBeVisible();
   await expect(page.getByText(/Tile courtesy discount/).first()).toBeVisible();
   await expect(page.getByText(/Site cost credit/).first()).toBeVisible();
-  if (view === 'cogs-export') await expect(page.getByText('Retail only — excluded from COGS', { exact: true })).toBeVisible();
-  else await expect(page.getByText('Includes Tile courtesy discount: -$125.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('Retail only — excluded from COGS', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('cogs-export.png'), fullPage: true });
+});
+
+for (const view of ['customer', 'customer-export-layout', 'export']) test(`${view} includes adjustments in category totals without showing their names`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1500, height: 1100 });
+  await page.goto(`${url}?view=${view}`);
+  await expect(page.getByText('RETAIL PRICE:', { exact: true })).toBeVisible();
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const expected = await page.evaluate(() => {
+    const { result, baseline } = (window as any).categoryAdjustmentReport;
+    // All extra cost belongs to Tile (+800) and Custom Features (-50).
+    // Retail-only -125 stays in Tile and never enters the cost basis.
+    const factor = (result.pricing.retailPrice + 125) / result.pricing.totalCostsBeforeOverhead;
+    return {
+      tile: Math.round(((baseline.costBreakdown.totals.tileLabor + 800) * factor - 125) * 100) / 100,
+      total: result.pricing.retailPrice,
+    };
+  });
+  const rows = view === 'export' ? page.locator('.breakdown-export-row') : view === 'customer-export-layout' ? page.locator('.export-summary-table tr') : page.locator('.summary-grid > .summary-row');
+  const tile = rows.filter({ hasText: /^Tile Labor:/ });
+  await expect(tile).toContainText(formatCurrency(expected.tile));
+  for (const title of ['Tile setup', 'Tile courtesy discount', 'Site cost credit']) await expect(page.getByText(new RegExp(title))).toHaveCount(0);
+  await expect(page.getByText(/Includes /)).toHaveCount(0);
+  const values = view === 'export' ? page.locator('.breakdown-export-row-value') : view === 'customer-export-layout' ? page.locator('.export-summary-value') : page.locator('.summary-grid > .summary-row > span:last-child');
+  const displayedTotal = await values.evaluateAll(elements => elements.reduce((sum, element) => sum + (Number(element.textContent?.replace(/[^\d.-]/g, '')) || 0), 0));
+  expect(Math.round(displayedTotal * 100) / 100).toBe(expected.total);
   await page.screenshot({ path: testInfo.outputPath(`${view}.png`), fullPage: true });
 });

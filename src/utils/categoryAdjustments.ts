@@ -30,7 +30,7 @@ export function getConditionBillingCategory(target?: ConditionTarget): Adjustmen
       if (target.id === 'pool.hasAutomaticCover' || target.id === 'pool.coverCost') return 'customFeatures';
       if (target.id === 'pool.deckingArea') return 'copingDecking';
       if (target.id === 'spa.facing') return 'stoneRockwork';
-      if (target.id === 'spa.doubleBullnose') return 'copingDecking';
+      if (target.id === 'spa.doubleBullnose') return 'stoneRockwork';
       if (target.id.startsWith('fiberglass') || target.id.startsWith('pool.fiberglass') || target.id === 'pool.crane' || target.id === 'spa.model' || target.id === 'spa.crane') return 'fiberglassShell';
       return 'plansAndEngineering';
     case 'Excavation':
@@ -40,6 +40,7 @@ export function getConditionBillingCategory(target?: ConditionTarget): Adjustmen
     case 'Plumbing': return 'plumbing';
     case 'Gas / Electrical': return group === 'Gas Run' ? 'gas' : 'electrical';
     case 'Tile / Coping / Decking':
+      if (target.id === 'coping.bullnose') return 'stoneRockwork';
       if (group === 'Coping' || group === 'Decking') return 'copingDecking';
       if (group === 'Rough Grading') return 'cleanup';
       return 'tile';
@@ -52,14 +53,6 @@ export function getConditionBillingCategory(target?: ConditionTarget): Adjustmen
     case 'Custom Features': return 'customFeatures';
     default: return '';
   }
-}
-
-export function categoryAdjustmentSummary(items: CostLineItem[], retailFactor: number): string[] {
-  return items.filter(isCategoryAdjustmentItem).map(item => {
-    const amount = isRetailCategoryAdjustment(item) ? Number(item.details?.adjustmentAmount) : item.total * retailFactor;
-    const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.round(amount * 100) / 100);
-    return `Includes ${item.description}: ${formatted}`;
-  });
 }
 
 export function validateCategoryAdjustments(input: unknown, pricing: any, cachedTargets?: ConditionTarget[]): string | null {
