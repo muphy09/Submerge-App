@@ -9,6 +9,9 @@ import { getDefaultProposal } from '../../src/utils/proposalDefaults';
 import { checkProposalContractRevision, adoptContractRevision, declineContractRevision, prefetchWestContractRevisions } from '../../src/services/contractTemplateRegistry';
 import { getEditableContractFields } from '../../src/services/contractGenerator';
 import { getActivePricingModelMeta } from '../../src/services/pricingDataStore';
+import { getPricingDataSnapshot } from '../../src/services/pricingDataStore';
+import MasterPricingEngine from '../../src/services/masterPricingEngine';
+import { calculateProposalRetailAdjustmentDraft } from '../../src/utils/proposalPricingPersistence';
 import '../../src/index.css';
 
 const fixture = (window as any).contractFixture;
@@ -22,6 +25,25 @@ const proposal = {
   versions: [],
 };
 fixture.proposal = proposal;
+if (fixture.retailDraft) {
+  proposal.excavation.customOptions = [{ name: 'Preview baseline', description: 'Isolated pricing test', laborCost: 30000, materialCost: 0, totalCost: 30000, isOffContract: false }];
+  Object.assign(proposal, MasterPricingEngine.calculateCompleteProposal(proposal));
+  if (fixture.retailDraft === 'historical') {
+    delete (proposal as any).pricingEngineVersion;
+    proposal.pricing.retailPrice += 500;
+    proposal.totalCost = proposal.pricing.retailPrice;
+    proposal.pricing = calculateProposalRetailAdjustmentDraft({
+      proposal, retailAdjustments: proposal.retailAdjustments,
+      pricingSnapshot: getPricingDataSnapshot(), mergeWithDefaults: (value) => value,
+    }).pricing;
+  }
+}
+fixture.expectedRetailDraft = (amount: number) => calculateProposalRetailAdjustmentDraft({
+  proposal: structuredClone(storedProposals.get(proposal.proposalNumber)),
+  retailAdjustments: [{ name: '', amount }, { name: '', amount: 0 }],
+  pricingSnapshot: getPricingDataSnapshot(),
+  mergeWithDefaults: (value) => value,
+});
 if (fixture.multiVersionSubmittedOffContract) {
   // Synthetic regression modeled on a submitted West proposal with seven versions.
   Object.assign(proposal, {

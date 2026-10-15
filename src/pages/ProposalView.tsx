@@ -111,7 +111,7 @@ import {
   applyHistoricalPricingProtection,
   buildHistoricalPricingReview,
 } from '../utils/pricingEngineCompatibility';
-import { recalculateProposalForRetailAdjustmentSave } from '../utils/proposalPricingPersistence';
+import { calculateProposalRetailAdjustmentDraft } from '../utils/proposalPricingPersistence';
 import { calculateCustomerSavingsSummary } from '../utils/proposalSavings';
 import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
 import {
@@ -1049,6 +1049,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const merged = {
       ...(base as Proposal),
       ...input,
+      // Missing engine metadata identifies historical proposals. New-proposal
+      // defaults must not make an older saved version look freshly calculated.
+      pricingEngineVersion: input.pricingEngineVersion,
+      historicalPricingAdjustment: input.historicalPricingAdjustment,
       customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
       poolSpecs,
       excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
@@ -2489,12 +2493,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         if (!syncMeta?.pricingSnapshot || syncMeta.priceModelStatus === 'removed') {
           throw new Error('The pricing revision for this proposal version could not be loaded.');
         }
-        updatedTargetVersion = recalculateProposalForRetailAdjustmentSave({
-          proposal: updatedTargetVersion,
+        updatedTargetVersion = calculateProposalRetailAdjustmentDraft({
+          proposal: targetVersion,
           retailAdjustments: savedRetailAdjustments,
           pricingSnapshot: syncMeta.pricingSnapshot,
           mergeWithDefaults: mergeProposalWithDefaults,
         });
+        updatedTargetVersion.warrantySections = savedWarrantySections;
       }
 
       const updatedTimestamp = new Date().toISOString();
@@ -2724,12 +2729,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleBreakdownPrint = async () => {
-    if (breakdownExporting || breakdownSaving) return;
+    if (breakdownExporting || breakdownSaving || customerBreakdownPreviewError) return;
     setBreakdownExportOpen(false);
-    if (customerBreakdownVersionId) {
-      const saveSucceeded = await handleSaveCustomerBreakdownChanges();
-      if (!saveSucceeded) return;
-    }
     const filename = getBreakdownExportFilename();
     const previewMeta = getBreakdownPrintPreviewMeta();
     const previewWindow = openBreakdownPrintPreviewWindow(filename, previewMeta);
@@ -2802,11 +2803,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const exportBreakdownPdf = async () => {
-    if (breakdownSaving) return;
-    if (customerBreakdownVersionId) {
-      const saveSucceeded = await handleSaveCustomerBreakdownChanges();
-      if (!saveSucceeded) return;
-    }
+    if (breakdownSaving || customerBreakdownPreviewError) return;
     const filename = getBreakdownExportFilename();
     const previewMeta = getBreakdownPrintPreviewMeta();
     setBreakdownExporting(true);
@@ -4130,15 +4127,43 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : customerBreakdownMode === 'warranty'
       ? customerWarrantyBreakdownDirty
       : customerRetailBreakdownDirty || customerWarrantyBreakdownDirty;
-  const customerBreakdownPreviewProposal =
-    customerModalView && customerBreakdownEditor &&
-    customerBreakdownEditor.versionId === (customerModalView.proposal.versionId || 'original')
-      ? {
-          ...customerModalView.proposal,
-          retailAdjustments: customerBreakdownEditor.draftRetailAdjustments,
-          warrantySections: customerBreakdownEditor.draftWarrantySections,
+  let customerBreakdownPreviewProposal = customerModalView?.proposal;
+  let customerBreakdownPreviewError: string | null = null;
+  if (customerModalView && customerBreakdownEditor &&
+      customerBreakdownEditor.versionId === (customerModalView.proposal.versionId || 'original')) {
+    // Use the saved version, not the display model (which may already contain
+    // historical protection), as the baseline shared with Save Changes.
+    const baseline = allVersionsForRender.find(
+      (entry) => (entry.versionId || 'original') === customerBreakdownEditor.versionId
+    );
+    customerBreakdownPreviewProposal = {
+      ...customerModalView.proposal,
+      warrantySections: customerBreakdownEditor.draftWarrantySections,
+    };
+    if (customerRetailBreakdownDirty && customerBreakdownMode !== 'warranty' && canEditCustomerBreakdownVersion) {
+      try {
+        const syncMeta = getCachedVersionSyncMeta(baseline);
+        if (!baseline || !syncMeta?.pricingSnapshot || syncMeta.priceModelStatus === 'removed') {
+          throw new Error('The saved pricing revision is unavailable.');
         }
-      : customerModalView?.proposal;
+        customerBreakdownPreviewProposal = {
+          ...calculateProposalRetailAdjustmentDraft({
+            proposal: baseline,
+            retailAdjustments: customerBreakdownEditor.draftRetailAdjustments,
+            pricingSnapshot: syncMeta.pricingSnapshot,
+            mergeWithDefaults: mergeProposalWithDefaults,
+          }),
+          warrantySections: customerBreakdownEditor.draftWarrantySections,
+        };
+      } catch {
+        customerBreakdownPreviewError = 'Live totals could not be calculated from this proposal’s saved pricing revision. Changes have not been saved.';
+        customerBreakdownPreviewProposal = {
+          ...customerBreakdownPreviewProposal,
+          retailAdjustments: customerBreakdownEditor.draftRetailAdjustments,
+        };
+      }
+    }
+  }
   const customerBreakdownPreviewView = customerBreakdownPreviewProposal
     ? buildViewModel(customerBreakdownPreviewProposal as Proposal)
     : customerModalView;
@@ -5761,7 +5786,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                       type="button"
                       onClick={handleCustomerBreakdownSaveClick}
                       disabled={
-                        !canEditCustomerBreakdownVersion ||
+                        !canEditCustomerBreakdownVersion || Boolean(customerBreakdownPreviewError) ||
                         !customerBreakdownDirty ||
                         breakdownSaving ||
                         breakdownExporting
@@ -5786,6 +5811,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 </div>
               </div>
               <div className="modal-body-scroll">
+                {customerBreakdownPreviewError && <div role="alert">{customerBreakdownPreviewError}</div>}
                 {customerBreakdownMode === 'warranty' ? (
                   <div className="customer-warranty-modal-body">
                     <SubmergeAdvantageWarranty

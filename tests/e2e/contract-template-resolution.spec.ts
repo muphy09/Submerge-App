@@ -45,10 +45,10 @@ const westRevisions = westTypes.flatMap(([id, , , latest]) =>
   })
 );
 
-async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bookkeeper' | 'designer' | 'master'; ownsProposal?: boolean; newerPricing?: boolean; edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string; multiVersionSubmittedOffContract?: boolean; newTreeTimingRevision?: boolean } = {}) {
+async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bookkeeper' | 'designer' | 'master'; ownsProposal?: boolean; newerPricing?: boolean; edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string; multiVersionSubmittedOffContract?: boolean; newTreeTimingRevision?: boolean; retailDraft?: string } = {}) {
   const errors: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted, orderPackageId, multiVersionSubmittedOffContract, viewerRole, ownsProposal }) => {
+  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted, orderPackageId, multiVersionSubmittedOffContract, viewerRole, ownsProposal, retailDraft }) => {
     window.__APP_ENV__ = {
       VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
       VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder', VITE_SUPABASE_ONLY: 'false',
@@ -58,7 +58,7 @@ async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bo
       userEmail: 'master@playwright.invalid', franchiseId: lawrence || westContract ? west : 'default', role: viewerRole || (lawrence || westContract ? 'designer' : 'master'), franchiseCode: lawrence || westContract ? '5555' : undefined,
     }));
     (window as any).contractFixture = {
-      edit,
+      edit, retailDraft,
       multiVersionSubmittedOffContract,
       secondProposalNumber: twoProposals ? `${proposalNumber}-B` : undefined,
       proposal: {
@@ -90,7 +90,7 @@ async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bo
         versionId: 'original', activeVersionId: 'original', isOriginalVersion: true,
       },
     };
-  }, { west, model, revision, proposalNumber, viewerRole: options.viewerRole, ownsProposal: options.ownsProposal, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false, orderPackageId: options.orderPackageId, multiVersionSubmittedOffContract: options.multiVersionSubmittedOffContract || false });
+  }, { west, model, revision, proposalNumber, retailDraft: options.retailDraft, viewerRole: options.viewerRole, ownsProposal: options.ownsProposal, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false, orderPackageId: options.orderPackageId, multiVersionSubmittedOffContract: options.multiVersionSubmittedOffContract || false });
 
   let releasePricing = () => {};
   const pricingGate = options.delayPricing ? new Promise<void>((resolve) => { releasePricing = resolve; }) : Promise.resolve();
@@ -186,6 +186,81 @@ async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bo
   await page.goto(fixtureUrl);
   return { errors, releasePricing, pricingRequests: () => pricingRequests };
 }
+
+for (const baseline of ['current', 'historical']) {
+  test(`retail draft updates live and only persists on Save Changes (${baseline})`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1500, height: 1100 });
+    await setup(page, { retailDraft: baseline });
+    const open = async () => {
+      await page.locator('.tile-title').filter({ hasText: /Customer Cost/ }).first().click();
+      await expect(page.locator('.adjustment-cost-input').first()).toBeVisible();
+    };
+    await open();
+    const stored = () => page.evaluate(() => JSON.stringify([...((window as any).contractFixture.storedProposals).entries()]));
+    const initialStored = await stored();
+    const saveCount = await page.evaluate(() => (window as any).contractFixture.saved.length);
+    const total = page.locator('.cost-breakdown-container .subtotal-row span').last();
+    const margin = page.locator('.cost-breakdown-container .proposal-gp-indicator');
+    const initialTotal = await total.innerText();
+    const initialMargin = await margin.innerText();
+    const amount = page.locator('.adjustment-cost-input').first();
+    for (const adjustment of [-1250.25, 2000.50, 0]) {
+      const expected = await page.evaluate((value) => {
+        const draft = (window as any).contractFixture.expectedRetailDraft(value);
+        return { total: draft.pricing.retailPrice, margin: draft.pricing.grossProfitMargin };
+      }, adjustment);
+      await amount.fill(adjustment === 0 ? '' : String(adjustment));
+      await expect(amount).toBeFocused();
+      await expect(total).toHaveText(`$${expected.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+      const sign = expected.margin < 0 ? '-' : '';
+      await expect(margin).toHaveText(`Proposal #26${sign}${Math.abs(expected.margin).toFixed(2).padStart(5, '0')}`);
+      expect(await stored()).toBe(initialStored);
+      expect(await page.evaluate(() => (window as any).contractFixture.saved.length)).toBe(saveCount);
+    }
+    await amount.fill('-1250.25');
+    await expect(total).not.toHaveText(initialTotal);
+    await expect(margin).not.toHaveText(initialMargin);
+    await page.evaluate(() => {
+      (window as any).contractFixture.pdfExports = 0;
+      (window as any).electron.exportBreakdownPdf = async () => {
+        (window as any).contractFixture.pdfExports += 1;
+        return { canceled: true };
+      };
+    });
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    await page.getByRole('option', { name: 'PDF', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).contractFixture.pdfExports)).toBe(1);
+    expect(await stored()).toBe(initialStored);
+    expect(await page.evaluate(() => (window as any).contractFixture.saved.length)).toBe(saveCount);
+    await expect(page.getByRole('button', { name: 'Save Changes', exact: true })).toBeEnabled();
+    await page.locator('.cost-summary-section').screenshot({ path: testInfo.outputPath(`live-retail-${baseline}.png`) });
+    await page.getByRole('button', { name: /Close customer cost/ }).click();
+    await page.getByRole('button', { name: 'No, discard', exact: true }).click();
+    expect(await stored()).toBe(initialStored);
+    await open();
+    await expect(total).toHaveText(initialTotal);
+    await expect(margin).toHaveText(initialMargin);
+    await amount.fill('-1250.25');
+    const previewTotal = await total.innerText();
+    const previewMargin = await margin.innerText();
+    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.length)).toBeGreaterThan(saveCount);
+    await expect(total).toHaveText(previewTotal);
+    await expect(margin).toHaveText(previewMargin);
+    await page.getByRole('button', { name: /Close customer cost/ }).click();
+    await open();
+    await expect(amount).toHaveValue('-1250.25');
+    await expect(total).toHaveText(previewTotal);
+    await expect(margin).toHaveText(previewMargin);
+  });
+}
+
+test('retail preview retains signed version locks', async ({ page }) => {
+  await setup(page, { retailDraft: 'current', signed: true });
+  await page.locator('.tile-title').filter({ hasText: /Customer Cost/ }).first().click();
+  await expect(page.getByRole('button', { name: 'Save Changes', exact: true })).toBeDisabled();
+  await expect(page.locator('.adjustment-cost-input')).toHaveCount(0);
+});
 
 test('Additional digging matches proposal, pricing and all 5555/9724 contract PDFs', async ({ page }) => {
   await setup(page);
