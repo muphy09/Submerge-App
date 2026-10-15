@@ -1,0 +1,33 @@
+.category-adjustments-editor { display: grid; gap: 16px; }
+.category-adjustment-card { min-width: 0; margin: 0; padding: 18px; border: 1px solid #dbe3eb; border-radius: 12px; background: #f8fafc; }
+.category-adjustment-card legend { padding: 0 8px; font-weight: 600; color: #334155; }
+.category-adjustment-fields { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(115px, 0.65fr) minmax(170px, 1.1fr) minmax(170px, 0.9fr); gap: 14px; align-items: stretch; }
+.category-adjustment-condition { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; align-items: end; }
+.category-adjustment-toggles { display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+.category-adjustment-condition { margin-top: 18px; }
+.category-adjustment-card .pricing-field { min-width: 0; display: grid; gap: 6px; }
+.category-adjustment-card input, .category-adjustment-card select { width: 100%; min-width: 0; padding: 9px; border: 1px solid #cbd5e1; border-radius: 7px; background: white; font: inherit; color: #1e293b; box-sizing: border-box; }
+.category-adjustment-switch { display: flex; gap: 4px; padding: 4px; border-radius: 8px; background: #e2e8f0; }
+.category-adjustment-switch button { flex: 1; padding: 8px; border: 0; border-radius: 6px; cursor: pointer; color: #475569; background: transparent; }
+.category-adjustment-switch button[aria-pressed="true"] { color: white; background: #087f8c; }
+.category-adjustment-explanation { margin: 16px 0; padding: 12px; border-left: 3px solid #087f8c; background: #edf8f8; line-height: 1.6; color: #164e63; }
+.category-adjustment-remove { padding: 7px 10px; border: 1px solid #fecaca; border-radius: 6px; color: #b91c1c; background: white; cursor: pointer; }
+.category-adjustment-error { color: #b91c1c; }
+.category-adjustment-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.category-adjustment-summary { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid #dbe3eb; border-radius: 10px; background: #f8fafc; }
+.category-adjustment-summary-copy { flex: 1; min-width: 0; }
+.category-adjustment-summary-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; color: #1e293b; }
+.category-adjustment-summary-heading strong { overflow-wrap: anywhere; }
+.category-adjustment-summary-amount { font-weight: 600; white-space: nowrap; }
+.category-adjustment-badge { padding: 3px 7px; border-radius: 5px; background: #e2e8f0; color: #475569; font-size: 0.8em; }
+.category-adjustment-summary p { margin: 6px 0 0; color: #52647b; font-size: 0.88em; line-height: 1.5; overflow-wrap: anywhere; }
+.category-adjustment-save, .category-adjustment-edit { padding: 8px 12px; border: 0; border-radius: 6px; background: #087f8c; color: white; font: inherit; cursor: pointer; }
+.category-adjustment-summary .category-adjustment-remove { font: inherit; }
+.category-adjustments-editor > .pricing-add-button { justify-self: start; padding: 10px 16px; color: #fff; border: 0; border-radius: 8px; background: #2563eb; font: inherit; font-weight: 600; cursor: pointer; }
+@media (max-width: 1400px) {
+  .category-adjustment-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .category-adjustment-summary { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 650px) {
+  .category-adjustment-fields, .category-adjustment-condition { grid-template-columns: minmax(0, 1fr); }
+}

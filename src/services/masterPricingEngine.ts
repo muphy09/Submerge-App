@@ -38,6 +38,7 @@ import {
 } from '../utils/customFeatures';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizePapDiscounts } from '../utils/papDiscounts';
+import { applyCategoryAdjustments } from '../utils/categoryAdjustments';
 import { calculateFeenstraMay2026Proposal } from './legacy/feenstraMay2026Engine.generated.js';
 import { shouldUseFeenstraMay2026Pricing } from './legacy/feenstraMay2026Profile';
 import feenstraMay2026Pricing from './legacy/feenstraMay2026Pricing.generated.json';
@@ -584,6 +585,8 @@ export class MasterPricingEngine {
       totals,
     };
 
+    const categoryRetailAdjustmentsTotal = applyCategoryAdjustments(costBreakdown, proposal, pricingData);
+
     // ============================================================================
     // PRICING CALCULATIONS (Matching Excel)
     // ============================================================================
@@ -631,7 +634,8 @@ export class MasterPricingEngine {
       customFeaturesAdjustmentTotal +
       autoCoverRetailAdjustment +
       retailAdjustmentsTotal +
-      historicalPricingAdjustment;
+      historicalPricingAdjustment +
+      categoryRetailAdjustmentsTotal;
 
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 0;

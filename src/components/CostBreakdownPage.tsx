@@ -11,6 +11,7 @@ import {
 import { normalizeCostBreakdownForDisplay } from '../utils/costBreakdownDisplay';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
+import { isCategoryAdjustmentItem, isRetailCategoryAdjustment } from '../utils/categoryAdjustments';
 import './CostBreakdownPage.css';
 
 interface CostBreakdownPageProps {
@@ -169,6 +170,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   };
 
   const getDisplayUnitPrice = (item: CostLineItem): number => {
+    if (viewMode === 'cogs' && isRetailCategoryAdjustment(item)) return 0;
     // Keep PAP discount rows showing percentages; all others scale with the active view
     if (viewMode === 'retail') {
       const override = getRetailOverride(item);
@@ -189,11 +191,14 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   };
 
   const renderDisplayTotal = (item: CostLineItem): string =>
-    viewMode === 'cogs' && isOffContractLineItem(item)
+    viewMode === 'cogs' && isRetailCategoryAdjustment(item)
+      ? `${formatCurrency(Number(item.details?.adjustmentAmount) || 0)} (Retail only)`
+      : viewMode === 'cogs' && isOffContractLineItem(item)
       ? 'OFF CONTRACT'
       : formatCurrency(getDisplayValue(item.total, item));
 
   const isMaterialItem = (item: CostLineItem): boolean => {
+    if (isCategoryAdjustmentItem(item)) return false;
     if (isCustomOptionItem(item)) return false;
     const desc = (item.description || '').toLowerCase();
     const cat = (item.category || '').toLowerCase();
@@ -202,6 +207,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   };
 
   const isLaborItem = (item: CostLineItem): boolean => {
+    if (isCategoryAdjustmentItem(item)) return false;
     if (isCustomOptionItem(item)) return false;
     const desc = (item.description || '').toLowerCase();
     if (desc.includes('pap discount')) return false;
@@ -326,9 +332,20 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
   ];
 
   // Filter out empty categories
-  const nonEmptyCategories = categories.filter((cat) => getRenderableItems(cat.items).length > 0);
+  const nonEmptyCategories = categories.map(category => {
+    const adjustmentItems = category.items.filter(isCategoryAdjustmentItem);
+    if (!adjustmentItems.length) return category;
+    return {
+      ...category,
+      subcategories: [
+        ...(category.subcategories || []).filter(sub => sub.name !== 'Category Adjustments').map(sub => ({ ...sub, items: sub.items.filter(item => !isCategoryAdjustmentItem(item)) })),
+        { name: 'Category Adjustments', items: adjustmentItems },
+      ],
+    };
+  }).filter((cat) => getRenderableItems(cat.items).length > 0);
 
   const isAdjustmentItem = (item: CostLineItem) => {
+    if (isCategoryAdjustmentItem(item)) return false;
     const desc = (item.description || '').toLowerCase();
     return desc.includes('pap discount') || desc.includes('tax');
   };
@@ -471,11 +488,11 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                   </thead>
                                   <tbody>
                                     {baseItems.map((item, idx) => {
-                                      const isTaxLine = item.description.toLowerCase().includes('tax');
+                                      const isTaxLine = !isCategoryAdjustmentItem(item) && item.description.toLowerCase().includes('tax');
                                       const gallons = item.details?.totalGallons;
                                       const truckGallons = item.details?.truckTotalGallons ??
                                         (isWaterTruck ? item.quantity * 7000 : undefined);
-                                      const isPapDiscount = item.description.includes('PAP Discount');
+                                      const isPapDiscount = !isCategoryAdjustmentItem(item) && item.description.includes('PAP Discount');
                                       const percentage =
                                         category.papDiscountKey && isPapDiscount
                                           ? (papDiscounts[category.papDiscountKey] || 0) * 100
@@ -528,7 +545,7 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                     </thead>
                                     <tbody>
                                       {visibleSubItems.map((item, idx) => {
-                                        const isPapDiscount = item.description.includes('PAP Discount');
+                                        const isPapDiscount = !isCategoryAdjustmentItem(item) && item.description.includes('PAP Discount');
                                         const percentage =
                                           category.papDiscountKey && isPapDiscount
                                             ? (papDiscounts[category.papDiscountKey] || 0) * 100
@@ -541,8 +558,8 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                                         return (
                                           <tr key={idx}>
                                             <td>{item.description}</td>
-                                            <td>{item.description.toLowerCase().includes('tax') ? '' : quantityDisplay}</td>
-                                            <td>{item.description.toLowerCase().includes('tax') ? '' : unitPriceDisplay}</td>
+                                            <td>{!isCategoryAdjustmentItem(item) && item.description.toLowerCase().includes('tax') ? '' : quantityDisplay}</td>
+                                            <td>{!isCategoryAdjustmentItem(item) && item.description.toLowerCase().includes('tax') ? '' : unitPriceDisplay}</td>
                                             <td>{renderDisplayTotal(item)}</td>
                                           </tr>
                                         );
@@ -570,11 +587,11 @@ function CostBreakdownPage({ proposal, onClose, onAdjustmentsChange }: CostBreak
                               </thead>
                               <tbody>
                                 {visibleItems.map((item, idx) => {
-                                  const isTaxLine = item.description.toLowerCase().includes('tax');
+                                  const isTaxLine = !isCategoryAdjustmentItem(item) && item.description.toLowerCase().includes('tax');
                                   const gallons = item.details?.totalGallons;
                                   const truckGallons = item.details?.truckTotalGallons ??
                                     (isWaterTruck ? item.quantity * 7000 : undefined);
-                                  const isPapDiscount = item.description.includes('PAP Discount');
+                                  const isPapDiscount = !isCategoryAdjustmentItem(item) && item.description.includes('PAP Discount');
                                   const percentage =
                                     category.papDiscountKey && isPapDiscount
                                       ? (papDiscounts[category.papDiscountKey] || 0) * 100

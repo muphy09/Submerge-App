@@ -1,3 +1,16 @@
+## [3.4.5] - 10/15/26
+### Admin Pricing Panel
+- Introduced 'Category Adjustments' inside of the Discounts / Adjustments category
+    - Admins can add a named cost to a category in the COGS Breakdown
+    - Costs can be set to COGS or Retail; negative amounts apply a discount
+    - Static adjustments apply to every proposal using that pricing model
+    - Conditional adjustments apply when the chosen designer input is active
+        - Supports specific selections and value comparisons (Example: Gas Run greater than 100 feet)
+        - Off Contract work is *not* included
+    - Adjustments show a readable explanation of when they apply
+    - Category Adjustments appear as line items in the COGS Breakdown in their respective category
+
+-----
 ## [3.4.4] - 10/12/26
 ### Materials and Equipment Order Form
 - Updated to support the Drainage category (LF)

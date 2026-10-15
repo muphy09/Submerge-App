@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const fixtureUrl = 'http://127.0.0.1:5173/tests/fixtures/pricing-cogs-overhead.html';
+const fixtureUrl = `${process.env.SUBMERGE_TEST_BASE_URL || 'http://127.0.0.1:5173'}/tests/fixtures/pricing-cogs-overhead.html`;
 
 test('Admin Excavation exposes Additional Digging with a zero per-day rate', async ({ page }, testInfo) => {
   await page.goto(fixtureUrl);

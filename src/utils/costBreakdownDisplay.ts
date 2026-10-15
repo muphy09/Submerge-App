@@ -1,5 +1,6 @@
 import { CostBreakdown, CostLineItem, Proposal } from '../types/proposal-new';
 import { isPpasEastProposal } from './franchiseScope';
+import { isCategoryAdjustmentItem } from './categoryAdjustments';
 
 const WATER_FEATURE_SOURCE_CATEGORY = 'Water Features';
 
@@ -27,8 +28,10 @@ const removeUnsupportedPpasEastCostItems = (
   const currentInteriorFinish = costBreakdown.interiorFinish || [];
   const interiorFinish = currentInteriorFinish.filter(
     (item) =>
-      !PPAS_EAST_UNSUPPORTED_COST_PATTERN.test(item.description || '') &&
-      !PPAS_EAST_UNSUPPORTED_COST_PATTERN.test(item.category || '')
+      isCategoryAdjustmentItem(item) || (
+        !PPAS_EAST_UNSUPPORTED_COST_PATTERN.test(item.description || '') &&
+        !PPAS_EAST_UNSUPPORTED_COST_PATTERN.test(item.category || '')
+      )
   );
   if (interiorFinish.length === currentInteriorFinish.length) return costBreakdown;
 

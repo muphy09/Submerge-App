@@ -9,6 +9,7 @@ import { CostBreakdown, CostLineItem, PricingCalculations, Proposal, RetailAdjus
 import type { WarrantySection } from '../types/warranty';
 import { CogsReportDocument } from './CogsReport';
 import './BreakdownExportPages.css';
+import { categoryAdjustmentSummary } from '../utils/categoryAdjustments';
 
 interface CostExportProps {
   costBreakdown: CostBreakdown;
@@ -237,6 +238,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
         label: row.label,
         value: retailValue,
         items: row.items,
+        details: categoryAdjustmentSummary(row.items || [], safeAdjustedRetailFactor),
       };
     });
     const feenstraCustomerBreakdown = resolveFeenstraMay2026CustomerBreakdown(
@@ -252,6 +254,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
         label: row.label,
         value: feenstraCustomerBreakdown.categoryValues[index] ?? 0,
         items: row.items,
+        details: [],
       }));
       runningRetailTotal = feenstraCustomerBreakdown.categoryValues.reduce(
         (total, value) => total + value,
@@ -304,7 +307,7 @@ export function BreakdownCostExportPage({ costBreakdown, customerName, proposal,
                   className={`breakdown-export-row${row ? '' : ' breakdown-export-row--empty'}`}
                   key={`${index}-${row?.label || `empty-${rowIndex}`}`}
                 >
-                  <span className="breakdown-export-row-label">{row ? `${row.label}:` : '\u00A0'}</span>
+                  <span className="breakdown-export-row-label">{row ? `${row.label}:` : '\u00A0'}{row && 'details' in row && (row.details as string[]).map(detail => <small className="breakdown-export-adjustment-detail" key={detail}>{detail}</small>)}</span>
                   <span className="breakdown-export-row-value">{row ? formatCurrency(row.value) : '\u00A0'}</span>
                 </div>
               );
