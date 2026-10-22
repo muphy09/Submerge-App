@@ -187,6 +187,78 @@ async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bo
   return { errors, releasePricing, pricingRequests: () => pricingRequests };
 }
 
+test('builder saves with its pinned model when another model replaces the shared pricing store', async ({ page }, testInfo) => {
+  await setup(page, { edit: true, retailDraft: 'current' });
+  await expect(page.getByPlaceholder('Enter customer name')).toBeVisible();
+  const expected = await page.evaluate(() => {
+    const result = (window as any).contractFixture.expectedRetailDraft(0);
+    return { retail: result.pricing.retailPrice, cogs: result.pricing.totalCOGS };
+  });
+  await page.route('**/rest/v1/franchise_pricing_models*', async route => {
+    if (!route.request().url().includes('other-model')) return route.fallback();
+    await route.fulfill({ json: { id: 'other-model', franchise_id: west, name: 'Other Model', current_revision_id: 'other-r1', pricing_json: {} } });
+  });
+  await page.route('**/rest/v1/franchise_pricing_model_revisions*', async route => {
+    if (!route.request().url().includes('other-r1')) return route.fallback();
+    await route.fulfill({ json: { id: 'other-r1', pricing_model_id: 'other-model', franchise_id: west, revision_number: 1,
+      pricing_json: { overheadMultiplier: 1.5, categoryAdjustments: [{ id: 'other-waterproofing', mode: 'static', basis: 'cogs', title: 'Waterproofing', amount: 800, category: 'tile' }] } } });
+  });
+  await page.evaluate(() => (window as any).contractFixture.activateOtherPricing('other-model', 'other-r1'));
+  await page.getByPlaceholder('Enter customer name').fill('Pinned model save regression');
+  await page.locator('.cost-modal-button').filter({ hasText: 'Customer Proposal' }).click();
+  await expect(page.locator('.cost-modal-content .subtotal-row span').last()).toHaveText(
+    `$${expected.retail.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  );
+  await page.locator('.cost-modal-content').screenshot({ path: testInfo.outputPath('pinned-model-preview.png') });
+  await page.locator('.cost-modal-close').click();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+  const saved = await page.evaluate(() => (window as any).contractFixture.storedProposals.get((window as any).contractFixture.proposal.proposalNumber));
+  expect(saved.pricingModelRevisionId).toBe(revision);
+  expect(saved.pricing.retailPrice).toBe(expected.retail);
+  expect(saved.pricing.totalCOGS).toBe(expected.cogs);
+  expect(saved.costBreakdown.tileLabor.some((line: any) => line.description === 'Waterproofing')).toBe(false);
+});
+
+test('older saved proposals retain their price when first opened and saved in the builder', async ({ page }) => {
+  await setup(page, { edit: true, retailDraft: 'historical' });
+  const baseline = await page.evaluate(() => structuredClone((window as any).contractFixture.proposal));
+  const review = page.getByRole('dialog').filter({ hasText: 'Older proposal pricing review' });
+  await expect(review).toBeVisible();
+  await review.getByRole('button', { name: 'Apply protected pricing', exact: true }).click();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+  const saved = await page.evaluate(() => (window as any).contractFixture.storedProposals.get((window as any).contractFixture.proposal.proposalNumber));
+  expect(saved.pricing.retailPrice).toBe(baseline.pricing.retailPrice);
+  expect(saved.totalCost).toBe(baseline.totalCost);
+  expect(saved.historicalPricingAdjustment).toBe(500);
+});
+
+test('saved historical price protection survives a contract update and repeated builder saves', async ({ page }, testInfo) => {
+  await setup(page, { westContract: true, retailDraft: 'protected' });
+  const baseline = await page.evaluate(() => structuredClone((window as any).contractFixture.proposal));
+  expect(baseline.historicalPricingAdjustment).toBe(-4940);
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Apply Update' }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('3');
+  await page.getByRole('button', { name: 'Close contract' }).click();
+  for (let visit = 0; visit < 2; visit += 1) {
+    await page.evaluate((number) => (window as any).contractFixture.navigateToEditor(number), proposalNumber);
+    await expect(page.getByPlaceholder('Enter customer name')).toBeVisible();
+    await page.getByPlaceholder('Enter customer name').fill(`Protected pricing visit ${visit}`);
+    // Opening the summary saves the draft through the real builder save path.
+    await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+    await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+    const saved = await page.evaluate(() => (window as any).contractFixture.storedProposals.get((window as any).contractFixture.proposal.proposalNumber));
+    expect(saved.historicalPricingAdjustment).toBe(-4940);
+    expect(saved.pricing.retailPrice).toBe(baseline.pricing.retailPrice);
+    expect(saved.totalCost).toBe(baseline.totalCost);
+    expect(saved.pricingModelRevisionId).toBe(revision);
+    expect(saved.contractTemplateRevisionId).toBe('west-nc-gunite-r2');
+  }
+  await page.screenshot({ path: testInfo.outputPath('protected-price-after-reopening.png'), fullPage: true });
+});
+
 for (const baseline of ['current', 'historical']) {
   test(`retail draft updates live and only persists on Save Changes (${baseline})`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1500, height: 1100 });

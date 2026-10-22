@@ -546,6 +546,32 @@ assert.equal(
   'Historical saved baseline was not preserved'
 );
 
+for (const adjustment of [-4940, 1000, 0]) {
+  const protectedProposal = {
+    ...applyHistoricalPricingProtection(historicalDriftProposal, historicalDriftReview),
+    historicalPricingAdjustment: adjustment,
+  };
+  const baseline = calculate(protectedProposal, getDefaultPAPDiscounts());
+  const repeatedReview = buildHistoricalPricingReview(
+    { ...protectedProposal, historicalPricingAdjustment: 0 },
+    offContractBaselinePricing
+  );
+  assert.equal(repeatedReview, null, 'Current engine proposal unexpectedly needs a new protection review');
+  const reopened = applyHistoricalPricingProtection(protectedProposal, repeatedReview);
+  assert.equal(reopened.historicalPricingAdjustment, adjustment, 'Reopening erased saved historical price protection');
+  assert.equal(
+    calculate(reopened, getDefaultPAPDiscounts()).pricing.retailPrice,
+    baseline.pricing.retailPrice,
+    'Reopening changed the protected retail price'
+  );
+  const edited = { ...reopened, retailAdjustments: [{ name: 'New discount', amount: -100 }] };
+  assert.equal(
+    calculate(edited, getDefaultPAPDiscounts()).pricing.retailPrice,
+    baseline.pricing.retailPrice - 100,
+    'Retaining historical protection prevented a new retail edit'
+  );
+}
+
 const retailAdjustmentSnapshot = getPricingDataSnapshot();
 retailAdjustmentSnapshot.papDiscountRates = getDefaultPAPDiscounts();
 const retailAdjustmentProposal = clone(offContractBaseline) as Proposal;

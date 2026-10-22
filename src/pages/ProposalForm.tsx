@@ -109,6 +109,7 @@ import {
 } from '../services/pricingRevisionReview';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
+import type { PricingData } from '../services/pricingTiers';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   normalizePapDiscounts,
@@ -343,6 +344,10 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   const merged = {
     ...base,
     ...input,
+    // Existing versions must retain their original engine metadata. Otherwise
+    // new-proposal defaults bypass the historical saved-price review.
+    pricingEngineVersion: input.pricingEngineVersion,
+    historicalPricingAdjustment: input.historicalPricingAdjustment,
     customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
     poolSpecs: mergedPoolSpecs,
     excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
@@ -496,6 +501,31 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const loadedProposalNumberRef = useRef<string | null>(null);
   const loadedProposalIdentityRef = useRef<LoadedProposalIdentity | null>(null);
   const loadedProposalBaselineRef = useRef<Proposal | null>(null);
+  const proposalPricingSnapshotsRef = useRef(new Map<string, PricingData>());
+  const pricingSnapshotKey = (input: Partial<Proposal>) => [
+    input.franchiseId || getSessionFranchiseId(),
+    input.pricingModelFranchiseId || input.franchiseId || getSessionFranchiseId(),
+    input.pricingModelId || '',
+    input.pricingModelRevisionId || '',
+    normalizePricingTierId(input.pricingTierId || input.pricingTierName),
+  ].join('::');
+  const getProposalPricingSnapshot = (input: Partial<Proposal>) => {
+    const key = pricingSnapshotKey(input);
+    const cached = proposalPricingSnapshotsRef.current.get(key);
+    if (cached) return cached;
+    const active = getActivePricingModelMeta();
+    if (
+      input.pricingModelId && active.pricingModelId === input.pricingModelId &&
+      active.pricingModelFranchiseId === (input.pricingModelFranchiseId || input.franchiseId || getSessionFranchiseId()) &&
+      (!input.pricingModelRevisionId || active.pricingModelRevisionId === input.pricingModelRevisionId) &&
+      active.pricingTierId === normalizePricingTierId(input.pricingTierId || input.pricingTierName)
+    ) {
+      const snapshot = getPricingDataSnapshot();
+      proposalPricingSnapshotsRef.current.set(key, snapshot);
+      return snapshot;
+    }
+    return null;
+  };
   const autosaveTimeoutRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
   const priceImpactCacheRef = useRef<
@@ -996,6 +1026,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
+      const current = latestProposalRef.current;
+      const active = getActivePricingModelMeta();
+      // A background pricing load must not replace this proposal's defaults.
+      if (current.pricingModelId && (
+        active.pricingModelId !== current.pricingModelId ||
+        (current.pricingModelRevisionId && active.pricingModelRevisionId !== current.pricingModelRevisionId) ||
+        active.pricingTierId !== normalizePricingTierId(current.pricingTierId || current.pricingTierName)
+      )) return;
       if (snapshot?.papDiscountRates) {
         setPapDiscounts(normalizePapDiscounts(snapshot.papDiscountRates as PAPDiscounts));
       }
@@ -1529,6 +1567,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           pricingCache.set(pricingCacheKey, pricingSnapshot);
         }
         const merged = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(input));
+        proposalPricingSnapshotsRef.current.set(pricingSnapshotKey({
+          ...input,
+          pricingModelId: input.pricingModelId || pricingSnapshot.pricingModelId || undefined,
+          pricingModelFranchiseId: input.pricingModelFranchiseId || pricingSnapshot.pricingModelFranchiseId || undefined,
+          pricingModelRevisionId: input.pricingModelRevisionId || pricingSnapshot.pricingModelRevisionId || undefined,
+        }), pricingSnapshot.pricing);
         return {
           ...merged,
           pricingModelId: input.pricingModelId || pricingSnapshot.pricingModelId || undefined,
@@ -2103,7 +2147,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       setIsSaving(true);
     }
     try {
-      let proposalToSave: Partial<Proposal> = sanitizeCurrentProposalState(proposal as Proposal);
+      let proposalToSave: Partial<Proposal> = { ...proposal };
 
       if (!proposalToSave.pricingModelId && defaultPricingModelId) {
         const def = pricingModels.find((m) => m.id === defaultPricingModelId);
@@ -2162,12 +2206,21 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         };
       }
 
-      if (!proposalNumber && !proposalToSave.equipment?.hasBeenEdited) {
-        proposalToSave = {
-          ...proposalToSave,
-          equipment: buildStartingEquipment(proposalToSave.poolSpecs, proposalToSave.equipment),
-        };
-      }
+      // Resolve before normalizing selections as well as calculating totals.
+      // Selection defaults also depend on the proposal's own pricing catalog.
+      const savePricingSnapshot = await loadPricingSnapshotForExistingProposal(
+        proposalToSave.franchiseId || getSessionFranchiseId(),
+        proposalToSave.pricingModelId,
+        proposalToSave.pricingModelFranchiseId,
+        normalizePricingTierId(proposalToSave.pricingTierId || proposalToSave.pricingTierName),
+        proposalToSave.pricingModelRevisionId
+      );
+      proposalToSave = withTemporaryPricingSnapshot(savePricingSnapshot.pricing, () => {
+        const normalized = sanitizeCurrentProposalState(proposalToSave as Proposal);
+        return !proposalNumber && !normalized.equipment?.hasBeenEdited
+          ? { ...normalized, equipment: buildStartingEquipment(normalized.poolSpecs, normalized.equipment) }
+          : normalized;
+      });
       // Validate if submitting
       if (effectiveMode === 'submit') {
         const errors = validateProposal(proposalToSave);
@@ -2180,7 +2233,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         }
       }
 
-      const totals = calculateTotals(proposalToSave);
+      const totals = withTemporaryPricingSnapshot(savePricingSnapshot.pricing, () => calculateTotals(proposalToSave));
       const now = new Date().toISOString();
       const versionName =
         totals.versionName ||
@@ -2795,14 +2848,19 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     );
   }
 
-  const currentPricingProposal = mergeWithDefaults(
+  const currentPricingSnapshot = getProposalPricingSnapshot(proposal) ||
+    (!proposalNumber && !proposal.pricingModelId ? getPricingDataSnapshot() : null);
+  if (!currentPricingSnapshot) {
+    return <div className="proposal-form"><p>This proposal's selected pricing revision is unavailable. Reopen the proposal before editing or saving.</p></div>;
+  }
+  const currentPricingProposal = withTemporaryPricingSnapshot(currentPricingSnapshot, () => mergeWithDefaults(
     applySessionCommissionRates(proposal)
-  ) as Proposal;
-  const currentModelPapDiscounts = readPapDiscountsFromModel();
-  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(
+  )) as Proposal;
+  const currentModelPapDiscounts = normalizePapDiscounts(currentPricingSnapshot.papDiscountRates);
+  const currentCostBreakdown = withTemporaryPricingSnapshot(currentPricingSnapshot, () => MasterPricingEngine.calculateCompleteProposal(
     currentPricingProposal,
     currentModelPapDiscounts
-  );
+  ));
   if (priceImpactProposalIdentityRef.current.proposal !== proposal) {
     priceImpactProposalIdentityRef.current = {
       proposal: proposal as object,
@@ -2835,7 +2893,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2860,7 +2918,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2885,7 +2943,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2910,7 +2968,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2935,7 +2993,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2960,7 +3018,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2985,7 +3043,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -3010,7 +3068,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });

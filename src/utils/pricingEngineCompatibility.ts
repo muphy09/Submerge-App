@@ -74,6 +74,11 @@ export function applyHistoricalPricingProtection<T extends Partial<Proposal>>(
   proposal: T,
   review: HistoricalPricingReview | null
 ): T {
+  // Reopening a protected version produces no new review because its engine
+  // version is already current. Keep the saved adjustment across later edits
+  // and saves instead of silently replacing its protected price with zero.
+  if (!review && isCurrentPricingEngineProposal(proposal)) return proposal;
+
   return {
     ...proposal,
     pricingEngineVersion: CURRENT_PRICING_ENGINE_VERSION,

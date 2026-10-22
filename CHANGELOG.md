@@ -1,3 +1,8 @@
+## [3.4.6] - 10/22/26
+### HOTFIX
+- Fixed an issue that could carry the current PAP discount values into older proposal models
+    - *This affected < 1% of active proposals, those proposals have been updated automatically*
+-----
 ## [3.4.5] - 10/15/26
 ### Admin Pricing Panel
 - Introduced 'Category Adjustments' inside of the Discounts / Adjustments category

@@ -8,7 +8,7 @@ import { ToastProvider } from '../../src/components/Toast';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
 import { checkProposalContractRevision, adoptContractRevision, declineContractRevision, prefetchWestContractRevisions } from '../../src/services/contractTemplateRegistry';
 import { getEditableContractFields } from '../../src/services/contractGenerator';
-import { getActivePricingModelMeta } from '../../src/services/pricingDataStore';
+import { getActivePricingModelMeta, initPricingDataStore } from '../../src/services/pricingDataStore';
 import { getPricingDataSnapshot } from '../../src/services/pricingDataStore';
 import MasterPricingEngine from '../../src/services/masterPricingEngine';
 import { calculateProposalRetailAdjustmentDraft } from '../../src/utils/proposalPricingPersistence';
@@ -28,6 +28,10 @@ fixture.proposal = proposal;
 if (fixture.retailDraft) {
   proposal.excavation.customOptions = [{ name: 'Preview baseline', description: 'Isolated pricing test', laborCost: 30000, materialCost: 0, totalCost: 30000, isOffContract: false }];
   Object.assign(proposal, MasterPricingEngine.calculateCompleteProposal(proposal));
+  if (fixture.retailDraft === 'protected') {
+    proposal.historicalPricingAdjustment = -4940;
+    Object.assign(proposal, MasterPricingEngine.calculateCompleteProposal(proposal));
+  }
   if (fixture.retailDraft === 'historical') {
     delete (proposal as any).pricingEngineVersion;
     proposal.pricing.retailPrice += 500;
@@ -121,6 +125,9 @@ fixture.returnValues = async (overrides: any = {}) => {
   };
 };
 fixture.pricingMeta = getActivePricingModelMeta;
+fixture.activateOtherPricing = (modelId: string, revisionId: string) => initPricingDataStore(
+  proposal.franchiseId, modelId, proposal.pricingModelFranchiseId, 'normal', revisionId
+);
 fixture.timingChecks = async (overrides: any = {}, render = false) => {
   const input = { ...proposal, ...overrides };
   const check = await checkProposalContractRevision(input);
