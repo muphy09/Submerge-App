@@ -1,6 +1,12 @@
 name: Build and Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to build or recover (for example v3.4.6)
+        required: true
+        type: string
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
@@ -9,11 +15,15 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
 env:
   VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
   VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
   VITE_SUPABASE_ONLY: true
-  RELEASE_TAG: ${{ github.ref_name }}
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 jobs:
   prepare-release:
@@ -21,6 +31,18 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v3
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+
+      - name: Validate existing release tag and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(franchise-[A-Za-z0-9-]+|master)\.[0-9]+)?$ ]]; then
+            echo "Unsupported release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          node scripts/set-build-version.js
 
       - name: Create deterministic GitHub release
         shell: bash
@@ -43,6 +65,8 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v3
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
 
       - name: Install Node.js
         uses: actions/setup-node@v3
@@ -71,15 +95,30 @@ jobs:
       - name: Build renderer
         run: npm run build:renderer
 
-      - name: Build and release (Windows)
+      - name: Build release assets (Windows)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EP_PRE_RELEASE: ${{ contains(github.ref_name, '-') && 'true' || 'false' }}
+          EP_PRE_RELEASE: ${{ contains(env.RELEASE_TAG, '-') && 'true' || 'false' }}
           EP_GH_IGNORE_TIME: true
-        run: npx electron-builder --win nsis --publish always
+        run: npx electron-builder --win nsis --publish never
+
+      # Upload to the exact release prepared above. electron-builder 24 only
+      # searches the first releases page and can incorrectly try to recreate it.
+      - name: Upload tagged release assets (Windows)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $staging = Join-Path "portable builds" "tagged-release-assets"
+          node scripts/stage-update-assets.js "portable builds/latest.yml" $staging
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to stage Windows release assets.' }
+          $assets = Get-ChildItem $staging -File
+          if (-not $assets) { throw 'No Windows release assets were produced.' }
+          gh release upload $env:RELEASE_TAG @($assets.FullName) --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to upload Windows release assets.' }
 
       - name: Publish fixed franchise update endpoint (Windows)
-        if: contains(github.ref_name, '-')
+        if: contains(env.RELEASE_TAG, '-')
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -116,6 +155,8 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v3
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
 
       - name: Install Node.js
         uses: actions/setup-node@v3
@@ -144,10 +185,10 @@ jobs:
       - name: Build renderer
         run: npm run build:renderer
 
-      - name: Build and release (macOS)
+      - name: Build release assets (macOS)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EP_PRE_RELEASE: ${{ contains(github.ref_name, '-') && 'true' || 'false' }}
+          EP_PRE_RELEASE: ${{ contains(env.RELEASE_TAG, '-') && 'true' || 'false' }}
           EP_GH_IGNORE_TIME: true
         run: |
           set -euo pipefail
@@ -157,10 +198,22 @@ jobs:
           # A signing/verification failure aborts before DMG creation/upload.
           export CSC_IDENTITY_AUTO_DISCOVERY=false
           echo "Building an ad-hoc signed Mac app; users must approve it in Privacy & Security."
-          npx electron-builder --mac dmg --publish always
+          npx electron-builder --mac dmg --publish never
+
+      - name: Upload tagged release assets (macOS)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          staging="portable builds/tagged-release-assets"
+          node scripts/stage-update-assets.js "portable builds/latest-mac.yml" "$staging"
+          assets=()
+          while IFS= read -r -d '' file; do assets+=("$file"); done < <(find "$staging" -maxdepth 1 -type f -print0)
+          if [ "${#assets[@]}" -eq 0 ]; then echo 'No macOS release assets were produced.' >&2; exit 1; fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
 
       - name: Publish fixed franchise update endpoint (macOS)
-        if: contains(github.ref_name, '-')
+        if: contains(env.RELEASE_TAG, '-')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
