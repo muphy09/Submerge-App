@@ -489,8 +489,6 @@ const AdditionalItemRemoveAction = ({
   </TooltipAnchor>
 );
 
-const WATER_FEATURE_PUMP_LOCKED_MESSAGE = 'Cannot be modified - Required with chosen Water Features';
-
 function EquipmentSectionNew({
   data,
   onChange,
@@ -662,6 +660,7 @@ function EquipmentSectionNew({
     },
     pumpQuantity: normalizedBasePumpQuantity || Math.max(data?.pumpQuantity ?? (hasPumpSelection ? 1 : 0), 0),
     additionalPumps: normalizedAdditionalPumps,
+    waterFeatureAutoPumpDismissed: data?.waterFeatureAutoPumpDismissed,
     auxiliaryPumps: normalizedAuxiliaryPumps,
     auxiliaryPump: data?.auxiliaryPump ?? normalizedAuxiliaryPumps[0],
     filter: data?.filter || {
@@ -2246,7 +2245,16 @@ function EquipmentSectionNew({
 
   const removeAdditionalPump = (index: number) => {
     const next = additionalPumps.filter((_, i) => i !== index);
-    setAdditionalPumps(next);
+    if (additionalPumps[index]?.autoAddedReason === 'waterFeature') {
+      updateData({
+        pumpQuantity: Math.max(getBasePumpQuantity(safeData), 0),
+        additionalPumps: next,
+        waterFeatureAutoPumpDismissed: true,
+      });
+    } else {
+      setAdditionalPumps(next);
+    }
+    setActiveAdditionalPumpIndex(null);
   };
 
   const removeAdditionalFilter = (index: number) => {
@@ -2946,7 +2954,7 @@ function EquipmentSectionNew({
                     <div>
                       <div className="spec-subcard-title">{title}</div>
                       {!isEditing && isRequiredByWaterFeatures && (
-                        <div className="spec-subcard-subtitle">Added Automatically</div>
+                        <div className="spec-subcard-subtitle">Added Automatically for Water Features</div>
                       )}
                     </div>
                     <div className="spec-subcard-actions stacked-actions">
@@ -2966,8 +2974,6 @@ function EquipmentSectionNew({
                         )}
                         <AdditionalItemRemoveAction
                           label={`Additional Pump ${idx + 1}`}
-                          disabled={isRequiredByWaterFeatures}
-                          disabledReason={WATER_FEATURE_PUMP_LOCKED_MESSAGE}
                           onRemove={() => removeAdditionalPump(idx)}
                         />
                       </div>

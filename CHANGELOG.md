@@ -1,32 +1,69 @@
-## [3.4.2] - 9/23/26
-### Proposal Sharing!
-- Proposals can now be shared between members of the same franchise
-    - Proposals can be shared as 'Can View' and 'Can Propose Changes', and optionally include a note
-    - ANY Proposal state (Draft, Submitted, Signed) can be shared
-- Sharing covers the whole Proposal tree, including future versions and addendums made
-- Proposed changes can be reviewed by the original owner
-    - Original owner can 'Apply Changes to Draft', 'Request Revisions with Note' or 'Decline'
-    - Comparison breakdown of changed fields and financial totals
-        - The Proposed Change can be withdrawn and resubmitted if more modifications are needed after the initial submit
-- Owners can remove access at any time and recipients can leave at any time
-- Shared Proposals *REQUIRE* an online connection
-    - Once a Proposal has entered collaboration, its editing stays online-only, even if unshared
-    - The Proposal can still be viewed / exported offline but *CANNOT* be modified until online
-### Dashboard UI / UX
-- Updated the main dashboard to support Proposal Sharing
-- The dashboard now includes 2 tabs inside of the Proposal Table: My Proposals and Shared with Me
-- Proposals that have been shared will include an icon signifying who they are shared with
-### Proposal Summary UI / UX
-- Updated the Proposal Summary style to match a more modern look
-- Introduced the Collaborators block to show the status of a Shared Proposal
+## [3.4.7] - 10/22/26
+### HOTFIX
+- Fixed an issue that could carry the current PAP discount values into older proposal models
+    - *This affected < 1% of active proposals, those proposals have been updated automatically*
+-----
+## [3.4.5] - 10/15/26
+### Admin Pricing Panel
+- Introduced 'Category Adjustments' inside of the Discounts / Adjustments category
+    - Admins can add a named cost to a category in the COGS Breakdown
+    - Costs can be set to COGS or Retail; negative amounts apply a discount
+    - Static adjustments apply to every proposal using that pricing model
+    - Conditional adjustments apply when the chosen designer input is active
+        - Supports specific selections and value comparisons (Example: Gas Run greater than 100 feet)
+        - Off Contract work is *not* included
+    - Adjustments show a readable explanation of when they apply
+    - Category Adjustments appear as line items in the COGS Breakdown in their respective category
+### Customer Cost Breakdown
+- Manual adjustments now update in realtime without hitting 'Save Changes'
+    - *You still need to use 'Save Changes' to save the adjustment made!*
+-----
+## [3.4.4] - 10/12/26
+### Materials and Equipment Order Form
+- Updated to support the Drainage category (LF)
+- Coping now correctly shows SF with Waste
+    - Waste was always included, it was just incorrectly represented here
+    - *Tile SF with Waste cannot be depicted because the original forumla does not account for it*
+        - *It is possible the waste is already included with the material cost. A new forumla could also be created..*
+### Excavation Category
+- Introduced ability to add more included dig days in Additional Options
+    - Additional dig days are reflected in the Contract under 'General Construction', line 10
+    - Option in Admin Price Panel to adjust cost per dig day increase (default set to $0)
+        - *If a Franchise wants to include a cost per dig day increase, the verbage in the contract should be adjusted*
+### Bug Fixes
+- Fixed an issue allowing Admins to see the 'Price Revision' / 'Contract Revision' change window on a proposal not owned by them
+    - Admins will *now* always see the verison of the proposal / contract the original owner has chosen
+-----
+## [3.4.3] - 10/1/26
+### Contract Correction Bugfix
+- Fixed a loop that occured when declining the Off Contract modification adjustment
+-----
+## [3.4.2] - 9/29/26
+### Materials and Equipment Order Form
+- Introduced a new breakdown inside of the Proposal Summary for Materials and Equipment
+    - *Only* shows quantity amounts, no prices
+    - Exportable to PDF and Print
+### Off Contract Bugfix
+- Fixed an issue that caused some Off Contract amounts to silently appear in the Contract Total Price (and breakdown)
+    - If this issue affected your proposal, you will be prompted to adjust the contract automatically when entering that contract
+### PMF03 Package Adjustment
+- Additional Pump that is automatically added from a Water Feature can now be removed
+-----
+## [3.4.1] - 9/24/26
+### Cloud Backend Update
+- Reduced Edge Function Invocations by changing heartbeat time from 10 seconds to 1 minute
+- Fixed RLS upsert errors caused by Admins viewing Proposals that were not owned by them
+    - *Should improve load times for Admins*
+- Laid framework down for the Proposal Sharing Update
 -----
 ## [3.4.0] - 9/23/26
-### Fiberglass Dimensions
-- *This change only applies to NEW proposals*
+### Fiberglass Dimensions!
 - Fiberglass Dimensions automatically fill into their respective input fields (Pool and Spa)
     - Decking Area does *not* automatically fill
+    - Hydura Shell options need dimensions inserted from an Admin to autofill
 - Admins can edit the dimensions for each shell inside of the Pricing Model Editor
     - Pricing Model Editor updated to support dimensions
+- *This change only applies to NEW proposals*
 ### Feedback Tutorial
 - Removed the feedback tutorial window
     - *Feedback button remains active*

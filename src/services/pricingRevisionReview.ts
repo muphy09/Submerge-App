@@ -1,4 +1,5 @@
 import MasterPricingEngine from './masterPricingEngine';
+import { isRetailCategoryAdjustment } from '../utils/categoryAdjustments';
 import {
   loadPricingModel,
   type LoadedPricingModel,
@@ -516,6 +517,9 @@ function flattenCostBreakdown(costBreakdown?: CostBreakdown | null) {
 }
 
 function lineItemKey(section: string, item: CostLineItem, occurrence: number) {
+  if (item.details?.categoryAdjustmentId) {
+    return `${section}::category-adjustment::${item.details.categoryAdjustmentId}::${item.details.adjustmentBasis}`;
+  }
   return [section, item.category || '', item.description || '', occurrence]
     .map((value) => String(value).trim().toLowerCase())
     .join('::');
@@ -542,20 +546,20 @@ function compareCostBreakdowns(before?: CostBreakdown | null, after?: CostBreakd
     const afterEntry = afterMap.get(key);
     const beforeItem = beforeEntry?.item;
     const afterItem = afterEntry?.item;
-    const beforeAmount = roundCurrency(beforeItem?.total);
-    const afterAmount = roundCurrency(afterItem?.total);
+    const beforeAmount = roundCurrency(beforeItem && isRetailCategoryAdjustment(beforeItem) ? beforeItem.details?.adjustmentAmount : beforeItem?.total);
+    const afterAmount = roundCurrency(afterItem && isRetailCategoryAdjustment(afterItem) ? afterItem.details?.adjustmentAmount : afterItem?.total);
     if (Math.abs(afterAmount - beforeAmount) < CURRENCY_EPSILON) return;
     const item = afterItem || beforeItem;
     if (!item) return;
     rows.push({
       key,
       category: String(item.category || afterEntry?.section || beforeEntry?.section || 'Pricing'),
-      label: String(item.description || item.category || 'Pricing item'),
+      label: `${String(item.description || item.category || 'Pricing item')}${item.details?.categoryAdjustmentId ? ` (${isRetailCategoryAdjustment(item) ? 'Retail' : 'COGS'})` : ''}`,
       quantity: Number(afterItem?.quantity ?? beforeItem?.quantity) || 0,
       beforeAmount,
       afterAmount,
-      beforeUnitAmount: roundCurrency(beforeItem?.unitPrice),
-      afterUnitAmount: roundCurrency(afterItem?.unitPrice),
+      beforeUnitAmount: beforeItem && isRetailCategoryAdjustment(beforeItem) ? beforeAmount : roundCurrency(beforeItem?.unitPrice),
+      afterUnitAmount: afterItem && isRetailCategoryAdjustment(afterItem) ? afterAmount : roundCurrency(afterItem?.unitPrice),
       direction: afterAmount > beforeAmount ? 'increase' : 'decrease',
     });
   });
@@ -564,6 +568,7 @@ function compareCostBreakdowns(before?: CostBreakdown | null, after?: CostBreakd
 }
 
 function isDerivedTaxComparisonRow(row: PricingRevisionComparisonRow) {
+  if (row.key.includes('::category-adjustment::')) return false;
   return /\btax\b/i.test(`${row.category} ${row.label}`);
 }
 
@@ -649,6 +654,7 @@ export async function buildPricingRevisionComparison(
     after.calculation.costBreakdown
   );
   const unmatchedCalculatedRows = calculatedRows.filter((row) => {
+      if (row.key.includes('::category-adjustment::')) return true;
       const rowLabel = normalizeCatalogIdentity(row.label);
       return !catalogComparison.changedSelectionNames.has(rowLabel);
     });

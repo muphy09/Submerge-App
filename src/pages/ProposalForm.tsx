@@ -89,8 +89,9 @@ import {
 import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpSelections';
 import { listAllFranchises, listAllPricingModels } from '../services/masterAdminAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
-import { getProposal as getProposalRemote, saveProposal as saveProposalRemote } from '../services/proposalsAdapter';
+import { getProposal as getProposalRemote, saveProposal as saveProposalRemote, isOwnProposal } from '../services/proposalsAdapter';
 import { listChangeRequests, saveWorkingCopy } from '../services/proposalCollaboration';
+import { needsOffContractSeparation } from '../utils/offContractSeparation';
 import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
   getSessionCommissionRates,
@@ -109,6 +110,7 @@ import {
 } from '../services/pricingRevisionReview';
 import { applyActiveVersion, listAllVersions, upsertVersionInContainer } from '../utils/proposalVersions';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
+import type { PricingData } from '../services/pricingTiers';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import {
   normalizePapDiscounts,
@@ -131,6 +133,7 @@ import {
 } from '../services/proposalWorkflow';
 import { countSelectedWaterFeatureCategories, sanitizeWaterFeatureSelections } from '../utils/waterFeatureCost';
 import { sanitizeProposalSelectionState } from '../utils/proposalSelectionSanitizer';
+import { EXCAVATION_DAYS_CONTRACT_FIELD } from '../utils/additionalDigging';
 import {
   FEENSTRA_MAY_2026_CALCULATION_PROFILE,
   FEENSTRA_PROPOSAL_NUMBER,
@@ -342,6 +345,10 @@ const mergeWithDefaults = (input: Partial<Proposal>): Partial<Proposal> => {
   const merged = {
     ...base,
     ...input,
+    // Existing versions must retain their original engine metadata. Otherwise
+    // new-proposal defaults bypass the historical saved-price review.
+    pricingEngineVersion: input.pricingEngineVersion,
+    historicalPricingAdjustment: input.historicalPricingAdjustment,
     customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
     poolSpecs: mergedPoolSpecs,
     excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
@@ -467,7 +474,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     || (isSharedWorkingCopy && (!sharedEditing || sharedSubmissionPending))
     || (Boolean(sharedAccess) && (!isSharedWorkingCopy || sharedAccess !== 'contribute' || !sharedEditing || cloudIssue === 'no-internet' || cloudIssue === 'server-issue'));
   const readOnlyBuilderMessage = isExplicitReadOnlyVersionView
-    ? 'Read-only mode for archived proposal versions. Review the builder, but changes are disabled.'
+    ? (location.state as any)?.readOnlyOffContractCorrection
+      ? 'Read-only mode preserves the saved contract total. Apply the Off-Contract correction on the proposal summary before editing this version.'
+      : 'Read-only mode for archived proposal versions. Review the builder, but changes are disabled.'
     : 'Read-only mode while acting as franchise owner. Review the proposal builder, but changes are disabled.';
   const isCreationRestricted = isProposalEditingRestricted && !proposalNumber;
   const canViewCostBreakdown =
@@ -517,6 +526,31 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const loadedProposalNumberRef = useRef<string | null>(null);
   const loadedProposalIdentityRef = useRef<LoadedProposalIdentity | null>(null);
   const loadedProposalBaselineRef = useRef<Proposal | null>(null);
+  const proposalPricingSnapshotsRef = useRef(new Map<string, PricingData>());
+  const pricingSnapshotKey = (input: Partial<Proposal>) => [
+    input.franchiseId || getSessionFranchiseId(),
+    input.pricingModelFranchiseId || input.franchiseId || getSessionFranchiseId(),
+    input.pricingModelId || '',
+    input.pricingModelRevisionId || '',
+    normalizePricingTierId(input.pricingTierId || input.pricingTierName),
+  ].join('::');
+  const getProposalPricingSnapshot = (input: Partial<Proposal>) => {
+    const key = pricingSnapshotKey(input);
+    const cached = proposalPricingSnapshotsRef.current.get(key);
+    if (cached) return cached;
+    const active = getActivePricingModelMeta();
+    if (
+      input.pricingModelId && active.pricingModelId === input.pricingModelId &&
+      active.pricingModelFranchiseId === (input.pricingModelFranchiseId || input.franchiseId || getSessionFranchiseId()) &&
+      (!input.pricingModelRevisionId || active.pricingModelRevisionId === input.pricingModelRevisionId) &&
+      active.pricingTierId === normalizePricingTierId(input.pricingTierId || input.pricingTierName)
+    ) {
+      const snapshot = getPricingDataSnapshot();
+      proposalPricingSnapshotsRef.current.set(key, snapshot);
+      return snapshot;
+    }
+    return null;
+  };
   const autosaveTimeoutRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
   const priceImpactCacheRef = useRef<
@@ -890,6 +924,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const shouldUseActiveDefault = Boolean(modelMeta.isDefault && modelMeta.pricingModelId);
     return {
       ...base,
+      ...(designerCode === '5555' || isMasterUser
+        ? { westConstructionTimingVersion: 'permit-and-dig-v1' as const }
+        : {}),
       poolSpecs: { ...base.poolSpecs!, fiberglassSpecAutofillEnabled: true },
       franchiseId,
       designerName,
@@ -916,6 +953,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const [proposal, setProposal] = useState<Partial<Proposal>>(proposalNumber ? {} : getInitialProposal());
+  const canChooseProposalRevisions = !isReadOnlyBuilderView &&
+    (!proposalNumber || isOwnProposal(proposal as Proposal, readSession()));
   const proposalNotesFranchiseId = proposal.franchiseId || getSessionFranchiseId();
   const { notes: proposalNoteOverrides } = useProposalNotes(proposalNotesFranchiseId);
   const { enabled: franchisePriceImpactEnabled } = useFranchiseCapability(
@@ -941,6 +980,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const review = proposal.pricingRevisionReview;
     if (
       isLoading ||
+      !canChooseProposalRevisions ||
       !proposalNumber ||
       review?.decision !== 'declined' ||
       !proposal.pricingModelRevisionId ||
@@ -982,6 +1022,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     };
   }, [
     isLoading,
+    canChooseProposalRevisions,
     proposal.pricingModelId,
     proposal.pricingModelRevisionId,
     proposal.pricingRevisionReview,
@@ -1010,6 +1051,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   useEffect(() => {
     const unsubscribe = subscribeToPricingData((snapshot) => {
+      const current = latestProposalRef.current;
+      const active = getActivePricingModelMeta();
+      // A background pricing load must not replace this proposal's defaults.
+      if (current.pricingModelId && (
+        active.pricingModelId !== current.pricingModelId ||
+        (current.pricingModelRevisionId && active.pricingModelRevisionId !== current.pricingModelRevisionId) ||
+        active.pricingTierId !== normalizePricingTierId(current.pricingTierId || current.pricingTierName)
+      )) return;
       if (snapshot?.papDiscountRates) {
         setPapDiscounts(normalizePapDiscounts(snapshot.papDiscountRates as PAPDiscounts));
       }
@@ -1377,7 +1426,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     const allowance = getPackageWaterFeaturesWithoutExtraPump(selectedPackage);
     const needsAdditionalPump = selectedWaterFeatureCategoryCount > allowance;
 
-    if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0) {
+    if (needsAdditionalPump && !hasManualAdditionalPump && waterFeatureAutoPumps.length === 0 && !equipment.waterFeatureAutoPumpDismissed) {
       const selection = buildWaterFeaturePump(
         findActivePumpOption(equipment.pump?.name) || activePumpOptions[0]
       );
@@ -1398,7 +1447,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       return;
     }
 
-    if (!needsAdditionalPump && waterFeatureAutoPumps.length > 0) {
+    if (!needsAdditionalPump && (waterFeatureAutoPumps.length > 0 || equipment.waterFeatureAutoPumpDismissed)) {
       setProposal((prev) => {
         const baseEquipment = (prev.equipment || getDefaultEquipment()) as Proposal['equipment'];
         const currentAdditionalSelections = getAdditionalPumpSelections(baseEquipment);
@@ -1408,6 +1457,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           equipment: {
             ...baseEquipment,
             additionalPumps: nextAdditionalSelections,
+            waterFeatureAutoPumpDismissed: false,
           } as Proposal['equipment'],
         } as Proposal);
       });
@@ -1534,6 +1584,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           pricingCache.set(pricingCacheKey, pricingSnapshot);
         }
         const merged = withTemporaryPricingSnapshot(pricingSnapshot.pricing, () => mergeWithDefaults(input));
+        proposalPricingSnapshotsRef.current.set(pricingSnapshotKey({
+          ...input,
+          pricingModelId: input.pricingModelId || pricingSnapshot.pricingModelId || undefined,
+          pricingModelFranchiseId: input.pricingModelFranchiseId || pricingSnapshot.pricingModelFranchiseId || undefined,
+          pricingModelRevisionId: input.pricingModelRevisionId || pricingSnapshot.pricingModelRevisionId || undefined,
+        }), pricingSnapshot.pricing);
         return {
           ...merged,
           pricingModelId: input.pricingModelId || pricingSnapshot.pricingModelId || undefined,
@@ -1640,6 +1696,17 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         navigate(`/proposal/view/${num}`, {
           replace: true,
           state: versionIdFromState ? { versionId: versionIdFromState } : undefined,
+        });
+        return;
+      }
+      if (!isReadOnlyBuilderView && needsOffContractSeparation(sanitizedTarget)) {
+        showToast({
+          type: 'warning',
+          message: 'Review the Off-Contract contract-total correction on the proposal summary before editing this version.',
+        });
+        navigate(`/proposal/view/${num}`, {
+          replace: true,
+          state: { versionId: nextActiveId },
         });
         return;
       }
@@ -1767,6 +1834,14 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         lastModified: new Date().toISOString(),
       } as Proposal;
 
+      if (section === 'excavation' && (
+        data.hasAdditionalDigging !== prev.excavation?.hasAdditionalDigging ||
+        data.additionalDiggingDays !== prev.excavation?.additionalDiggingDays
+      )) {
+        nextProposal.contractOverrides = { ...prev.contractOverrides };
+        delete nextProposal.contractOverrides[EXCAVATION_DAYS_CONTRACT_FIELD];
+      }
+
       if (
         section === 'poolSpecs' &&
         (prev.poolSpecs?.spaType ?? 'none') !== 'none' &&
@@ -1779,6 +1854,19 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
             spaRun: 0,
           },
         };
+      }
+
+      if (section === 'waterFeatures') {
+        const activeFeatureIds = (selections: Proposal['waterFeatures']['selections'] = []) =>
+          [...new Set(selections
+            .filter((selection) => selection && (selection.quantity ?? 0) > 0)
+            .map((selection) => selection.featureId))].sort().join('|');
+        if (activeFeatureIds(prev.waterFeatures?.selections) !== activeFeatureIds(data?.selections)) {
+          nextProposal.equipment = {
+            ...(prev.equipment || getDefaultEquipment()),
+            waterFeatureAutoPumpDismissed: false,
+          };
+        }
       }
 
       return sanitizeCurrentProposalState(nextProposal);
@@ -2042,6 +2130,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     if (isProposalEditingRestricted) return null;
     if (isReadOnlyBuilderView) return null;
     if (saveInFlightRef.current) return null;
+    if (proposalNumber && needsOffContractSeparation(proposal)) {
+      showToast({
+        type: 'warning',
+        message: 'Review the Off-Contract contract-total correction on the proposal summary before saving.',
+      });
+      return null;
+    }
 
     if (proposalNumber) {
       const loadBlockReason = getExistingProposalSaveBlockReason({
@@ -2074,7 +2169,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       setIsSaving(true);
     }
     try {
-      let proposalToSave: Partial<Proposal> = sanitizeCurrentProposalState(proposal as Proposal);
+      let proposalToSave: Partial<Proposal> = { ...proposal };
 
       if (!proposalToSave.pricingModelId && defaultPricingModelId) {
         const def = pricingModels.find((m) => m.id === defaultPricingModelId);
@@ -2133,12 +2228,21 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         };
       }
 
-      if (!proposalNumber && !proposalToSave.equipment?.hasBeenEdited) {
-        proposalToSave = {
-          ...proposalToSave,
-          equipment: buildStartingEquipment(proposalToSave.poolSpecs, proposalToSave.equipment),
-        };
-      }
+      // Resolve before normalizing selections as well as calculating totals.
+      // Selection defaults also depend on the proposal's own pricing catalog.
+      const savePricingSnapshot = await loadPricingSnapshotForExistingProposal(
+        proposalToSave.franchiseId || getSessionFranchiseId(),
+        proposalToSave.pricingModelId,
+        proposalToSave.pricingModelFranchiseId,
+        normalizePricingTierId(proposalToSave.pricingTierId || proposalToSave.pricingTierName),
+        proposalToSave.pricingModelRevisionId
+      );
+      proposalToSave = withTemporaryPricingSnapshot(savePricingSnapshot.pricing, () => {
+        const normalized = sanitizeCurrentProposalState(proposalToSave as Proposal);
+        return !proposalNumber && !normalized.equipment?.hasBeenEdited
+          ? { ...normalized, equipment: buildStartingEquipment(normalized.poolSpecs, normalized.equipment) }
+          : normalized;
+      });
       // Validate if submitting
       if (effectiveMode === 'submit') {
         const errors = validateProposal(proposalToSave);
@@ -2151,7 +2255,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         }
       }
 
-      const totals = calculateTotals(proposalToSave);
+      const totals = withTemporaryPricingSnapshot(savePricingSnapshot.pricing, () => calculateTotals(proposalToSave));
       const now = new Date().toISOString();
       const versionName =
         totals.versionName ||
@@ -2427,7 +2531,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleSelectPricingModel = async (id: string) => {
-    if (isReadOnlyBuilderView) return;
+    if (!canChooseProposalRevisions) return;
     const model = pricingModels.find((entry) => entry.id === id);
     await applyPricingModelSelection(
       id,
@@ -2442,7 +2546,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleOpenDeclinedPricingComparison = async () => {
-    if (isReadOnlyBuilderView) return;
+    if (!canChooseProposalRevisions) return;
     setShowDeclinedPricingComparison(true);
     setDeclinedPricingComparisonLoading(true);
     setPricingRevisionError(null);
@@ -2465,7 +2569,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleUpgradeDeclinedPricing = async () => {
-    if (!declinedPricingComparison || pricingRevisionBusy || isReadOnlyBuilderView) return;
+    if (!declinedPricingComparison || pricingRevisionBusy || !canChooseProposalRevisions) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
     try {
@@ -2506,7 +2610,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleSelectPricingTier = (tierValue: string) => {
-    if (isReadOnlyBuilderView) return;
+    if (!canChooseProposalRevisions) return;
     const pricingTierId = normalizePricingTierId(tierValue);
     if (pricingTierId === selectedPricingTierId) return;
     if (isBronzePricingTier(pricingTierId)) {
@@ -2517,6 +2621,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   };
 
   const handleConfirmBronzePricingTier = () => {
+    if (!canChooseProposalRevisions) return;
     const pricingTierId = normalizePricingTierId(pendingPricingTierId);
     setPendingPricingTierId(null);
     void applyPricingTierSelection(pricingTierId);
@@ -2781,14 +2886,19 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     );
   }
 
-  const currentPricingProposal = mergeWithDefaults(
+  const currentPricingSnapshot = getProposalPricingSnapshot(proposal) ||
+    (!proposalNumber && !proposal.pricingModelId ? getPricingDataSnapshot() : null);
+  if (!currentPricingSnapshot) {
+    return <div className="proposal-form"><p>This proposal's selected pricing revision is unavailable. Reopen the proposal before editing or saving.</p></div>;
+  }
+  const currentPricingProposal = withTemporaryPricingSnapshot(currentPricingSnapshot, () => mergeWithDefaults(
     applySessionCommissionRates(proposal)
-  ) as Proposal;
-  const currentModelPapDiscounts = readPapDiscountsFromModel();
-  const currentCostBreakdown = MasterPricingEngine.calculateCompleteProposal(
+  )) as Proposal;
+  const currentModelPapDiscounts = normalizePapDiscounts(currentPricingSnapshot.papDiscountRates);
+  const currentCostBreakdown = withTemporaryPricingSnapshot(currentPricingSnapshot, () => MasterPricingEngine.calculateCompleteProposal(
     currentPricingProposal,
     currentModelPapDiscounts
-  );
+  ));
   if (priceImpactProposalIdentityRef.current.proposal !== proposal) {
     priceImpactProposalIdentityRef.current = {
       proposal: proposal as object,
@@ -2821,7 +2931,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2846,7 +2956,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2871,7 +2981,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2896,7 +3006,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2921,7 +3031,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2946,7 +3056,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2971,7 +3081,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -2996,7 +3106,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       target,
       displayBasis: priceImpactDisplayBasis,
       currentCalculation: currentCostBreakdown,
-      pricingSnapshot: getPricingDataSnapshot(),
+      pricingSnapshot: currentPricingSnapshot,
       calculateProposal: (input) =>
         MasterPricingEngine.calculateCompleteProposal(input, currentModelPapDiscounts),
     });
@@ -3108,6 +3218,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? 'This proposal is locked to the May 11, 2026 calculation engine and pricing revision.'
           : isReadOnlyBuilderView
           ? readOnlyBuilderMessage
+          : !canChooseProposalRevisions
+          ? 'Pricing selections are controlled by the proposal owner.'
           : 'Click to change from the Active Price Model'
       }
       aria-label={
@@ -3115,6 +3227,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? `Current pricing model: ${pricingModelDisplayName}. Locked to May 11, 2026 pricing.`
           : isReadOnlyBuilderView
           ? `Current pricing model: ${pricingModelDisplayName}. ${readOnlyBuilderMessage}`
+          : !canChooseProposalRevisions
+          ? `Current pricing model: ${pricingModelDisplayName}. Pricing selections are controlled by the proposal owner.`
           : `Current pricing model: ${pricingModelDisplayName}. Click to change from the Active Price Model`
       }
     >
@@ -3125,7 +3239,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         disabled={
           pricingModels.length === 0 ||
           isSaving ||
-          isReadOnlyBuilderView ||
+          !canChooseProposalRevisions ||
           isFeenstraMay2026Pricing
         }
         aria-label={`Pricing Model. Current selection: ${pricingModelDisplayName}`}
@@ -3160,6 +3274,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     </label>
   );
   const hasDeclinedPricingUpgrade =
+    canChooseProposalRevisions &&
     proposal.pricingRevisionReview?.decision === 'declined' &&
     Boolean(proposal.pricingModelId) &&
     Boolean(proposal.pricingModelRevisionId) &&
@@ -3204,6 +3319,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? 'The pricing tier is locked for the May 11, 2026 calculation profile.'
           : isReadOnlyBuilderView
           ? readOnlyBuilderMessage
+          : !canChooseProposalRevisions
+          ? 'Pricing selections are controlled by the proposal owner.'
           : 'Select the pricing tier for this proposal'
       }
       aria-label={
@@ -3211,6 +3328,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? `Current pricing tier: ${pricingTierDisplayName}. Locked to May 11, 2026 pricing.`
           : isReadOnlyBuilderView
           ? `Current pricing tier: ${pricingTierDisplayName}. ${readOnlyBuilderMessage}`
+          : !canChooseProposalRevisions
+          ? `Current pricing tier: ${pricingTierDisplayName}. Pricing selections are controlled by the proposal owner.`
           : `Current pricing tier: ${pricingTierDisplayName}. Select the pricing tier for this proposal`
       }
     >
@@ -3218,7 +3337,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         value={normalizedSelectedPricingTierId}
         onChange={(e) => handleSelectPricingTier(e.target.value)}
         className="form-header-pricing-select"
-        disabled={isSaving || isReadOnlyBuilderView || isFeenstraMay2026Pricing}
+        disabled={isSaving || !canChooseProposalRevisions || isFeenstraMay2026Pricing}
         aria-label={`Pricing Tier. Current selection: ${pricingTierDisplayName}`}
       >
         {PRICING_TIER_OPTIONS.map((tier) => (
@@ -3392,7 +3511,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                   ? 'VIEW ONLY. Withdraw Changes before proposing more changes'
                   : 'VIEW ONLY. To modify, click Propose Changes at the top'
                 : undefined}>
-                <fieldset className="proposal-builder-readonly-shell" aria-label="Read-only proposal builder"
+                <fieldset className="proposal-builder-readonly-shell" disabled={!sharedAccess} aria-label="Read-only proposal builder"
                   onMouseDownCapture={blockReadOnlyBuilderInteraction}
                   onClickCapture={blockReadOnlyBuilderInteraction}
                   onKeyDownCapture={blockReadOnlyBuilderInteraction}

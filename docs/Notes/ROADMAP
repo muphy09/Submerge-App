@@ -1,5 +1,7 @@
 ---------------------------------------------------------------------------------------------------------
 Immediate Changes - 
+
+- Backups of proposal revision history
 - Text change bug 
 - Checkbox for 3 year warranty and 5 year warranty in pricing sheet & contract
 - Bookkeeper Overhaul
@@ -23,6 +25,15 @@ Immediate Changes -
 
 ## Notes:
 
+
+Comparison view between different versions of proposals
+
+ADjust contract date (email from john)
+
+Better HUD for admins / users when viewing what contract version / price version they are on or viewing
+
+Set charge added per category - ths one will be when tile is added
+realtime update on price adjustment
 -------------------------------------
 Mid Term - 
 - Workflow for Addendum (contract changes after original) must show cost comparison of before and after 

@@ -7,6 +7,7 @@ import { getAdditionalPumpSelections, normalizePumpSelectionState } from './pump
 import { normalizeEquipmentLighting } from './lighting';
 import { getEquipmentItemCost } from './equipmentCost';
 import { isPpasEastProposal } from './franchiseScope';
+import { syncAdditionalDiggingFromContract } from './additionalDigging';
 
 const SPA_CONTRACT_FIELD_IDS = ['p2_52'];
 const SPA_LIGHT_CONTRACT_FIELD_IDS = ['p2_53', 'p2_54'];
@@ -444,6 +445,7 @@ export function sanitizeProposalSelectionState(
   proposal: Proposal,
   options?: { defaultAuxiliaryPump?: PumpSelection | null }
 ): Proposal {
+  proposal = syncAdditionalDiggingFromContract(proposal);
   const poolDefaults = getDefaultPoolSpecs();
   const poolSpecs = { ...(proposal.poolSpecs || poolDefaults) };
   const plumbing = {

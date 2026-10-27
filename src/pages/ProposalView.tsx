@@ -14,6 +14,7 @@ import type { ContractViewHandle } from '../components/ContractView';
 import { OverflowTooltipText, TooltipAnchor } from '../components/AppTooltip';
 import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import { CogsReportDocument } from '../components/CogsReport';
+import MaterialsOrderForm from '../components/MaterialsOrderForm';
 import OffContractItemsView from '../components/OffContractItemsView';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -37,7 +38,7 @@ import {
   DISABLED_SIGNED_WORKFLOW_MESSAGE,
   loadFranchiseSignedWorkflowDisabled,
 } from '../services/franchiseBranding';
-import { getProposal as getProposalRemote, saveProposal as saveProposalAdapter } from '../services/proposalsAdapter';
+import { getProposal as getProposalRemote, saveProposal as saveProposalAdapter, isOwnProposal } from '../services/proposalsAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import {
   initPricingDataStore,
@@ -99,16 +100,20 @@ import {
   createCorrectedPricingVersion,
   type CustomOptionPricingCorrectionReview,
 } from '../utils/customOptionPricingCorrection';
+import { applyOffContractSeparation, getSavedOffContractTotal, needsOffContractSeparation } from '../utils/offContractSeparation';
+import { dismissOffContractReview, getOffContractReviewKey, isOffContractReviewDismissed } from '../utils/offContractReviewDismissal';
 import { getEffectivePrimarySanitationSystemName, getSelectedEquipmentPackage } from '../utils/equipmentPackages';
 import { normalizeCustomFeatures } from '../utils/customFeatures';
 import { normalizeWarrantySectionsSetting } from '../utils/warranty';
 import { resolveProposalPapDiscounts } from '../utils/papDiscounts';
 import { buildBreakdownPdfBytes, downloadBreakdownPdf } from '../utils/breakdownPdf';
+import { buildMaterialsOrderForm } from '../utils/materialsOrderForm';
+import { EXCAVATION_DAYS_CONTRACT_FIELD, getAdditionalDiggingDays, syncAdditionalDiggingFromContract } from '../utils/additionalDigging';
 import {
   applyHistoricalPricingProtection,
   buildHistoricalPricingReview,
 } from '../utils/pricingEngineCompatibility';
-import { recalculateProposalForRetailAdjustmentSave } from '../utils/proposalPricingPersistence';
+import { calculateProposalRetailAdjustmentDraft } from '../utils/proposalPricingPersistence';
 import { calculateCustomerSavingsSummary } from '../utils/proposalSavings';
 import { getPricingTierName, isBronzePricingTier, normalizePricingTierId } from '../services/pricingTiers';
 import {
@@ -767,6 +772,14 @@ const getEquipmentPackageLabel = (equipment: Proposal['equipment']): string | nu
   return normalizedPackageName.includes('package') ? packageName : `${packageName} Equipment Package`;
 };
 
+const getOrderFormPackageSummaryName = (packageName: string, packageId?: string): string => {
+  const name = packageName.trim();
+  if (!name || /^no package selected$/i.test(name)) return 'None';
+  if (packageId === 'custom' || /^custom\b/i.test(name)) return 'Custom';
+  const packageCode = name.match(/^(?:PMF|PFM)\d+/i);
+  return packageCode ? packageCode[0].toUpperCase() : name.split(/[\s-]/)[0];
+};
+
 const buildEquipmentSummary = (
   equipment: Proposal['equipment'],
   equipmentFlags: RetiredEquipmentFlags = getEmptyRetiredEquipmentFlags()
@@ -880,6 +893,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [customerBreakdownVersionId, setCustomerBreakdownVersionId] = useState<string | null>(null);
   const [customerBreakdownMode, setCustomerBreakdownMode] = useState<CustomerBreakdownMode>('combined');
   const [cogsBreakdownVersionId, setCogsBreakdownVersionId] = useState<string | null>(null);
+  const [materialsOrderVersionId, setMaterialsOrderVersionId] = useState<string | null>(null);
   const [showCogsBreakdown, setShowCogsBreakdown] = useState(false);
   const [offContractVersionId, setOffContractVersionId] = useState<string | null>(null);
   const [contractVersionId, setContractVersionId] = useState<string | null>(null);
@@ -942,6 +956,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [customOptionPricingCorrectionBusy, setCustomOptionPricingCorrectionBusy] = useState(false);
   const [customOptionPricingCorrectionError, setCustomOptionPricingCorrectionError] = useState<string | null>(null);
   const dismissedCustomOptionCorrectionVersionRef = useRef<string | null>(null);
+  const [offContractReviewVersionId, setOffContractReviewVersionId] = useState<string | null>(null);
+  const [offContractReviewBusy, setOffContractReviewBusy] = useState(false);
+  const [offContractReviewError, setOffContractReviewError] = useState<string | null>(null);
   const [versionSyncMeta, setVersionSyncMeta] = useState<Record<string, ProposalVersionSyncMeta>>({});
   const proposalRef = useRef<HTMLDivElement>(null);
   const breakdownExportControlRef = useRef<HTMLDivElement>(null);
@@ -965,6 +982,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const isReviewerRole = sessionRole === 'owner' || sessionRole === 'admin' || sessionRole === 'bookkeeper';
   const isReviewerWorkspaceView = Boolean(locationState?.reviewerReturnTo || locationState?.reviewerReturnPath);
   const isReadOnlyReviewerView = isReviewerRole && isReviewerWorkspaceView;
+  // Review permission does not authorize changing the owner's revision choices.
+  const canChooseProposalRevisions = Boolean(
+    proposal && isOwnProposal(proposal, readSession()) &&
+    !isProposalEditingRestricted && !isReadOnlyReviewerView
+  );
   const canViewCogsBreakdown = showCogsBreakdown;
   const activeEditableVersion =
     (versions.length
@@ -1057,6 +1079,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const merged = {
       ...(base as Proposal),
       ...input,
+      // Missing engine metadata identifies historical proposals. New-proposal
+      // defaults must not make an older saved version look freshly calculated.
+      pricingEngineVersion: input.pricingEngineVersion,
+      historicalPricingAdjustment: input.historicalPricingAdjustment,
       customerInfo: { ...(base.customerInfo || {}), ...(input.customerInfo || {}) } as Proposal['customerInfo'],
       poolSpecs,
       excavation: { ...getDefaultExcavation(), ...(input.excavation || {}) },
@@ -1091,7 +1117,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       };
       merged.interiorFinish = { ...merged.interiorFinish, hasWaterproofing: false };
     }
-    return merged;
+    return syncAdditionalDiggingFromContract(merged);
   };
 
   const resolveVersionSyncMetaEntries = async (
@@ -1435,12 +1461,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   }, [breakdownExportOpen]);
 
   useEffect(() => {
-    if (!customerBreakdownVersionId && !cogsBreakdownVersionId) {
+    if (!customerBreakdownVersionId && !cogsBreakdownVersionId && !materialsOrderVersionId) {
       setBreakdownExportOpen(false);
       setBreakdownExporting(false);
       setBreakdownExportActive(false);
     }
-  }, [customerBreakdownVersionId, cogsBreakdownVersionId]);
+  }, [customerBreakdownVersionId, cogsBreakdownVersionId, materialsOrderVersionId]);
 
   useEffect(() => {
     if (customerBreakdownVersionId) return;
@@ -1660,7 +1686,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleDeclinePricingRevision = async () => {
-    if (isProposalEditingRestricted) return;
+    if (!canChooseProposalRevisions) return;
     if (!proposal || !pricingRevisionComparison) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
@@ -1688,7 +1714,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleUpgradePricingRevision = async () => {
-    if (isProposalEditingRestricted) return;
+    if (!canChooseProposalRevisions) return;
     if (!proposal || !pricingRevisionComparison) return;
     setPricingRevisionBusy(true);
     setPricingRevisionError(null);
@@ -1752,12 +1778,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         openContractWithRevision(version, check.pinned);
         return;
       }
-      if (isProposalEditingRestricted) {
-        if (check.requiresReview) {
-          setPendingContractRevision({ version, check });
-          setContractRevisionPromptOpen(true);
-          return;
-        }
+      if (!canChooseProposalRevisions || !isOwnProposal(version, readSession())) {
         openContractWithRevision(version, check.pinned);
         return;
       }
@@ -1788,7 +1809,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleKeepCurrentContract = async () => {
     if (!pendingContractRevision) return;
-    if (isProposalEditingRestricted) {
+    if (!canChooseProposalRevisions || !isOwnProposal(pendingContractRevision.version, readSession())) {
       const { version, check } = pendingContractRevision;
       setContractRevisionPromptOpen(false);
       setPendingContractRevision(null);
@@ -1814,16 +1835,12 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const handleUpgradeContract = async () => {
     if (!pendingContractRevision) return;
-    if (isProposalEditingRestricted) {
+    if (!canChooseProposalRevisions || !isOwnProposal(pendingContractRevision.version, readSession())) {
       const { version, check } = pendingContractRevision;
       setContractRevisionPromptOpen(false);
       setPendingContractRevision(null);
       setContractRevisionError(null);
-      openContractWithRevision(version, check.latest);
-      showToast({
-        type: 'info',
-        message: 'Previewing the latest contract template. The proposal was not changed.',
-      });
+      openContractWithRevision(version, check.pinned);
       return;
     }
     setContractRevisionBusy(true);
@@ -1845,7 +1862,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   useEffect(() => {
     let cancelled = false;
     const detectPricingRevision = async () => {
-      if (isProposalEditingRestricted) {
+      if (!canChooseProposalRevisions) {
         setPricingRevisionComparison(null);
         setPricingRevisionPromptOpen(false);
         setPricingRevisionComparisonOpen(false);
@@ -1891,10 +1908,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [isProposalEditingRestricted, proposal?.pricingModelId, proposal?.pricingModelRevisionId, proposal?.lastModified]);
+  }, [canChooseProposalRevisions, proposal?.pricingModelId, proposal?.pricingModelRevisionId, proposal?.lastModified]);
 
   useEffect(() => {
     if (!proposal || isProposalEditingRestricted || isVersionPermanentlyLocked(proposal)) {
+      setCustomOptionPricingCorrection(null);
+      return;
+    }
+    if (needsOffContractSeparation(proposal)) {
       setCustomOptionPricingCorrection(null);
       return;
     }
@@ -1919,6 +1940,75 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     versionSyncMeta,
   ]);
 
+  const canReviewOffContractVersion = (selected: Proposal) => {
+    const selectedIsSigned = isVersionPermanentlyLocked(selected);
+    const canCorrectSignedBaseline = Boolean(
+      selectedIsSigned && hasSignedBaseline && proposalWorkflowStatus === 'signed' &&
+      (selected.versionId || 'original') === getLatestSignedBaselineVersionId(proposal as Proposal) &&
+      !versions.some((entry) => !isVersionPermanentlyLocked(entry))
+    );
+    return canManageVersionDrafts && !isProposalCompleted &&
+      !isProposalEditingRestricted && !isReadOnlyReviewerView &&
+      (!selectedIsSigned || canCorrectSignedBaseline) && needsOffContractSeparation(selected);
+  };
+
+  useEffect(() => {
+    const selected = versions.find((entry) => (entry.versionId || 'original') === selectedVersionId);
+    if (
+      !selected || !canReviewOffContractVersion(selected) ||
+      isOffContractReviewDismissed(getOffContractReviewKey(selected, readSession()?.userId))
+    ) {
+      setOffContractReviewVersionId(null);
+      return;
+    }
+    setOffContractReviewVersionId(selected.versionId || 'original');
+  }, [canManageVersionDrafts, hasSignedBaseline, isProposalCompleted, isProposalEditingRestricted, isReadOnlyReviewerView, proposal, proposalNumber, proposalWorkflowStatus, selectedVersionId, versions]);
+
+  const handleApplyOffContractSeparation = async () => {
+    if (!proposal || !offContractReviewVersionId || offContractReviewBusy) return;
+    const source = versions.find((entry) => (entry.versionId || 'original') === offContractReviewVersionId);
+    if (!source || !canManageVersionDrafts || isProposalCompleted) return;
+    setOffContractReviewBusy(true);
+    setOffContractReviewError(null);
+    try {
+      const container = {
+        ...ensureProposalWorkflow(proposal),
+        versions,
+        activeVersionId,
+      } as Proposal;
+      const correction = applyOffContractSeparation(container, source);
+      const saved = await saveProposalRemote(correction.container);
+      const savedVersions = listAllVersions(saved as Proposal).map((entry) => ({
+        ...(mergeProposalWithDefaults(entry) as Proposal),
+        versionId: entry.versionId || 'original',
+        versionName: entry.versionName || (entry.isOriginalVersion ? 'Original Version' : 'Version'),
+        isOriginalVersion: entry.isOriginalVersion,
+        activeVersionId: entry.activeVersionId,
+        versions: [],
+      }));
+      const correctedId = correction.correctedVersion.versionId || 'original';
+      const activeApplied = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
+      setVersions(savedVersions);
+      setProposal(activeApplied as Proposal);
+      setActiveVersionId((saved as Proposal).activeVersionId || correctedId);
+      setSelectedVersionId(correctedId);
+      setOffContractReviewVersionId(null);
+      setVersionSyncMeta(await resolveVersionSyncMetaEntries(savedVersions, saved as Proposal));
+      showToast({
+        type: (saved as any).syncStatus === 'pending' ? 'warning' : 'success',
+        message: (saved as any).syncStatus === 'pending'
+          ? 'Corrected contract total saved locally. It will sync when back online.'
+          : correction.createdVersion
+          ? 'Corrected proposal addendum draft created. The signed version was left unchanged.'
+          : 'Contract total corrected in this version.',
+      });
+    } catch (error: any) {
+      setOffContractReviewError(error?.message || 'Could not apply the contract-total correction.');
+    } finally {
+      setOffContractReviewBusy(false);
+    }
+  };
+
   const handleEdit = (version?: Proposal, options?: { readOnly?: boolean }) => {
     if (!canManageVersionDrafts && !canOpenReadOnlyBuilder && !options?.readOnly) return;
     if (!version) return;
@@ -1939,6 +2029,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         sharedStartEditing: Boolean(sharedRequest) && !submissionPending,
         sharedSubmissionPending: submissionPending,
         sharedPermission: proposal?.sharedPermission,
+        readOnlyOffContractCorrection: options?.readOnly === true && needsOffContractSeparation(version),
       },
     });
   };
@@ -2310,11 +2401,27 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       const updated = all.map((v) => {
         const id = v.versionId || 'original';
         if (id !== versionId) return v;
-        return {
+        let nextVersion = syncAdditionalDiggingFromContract({
           ...(v as Proposal),
           contractOverrides: overrides,
           lastModified: new Date().toISOString(),
-        };
+        });
+        if (getAdditionalDiggingDays(nextVersion.excavation) !== getAdditionalDiggingDays(v.excavation)) {
+          const syncMeta = getCachedVersionSyncMeta(v) ?? getFrozenVersionSyncMeta(v);
+          if (!syncMeta.pricingSnapshot) throw new Error('The saved pricing revision is required to update excavation days.');
+          const dayRate = Number(syncMeta.pricingSnapshot?.excavation?.additionalDiggingPerDay ?? 0);
+          const hadCharge = v.costBreakdown?.excavation?.some((line) =>
+            line.description === 'Additional Digging (Days)' && line.total > 0);
+          if (dayRate > 0 || hadCharge) {
+            const recalculated = calculateCurrentCategoryCustomOptionPricing(nextVersion);
+            if (!recalculated) throw new Error('The saved pricing revision is required to update excavation days.');
+            nextVersion = { ...nextVersion, ...recalculated.calculation };
+          }
+        }
+        // The proposal now owns this count. Keep other manual contract fields intact.
+        nextVersion.contractOverrides = { ...overrides };
+        delete nextVersion.contractOverrides[EXCAVATION_DAYS_CONTRACT_FIELD];
+        return nextVersion;
       });
 
       const desiredActiveId =
@@ -2355,6 +2462,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     } catch (error) {
       console.error('Failed to save contract overrides', error);
       showToast({ type: 'error', message: 'Could not save contract overrides.' });
+      throw error;
     }
   };
 
@@ -2435,12 +2543,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         if (!syncMeta?.pricingSnapshot || syncMeta.priceModelStatus === 'removed') {
           throw new Error('The pricing revision for this proposal version could not be loaded.');
         }
-        updatedTargetVersion = recalculateProposalForRetailAdjustmentSave({
-          proposal: updatedTargetVersion,
+        updatedTargetVersion = calculateProposalRetailAdjustmentDraft({
+          proposal: targetVersion,
           retailAdjustments: savedRetailAdjustments,
           pricingSnapshot: syncMeta.pricingSnapshot,
           mergeWithDefaults: mergeProposalWithDefaults,
         });
+        updatedTargetVersion.warrantySections = savedWarrantySections;
       }
 
       const updatedTimestamp = new Date().toISOString();
@@ -2538,6 +2647,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const customerName =
       cogsModalView?.proposal?.customerInfo?.customerName ||
       customerModalView?.proposal?.customerInfo?.customerName ||
+      materialsOrderView?.proposal?.customerInfo?.customerName ||
       proposal?.customerInfo?.customerName ||
       'Proposal';
     const today = new Date();
@@ -2546,6 +2656,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     ).padStart(2, '0')}`;
     if (cogsModalView) {
       return `${customerName}-cogs-cost-breakdown-${formattedDate}.pdf`;
+    }
+    if (materialsOrderView) {
+      return `${customerName}-materials-equipment-order-form-${formattedDate}.pdf`;
     }
     if (customerBreakdownMode === 'cost') {
       return `${customerName}-customer-cost-breakdown-${formattedDate}.pdf`;
@@ -2562,6 +2675,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         eyebrow: 'COGS Breakdown',
         title: 'COGS Cost Breakdown',
         orientation: 'landscape',
+      };
+    }
+
+    if (materialsOrderView) {
+      return {
+        eyebrow: 'Materials and Equipment Order Form',
+        title: 'Materials and Equipment Order Form',
+        orientation: 'portrait',
       };
     }
 
@@ -2658,12 +2779,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const handleBreakdownPrint = async () => {
-    if (breakdownExporting || breakdownSaving) return;
+    if (breakdownExporting || breakdownSaving || customerBreakdownPreviewError) return;
     setBreakdownExportOpen(false);
-    if (customerBreakdownVersionId) {
-      const saveSucceeded = await handleSaveCustomerBreakdownChanges();
-      if (!saveSucceeded) return;
-    }
     const filename = getBreakdownExportFilename();
     const previewMeta = getBreakdownPrintPreviewMeta();
     const previewWindow = openBreakdownPrintPreviewWindow(filename, previewMeta);
@@ -2736,11 +2853,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const exportBreakdownPdf = async () => {
-    if (breakdownSaving) return;
-    if (customerBreakdownVersionId) {
-      const saveSucceeded = await handleSaveCustomerBreakdownChanges();
-      if (!saveSucceeded) return;
-    }
+    if (breakdownSaving || customerBreakdownPreviewError) return;
     const filename = getBreakdownExportFilename();
     const previewMeta = getBreakdownPrintPreviewMeta();
     setBreakdownExporting(true);
@@ -3426,12 +3539,15 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   };
 
   const buildViewModel = (input: Proposal) => {
+    const hasPendingOffContractCorrection = needsOffContractSeparation(input);
     const syncMeta = getCachedVersionSyncMeta(input) ?? getFrozenVersionSyncMeta(input);
     const livePricingSnapshot = syncMeta.pricingSnapshot;
     const canUsePricingSnapshot =
       Boolean(proposal) &&
       Boolean(livePricingSnapshot) &&
-      syncMeta.priceModelStatus !== 'removed';
+      syncMeta.priceModelStatus !== 'removed' &&
+      !hasPendingOffContractCorrection &&
+      input.pricing?.offContractSeparated !== true;
     let mergedProposal = canUsePricingSnapshot
       ? (withTemporaryPricingSnapshot(livePricingSnapshot!, () => mergeProposalWithDefaults(input)) as Proposal)
       : (input as Proposal);
@@ -3457,6 +3573,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       calculated?.costBreakdown || mergedProposal.costBreakdown,
       mergedProposal
     );
+    const materialsOrder = livePricingSnapshot
+      ? withTemporaryPricingSnapshot(livePricingSnapshot, () => buildMaterialsOrderForm(mergedProposal, costBreakdownForDisplay))
+      : buildMaterialsOrderForm(mergedProposal, costBreakdownForDisplay, false);
     const subtotal = calculated?.subtotal ?? mergedProposal.subtotal ?? 0;
     const totalCost = calculated?.totalCost ?? mergedProposal.totalCost ?? 0;
     const pricing = calculated?.pricing ?? mergedProposal.pricing;
@@ -3469,7 +3588,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const retailPrice = pricing?.retailPrice ?? totalCost ?? subtotal ?? 0;
     const offContractTotal =
       pricing?.offContractTotal ?? getOffContractTotal(mergedProposal, offContractDeckingLineItems);
-    const retailPriceForMargin = Math.max(0, retailPrice - offContractTotal);
+    const retailPriceForMargin = Math.max(0, retailPrice - (pricing?.offContractSeparated ? 0 : offContractTotal));
     const digCommission = pricing?.digCommission ?? 0;
     const adminFee = pricing?.adminFee ?? 0;
     const closeoutCommission = pricing?.closeoutCommission ?? 0;
@@ -3701,6 +3820,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       proposal: mergedProposal,
       calculated,
       costBreakdownForDisplay,
+      materialsOrder,
       subtotal,
       totalCost,
       pricing,
@@ -3900,6 +4020,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const primaryView = versionMap.get(displayPrimaryVersionId) || viewModels[0];
   const selectedViewModel = selectedView || primaryView;
   const selectedVersionIdKey = selectedViewModel?.proposal.versionId || 'original';
+  const offContractReviewVersion = versions.find(
+    (entry) => (entry.versionId || 'original') === offContractReviewVersionId
+  );
   const signableApprovedVersionIds = approvedVersionIds.filter(
     (versionId) => !hasEquipmentChangeRequired(versionSyncMeta[versionId]?.equipmentFlags)
   );
@@ -3998,6 +4121,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const cogsModalView = cogsBreakdownVersionId
     ? versionMap.get(cogsBreakdownVersionId) || primaryView
     : null;
+  const materialsOrderView = materialsOrderVersionId
+    ? versionMap.get(materialsOrderVersionId) || primaryView
+    : null;
   const offContractModalView = offContractVersionId
     ? versionMap.get(offContractVersionId) || primaryView
     : null;
@@ -4052,15 +4178,43 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : customerBreakdownMode === 'warranty'
       ? customerWarrantyBreakdownDirty
       : customerRetailBreakdownDirty || customerWarrantyBreakdownDirty;
-  const customerBreakdownPreviewProposal =
-    customerModalView && customerBreakdownEditor &&
-    customerBreakdownEditor.versionId === (customerModalView.proposal.versionId || 'original')
-      ? {
-          ...customerModalView.proposal,
-          retailAdjustments: customerBreakdownEditor.draftRetailAdjustments,
-          warrantySections: customerBreakdownEditor.draftWarrantySections,
+  let customerBreakdownPreviewProposal = customerModalView?.proposal;
+  let customerBreakdownPreviewError: string | null = null;
+  if (customerModalView && customerBreakdownEditor &&
+      customerBreakdownEditor.versionId === (customerModalView.proposal.versionId || 'original')) {
+    // Use the saved version, not the display model (which may already contain
+    // historical protection), as the baseline shared with Save Changes.
+    const baseline = allVersionsForRender.find(
+      (entry) => (entry.versionId || 'original') === customerBreakdownEditor.versionId
+    );
+    customerBreakdownPreviewProposal = {
+      ...customerModalView.proposal,
+      warrantySections: customerBreakdownEditor.draftWarrantySections,
+    };
+    if (customerRetailBreakdownDirty && customerBreakdownMode !== 'warranty' && canEditCustomerBreakdownVersion) {
+      try {
+        const syncMeta = getCachedVersionSyncMeta(baseline);
+        if (!baseline || !syncMeta?.pricingSnapshot || syncMeta.priceModelStatus === 'removed') {
+          throw new Error('The saved pricing revision is unavailable.');
         }
-      : customerModalView?.proposal;
+        customerBreakdownPreviewProposal = {
+          ...calculateProposalRetailAdjustmentDraft({
+            proposal: baseline,
+            retailAdjustments: customerBreakdownEditor.draftRetailAdjustments,
+            pricingSnapshot: syncMeta.pricingSnapshot,
+            mergeWithDefaults: mergeProposalWithDefaults,
+          }),
+          warrantySections: customerBreakdownEditor.draftWarrantySections,
+        };
+      } catch {
+        customerBreakdownPreviewError = 'Live totals could not be calculated from this proposal’s saved pricing revision. Changes have not been saved.';
+        customerBreakdownPreviewProposal = {
+          ...customerBreakdownPreviewProposal,
+          retailAdjustments: customerBreakdownEditor.draftRetailAdjustments,
+        };
+      }
+    }
+  }
   const customerBreakdownPreviewView = customerBreakdownPreviewProposal
     ? buildViewModel(customerBreakdownPreviewProposal as Proposal)
     : customerModalView;
@@ -4421,6 +4575,24 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           </button>
         )}
 
+        <button className="summary-tile materials-order-tile" type="button" onClick={() => setMaterialsOrderVersionId(versionId)}>
+          <div className="tile-header">
+            <div className="tile-icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 3h9l3 3v15H6V3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                <path d="M9 10h6M9 14h6M9 18h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div className="tile-header-text"><p className="tile-title">Materials &amp; Equipment<br/>Order Form</p></div>
+          </div>
+          <div className="tile-content-box">
+            <div className="tile-metrics">
+              <div className="metric-row"><span className="metric-label">Equipment Package:</span><OverflowTooltipText as="span" className="metric-value">{getOrderFormPackageSummaryName(vm.materialsOrder.packageName, vm.proposal.equipment.packageSelectionId)}</OverflowTooltipText></div>
+            </div>
+          </div>
+          <span className="tile-link">View Order Form <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 11L11 3M11 3H5M11 3V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+        </button>
+
         {canViewCogsBreakdown && (
           <button className="summary-tile cogs-tile" type="button" onClick={() => setCogsBreakdownVersionId(versionId)}>
             <div className="tile-header">
@@ -4768,7 +4940,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       : versionHasSubmissionHistory || versionRecordStatus === 'changes_requested'
       ? 'Resubmit Proposal'
       : 'Submit Proposal';
-    const archivedEditLabel = isArchived ? 'Open Read-Only Builder' : 'Edit Proposal';
+    const hasPendingOffContractCorrection = needsOffContractSeparation(vm.proposal);
+    const openBuilderReadOnly = isArchived || hasPendingOffContractCorrection;
+    const archivedEditLabel = openBuilderReadOnly ? 'Open Read-Only Builder' : 'Edit Proposal';
     const canUseSubmitAction = shouldRenderSubmitAction && !submitActionDisabledReason;
     const signActionTooltip = showSignProposalButton ? signProposalDisabledReason : undefined;
     const shouldRenderArchivedNote =
@@ -4831,12 +5005,23 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             <TooltipAnchor tooltip={editVersionDisabledReason}>
               <button
                 className="action-button side-action-button"
-                onClick={() => handleEdit(vm.proposal, { readOnly: isArchived })}
+                onClick={() => handleEdit(vm.proposal, { readOnly: openBuilderReadOnly })}
                 disabled={!canOpenVersionInBuilder}
               >
                 <ProposalSummaryIcon name="edit" size={21} />{isSharedRecipient ? myWorkingRequest ? 'Continue Editing' : 'View Proposal' : archivedEditLabel}
               </button>
             </TooltipAnchor>
+            {canReviewOffContractVersion(vm.proposal) && (
+              <button
+                className="action-button side-action-button"
+                onClick={() => {
+                  setOffContractReviewError(null);
+                  setOffContractReviewVersionId(versionId);
+                }}
+              >
+                Review Contract Total Correction
+              </button>
+            )}
             {!isSharedRecipient && <TooltipAnchor tooltip={deleteVersionDisabledReason}>
               <button
                 className="action-button danger side-action-button"
@@ -4848,6 +5033,9 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             </TooltipAnchor>}
           </div>
           {archivedNote && <p className="proposal-side-empty">{archivedNote}</p>}
+          {hasPendingOffContractCorrection && (
+            <p className="proposal-side-empty">The saved contract total is unchanged. The builder is read-only until you choose to apply the Off-Contract correction.</p>
+          )}
         </div>
       </div>
     );
@@ -5714,7 +5902,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                       type="button"
                       onClick={handleCustomerBreakdownSaveClick}
                       disabled={
-                        !canEditCustomerBreakdownVersion ||
+                        !canEditCustomerBreakdownVersion || Boolean(customerBreakdownPreviewError) ||
                         !customerBreakdownDirty ||
                         breakdownSaving ||
                         breakdownExporting
@@ -5739,6 +5927,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 </div>
               </div>
               <div className="modal-body-scroll">
+                {customerBreakdownPreviewError && <div role="alert">{customerBreakdownPreviewError}</div>}
                 {customerBreakdownMode === 'warranty' ? (
                   <div className="customer-warranty-modal-body">
                     <SubmergeAdvantageWarranty
@@ -5799,6 +5988,35 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
               )}
             </div>
           )}
+        </>
+      )}
+      {materialsOrderVersionId && materialsOrderView && (
+        <>
+          <div className="modal-overlay" data-scroll-lock="true" onClick={() => setMaterialsOrderVersionId(null)}>
+            <div className="modal-content wide materials-order-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <div><p className="modal-eyebrow">Order Form</p><h2>Materials and Equipment</h2></div>
+                <div className="breakdown-header-actions">
+                  <div className="export-control" ref={breakdownExportControlRef}>
+                    <button className={`action-button export-button ${breakdownExportOpen ? 'open' : ''}`} type="button"
+                      onClick={handleBreakdownExportToggle} disabled={breakdownExporting} aria-expanded={breakdownExportOpen} aria-haspopup="listbox">Export</button>
+                    {breakdownExportOpen && <div className="export-dropdown" role="listbox">
+                      <button type="button" className="export-option" role="option" onClick={handleBreakdownPrint} disabled={breakdownExporting}>Print</button>
+                      <button type="button" className="export-option" role="option" onClick={handleBreakdownPdf} disabled={breakdownExporting}>PDF</button>
+                    </div>}
+                  </div>
+                  <button className="modal-close" onClick={() => setMaterialsOrderVersionId(null)} aria-label="Close materials and equipment order form">x</button>
+                </div>
+              </div>
+              <div className="modal-body-scroll">
+                <MaterialsOrderForm proposal={materialsOrderView.proposal} data={materialsOrderView.materialsOrder} mode="viewer" />
+              </div>
+            </div>
+          </div>
+          {shouldRenderBreakdownExport && <div className={`export-print-area ${breakdownExportActive ? 'print-mode' : ''}`}
+            ref={breakdownExportAreaRef} aria-hidden="true">
+            <MaterialsOrderForm proposal={materialsOrderView.proposal} data={materialsOrderView.materialsOrder} mode="export" />
+          </div>}
         </>
       )}
       {canViewCogsBreakdown && cogsBreakdownVersionId && cogsModalView && (
@@ -5888,6 +6106,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       <PricingRevisionPromptModal
         isOpen={
           pricingRevisionPromptOpen &&
+          canChooseProposalRevisions &&
           Boolean(pricingRevisionComparison) &&
           !customOptionPricingCorrection
         }
@@ -5919,7 +6138,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       />
 
       <ConfirmDialog
-        open={Boolean(customOptionPricingCorrection)}
+        open={Boolean(customOptionPricingCorrection) && !offContractReviewVersionId}
         title="Custom-option pricing correction available"
         message={
           customOptionPricingCorrection
@@ -5939,8 +6158,39 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         }}
       />
 
+      <ConfirmDialog
+        open={Boolean(offContractReviewVersionId && offContractReviewVersion)}
+        title="Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?"
+        message={
+          offContractReviewVersion
+            ? `The saved contract total is ${formatCurrency(offContractReviewVersion.pricing?.retailPrice ?? offContractReviewVersion.totalCost ?? 0)}. The corrected contract total will be ${formatCurrency((offContractReviewVersion.pricing?.retailPrice ?? offContractReviewVersion.totalCost ?? 0) - getSavedOffContractTotal(offContractReviewVersion))}. ${isVersionPermanentlyLocked(offContractReviewVersion)
+              ? 'Accepting creates a proposal addendum draft. The signed contract remains unchanged.'
+              : getVersionRecordStatus(offContractReviewVersion) === 'submitted' ||
+                getVersionRecordStatus(offContractReviewVersion) === 'needs_approval' ||
+                getVersionRecordStatus(offContractReviewVersion) === 'approved' ||
+                hasVersionSubmissionHistory(proposal as Proposal, offContractReviewVersion.versionId)
+              ? 'Accepting updates this version and returns it to Draft. It must be resubmitted for approval.'
+              : 'Accepting updates this draft version.'}`
+            : ''
+        }
+        confirmLabel={offContractReviewVersion && isVersionPermanentlyLocked(offContractReviewVersion)
+          ? 'Create addendum draft'
+          : 'Update this version'}
+        cancelLabel="Not now"
+        isLoading={offContractReviewBusy}
+        errorMessage={offContractReviewError}
+        onConfirm={() => void handleApplyOffContractSeparation()}
+        onCancel={() => {
+          if (offContractReviewVersion) {
+            dismissOffContractReview(getOffContractReviewKey(offContractReviewVersion, readSession()?.userId));
+          }
+          setOffContractReviewVersionId(null);
+          setOffContractReviewError(null);
+        }}
+      />
+
       <PricingRevisionComparisonModal
-        isOpen={pricingRevisionComparisonOpen}
+        isOpen={canChooseProposalRevisions && pricingRevisionComparisonOpen}
         comparison={pricingRevisionComparison}
         loading={pricingRevisionBusy}
         error={pricingRevisionError}
@@ -5957,7 +6207,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         }}
       />
       <ContractRevisionPromptModal
-        isOpen={contractRevisionPromptOpen && Boolean(pendingContractRevision)}
+        isOpen={canChooseProposalRevisions && contractRevisionPromptOpen && Boolean(pendingContractRevision)}
         currentRevision={pendingContractRevision?.check.pinned.revisionNumber}
         latestRevision={pendingContractRevision?.check.latest.revisionNumber}
         currentTemplateName={pendingContractRevision?.check.pinned.templateName}

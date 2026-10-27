@@ -243,6 +243,15 @@ test('still opens and saves a normal existing proposal without changing its iden
     expect(saved.customerInfo.customerName).toBe('Normal Existing Customer Updated');
     expect(saved.createdDate).toBe(createdDate);
     expect(saved.proposalNumber).toBe(proposalNumber);
+    await window.getByRole('button', { name: /Materials & Equipment Order Form/ }).click();
+    const orderModal = window.locator('.materials-order-modal');
+    await expect(orderModal.getByRole('heading', { name: 'Materials and Equipment' }).first()).toBeVisible();
+    await expect(orderModal.locator('.materials-order-page--viewer')).toHaveCount(1);
+    await expect(orderModal.getByText('Normal Existing Customer Updated')).toBeVisible();
+    await orderModal.getByRole('button', { name: 'Export' }).click();
+    await expect(orderModal.getByRole('option', { name: 'PDF' })).toBeVisible();
+    await orderModal.getByRole('button', { name: 'Close materials and equipment order form' }).click();
+    expect(await window.evaluate((number) => window.electron.getProposal(number), proposalNumber)).toEqual(saved);
   } finally {
     await electronApp?.close().catch(() => undefined);
   }
@@ -502,6 +511,59 @@ test('creates and saves a new proposal version with its own creation date', asyn
     expect(createdVersion.customerInfo.customerName).toBe('Versioned Existing Customer Updated');
     expect(createdVersion.createdDate).not.toBe(createdDate);
     expect(allVersions.find((version) => version.versionId === 'original')?.createdDate).toBe(createdDate);
+  } finally {
+    await electronApp?.close().catch(() => undefined);
+  }
+});
+
+test('shared recipient keeps owner correction controls locked and cached pricing unchanged', async ({}, testInfo) => {
+  const proposalNumber = 'TEST-PWTEST-SHARED-CORRECTION';
+  const original = buildLocalProposal(proposalNumber, 'Shared Correction Customer');
+  const shared = {
+    ...original,
+    designerAuthUserId: 'another-designer',
+    ownerAuthUserId: 'another-designer',
+    collaborationEnabled: true,
+    contentRevision: 7,
+    sharedPermission: 'contribute',
+    pricing: { ...original.pricing, offContractTotal: 5_000 },
+  };
+  const cacheKey = `submerge.sharedProposalCache.v1.test.${testSession.userId}.${proposalNumber}`;
+  let electronApp: ElectronApplication | null = null;
+
+  try {
+    const launched = await launchIsolatedApp(testInfo.outputPath('app-data'));
+    electronApp = launched.electronApp;
+    const window = launched.window;
+    await seedSessionAndProposals(window, []);
+    await window.context().setOffline(true);
+    await window.evaluate(({ key, proposal }) => {
+      localStorage.setItem(key, JSON.stringify({ proposal, share: {
+        id: 'isolated-shared-access', proposal_number: proposal.proposalNumber,
+        recipient_id: 'playwright-proposal-safety-user', permission: 'contribute',
+        note: null, created_at: '2026-09-23T12:00:00.000Z', ended_at: null,
+      } }));
+      window.location.hash = `/proposal/view/${proposal.proposalNumber}`;
+      window.location.reload();
+    }, { key: cacheKey, proposal: shared });
+
+    await expect(window.getByRole('heading', { name: 'Proposal Summary' })).toBeVisible();
+    await expect(window.getByRole('button', { name: 'Review Contract Total Correction' })).toHaveCount(0);
+    await expect(window.getByRole('button', { name: 'Delete Version' })).toHaveCount(0);
+    await window.getByRole('button', { name: 'View Proposal', exact: true }).click();
+    await expect(window.getByPlaceholder('Enter customer name')).toHaveValue(shared.customerInfo.customerName);
+    const customerName = window.getByPlaceholder('Enter customer name');
+    await expect(customerName).toHaveCSS('pointer-events', 'none');
+    await customerName.focus();
+    await customerName.press('End');
+    await customerName.press('X');
+    await expect(customerName).toHaveValue(shared.customerInfo.customerName);
+    await expect(window.getByText('Shared Proposal · View Only', { exact: true })).toBeVisible();
+    await window.screenshot({ path: testInfo.outputPath('shared-correction-read-only.png'), fullPage: true });
+
+    const cached = await window.evaluate((key) => JSON.parse(localStorage.getItem(key)!), cacheKey);
+    expect(cached.proposal).toEqual(shared);
+    expect(await window.evaluate((number) => window.electron.getProposal(number), proposalNumber)).toBeFalsy();
   } finally {
     await electronApp?.close().catch(() => undefined);
   }

@@ -54,7 +54,7 @@ test('shows complete Price Impact for active Tile, Coping, and Decking controls'
   const offContractDialog = page.getByRole('dialog', {
     name: 'Price Impact for Additional Decking Off-Contract',
   });
-  await expect(offContractDialog).toContainText('Off-Contract Retail Price');
+  await expect(offContractDialog).toContainText('Off Contract addendum price change');
   await expect(offContractDialog).toContainText('included in the contract');
 
   await page.keyboard.press('Escape');
@@ -141,9 +141,9 @@ test('places the primary Decking off-contract switch above the header rule', asy
     .getByRole('button', { name: 'Show Price Impact for Primary Decking Off-Contract' })
     .click();
   const dialog = page.getByRole('dialog', { name: 'Price Impact for Primary Decking Off-Contract' });
-  await expect(dialog.locator('.price-impact-line')).toHaveCount(1);
-  await expect(dialog.getByText('Off-Contract Retail Price', { exact: true })).toBeVisible();
-  await expect(dialog.locator('.price-impact-line .is-negative')).toHaveCount(0);
+  await expect(dialog.locator('.price-impact-line')).toHaveCount(0);
+  await expect(dialog.getByText('Off Contract addendum price change', { exact: true })).toBeVisible();
+  await expect(dialog).toContainText('Estimated contract price change');
   await expect(dialog).not.toContainText('Decking Labor');
   await expect(dialog).not.toContainText('Decking Material');
   await expect(dialog).not.toContainText('Decking Material Tax');

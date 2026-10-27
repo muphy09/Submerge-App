@@ -2,6 +2,7 @@ import pricingData from './pricingData';
 import { getSessionFranchiseCode } from './session';
 import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import { removeHardcodedPapDiscountsFromPricing } from '../utils/papDiscounts';
+import { validateCategoryAdjustments } from '../utils/categoryAdjustments';
 import { DEFAULT_TAX_RATE, normalizeTaxRate, syncLegacyTaxRateAliases } from './taxRate';
 import {
   loadPricingModel as loadPricingModelRemote,
@@ -130,6 +131,7 @@ const listeners = new Set<(data: PricingData) => void>();
 
 function normalizePricingState(snapshot: PricingData, source?: any): PricingData {
   const normalized = removeHardcodedPapDiscountsFromPricing(deepClone(snapshot));
+  normalized.categoryAdjustments = Array.isArray(source?.categoryAdjustments) ? deepClone(source.categoryAdjustments) : [];
   // Missing in a persisted model means historical pricing, not the new default.
   // The rollout publishes 10% in NEW revisions; never inject it into old ones.
   if (source && source.tileCoping?.offContractDecking?.materialWasteRate == null) {
@@ -1000,13 +1002,17 @@ export async function loadPricingSnapshotForExistingProposal(
       resolvedModelId
     );
   }
-  return loadPricingSnapshotForFranchise(
+  const snapshot = await loadPricingSnapshotForFranchise(
     franchiseId,
     resolvedModelId || undefined,
     pricingModelFranchiseId,
     pricingTierId,
     resolvedRevisionId
   );
+  if (!resolvedRevisionId && snapshot.pricing.categoryAdjustments?.length) {
+    throw new Error('The proposal\'s original pricing revision could not be verified. Reconnect before editing this proposal.');
+  }
+  return snapshot;
 }
 
 export function withTemporaryPricingSnapshot<T>(snapshot: PricingData, callback: () => T): T {
@@ -1041,6 +1047,11 @@ export async function savePricingModelSnapshot(options: {
   createNew?: boolean;
 }) {
   syncInteriorFinishColorOptions(basePricingState);
+  for (const tier of [NORMAL_PRICING_TIER_ID, BRONZE_PRICING_TIER_ID]) {
+    const effective = resolvePricingForTier(basePricingState, tier, getTierResolutionOptions());
+    const adjustmentError = validateCategoryAdjustments(effective.categoryAdjustments, effective);
+    if (adjustmentError) throw new Error(`${getPricingTierName(tier)} pricing: ${adjustmentError}`);
+  }
   return savePricingModelRemote({
     franchiseId: activeFranchiseId,
     pricing: withoutPricingRuntimeFields(basePricingState),

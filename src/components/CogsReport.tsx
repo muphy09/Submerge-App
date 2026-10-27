@@ -3,6 +3,7 @@ import type { CostLineItem } from '../types/proposal-new';
 import type { CostBreakdownSubcategory } from '../utils/costBreakdownSubcategories';
 import { hasLineItemSubcategory } from '../utils/costBreakdownSubcategories';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
+import { isCategoryAdjustmentItem, isRetailCategoryAdjustment } from '../utils/categoryAdjustments';
 import FranchiseLogo from './FranchiseLogo';
 import './CogsReport.css';
 
@@ -75,10 +76,11 @@ const roundToTwo = (value: number): number =>
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 
 const formatCurrency = (value: number): string =>
-  `$${(Number.isFinite(value) ? value : 0).toLocaleString('en-US', {
+  (Number.isFinite(value) ? value : 0).toLocaleString('en-US', {
+    style: 'currency', currency: 'USD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  });
 
 const formatReportDate = (value?: string | null): string => {
   const parsed = new Date(value || Date.now());
@@ -96,12 +98,12 @@ const categoryTotal = (items: CostLineItem[] = []): number =>
 const isReportableCogsItem = (categoryName: string, item: CostLineItem): boolean => {
   if (isOffContractLineItem(item)) return false;
   // Negative custom-feature entries are retail-only adjustments in the pricing engine.
-  return categoryName !== 'Custom Features' || (item.total ?? 0) >= 0;
+  return isCategoryAdjustmentItem(item) || categoryName !== 'Custom Features' || (item.total ?? 0) >= 0;
 };
 
 const itemWeight = (item: CostLineItem): number => {
   const descriptionLength = (item.description || '').trim().length;
-  return 1 + Math.max(0, Math.ceil(descriptionLength / 42) - 1) * 0.55;
+  return 1 + Math.max(0, Math.ceil(descriptionLength / 42) - 1) * 0.55 + (isRetailCategoryAdjustment(item) ? 0.6 : 0);
 };
 
 const normalizeCategories = (
@@ -112,12 +114,17 @@ const normalizeCategories = (
   const categories: NormalizedCogsCategory[] = input
     .map((category) => {
       const items = (category.items || []).filter((item) => isReportableCogsItem(category.name, item));
-      const subcategories = category.subcategories
-        ?.map((subcategory) => ({
+      const adjustmentItems = items.filter(isCategoryAdjustmentItem);
+      const subcategories = [...(category.subcategories || [])
+        .map((subcategory) => ({
           ...subcategory,
           items: (subcategory.items || []).filter((item) => isReportableCogsItem(category.name, item)),
         }))
-        .filter((subcategory) => subcategory.items.length > 0);
+        .filter((subcategory) => subcategory.items.length > 0 && subcategory.name !== 'Category Adjustments')
+        .map(sub => ({ ...sub, items: sub.items.filter(item => !isCategoryAdjustmentItem(item)) }))
+        .filter(sub => sub.items.length > 0),
+        ...(adjustmentItems.length ? [{ name: 'Category Adjustments', items: adjustmentItems }] : []),
+      ];
       const baseItems = subcategories?.length
         ? items.filter((item) => !hasLineItemSubcategory(item))
         : items;
@@ -308,7 +315,7 @@ const buildDetailPages = (categories: NormalizedCogsCategory[]): CogsDetailPage[
 };
 
 const isTaxLineItem = (item: CostLineItem): boolean =>
-  (item.description || '').toLowerCase().includes('tax');
+  !isCategoryAdjustmentItem(item) && (item.description || '').toLowerCase().includes('tax');
 
 const renderQuantity = (row: Extract<CogsDetailRow, { kind: 'item' }>): string => {
   if (row.quantityLabel !== undefined) return row.quantityLabel;
@@ -483,10 +490,10 @@ function CogsDetailColumn({ rows }: { rows: CogsDetailRow[] }) {
           }
           return (
             <div className="cogs-report-detail-item-row" key={row.key}>
-              <span>{row.item.description}</span>
+              <span>{row.item.description}{isRetailCategoryAdjustment(row.item) && <small className="cogs-retail-adjustment-note">Retail only — excluded from COGS</small>}</span>
               <span>{renderQuantity(row)}</span>
               <span>{renderUnitCost(row)}</span>
-              <strong>{formatCurrency(row.item.total)}</strong>
+              <strong>{formatCurrency(isRetailCategoryAdjustment(row.item) ? Number(row.item.details?.adjustmentAmount) : row.item.total)}</strong>
             </div>
           );
         })}

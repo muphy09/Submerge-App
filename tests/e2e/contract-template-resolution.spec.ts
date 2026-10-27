@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getBundledContractTemplateRevision } from '../../src/services/contractTemplates';
+import { withWestConstructionTiming } from '../../src/services/westContractConstructionTiming';
 
-const fixtureOrigin = 'http://127.0.0.1:5173';
+const fixtureOrigin = process.env.SUBMERGE_TEST_ORIGIN || 'http://127.0.0.1:5173';
 const fixtureUrl = `${fixtureOrigin}/tests/fixtures/contract-template-resolution.html`;
 const west = 'playwright-west';
 const east = 'playwright-east';
@@ -44,26 +45,33 @@ const westRevisions = westTypes.flatMap(([id, , , latest]) =>
   })
 );
 
-async function setup(page: Page, options: { edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean } = {}) {
+async function setup(page: Page, options: { viewerRole?: 'admin' | 'owner' | 'bookkeeper' | 'designer' | 'master'; ownsProposal?: boolean; newerPricing?: boolean; edit?: boolean; delayPricing?: boolean; lawrence?: boolean; westContract?: boolean; manualReturns?: boolean; oldFiberglass?: boolean; twoProposals?: boolean; futureWestRevision?: boolean; offContract?: boolean; signed?: boolean; submitted?: boolean; orderPackageId?: string; multiVersionSubmittedOffContract?: boolean; newTreeTimingRevision?: boolean; retailDraft?: string } = {}) {
   const errors: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals }) => {
+  await page.addInitScript(({ west, model, revision, proposalNumber, edit, lawrence, westContract, manualReturns, oldFiberglass, twoProposals, offContract, signed, submitted, orderPackageId, multiVersionSubmittedOffContract, viewerRole, ownsProposal, retailDraft }) => {
     window.__APP_ENV__ = {
       VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
       VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder', VITE_SUPABASE_ONLY: 'false',
     };
     localStorage.setItem('submerge-user-session', JSON.stringify({
       userId: 'playwright-master', userName: 'Playwright Master',
-      userEmail: 'master@playwright.invalid', franchiseId: lawrence || westContract ? west : 'default', role: lawrence || westContract ? 'designer' : 'master', franchiseCode: lawrence || westContract ? '5555' : undefined,
+      userEmail: 'master@playwright.invalid', franchiseId: lawrence || westContract ? west : 'default', role: viewerRole || (lawrence || westContract ? 'designer' : 'master'), franchiseCode: lawrence || westContract ? '5555' : undefined,
     }));
     (window as any).contractFixture = {
-      edit,
+      edit, retailDraft,
+      multiVersionSubmittedOffContract,
       secondProposalNumber: twoProposals ? `${proposalNumber}-B` : undefined,
       proposal: {
-        proposalNumber, franchiseId: lawrence || westContract ? west : 'default', designerAuthUserId: 'playwright-master',
-        designerName: 'Playwright Master', designerRole: lawrence || westContract ? 'designer' : 'master', status: 'draft',
+        proposalNumber, franchiseId: lawrence || westContract ? west : 'default', designerAuthUserId: ownsProposal === false ? 'original-designer' : 'playwright-master',
+        designerName: ownsProposal === false ? 'Original Designer' : 'Playwright Master', designerRole: lawrence || westContract ? 'designer' : 'master', status: signed ? 'signed' : submitted ? 'needs_approval' : 'draft',
+        ...(signed ? { versionLocked: true, versionLockedAt: '2026-09-20T00:00:00.000Z', versionSubmittedAt: '2026-09-20T00:00:00.000Z', workflow: { status: 'signed', signedVersionId: 'original', signedAt: '2026-09-20T00:00:00.000Z' } } : {}),
+        ...(submitted ? { versionSubmittedAt: '2026-09-20T00:00:00.000Z', workflow: {
+          status: 'needs_approval', reviewVersionId: 'original', submittedVersionId: 'original',
+          submittedAt: '2026-09-20T00:00:00.000Z', history: [{ id: 'submitted-original', type: 'submitted', versionId: 'original', createdAt: '2026-09-20T00:00:00.000Z' }],
+        } } : {}),
         pricingModelId: model, pricingModelName: 'Sizzlin Summer 2026',
         pricingModelFranchiseId: west, pricingModelRevisionId: revision, pricingModelRevisionNumber: 1,
+        ...(orderPackageId ? { equipment: { packageSelectionId: orderPackageId, packageSelectionTouched: true } } : {}),
         customerInfo: { customerName: lawrence ? 'State Change Regression' : 'CONTRACT TEST', state: lawrence ? 'SC' : 'NC', city: 'Charlotte' },
         ...(oldFiberglass ? { poolSpecs: { poolType: 'fiberglass' } } : {}),
         ...(lawrence || westContract ? {
@@ -71,12 +79,18 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
           contractTemplateRevisionId: `bundled:${west}:nc-${oldFiberglass ? 'fiberglass' : 'gunite'}:r1`,
         } : {}),
         ...(manualReturns ? { contractOverrides: { p1_36: '5' } } : {}),
+        ...(offContract ? {
+          excavation: { customOptions: [{ name: 'Separate excavation', description: 'Addendum only', laborCost: 0, materialCost: 0, totalCost: 1000, isOffContract: true }] },
+          pricing: { retailPrice: 100000, totalCOGS: 60000, offContractTotal: 1000, manualAdjustmentsTotal: 1000 },
+          totalCost: 100000,
+          contractOverrides: { p1_7: '$100,000.00', p1_pay_excavation: '$29,000.00' },
+        } : {}),
         createdDate: lawrence || westContract ? '2026-09-10T12:00:00.000Z' : '2026-09-23T00:00:00.000Z',
         lastModified: '2026-09-10T12:00:00.000Z',
         versionId: 'original', activeVersionId: 'original', isOriginalVersion: true,
       },
     };
-  }, { west, model, revision, proposalNumber, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false });
+  }, { west, model, revision, proposalNumber, retailDraft: options.retailDraft, viewerRole: options.viewerRole, ownsProposal: options.ownsProposal, edit: options.edit || false, lawrence: options.lawrence || false, westContract: options.westContract || false, manualReturns: options.manualReturns || false, oldFiberglass: options.oldFiberglass || false, twoProposals: options.twoProposals || false, offContract: options.offContract || false, signed: options.signed || false, submitted: options.submitted || false, orderPackageId: options.orderPackageId, multiVersionSubmittedOffContract: options.multiVersionSubmittedOffContract || false });
 
   let releasePricing = () => {};
   const pricingGate = options.delayPricing ? new Promise<void>((resolve) => { releasePricing = resolve; }) : Promise.resolve();
@@ -84,7 +98,7 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
   const templates = options.futureWestRevision
     ? westTemplates.map((row) => row.id === 'west-nc-gunite' ? { ...row, current_revision_id: 'west-nc-gunite-r3' } : row)
     : westTemplates;
-  const revisions = options.futureWestRevision
+  let revisions = options.futureWestRevision
     ? [...westRevisions, {
         ...westRevisions.find((row) => row.id === 'west-nc-gunite-r2')!,
         id: 'west-nc-gunite-r3', revision_number: 3,
@@ -97,6 +111,19 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
         published_at: '2026-10-01T00:00:00.000Z',
       }]
     : westRevisions;
+  if (options.newTreeTimingRevision) {
+    revisions = [...revisions, ...westTypes.map(([id, , , latest]) => {
+      const base = westRevisions.find((row) => row.id === `west-${id}-r${latest}`)!;
+      const template = withWestConstructionTiming(getBundledContractTemplateRevision(id)!.contractTemplate, id);
+      return { ...base, id: `west-${id}-r${latest + 1}`, revision_number: latest + 1,
+        field_layout_json: template.fields,
+        autofill_rules_json: { ...base.autofill_rules_json, legacyBundledId: undefined,
+          newProposalTreesOnly: true, westConstructionTimingVersion: 'permit-and-dig-v1',
+          effectivePublishedAt: null, staticPatches: template.staticPatches,
+          changeNotes: ['Construction timing changed for new proposal trees only.'] },
+        published_at: '2026-10-13T00:00:00.000Z' };
+    })];
+  }
   // All backend traffic is synthetic; no account or production records are used.
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
@@ -128,15 +155,28 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
     }
     if (table === 'franchises') rows = [{ id: west, name: 'PPAS West', franchise_code: '5555' }, { id: east, name: 'PPAS East', franchise_code: '9724' }].filter(row => !url.searchParams.has('id') || url.searchParams.get('id') === `eq.${row.id}`);
     if (table === 'franchise_pricing_models') rows = [{
-      id: model, franchise_id: west, name: 'Sizzlin Summer 2026', current_revision_id: revision,
+      id: model, franchise_id: west, name: 'Sizzlin Summer 2026', current_revision_id: options.newerPricing ? 'playwright-summer-r2' : revision,
       version: 'v1', is_default: true, pricing_json: {},
     }];
     if (table === 'franchise_pricing_model_revisions') {
       pricingRequests += 1;
       await pricingGate;
-      rows = [{ id: revision, pricing_model_id: model, franchise_id: west, revision_number: 1, pricing_json: {} }];
+      rows = [{ id: revision, pricing_model_id: model, franchise_id: west, revision_number: 1, pricing_json: {} },
+        ...(options.newerPricing ? [{ id: 'playwright-summer-r2', pricing_model_id: model, franchise_id: west, revision_number: 2, pricing_json: { overheadMultiplier: 1.5 } }] : [])];
+      const requestedRevision = url.searchParams.get('id');
+      if (requestedRevision) rows = rows.filter((row) => requestedRevision === 'eq.' + row.id);
     }
     // Read the local proposal through the fixture's IPC adapter. Writes stay intercepted.
+    if ((table === 'franchise_proposals' || table === 'master_dev_proposals') &&
+        route.request().method() === 'GET' && options.ownsProposal === false) {
+      const stored = await page.evaluate(() => {
+        const fixture = (window as any).contractFixture;
+        return fixture.storedProposals?.get(fixture.proposal.proposalNumber) || fixture.proposal;
+      });
+      rows = [{ proposal_json: stored, franchise_id: stored.franchiseId,
+        designer_auth_user_id: stored.designerAuthUserId, designer_name: stored.designerName,
+        designer_role: stored.designerRole, status: stored.status }];
+    }
     if (table === 'franchise_proposals' && route.request().method() !== 'GET') {
       const data = route.request().postDataJSON();
       rows = [Array.isArray(data) ? data[0] : data];
@@ -145,6 +185,313 @@ async function setup(page: Page, options: { edit?: boolean; delayPricing?: boole
   });
   await page.goto(fixtureUrl);
   return { errors, releasePricing, pricingRequests: () => pricingRequests };
+}
+
+test('builder saves with its pinned model when another model replaces the shared pricing store', async ({ page }, testInfo) => {
+  await setup(page, { edit: true, retailDraft: 'current' });
+  await expect(page.getByPlaceholder('Enter customer name')).toBeVisible();
+  const expected = await page.evaluate(() => {
+    const result = (window as any).contractFixture.expectedRetailDraft(0);
+    return { retail: result.pricing.retailPrice, cogs: result.pricing.totalCOGS };
+  });
+  await page.route('**/rest/v1/franchise_pricing_models*', async route => {
+    if (!route.request().url().includes('other-model')) return route.fallback();
+    await route.fulfill({ json: { id: 'other-model', franchise_id: west, name: 'Other Model', current_revision_id: 'other-r1', pricing_json: {} } });
+  });
+  await page.route('**/rest/v1/franchise_pricing_model_revisions*', async route => {
+    if (!route.request().url().includes('other-r1')) return route.fallback();
+    await route.fulfill({ json: { id: 'other-r1', pricing_model_id: 'other-model', franchise_id: west, revision_number: 1,
+      pricing_json: { overheadMultiplier: 1.5, categoryAdjustments: [{ id: 'other-waterproofing', mode: 'static', basis: 'cogs', title: 'Waterproofing', amount: 800, category: 'tile' }] } } });
+  });
+  await page.evaluate(() => (window as any).contractFixture.activateOtherPricing('other-model', 'other-r1'));
+  await page.getByPlaceholder('Enter customer name').fill('Pinned model save regression');
+  await page.locator('.cost-modal-button').filter({ hasText: 'Customer Proposal' }).click();
+  await expect(page.locator('.cost-modal-content .subtotal-row span').last()).toHaveText(
+    `$${expected.retail.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  );
+  await page.locator('.cost-modal-content').screenshot({ path: testInfo.outputPath('pinned-model-preview.png') });
+  await page.locator('.cost-modal-close').click();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+  const saved = await page.evaluate(() => (window as any).contractFixture.storedProposals.get((window as any).contractFixture.proposal.proposalNumber));
+  expect(saved.pricingModelRevisionId).toBe(revision);
+  expect(saved.pricing.retailPrice).toBe(expected.retail);
+  expect(saved.pricing.totalCOGS).toBe(expected.cogs);
+  expect(saved.costBreakdown.tileLabor.some((line: any) => line.description === 'Waterproofing')).toBe(false);
+});
+
+test('older saved proposals retain their price when first opened and saved in the builder', async ({ page }) => {
+  await setup(page, { edit: true, retailDraft: 'historical' });
+  const baseline = await page.evaluate(() => structuredClone((window as any).contractFixture.proposal));
+  const review = page.getByRole('dialog').filter({ hasText: 'Older proposal pricing review' });
+  await expect(review).toBeVisible();
+  await review.getByRole('button', { name: 'Apply protected pricing', exact: true }).click();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+  const saved = await page.evaluate(() => (window as any).contractFixture.storedProposals.get((window as any).contractFixture.proposal.proposalNumber));
+  expect(saved.pricing.retailPrice).toBe(baseline.pricing.retailPrice);
+  expect(saved.totalCost).toBe(baseline.totalCost);
+  expect(saved.historicalPricingAdjustment).toBe(500);
+});
+
+test('saved historical price protection survives a contract update and repeated builder saves', async ({ page }, testInfo) => {
+  await setup(page, { westContract: true, retailDraft: 'protected' });
+  const baseline = await page.evaluate(() => structuredClone((window as any).contractFixture.proposal));
+  expect(baseline.historicalPricingAdjustment).toBe(-4940);
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Apply Update' }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toHaveValue('3');
+  await page.getByRole('button', { name: 'Close contract' }).click();
+  for (let visit = 0; visit < 2; visit += 1) {
+    await page.evaluate((number) => (window as any).contractFixture.navigateToEditor(number), proposalNumber);
+    await expect(page.getByPlaceholder('Enter customer name')).toBeVisible();
+    await page.getByPlaceholder('Enter customer name').fill(`Protected pricing visit ${visit}`);
+    // Opening the summary saves the draft through the real builder save path.
+    await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+    await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+    const saved = await page.evaluate(() => (window as any).contractFixture.storedProposals.get((window as any).contractFixture.proposal.proposalNumber));
+    expect(saved.historicalPricingAdjustment).toBe(-4940);
+    expect(saved.pricing.retailPrice).toBe(baseline.pricing.retailPrice);
+    expect(saved.totalCost).toBe(baseline.totalCost);
+    expect(saved.pricingModelRevisionId).toBe(revision);
+    expect(saved.contractTemplateRevisionId).toBe('west-nc-gunite-r2');
+  }
+  await page.screenshot({ path: testInfo.outputPath('protected-price-after-reopening.png'), fullPage: true });
+});
+
+for (const baseline of ['current', 'historical']) {
+  test(`retail draft updates live and only persists on Save Changes (${baseline})`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1500, height: 1100 });
+    await setup(page, { retailDraft: baseline });
+    const open = async () => {
+      await page.locator('.tile-title').filter({ hasText: /Customer Cost/ }).first().click();
+      await expect(page.locator('.adjustment-cost-input').first()).toBeVisible();
+    };
+    await open();
+    const stored = () => page.evaluate(() => JSON.stringify([...((window as any).contractFixture.storedProposals).entries()]));
+    const initialStored = await stored();
+    const saveCount = await page.evaluate(() => (window as any).contractFixture.saved.length);
+    const total = page.locator('.cost-breakdown-container .subtotal-row span').last();
+    const margin = page.locator('.cost-breakdown-container .proposal-gp-indicator');
+    const initialTotal = await total.innerText();
+    const initialMargin = await margin.innerText();
+    const amount = page.locator('.adjustment-cost-input').first();
+    for (const adjustment of [-1250.25, 2000.50, 0]) {
+      const expected = await page.evaluate((value) => {
+        const draft = (window as any).contractFixture.expectedRetailDraft(value);
+        return { total: draft.pricing.retailPrice, margin: draft.pricing.grossProfitMargin };
+      }, adjustment);
+      await amount.fill(adjustment === 0 ? '' : String(adjustment));
+      await expect(amount).toBeFocused();
+      await expect(total).toHaveText(`$${expected.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+      const sign = expected.margin < 0 ? '-' : '';
+      await expect(margin).toHaveText(`Proposal #26${sign}${Math.abs(expected.margin).toFixed(2).padStart(5, '0')}`);
+      expect(await stored()).toBe(initialStored);
+      expect(await page.evaluate(() => (window as any).contractFixture.saved.length)).toBe(saveCount);
+    }
+    await amount.fill('-1250.25');
+    await expect(total).not.toHaveText(initialTotal);
+    await expect(margin).not.toHaveText(initialMargin);
+    await page.evaluate(() => {
+      (window as any).contractFixture.pdfExports = 0;
+      (window as any).electron.exportBreakdownPdf = async () => {
+        (window as any).contractFixture.pdfExports += 1;
+        return { canceled: true };
+      };
+    });
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    await page.getByRole('option', { name: 'PDF', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).contractFixture.pdfExports)).toBe(1);
+    expect(await stored()).toBe(initialStored);
+    expect(await page.evaluate(() => (window as any).contractFixture.saved.length)).toBe(saveCount);
+    await expect(page.getByRole('button', { name: 'Save Changes', exact: true })).toBeEnabled();
+    await page.locator('.cost-summary-section').screenshot({ path: testInfo.outputPath(`live-retail-${baseline}.png`) });
+    await page.getByRole('button', { name: /Close customer cost/ }).click();
+    await page.getByRole('button', { name: 'No, discard', exact: true }).click();
+    expect(await stored()).toBe(initialStored);
+    await open();
+    await expect(total).toHaveText(initialTotal);
+    await expect(margin).toHaveText(initialMargin);
+    await amount.fill('-1250.25');
+    const previewTotal = await total.innerText();
+    const previewMargin = await margin.innerText();
+    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.length)).toBeGreaterThan(saveCount);
+    await expect(total).toHaveText(previewTotal);
+    await expect(margin).toHaveText(previewMargin);
+    await page.getByRole('button', { name: /Close customer cost/ }).click();
+    await open();
+    await expect(amount).toHaveValue('-1250.25');
+    await expect(total).toHaveText(previewTotal);
+    await expect(margin).toHaveText(previewMargin);
+  });
+}
+
+test('retail preview retains signed version locks', async ({ page }) => {
+  await setup(page, { retailDraft: 'current', signed: true });
+  await page.locator('.tile-title').filter({ hasText: /Customer Cost/ }).first().click();
+  await expect(page.getByRole('button', { name: 'Save Changes', exact: true })).toBeDisabled();
+  await expect(page.locator('.adjustment-cost-input')).toHaveCount(0);
+});
+
+test('Additional digging matches proposal, pricing and all 5555/9724 contract PDFs', async ({ page }) => {
+  await setup(page);
+  const results = await page.evaluate(() => (window as any).contractFixture.diggingChecks());
+  expect(results).toHaveLength(8);
+  for (const result of results) {
+    expect(result.zeroPriceChange).toBe(0);
+    expect(result.field).toBe('3');
+    expect(result.pdfField).toBe('3');
+    expect(result.charge.quantity).toBe(2);
+    expect(result.charge.unitPrice).toBe(350);
+    expect(result.charge.total).toBe(700);
+    expect(result.impact).toBeCloseTo(700, 2);
+    expect(result.manual.hasAdditionalDigging).toBe(true);
+    expect(result.manual.additionalDiggingDays).toBe(3);
+    expect(result.manualOverrides.p1_7).toBe('$123');
+    expect(result.signedUnchanged).toBe(true);
+    expect(result.baseUnchanged).toBe(true);
+  }
+});
+
+test('saving manual contract excavation days updates the proposal and survives reopening', async ({ page }) => {
+  await setup(page, { westContract: true });
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Keep Current', exact: true }).click();
+  const input = page.locator('[data-field-id="p1_30"] input');
+  await expect(input).toHaveValue('1');
+  const saveCount = await page.evaluate(() => (window as any).contractFixture.saved.length);
+  await input.fill('1.5');
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect(page.getByText('Excavation days must be a whole number of at least 1.', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).contractFixture.saved.length)).toBe(saveCount);
+  await input.fill('4');
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.at(-1)?.excavation?.additionalDiggingDays)).toBe(3);
+  const saved = await page.evaluate(() => (window as any).contractFixture.saved.at(-1));
+  expect(saved.excavation.hasAdditionalDigging).toBe(true);
+  expect(saved.contractOverrides.p1_30).toBeUndefined();
+  await expect(input).toHaveValue('4');
+  await page.getByRole('button', { name: 'Close contract' }).click();
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(input).toHaveValue('4');
+  await input.fill('1');
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.at(-1)?.excavation?.hasAdditionalDigging)).toBe(false);
+  expect((await page.evaluate(() => (window as any).contractFixture.saved.at(-1))).excavation.additionalDiggingDays).toBe(1);
+  await page.getByRole('button', { name: 'Close contract' }).click();
+  await page.evaluate((number) => (window as any).contractFixture.navigateToEditor(number), proposalNumber);
+  await page.locator('.nav-item.excavation-item').click();
+  const row = page.locator('.excavation-option-row').filter({ hasText: 'Additional Digging (Days)' });
+  await expect(row.getByRole('switch')).not.toBeChecked();
+  await row.getByRole('switch').click();
+  await row.getByRole('spinbutton', { name: 'Additional Digging (Days)' }).fill('2');
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect(page.getByRole('button', { name: /View Contract/ })).toBeVisible();
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(input).toHaveValue('3');
+});
+
+for (const viewerRole of ['admin', 'owner', 'bookkeeper', 'master'] as const) {
+  test(`${viewerRole} reviewing another designer's proposal keeps saved revisions without prompting or saving`, async ({ page }, testInfo) => {
+    await setup(page, { westContract: true, submitted: true, viewerRole, ownsProposal: false, newerPricing: true });
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const cachedBefore = await page.evaluate(() => (window as any).contractFixture.saved.length);
+    await page.getByRole('button', { name: /View Contract/ }).click();
+    await expect(page.getByRole('button', { name: 'Close contract' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('.contract-page-canvas').first()).toBeVisible();
+    const result = await page.evaluate(async () => {
+      const fixture = (window as any).contractFixture;
+      return { saved: fixture.saved, meta: fixture.pricingMeta(), contract: await fixture.returnValues() };
+    });
+    expect(result.saved).toHaveLength(cachedBefore);
+    for (const cached of result.saved) {
+      expect(cached.pricingModelRevisionId).toBe(revision);
+      expect(cached.contractTemplateRevisionId).toBe(`bundled:${west}:nc-gunite:r1`);
+      expect(cached.pricingRevisionReview).toBeFalsy();
+      expect(cached.contractRevisionReview).toBeFalsy();
+    }
+    expect(result.meta.pricingModelRevisionId).toBe(revision);
+    expect(result.contract.pinned).toBe('4');
+    expect(result.contract.latest).toBe('3');
+    if (viewerRole === 'admin') await page.screenshot({ path: testInfo.outputPath('admin-saved-contract.png') });
+  });
+}
+
+test('admin still receives pricing revision choices on their own proposal', async ({ page }) => {
+  await setup(page, { westContract: true, viewerRole: 'admin', newerPricing: true });
+  await expect(page.getByRole('button', { name: 'Compare Difference' })).toBeVisible();
+});
+
+test('admin can choose a contract update on their own proposal', async ({ page }) => {
+  await setup(page, { westContract: true, viewerRole: 'admin' });
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Apply Update' }).click();
+  await expect(page.getByRole('button', { name: 'Close contract' })).toBeVisible();
+  const saved = await page.evaluate(() => (window as any).contractFixture.saved.at(-1));
+  expect(saved.contractTemplateRevisionId).toBe('west-nc-gunite-r2');
+  expect(saved.pricingModelRevisionId).toBe(revision);
+});
+
+test('foreign proposal builder does not offer a previously declined pricing upgrade', async ({ page }) => {
+  await setup(page, { westContract: true, submitted: true, viewerRole: 'admin', ownsProposal: false, newerPricing: true });
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await page.evaluate((number) => {
+    const fixture = (window as any).contractFixture;
+    fixture.storedProposals.get(number).pricingRevisionReview = {
+      decision: 'declined', latestRevisionId: 'playwright-summer-r2',
+      pricingModelId: fixture.proposal.pricingModelId,
+      baselineRevisionId: fixture.proposal.pricingModelRevisionId,
+    };
+    fixture.navigateToEditor(number);
+  }, proposalNumber);
+  await expect(page.getByRole('combobox', { name: /^Pricing Model/ })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: /^Pricing Tier/ })).toBeDisabled();
+  await expect(page.locator('.form-header-pricing-upgrade-actions')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).contractFixture.pricingMeta().pricingModelRevisionId)).toBe(revision);
+});
+
+for (const selectedRevision of ['west-nc-gunite-r2', undefined]) {
+  test(`admin opening a foreign contract preserves ${selectedRevision || 'the unpinned historical template'} without saving`, async ({ page }) => {
+    await setup(page, { westContract: true, submitted: true, viewerRole: 'admin', ownsProposal: false });
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await page.evaluate(({ number, selectedRevision }) => {
+      const fixture = (window as any).contractFixture;
+      const stored = fixture.storedProposals.get(number);
+      stored.contractTemplateRevisionId = selectedRevision;
+      fixture.remountSummary();
+    }, { number: proposalNumber, selectedRevision });
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    const cachedBefore = await page.evaluate(() => (window as any).contractFixture.saved.length);
+    await page.getByRole('button', { name: /View Contract/ }).click();
+    await expect(page.getByRole('button', { name: 'Close contract' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const result = await page.evaluate((number) => {
+      const fixture = (window as any).contractFixture;
+      return { saved: fixture.saved, stored: fixture.storedProposals.get(number) };
+    }, proposalNumber);
+    expect(result.saved).toHaveLength(cachedBefore);
+    expect(result.stored.contractTemplateRevisionId).toBe(selectedRevision);
+    expect(result.stored.pricingModelRevisionId).toBe(revision);
+  });
+}
+
+for (const [orderPackageId, shortName] of [
+  ['pmf03-standard-automation', 'PMF03'],
+  ['pfm01-basic-chlorine', 'PFM01'],
+  ['custom', 'Custom'],
+] as const) {
+  test(`Materials order tile shows ${shortName} without item groups`, async ({ page }) => {
+    await setup(page, { orderPackageId });
+    const tile = page.locator('.summary-tile.materials-order-tile');
+    await expect(tile).toBeVisible();
+    await expect(tile.locator('.metric-row')).toHaveCount(1);
+    await expect(tile.locator('.metric-label')).toHaveText('Equipment Package:');
+    await expect(tile.locator('.metric-value')).toHaveText(shortName);
+    await expect(tile).not.toContainText('Item Groups');
+  });
 }
 
 test('master proposal opens the West contract and keeps its owner and pricing revision', async ({ page }, testInfo) => {
@@ -163,6 +510,214 @@ test('master proposal opens the West contract and keeps its owner and pricing re
   await expect.poll(() => page.locator('.contract-page-canvas').first().evaluate((canvas: HTMLCanvasElement) => canvas.width)).toBeGreaterThan(300);
   await page.screenshot({ path: testInfo.outputPath('master-west-contract.png') });
   expect(errors.filter((message) => /Failed to load proposal|contract PDF|contract template/i.test(message))).toEqual([]);
+});
+
+test('Off Contract total correction requires consent and preserves the saved contract version', async ({ page }, testInfo) => {
+  await setup(page, { westContract: true, offContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('$100,000.00');
+  await expect(prompt).toContainText('$99,000.00');
+  await page.getByRole('button', { name: 'Go to test summary' }).evaluate((button) => {
+    (button as HTMLElement).style.display = 'none';
+  });
+  await page.screenshot({ path: testInfo.outputPath('off-contract-consent.png') });
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await expect(prompt).not.toBeVisible();
+  const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(before.pricing.retailPrice).toBe(100000);
+  expect(before.pricing.totalCOGS).toBe(60000);
+  expect(before.versions).toEqual([]);
+});
+
+test('accepting the Off Contract correction updates the current draft version', async ({ page }) => {
+  await setup(page, { westContract: true, offContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole('button', { name: 'Update this version' }).click();
+  await expect(prompt).not.toBeVisible();
+  await expect(page.getByRole('button', { name: /Contract Retail Price:/ })).toContainText('$99,000.00');
+  const after = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(after.pricing.retailPrice).toBe(99000);
+  expect(after.totalCost).toBe(99000);
+  expect(after.pricing.offContractTotal).toBe(1000);
+  expect(after.pricing.offContractSeparated).toBe(true);
+  expect(after.pricing.totalCOGS).toBe(60000);
+  expect(after.contractOverrides.p1_7).toBeUndefined();
+  expect(after.contractOverrides.p1_pay_excavation).toBeUndefined();
+  expect(after.versionId).toBe('original');
+  expect(after.status).toBe('draft');
+  expect(after.versions).toEqual([]);
+});
+
+for (const status of ['draft', 'submitted', 'signed'] as const) {
+  test(`declining Off Contract correction stays declined after remount and reload for ${status}`, async ({ page }, testInfo) => {
+    // Reload recreates synthetic records; keep their workflow normalization timestamps stable.
+    await page.clock.setFixedTime(new Date('2026-10-01T12:00:00.000Z'));
+    await setup(page, { westContract: true, offContract: true, twoProposals: true,
+      submitted: status === 'submitted', signed: status === 'signed' });
+    const prompt = page.getByRole('dialog', {
+      name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+    });
+    await expect(prompt).toBeVisible();
+    const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+    await prompt.getByRole('button', { name: 'Not now' }).click();
+    await expect(prompt).not.toBeVisible();
+
+    // A background remount can occur without the designer navigating anywhere.
+    await page.evaluate(() => (window as any).contractFixture.remountSummary());
+    await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await expect(prompt).not.toBeVisible();
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+
+    // Reproduce the old edit -> summary redirect. The builder save guard remains intact.
+    if (status === 'draft' || status === 'submitted') {
+      await page.evaluate((number) => (window as any).contractFixture.navigateToEditor(number), proposalNumber);
+      await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/view/${proposalNumber}`);
+      await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+      await expect(prompt).not.toBeVisible();
+      await page.getByRole('button', { name: 'Open Read-Only Builder', exact: true }).click();
+      await expect(page.getByTestId('fixture-route')).toHaveText(`/proposal/edit/${proposalNumber}`);
+      await expect(page.getByRole('group', { name: 'Read-only proposal builder' }).getByRole('textbox', { name: 'Enter customer name' })).toBeDisabled();
+      await expect(page.locator('.proposal-builder-readonly-note')).toContainText('preserves the saved contract total');
+      await page.getByRole('button', { name: 'Go to test summary' }).click();
+      await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+      await expect(prompt).not.toBeVisible();
+    }
+
+    // A decline is scoped to one proposal/version, not all of the designer's proposals.
+    await page.getByRole('button', { name: 'Go to second proposal' }).click();
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole('button', { name: 'Not now' }).click();
+    await page.getByRole('button', { name: 'Go to test summary' }).click();
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await expect(prompt).not.toBeVisible();
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+
+    await page.reload();
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    await expect(prompt).not.toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`off-contract-declined-${status}.png`) });
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+    await page.getByRole('button', { name: 'Review Contract Total Correction', exact: true }).click();
+    await expect(prompt).toBeVisible();
+    await expect(prompt).toContainText('$100,000.00');
+    await expect(prompt).toContainText('$99,000.00');
+    await prompt.getByRole('button', { name: 'Not now' }).click();
+    await expect(prompt).not.toBeVisible();
+    expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+    if (status === 'draft') {
+      await page.getByRole('button', { name: 'Review Contract Total Correction', exact: true }).click();
+      await prompt.getByRole('button', { name: 'Update this version' }).click();
+      await expect(prompt).not.toBeVisible();
+      await expect(page.getByRole('button', { name: /Contract Retail Price:/ })).toContainText('$99,000.00');
+      await expect(page.getByRole('button', { name: 'Edit Proposal', exact: true })).toBeVisible();
+    }
+  });
+}
+
+test('Off Contract decline survives route remount when local storage is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    const getItem = Storage.prototype.getItem;
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key) {
+      if (key.startsWith('submerge.offContractReview.declined.')) throw new Error('Storage unavailable');
+      return getItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('submerge.offContractReview.declined.')) throw new Error('Storage unavailable');
+      return setItem.call(this, key, value);
+    };
+  });
+  await setup(page, { westContract: true, offContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await page.getByRole('button', { name: 'Open Read-Only Builder', exact: true }).click();
+  await expect(page.locator('.proposal-builder-readonly-note')).toBeVisible();
+  await page.getByRole('button', { name: 'Go to test summary' }).click();
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await expect(prompt).not.toBeVisible();
+  expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+});
+
+test('submitted West Off Contract decking decline preserves all seven versions and approval state', async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date('2026-10-01T12:00:00.000Z'));
+  await setup(page, { westContract: true, offContract: true, submitted: true, multiVersionSubmittedOffContract: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('$130,000.00');
+  await expect(prompt).toContainText('$112,925.80');
+  const before = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(before.workflow.reviewVersionId).toBe('submitted-decking');
+  expect(before.versions).toHaveLength(6);
+  const savesBeforeDecline = await page.evaluate(() => (window as any).contractFixture.saved.length);
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await expect(prompt).not.toBeVisible();
+  expect(await page.evaluate(() => (window as any).contractFixture.saved.length)).toBe(savesBeforeDecline);
+  await page.evaluate(() => (window as any).contractFixture.remountSummary());
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await expect(prompt).not.toBeVisible();
+  expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+  await page.evaluate(() => (window as any).contractFixture.selectVersion('sibling-1'));
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('$131,958.20');
+  await prompt.getByRole('button', { name: 'Not now' }).click();
+  await page.evaluate(() => (window as any).contractFixture.selectVersion('submitted-decking'));
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await expect(prompt).not.toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('submitted-west-seven-versions-declined.png') });
+  expect(await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber)).toEqual(before);
+});
+
+test('accepting the Off Contract correction returns the submitted version to draft for resubmission', async ({ page }) => {
+  await setup(page, { westContract: true, offContract: true, submitted: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('must be resubmitted for approval');
+  await prompt.getByRole('button', { name: 'Update this version' }).click();
+  await expect(prompt).not.toBeVisible();
+  const after = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(after.versionId).toBe('original');
+  expect(after.versions).toEqual([]);
+  expect(after.pricing.retailPrice).toBe(99000);
+  expect(after.pricing.totalCOGS).toBe(60000);
+  expect(after.status).toBe('draft');
+  expect(after.workflow.status).toBe('draft');
+  expect(after.workflow.reviewVersionId).toBeNull();
+  expect(after.versionSubmittedAt).toBeNull();
+  expect(after.workflow.history.some((entry: any) => entry.type === 'submitted')).toBe(true);
+});
+
+test('signed Off Contract contract remains frozen while correction creates an addendum draft', async ({ page }) => {
+  await setup(page, { westContract: true, offContract: true, signed: true });
+  const prompt = page.getByRole('dialog', {
+    name: 'Contract Total has been updated to remove Off-Contract items. Would you like to apply these changes?',
+  });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole('button', { name: 'Create addendum draft' }).click();
+  await expect(prompt).not.toBeVisible();
+  const after = await page.evaluate((number) => (window as any).contractFixture.storedProposals.get(number), proposalNumber);
+  expect(after.workflow.signedVersionId).toBe('original');
+  expect(after.workflow.status).toBe('signed');
+  expect(after.pricing.retailPrice).toBe(99000);
+  expect(after.versionName).toBe('Proposal Addendum 1');
+  const signed = after.versions.find((entry: any) => entry.versionId === 'original');
+  expect(signed.status).toBe('signed');
+  expect(signed.versionLocked).toBe(true);
+  expect(signed.pricing.retailPrice).toBe(100000);
 });
 
 for (const useMatching of [false, true]) {
@@ -426,4 +981,161 @@ test('leaving a loading builder for the summary cancels obsolete loads', async (
   fixture.releasePricing();
   await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
   expect(fixture.errors.filter((message) => message.includes('Failed to load proposal'))).toEqual([]);
+});
+
+for (const [id, state, poolType, latest] of westTypes) {
+  test(`West construction timing: ${id} preserves autofill and every pixel outside the two lines`, async ({ page }, testInfo) => {
+    await setup(page, { newTreeTimingRevision: true });
+    // Summary loading selects the pricing snapshot shared by the generator.
+    await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+    const result = await page.evaluate(({ state, poolType }) => (window as any).contractFixture.timingChecks({
+      createdDate: '2026-10-13T12:00:00.000Z',
+      contractTemplateRevisionId: undefined,
+      westConstructionTimingVersion: 'permit-and-dig-v1',
+      customerInfo: { customerName: 'TIMING EXPORT TEST', state, city: 'Charlotte', address: '123 Test Street' },
+      poolSpecs: { poolType, surfaceArea: 500, perimeter: 100, maxLength: 25, maxWidth: 20, shallowDepth: 3, endDepth: 6 },
+      contractOverrides: { p1_8: '10/18/2026', p1_9: '4/18/2027', p1_36: '5', p1_pay_excavation: '$25,000.00' },
+    }, true), { state, poolType });
+    expect(result.dateFields).toEqual([]);
+    expect(result.editableDateFieldNames).toEqual([]);
+    expect(result.requiresReview).toBe(false);
+    expect(result.revisionId).toBe(`west-${id}-r${latest + 1}`);
+    expect(result.otherFieldDifferences).toEqual([]);
+    expect(result.flattenedFields).toBe(0);
+    expect(result.pageCount).toBe(6);
+    expect(result.changedPixelsOutsideTiming).toBe(0);
+    expect(result.changedPixelsInsideTiming).toBeGreaterThan(0);
+    expect(result.text).toContain('Construction to substantially commence approximately 2-4 weeks after the permit is issued and full HOA approval.');
+    expect(result.text).toContain('Construction to be substantially complete approximately 8-12 weeks from the dig date.');
+    expect(result.versions).toEqual([
+      { mode: 'scratch', marker: 'permit-and-dig-v1', dateFieldCount: 0 },
+      { mode: 'copy', marker: 'permit-and-dig-v1', dateFieldCount: 0 },
+    ]);
+    const screenshotPath = testInfo.outputPath(`${id}-construction-timing.png`);
+    writeFileSync(screenshotPath, Buffer.from(result.image, 'base64'));
+    await testInfo.attach('Exported contract page one', { path: screenshotPath, contentType: 'image/png' });
+  });
+}
+
+test('West construction timing: older trees, signed contracts and new scratch/copy versions keep dates', async ({ page }) => {
+  await setup(page, { newTreeTimingRevision: true });
+  const results = await page.evaluate(async () => {
+    const fixture = (window as any).contractFixture;
+    return Promise.all([false, true].map((signed) => fixture.timingChecks({
+      createdDate: '2026-09-23T00:00:00.000Z',
+      contractTemplateRevisionId: 'west-nc-gunite-r2',
+      westConstructionTimingVersion: undefined,
+      status: signed ? 'signed' : 'draft', versionLocked: signed,
+      contractOverrides: { p1_8: '10/18/2026', p1_9: '4/18/2027' },
+    })));
+  });
+  for (const result of results) {
+    expect(result.requiresReview).toBe(false);
+    expect(result.patches).toEqual([]);
+    expect(result.dateFields.map((field: any) => field.value)).toEqual(['10/18/2026', '4/18/2027']);
+    expect(result.versions).toEqual([
+      { mode: 'scratch', marker: null, dateFieldCount: 2 },
+      { mode: 'copy', marker: null, dateFieldCount: 2 },
+    ]);
+  }
+});
+
+test('West construction timing: East ignores the marker even in a master proposal', async ({ page }) => {
+  await setup(page, { newTreeTimingRevision: true });
+  const results = await page.evaluate(async (east) => {
+    const fixture = (window as any).contractFixture;
+    return Promise.all([east, 'default'].map((franchiseId) => fixture.timingChecks({
+      franchiseId, pricingModelFranchiseId: east,
+      westConstructionTimingVersion: 'permit-and-dig-v1',
+    })));
+  }, east);
+  for (const result of results) {
+    expect(result.dateFields).toHaveLength(2);
+    expect(result.patches).toEqual([]);
+  }
+});
+
+test('West construction timing: editor shows plain timing text without date pickers or a revision prompt', async ({ page }, testInfo) => {
+  await setup(page, { westContract: true, newTreeTimingRevision: true });
+  await page.evaluate(() => {
+    const fixture = (window as any).contractFixture;
+    const input = fixture.storedProposals.get(fixture.proposal.proposalNumber);
+    Object.assign(input, { westConstructionTimingVersion: 'permit-and-dig-v1',
+      createdDate: '2026-10-13T12:00:00.000Z', contractTemplateRevisionId: undefined });
+    fixture.remountSummary();
+  });
+  await page.getByRole('button', { name: /View Contract/ }).click();
+  await expect(page.locator('[data-field-id="p1_36"] input')).toBeVisible();
+  await expect(page.locator('[data-field-id="p1_8"], [data-field-id="p1_9"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Keep Current', exact: true })).toHaveCount(0);
+  await page.locator('.contract-page').first().screenshot({ path: testInfo.outputPath('west-timing-editor.png') });
+});
+
+test('West construction timing: only starting a new proposal marks the format, and saving preserves it', async ({ page }) => {
+  await setup(page, { westContract: true, newTreeTimingRevision: true });
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await page.evaluate(() => (window as any).contractFixture.navigateToNewProposal());
+  await expect(page.locator('.proposal-form')).toBeVisible();
+  await expect(page.getByTestId('fixture-route')).toHaveText('/proposal/new');
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect.poll(() => page.evaluate((oldNumber) =>
+    (window as any).contractFixture.saved.some((entry: any) => entry.proposalNumber !== oldNumber), proposalNumber)).toBe(true);
+  const saved = await page.evaluate((oldNumber) =>
+    (window as any).contractFixture.saved.findLast((entry: any) => entry.proposalNumber !== oldNumber), proposalNumber);
+  expect(saved.westConstructionTimingVersion).toBe('permit-and-dig-v1');
+  expect(saved.proposalNumber).not.toBe(proposalNumber);
+  await page.evaluate((number) => (window as any).contractFixture.navigateToEditor(number), saved.proposalNumber);
+  await expect(page.locator('.proposal-form')).toBeVisible();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.at(-1)?.westConstructionTimingVersion))
+    .toBe('permit-and-dig-v1');
+});
+
+test('West construction timing: opening and saving an old proposal never marks it', async ({ page }) => {
+  await setup(page, { westContract: true, edit: true, newTreeTimingRevision: true });
+  await expect(page.locator('.proposal-form')).toBeVisible();
+  await page.getByRole('button', { name: 'Proposal Summary', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).contractFixture.saved.length)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => (window as any).contractFixture.saved.at(-1)?.westConstructionTimingVersion)).toBeUndefined();
+});
+
+test('West construction timing: an older client and an unmarked future-dated proposal both retain the legacy head', async ({ page }) => {
+  await setup(page, { newTreeTimingRevision: true });
+  const result = await page.evaluate(async (west) => {
+    const check = await (window as any).contractFixture.check({
+      createdDate: '2030-01-01T00:00:00.000Z', westConstructionTimingVersion: undefined,
+    });
+    const catalog = JSON.parse(localStorage.getItem(`submerge-contract-template-catalog-v1:${west}`)!);
+    const template = catalog.templates.find((row: any) => row.id === 'west-nc-gunite');
+    // Reproduce the older client's original creation-date inference, which
+    // knows nothing about the new-proposal-only rule or proposal marker.
+    const atCreation = catalog.revisions.filter((row: any) => row.contract_template_id === template.id &&
+      Date.parse(row.autofill_rules_json.effectivePublishedAt || '') <= Date.parse('2030-01-01T00:00:00.000Z'))
+      .sort((left: any, right: any) => left.revision_number - right.revision_number);
+    return { check: check.check, legacyCurrent: template.current_revision_id, legacyInferred: atCreation.at(-1)?.id };
+  }, west);
+  expect(result.check.pinned.revisionId).toBe('west-nc-gunite-r2');
+  expect(result.check.latest.revisionId).toBe('west-nc-gunite-r2');
+  expect(result.check.requiresReview).toBe(false);
+  expect(result.check.changeNotes).toEqual([]);
+  expect(result.legacyCurrent).toBe('west-nc-gunite-r2');
+  expect(result.legacyInferred).toBe('west-nc-gunite-r2');
+});
+
+test('West construction timing: cached new revisions keep their own fields and text offline', async ({ page }) => {
+  await setup(page, { westContract: true, newTreeTimingRevision: true });
+  await expect(page.locator('.summary-tile.customer-tile')).toBeVisible();
+  await page.evaluate(() => (window as any).contractFixture.prefetchWest());
+  const result = await page.evaluate(async () => {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+    return (window as any).contractFixture.timingChecks({ westConstructionTimingVersion: 'permit-and-dig-v1',
+      createdDate: '2026-10-13T12:00:00.000Z', contractTemplateRevisionId: 'west-nc-gunite-r3' });
+  });
+  expect(result.revisionId).toBe('west-nc-gunite-r3');
+  expect(result.dateFields).toEqual([]);
+  expect(result.requiresReview).toBe(false);
+  expect(result.patches[0].texts.map((text: any) => text.text)).toEqual([
+    'Construction to substantially commence approximately 2-4 weeks after the permit is issued and full HOA approval.',
+    'Construction to be substantially complete approximately 8-12 weeks from the dig date.',
+  ]);
 });

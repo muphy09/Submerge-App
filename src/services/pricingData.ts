@@ -3,6 +3,7 @@
 // ============================================================================
 
 import type { MasonryFacingOption } from '../utils/masonryFacing';
+import type { CategoryAdjustment } from '../types/categoryAdjustments';
 
 const defaultRbbFacingOptions: MasonryFacingOption[] = [
   { id: 'tile', name: 'Tile', materialCost: 0, laborCost: 0 },
@@ -133,6 +134,7 @@ const pricingData = {
     fiberglassShell: 0.00,
   },
   // Manual retail adjustments (designer-facing)
+  categoryAdjustments: [] as CategoryAdjustment[],
   manualAdjustments: {
     positive1: 0,
     positive2: 0,
@@ -187,6 +189,7 @@ const pricingData = {
     baseSpa: 200,
     raisedSpa: 350,
     sitePrep: 200,
+    additionalDiggingPerDay: 0,
     tightAccessJob: 6400,
     backfill: 600,
     gravelPerSqft: 2.75,

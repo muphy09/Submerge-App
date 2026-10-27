@@ -129,6 +129,8 @@ export interface Excavation {
   // Additional work
   additionalSitePrepHours: number;
   hasAdditionalSitePrep?: boolean;
+  hasAdditionalDigging?: boolean;
+  additionalDiggingDays?: number;
   hasTightAccessJob?: boolean;
   hasGravelInstall: boolean;
   gravelInstallQuantity?: number;
@@ -432,6 +434,7 @@ export interface Equipment {
   pump: PumpSelection;
   pumpQuantity?: number;
   additionalPumps?: PumpSelection[];
+  waterFeatureAutoPumpDismissed?: boolean;
   auxiliaryPump?: PumpSelection; // Deprecated: use auxiliaryPumps
   auxiliaryPumps?: PumpSelection[]; // Blower selections (single-select in current UI)
   filter: FilterSelection;
@@ -726,6 +729,7 @@ export interface PricingCalculations {
   overheadMultiplier: number; // Default 1.01 (1% overhead)
   totalCOGS: number; // totalCostsBeforeOverhead × overheadMultiplier
   offContractTotal: number; // Separately reported work excluded from pool retail and COGS
+  offContractSeparated?: boolean; // True when retailPrice and totalCost exclude off-contract work
 
   // Retail price calculation
   targetMargin: number; // Default 0.70 (70% - meaning 30% profit)
@@ -952,5 +956,7 @@ export interface Proposal {
   contractTemplateRevisionNumber?: number;
   contractRevisionReview?: ContractRevisionReviewState | null;
   contractTemplateRevision?: string;
+  /** Set only when a new proposal tree starts in the updated app; versions inherit it. */
+  westConstructionTimingVersion?: 'permit-and-dig-v1';
   warrantySections?: WarrantySection[] | null;
 }

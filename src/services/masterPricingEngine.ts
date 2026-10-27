@@ -11,6 +11,7 @@ import { flattenWaterFeatures } from '../utils/waterFeatureCost';
 import { CUSTOM_OPTIONS_SUBCATEGORY } from '../utils/costBreakdownSubcategories';
 import { isPpasEastProposal } from '../utils/franchiseScope';
 import { getSelectedEquipmentPackage, isFixedEquipmentPackage } from '../utils/equipmentPackages';
+import { syncAdditionalDiggingFromContract } from '../utils/additionalDigging';
 import {
   DEFAULT_CLOSEOUT_COMMISSION_RATE,
   DEFAULT_DIG_COMMISSION_RATE,
@@ -37,6 +38,7 @@ import {
 } from '../utils/customFeatures';
 import { isOffContractLineItem } from '../utils/offContractLineItems';
 import { normalizePapDiscounts } from '../utils/papDiscounts';
+import { applyCategoryAdjustments } from '../utils/categoryAdjustments';
 import { calculateFeenstraMay2026Proposal } from './legacy/feenstraMay2026Engine.generated.js';
 import { shouldUseFeenstraMay2026Pricing } from './legacy/feenstraMay2026Profile';
 import feenstraMay2026Pricing from './legacy/feenstraMay2026Pricing.generated.json';
@@ -189,7 +191,7 @@ export class MasterPricingEngine {
       ...proposal.poolSpecs!,
       waterfallCount,
     };
-    const excavation = proposal.excavation!;
+    const excavation = syncAdditionalDiggingFromContract(proposal).excavation!;
     const normalizedExcavation = {
       ...excavation,
       totalRBBSqft: ExcavationCalculations.calculateTotalRBBSqft(excavation),
@@ -583,6 +585,8 @@ export class MasterPricingEngine {
       totals,
     };
 
+    const categoryRetailAdjustmentsTotal = applyCategoryAdjustments(costBreakdown, proposal, pricingData);
+
     // ============================================================================
     // PRICING CALCULATIONS (Matching Excel)
     // ============================================================================
@@ -630,8 +634,8 @@ export class MasterPricingEngine {
       customFeaturesAdjustmentTotal +
       autoCoverRetailAdjustment +
       retailAdjustmentsTotal +
-      offContractTotal +
-      historicalPricingAdjustment;
+      historicalPricingAdjustment +
+      categoryRetailAdjustmentsTotal;
 
     // Excel adds a baked-in $1,250 kicker to retail (not shown separately in the UI)
     const g3UpgradeCost = 0;
@@ -648,9 +652,8 @@ export class MasterPricingEngine {
 
     // Step 4: Add G3 upgrade and discount
     const retailPrice = baseRetailPrice + g3UpgradeCost + discountAmount + designerAdjustmentsTotal;
-    // Off-contract work increases customer-facing retail only. It does not
-    // participate in pool COGS, commissions, fees, or margin calculations.
-    const retailPriceExcludingOffContract = Math.max(0, retailPrice - offContractTotal);
+    // Off-contract work has its own addendum and never enters contract retail.
+    const retailPriceExcludingOffContract = retailPrice;
 
     // Step 5: Calculate commissions and fees
     const digCommission = retailPriceExcludingOffContract * digCommissionRate;
@@ -667,6 +670,7 @@ export class MasterPricingEngine {
       overheadMultiplier,
       totalCOGS,
       offContractTotal,
+      offContractSeparated: true,
       targetMargin,
       baseRetailPrice,
       g3UpgradeCost,

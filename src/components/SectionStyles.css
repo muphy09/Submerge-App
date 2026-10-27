@@ -2740,6 +2740,20 @@ select.compact-input {
   min-width: 0;
 }
 
+.excavation-inline-option-input.excavation-digging-days-input {
+  flex: 0 0 65px;
+  width: 65px;
+}
+
+.excavation-digging-days-input .compact-input {
+  padding-left: 7px;
+}
+
+.excavation-digging-days-input .compact-input-unit {
+  right: 6px;
+  font-size: 0.7rem;
+}
+
 .excavation-inline-stepper {
   min-height: 32px;
   border: 1px solid #d6deea;

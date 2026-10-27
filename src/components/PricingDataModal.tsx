@@ -52,6 +52,7 @@ import {
 } from '../services/pricingTiers';
 import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import './PricingDataModal.css';
+import CategoryAdjustmentsEditor from './CategoryAdjustmentsEditor';
 
 type Path = (string | number)[];
 
@@ -1798,6 +1799,13 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
         title: 'Discounts / Adjustments',
         groups: [
           {
+            title: 'Category Adjustments',
+            render: () => <CategoryAdjustmentsEditor key={`${selectedModelId || 'new'}-${selectedPricingTierId}-${viewingHistoricalRevision?.id || 'current'}`} pricing={data} disabled={!!viewingHistoricalRevision} onChange={adjustments => {
+              updatePricingValue(['categoryAdjustments'], adjustments);
+              setHasChanges(true);
+            }} />,
+          },
+          {
             title: 'Preferred Approved Provider Discounts',
             scalars: [
               { label: 'Excavation', path: ['papDiscountRates', 'excavation'], type: 'number', tooltip: 'Applies % discount to Excavation line items (not fiberglass pools).', prefix: '%', isPercent: true },
@@ -2085,6 +2093,16 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                   : []),
               ],
             },
+          },
+          {
+            title: 'Additional Digging (Days)',
+            scalars: [{
+              label: 'Additional Digging (per day)',
+              path: ['excavation', 'additionalDiggingPerDay'],
+              type: 'number',
+              prefix: '$',
+              tooltip: 'COGS per additional digging day. Defaults to $0. Applies when Additional Digging (Days) is enabled.',
+            }],
           },
           {
             title: 'Base excavation (surface area breakpoints)',
@@ -3928,6 +3946,9 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     ],
     [
       data,
+      viewingHistoricalRevision,
+      selectedModelId,
+      selectedPricingTierId,
       additionalDeckingFields,
       excavationBaseTableFields,
       excavationExposedPoolWallFields,
@@ -4008,6 +4029,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
     `${count} ${count === 1 ? singular : plural}`;
 
   const getGroupSummary = (group: Group) => {
+    if (group.title === 'Category Adjustments') return null;
     const hasCustom = Boolean(group.render);
     const hasScalars = Boolean(group.scalars?.length);
     const hasScalarTable = Boolean(group.scalarTable?.rows.length);

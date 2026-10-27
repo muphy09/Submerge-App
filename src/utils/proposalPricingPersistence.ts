@@ -11,11 +11,11 @@ import {
 type MergeProposalWithDefaults = (input: Partial<Proposal>) => Partial<Proposal>;
 
 /**
- * Recalculate every persisted pricing field when a customer-facing retail
- * adjustment is edited outside the proposal builder. This keeps the saved
- * inputs and totals on the same pricing-model revision.
+ * Derive pricing for a retail-adjustment draft without saving or mutating the
+ * baseline. Preview and save must both start from the unedited version so
+ * historical pricing protection does not absorb the new adjustment.
  */
-export function recalculateProposalForRetailAdjustmentSave(options: {
+export function calculateProposalRetailAdjustmentDraft(options: {
   proposal: Proposal;
   retailAdjustments: RetailAdjustment[];
   pricingSnapshot: PricingData;
@@ -65,3 +65,6 @@ export function recalculateProposalForRetailAdjustmentSave(options: {
     totalCost: calculation.totalCost,
   };
 }
+
+// Compatibility for existing callers; calculation itself never persists data.
+export const recalculateProposalForRetailAdjustmentSave = calculateProposalRetailAdjustmentDraft;

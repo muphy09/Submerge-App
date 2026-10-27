@@ -1,0 +1,179 @@
+import { expect, test } from '@playwright/test';
+const url = `${process.env.SUBMERGE_TEST_BASE_URL || 'http://127.0.0.1:5173'}/tests/fixtures/category-adjustments.html`;
+
+test('admin builds, explains, saves and reloads one conditional retail discount', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1650, height: 1100 });
+  await page.goto(url);
+  await expect(page.getByRole('heading', { name: 'Category Adjustments', exact: true })).toBeVisible();
+  await expect(page.getByText('Use the builder below to manage this pricing area.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Flat adjustments apply once per proposal/)).toHaveCount(0);
+  await expect(page.getByText('No category adjustments. Existing prices are unchanged.')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).categoryAdjustmentFixture.saved().saveCount)).toBe(0);
+  await page.getByRole('button', { name: 'Add Category Adjustment', exact: true }).click();
+  const row = page.locator('fieldset.category-adjustment-card').first();
+  await expect(row.getByLabel('Breakdown Category', { exact: true }).locator('option:checked')).toHaveText('Choose a category...');
+  await row.getByLabel('Title', { exact: true }).fill('Long gas run credit');
+  await row.getByLabel('Cost ($)', { exact: true }).fill('-125');
+  await row.getByLabel('Breakdown Category', { exact: true }).selectOption('gas');
+  await row.getByRole('button', { name: 'Retail', exact: true }).click();
+  await row.getByRole('button', { name: 'Conditional', exact: true }).click();
+  await expect(row.getByLabel('Breakdown Category', { exact: true })).toHaveCount(0);
+  await expect(row.getByLabel('Designer Category', { exact: true })).toHaveValue('');
+  await expect(row.getByLabel('Designer Category', { exact: true }).locator('option:checked')).toHaveText('Choose a category...');
+  await expect(row.getByLabel('Subcategory', { exact: true })).toHaveCount(0);
+  const titleBounds = await row.getByLabel('Title', { exact: true }).boundingBox();
+  const categoryBounds = await row.getByLabel('Designer Category', { exact: true }).boundingBox();
+  expect(Math.abs(titleBounds!.y - categoryBounds!.y)).toBeLessThan(3);
+  const modeBounds = await row.getByRole('group', { name: 'Application mode' }).boundingBox();
+  const basisBounds = await row.getByRole('group', { name: 'Pricing basis' }).boundingBox();
+  expect(modeBounds!.y + modeBounds!.height).toBeLessThan(basisBounds!.y);
+  await row.getByLabel('Designer Category', { exact: true }).selectOption('Gas / Electrical');
+  await row.getByLabel('Subcategory', { exact: true }).selectOption('Gas Run');
+  await row.getByLabel('Comparison', { exact: true }).selectOption('gt');
+  await row.getByLabel('Value (feet)', { exact: true }).fill('100');
+  await expect(row.getByText('Apply -$125.00 to Retail when Gas Run is greater than 100 feet.', { exact: true })).toBeVisible();
+  const amounts = await page.evaluate(() => {
+    const fixture = (window as any).categoryAdjustmentFixture;
+    return [100, 101].map(run => { const result = fixture.calculate(run); return result.costBreakdown.gas.filter((item: any) => item.details?.categoryAdjustmentId).length; });
+  });
+  expect(amounts).toEqual([0, 1]);
+  await row.screenshot({ path: testInfo.outputPath('conditional-adjustment.png') });
+  await row.getByRole('button', { name: 'Save Adjustment', exact: true }).click();
+  await expect(page.locator('fieldset.category-adjustment-card')).toHaveCount(0);
+  const summary = page.locator('.category-adjustment-summary');
+  await expect(summary).toContainText('Long gas run credit');
+  await expect(summary).toContainText('Apply -$125.00 to Retail when Gas Run is greater than 100 feet.');
+  expect(await page.evaluate(() => (window as any).categoryAdjustmentFixture.saved().saveCount)).toBe(0);
+  await summary.screenshot({ path: testInfo.outputPath('collapsed-adjustment.png') });
+  await page.getByRole('button', { name: 'Publish Revision 1', exact: true }).first().click();
+  await expect.poll(() => page.evaluate(() => (window as any).categoryAdjustmentFixture.saved().saveCount)).toBe(1);
+  await expect(summary).toBeVisible();
+  expect(await page.evaluate(() => (window as any).categoryAdjustmentFixture.saved().pricing.categoryAdjustments[0].condition)).toEqual({ targetId: 'electrical.gas', operator: 'gt', value: 100 });
+  expect(await page.evaluate(() => (window as any).categoryAdjustmentFixture.saved().pricing.categoryAdjustments[0].category)).toBe('gas');
+  await summary.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(row.getByLabel('Title', { exact: true })).toHaveValue('Long gas run credit');
+  await expect(row.getByLabel('Value (feet)', { exact: true })).toHaveValue('100');
+});
+
+test('incomplete conditions cannot publish a pricing revision', async ({ page }) => {
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Add Category Adjustment', exact: true }).click();
+  const row = page.locator('fieldset.category-adjustment-card').first();
+  await row.getByLabel('Title', { exact: true }).fill('Incomplete charge');
+  await row.getByRole('button', { name: 'Conditional', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish Revision 1', exact: true }).first().click();
+  await expect(page.getByText('Normal pricing: Incomplete charge: Choose an available condition target.', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).categoryAdjustmentFixture.saved().saveCount)).toBe(0);
+});
+
+test('cascading conditions can stop broadly or target an exact tile selection', async ({ page }) => {
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Add Category Adjustment', exact: true }).click();
+  const row = page.locator('fieldset.category-adjustment-card').first();
+  await row.getByLabel('Title', { exact: true }).fill('Tile adjustment');
+  await row.getByLabel('Cost ($)', { exact: true }).fill('800');
+  await row.getByLabel('Breakdown Category', { exact: true }).selectOption('tile');
+  await row.getByRole('button', { name: 'Conditional', exact: true }).click();
+  await row.getByLabel('Designer Category', { exact: true }).selectOption('Tile / Coping / Decking');
+  await row.getByLabel('Subcategory', { exact: true }).selectOption('Tile');
+  await expect(row.locator('.category-adjustment-explanation')).toHaveText('Apply $800.00 to COGS when Tile is active.');
+  await row.getByLabel('Condition Detail 2', { exact: true }).selectOption('Tile Option');
+  await row.getByLabel('Matching Option', { exact: true }).selectOption('level2');
+  await expect(row.locator('.category-adjustment-explanation')).toHaveText('Apply $800.00 to COGS when Level 2 is active.');
+  await row.getByLabel('Designer Category', { exact: true }).selectOption('Drainage');
+  await expect(row.getByLabel('Matching Option', { exact: true })).toHaveCount(0);
+  await expect(row.locator('.category-adjustment-explanation')).not.toContainText('Level 2');
+  await row.getByRole('button', { name: 'Static', exact: true }).click();
+  await expect(row.getByLabel('Breakdown Category', { exact: true })).toHaveValue('');
+  await expect(row.getByLabel('Designer Category', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).categoryAdjustmentFixture.get()[0].condition)).toBeUndefined();
+  await expect(row.locator('.category-adjustment-explanation')).toContainText('on every proposal');
+  await row.getByLabel('Breakdown Category', { exact: true }).selectOption('excavation');
+  await row.getByRole('button', { name: 'Conditional', exact: true }).click();
+  await expect(row.getByLabel('Designer Category', { exact: true })).toHaveValue('');
+  await expect(row.getByLabel('Subcategory', { exact: true })).toHaveCount(0);
+  await row.getByLabel('Designer Category', { exact: true }).selectOption('Tile / Coping / Decking');
+  await row.getByLabel('Subcategory', { exact: true }).selectOption('Tile');
+  await row.getByRole('button', { name: 'Save Adjustment', exact: true }).click();
+  await expect(page.locator('.category-adjustment-summary')).toContainText('Apply $800.00 to COGS when Tile is active.');
+  await page.locator('.category-adjustment-summary').getByRole('button', { name: 'Edit', exact: true }).click();
+  await row.getByRole('button', { name: 'Remove adjustment', exact: true }).click();
+  await expect(page.getByText('No category adjustments. Existing prices are unchanged.')).toBeVisible();
+});
+
+test('saving an adjustment requires a valid selection and supports a condensed list', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1650, height: 1100 });
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Add Category Adjustment', exact: true }).click();
+  let row = page.locator('fieldset.category-adjustment-card');
+  await row.getByRole('button', { name: 'Save Adjustment', exact: true }).click();
+  await expect(row.getByText('Give every category adjustment a Title.', { exact: true })).toBeVisible();
+  await row.getByLabel('Title', { exact: true }).fill('Setup fee');
+  await row.getByLabel('Cost ($)', { exact: true }).fill('800');
+  await row.getByRole('button', { name: 'Save Adjustment', exact: true }).click();
+  await expect(row.getByText('Setup fee: choose a breakdown category.', { exact: true })).toBeVisible();
+  await row.getByLabel('Breakdown Category', { exact: true }).selectOption('tile');
+  await row.getByRole('button', { name: 'Save Adjustment', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Category Adjustment', exact: true }).click();
+  row = page.locator('fieldset.category-adjustment-card');
+  await row.getByLabel('Title', { exact: true }).fill('Courtesy credit');
+  await row.getByLabel('Cost ($)', { exact: true }).fill('-100');
+  await row.getByLabel('Breakdown Category', { exact: true }).selectOption('permit');
+  await row.getByRole('button', { name: 'Retail', exact: true }).click();
+  await row.getByRole('button', { name: 'Save Adjustment', exact: true }).click();
+  await expect(page.locator('fieldset.category-adjustment-card')).toHaveCount(0);
+  await expect(page.locator('.category-adjustment-summary')).toHaveCount(2);
+  await page.locator('.category-adjustments-editor').screenshot({ path: testInfo.outputPath('condensed-list.png') });
+  await page.locator('.category-adjustment-summary').first().getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('fieldset.category-adjustment-card')).toHaveCount(1);
+  await expect(page.locator('.category-adjustment-summary')).toHaveCount(1);
+});
+
+test('COGS and retail views keep the discount in its category and outside COGS', async ({ page }, testInfo) => {
+  await page.goto(`${url}?view=cogs`);
+  const tile = page.locator('.cost-breakdown-category').filter({ has: page.locator('.cost-breakdown-category-name', { hasText: /^Tile$/ }) });
+  await tile.locator('.cost-breakdown-category-header').click();
+  await expect(tile.getByText('Category Adjustments', { exact: true })).toBeVisible();
+  await expect(tile.getByText('Tile setup', { exact: true })).toBeVisible();
+  await expect(tile.getByText('-$125.00 (Retail only)', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Retail Cost Breakdown', exact: true }).click();
+  const discountRow = tile.getByRole('row').filter({ hasText: 'Tile courtesy discount' });
+  await expect(discountRow).toContainText('-$125.00');
+  await tile.screenshot({ path: testInfo.outputPath('tile-breakdown.png') });
+});
+
+test('detailed COGS export retains category adjustment line items', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1500, height: 1100 });
+  await page.goto(`${url}?view=cogs-export`);
+  await expect(page.getByText(/Tile setup/).first()).toBeVisible();
+  await expect(page.getByText(/Tile courtesy discount/).first()).toBeVisible();
+  await expect(page.getByText(/Site cost credit/).first()).toBeVisible();
+  await expect(page.getByText('Retail only — excluded from COGS', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('cogs-export.png'), fullPage: true });
+});
+
+for (const view of ['customer', 'customer-export-layout', 'export']) test(`${view} includes adjustments in category totals without showing their names`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1500, height: 1100 });
+  await page.goto(`${url}?view=${view}`);
+  await expect(page.getByText('RETAIL PRICE:', { exact: true })).toBeVisible();
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const expected = await page.evaluate(() => {
+    const { result, baseline } = (window as any).categoryAdjustmentReport;
+    // All extra cost belongs to Tile (+800) and Custom Features (-50).
+    // Retail-only -125 stays in Tile and never enters the cost basis.
+    const factor = (result.pricing.retailPrice + 125) / result.pricing.totalCostsBeforeOverhead;
+    return {
+      tile: Math.round(((baseline.costBreakdown.totals.tileLabor + 800) * factor - 125) * 100) / 100,
+      total: result.pricing.retailPrice,
+    };
+  });
+  const rows = view === 'export' ? page.locator('.breakdown-export-row') : view === 'customer-export-layout' ? page.locator('.export-summary-table tr') : page.locator('.summary-grid > .summary-row');
+  const tile = rows.filter({ hasText: /^Tile Labor:/ });
+  await expect(tile).toContainText(formatCurrency(expected.tile));
+  for (const title of ['Tile setup', 'Tile courtesy discount', 'Site cost credit']) await expect(page.getByText(new RegExp(title))).toHaveCount(0);
+  await expect(page.getByText(/Includes /)).toHaveCount(0);
+  const values = view === 'export' ? page.locator('.breakdown-export-row-value') : view === 'customer-export-layout' ? page.locator('.export-summary-value') : page.locator('.summary-grid > .summary-row > span:last-child');
+  const displayedTotal = await values.evaluateAll(elements => elements.reduce((sum, element) => sum + (Number(element.textContent?.replace(/[^\d.-]/g, '')) || 0), 0));
+  expect(Math.round(displayedTotal * 100) / 100).toBe(expected.total);
+  await page.screenshot({ path: testInfo.outputPath(`${view}.png`), fullPage: true });
+});

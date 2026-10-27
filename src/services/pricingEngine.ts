@@ -2,6 +2,7 @@
 // PRICING ENGINE - Excel Formula Logic Implementation
 // ============================================================================
 
+import { getAdditionalDiggingDays } from '../utils/additionalDigging';
 import {
   Proposal,
   PoolSpecs,
@@ -160,6 +161,14 @@ export class ExcavationCalculations {
 
     if (!hasPoolDefinition(poolSpecs)) {
       return items;
+    }
+
+    const additionalDays = getAdditionalDiggingDays(excavation);
+    const rawDayRate = Number(prices.additionalDiggingPerDay ?? 0);
+    const dayRate = Number.isFinite(rawDayRate) ? Math.max(0, rawDayRate) : 0;
+    if (additionalDays > 0) {
+      items.push({ category: 'Excavation', description: 'Additional Digging (Days)',
+        unitPrice: dayRate, quantity: additionalDays, total: dayRate * additionalDays });
     }
 
     const gravelMultiplier = options.allowExcavationOptionMultipliers

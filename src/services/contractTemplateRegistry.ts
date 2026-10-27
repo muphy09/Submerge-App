@@ -19,6 +19,8 @@ type RevisionRules = {
   changeNotes?: string[];
   effectivePublishedAt?: string | null;
   legacyBundledId?: string;
+  newProposalTreesOnly?: boolean;
+  westConstructionTimingVersion?: Proposal['westConstructionTimingVersion'];
 };
 
 export type ContractRevisionDescriptor = {
@@ -322,8 +324,29 @@ function currentRevisionRow(catalog: RemoteCatalog, proposal: Proposal, west: bo
     (row) => String(row.jurisdiction_key || '*').toUpperCase() === jurisdiction
   ) || rows.find((row) => row.jurisdiction_key === '*');
   if (!templateRow?.current_revision_id) return null;
-  const revision = catalog.revisions.find((row) => row.id === templateRow.current_revision_id);
+  let revision = catalog.revisions.find((row) => row.id === templateRow.current_revision_id);
   if (!revision) throw new Error('The published contract revision could not be found.');
+  if (west) {
+    if (revisionRules(revision, true).newProposalTreesOnly &&
+        proposal.westConstructionTimingVersion !== 'permit-and-dig-v1') {
+      const legacy = catalog.revisions.filter((row) => row.contract_template_id === templateRow.id &&
+        row.revision_number < revision!.revision_number && !revisionRules(row, true).newProposalTreesOnly)
+        .sort((left, right) => left.revision_number - right.revision_number);
+      revision = legacy[legacy.length - 1];
+      if (!revision) throw new Error('The historical contract revision could not be found.');
+    }
+    const eligible = catalog.revisions.filter((row) => {
+      if (row.contract_template_id !== templateRow.id) return false;
+      const rules = revisionRules(row, true);
+      return rules.newProposalTreesOnly === true &&
+        rules.westConstructionTimingVersion === 'permit-and-dig-v1' &&
+        proposal.westConstructionTimingVersion === rules.westConstructionTimingVersion;
+    }).sort((left, right) => left.revision_number - right.revision_number);
+    // New-tree-only revisions are published without advancing the legacy head.
+    // Older installed clients therefore never offer them to existing contracts.
+    const newTreeRevision = eligible[eligible.length - 1];
+    if (newTreeRevision && newTreeRevision.revision_number > revision.revision_number) revision = newTreeRevision;
+  }
   return { templateRow, revision };
 }
 
@@ -357,13 +380,16 @@ export async function checkProposalContractRevision(proposal: Proposal): Promise
     : null;
   if (!saved && !proposal.contractTemplateRevisionId && west) {
     const history = catalog.revisions
-      .filter((row) => row.contract_template_id === current.templateRow.id)
+      .filter((row) => row.contract_template_id === current.templateRow.id &&
+        !revisionRules(row, true).newProposalTreesOnly)
       .sort((left, right) => left.revision_number - right.revision_number);
     const atCreation = history.filter((row) => {
       const publishedAt = Date.parse(String(revisionRules(row, true).effectivePublishedAt || ''));
       return Number.isFinite(createdAt) && Number.isFinite(publishedAt) && publishedAt <= createdAt;
     });
-    const revision = atCreation[atCreation.length - 1] || history[0];
+    const revision = revisionRules(current.revision, true).newProposalTreesOnly
+      ? current.revision
+      : atCreation[atCreation.length - 1] || history[0];
     if (revision) saved = { template: current.templateRow, revision };
   }
   if (!saved && proposal.contractTemplateRevisionId) {
@@ -388,7 +414,9 @@ export async function checkProposalContractRevision(proposal: Proposal): Promise
   const changeNotes = changed && pinned.templateId === latest.templateId
     ? catalog.revisions
         .filter((row) => row.contract_template_id === latest.templateId &&
-          row.revision_number > pinned.revisionNumber && row.revision_number <= latest.revisionNumber)
+          row.revision_number > pinned.revisionNumber && row.revision_number <= latest.revisionNumber &&
+          (!west || !revisionRules(row, true).newProposalTreesOnly ||
+            proposal.westConstructionTimingVersion === revisionRules(row, true).westConstructionTimingVersion))
         .sort((left, right) => left.revision_number - right.revision_number)
         .flatMap((row) => revisionRules(row, west).changeNotes || [])
     : [];

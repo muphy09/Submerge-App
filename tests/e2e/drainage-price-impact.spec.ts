@@ -73,7 +73,8 @@ test('shows complete Price Impact for every active Drainage control', async ({ p
   const offContractDialog = page.getByRole('dialog', {
     name: 'Price Impact for Off-Contract Drainage Option',
   });
-  await expect(offContractDialog).toContainText('Off-Contract Retail Price');
+  await expect(offContractDialog).toContainText('Off Contract addendum price change');
+  await expect(offContractDialog).toContainText('Estimated contract price change');
 
   const screenshotPath = testInfo.outputPath('drainage-price-impact.png');
   await page.screenshot({ path: screenshotPath, fullPage: true });
