@@ -66,6 +66,33 @@ test('dashboard shows proposal attention dots without an updates feed', async ({
   await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('open-proposal');
 });
 
+test('dashboard tabs keep the same table width and full-width dividers', async ({ page }, testInfo) => {
+  for (const width of [1440, 2057]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${fixture}?mode=dashboard`);
+    const measure = () => page.locator('.dashboard-proposals-panel').evaluate(panel => {
+      const body = panel.querySelector<HTMLElement>('.dashboard-proposals-body:not([hidden]), .dashboard-shared-table-shell:not([hidden])')!;
+      const rect = (selector: string) => {
+        const bounds = body.querySelector(selector)!.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right };
+      };
+      return { toolbar: rect('.dashboard-proposals-toolbar'), table: rect('table'), pagination: rect('.proposal-table-pagination'),
+        bodyLeft: body.getBoundingClientRect().left, bodyRight: body.getBoundingClientRect().right };
+    });
+    await expect(page.getByRole('table')).toBeVisible();
+    const mine = await measure();
+    await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
+    await expect(page.getByRole('columnheader', { name: 'Owner', exact: true })).toBeVisible();
+    const shared = await measure();
+    expect(shared).toEqual(mine);
+    expect(shared.toolbar.left).toBe(shared.bodyLeft);
+    expect(shared.toolbar.right).toBe(shared.bodyRight);
+    expect(shared.pagination.left).toBe(shared.bodyLeft);
+    expect(shared.pagination.right).toBe(shared.bodyRight);
+    await page.screenshot({ path: testInfo.outputPath(`shared-table-alignment-${width}.png`) });
+  }
+});
+
 test('shared list paginates and owner icon keeps its space beside a long name', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 700 });
   await page.goto(`${fixture}?mode=dashboard&many=1&long=1`);
