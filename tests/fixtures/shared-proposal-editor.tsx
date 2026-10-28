@@ -3,10 +3,13 @@ import ReactDOM from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ProposalForm from '../../src/pages/ProposalForm';
 import ProposalView from '../../src/pages/ProposalView';
+import HomePage from '../../src/pages/HomePage';
+import { readSession } from '../../src/services/session';
 import { ToastProvider } from '../../src/components/Toast';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
 import MasterPricingEngine from '../../src/services/masterPricingEngine';
 import '../../src/index.css';
+import '../../src/styles/sharedButtons.css';
 
 const proposal: any = { ...getDefaultProposal(), proposalNumber: 'PROP-SHARED-EDITOR', franchiseId: 'shared-fixture',
   designerCode: '5555', designerAuthUserId: 'owner', ownerAuthUserId: 'owner', designerName: 'Owner', designerRole: 'designer',
@@ -32,9 +35,11 @@ const normalCreation = new URLSearchParams(location.search).has('normalCreation'
   listPricingModels: async () => [], loadPricingModel: async () => null, getSetting: async () => null,
   getFranchiseSetting: async () => null, setSetting: async () => undefined };
 ReactDOM.createRoot(document.getElementById('root')!).render(<ToastProvider>
-  <MemoryRouter initialEntries={normalCreation ? ['/proposal/new'] : [{ pathname: '/proposal/edit/PROP-SHARED-EDITOR', state: {
+  <MemoryRouter initialEntries={normalCreation ? ['/proposal/new'] : new URLSearchParams(location.search).has('summary')
+    ? ['/proposal/view/PROP-SHARED-EDITOR'] : [{ pathname: '/proposal/edit/PROP-SHARED-EDITOR', state: {
     sharedWorkingCopy: true, sharedPermission: 'contribute', versionId: 'original' } }]}>
     <Routes><Route path="/proposal/new" element={<ProposalForm />} /><Route path="/proposal/edit/:proposalNumber" element={<ProposalForm />} />
-      <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} /></Routes>
+      <Route path="/proposal/view/:proposalNumber" element={<ProposalView />} />
+      <Route path="/" element={<HomePage session={readSession()} />} /></Routes>
   </MemoryRouter>
 </ToastProvider>);

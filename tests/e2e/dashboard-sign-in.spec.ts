@@ -73,7 +73,7 @@ for (const recoveryEvent of ['online', 'submerge:proposal-cloud-sync']) {
     expect(rolloutReads).toBeGreaterThan(0);
     await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
     await expect(page.getByRole('row', { name: 'Open shared proposal Recovered shared proposal' })).toBeVisible();
-    await expect(page.getByRole('img', { name: 'New shared proposal', exact: true })).toBeVisible();
+    await expect(page.locator('.dashboard-shared-table').getByRole('img', { name: 'New shared proposal', exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('sharing-after-reconnect.png') });
   });
 }

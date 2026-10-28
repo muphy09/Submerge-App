@@ -189,13 +189,24 @@ test('recipient can withdraw from the summary and send saved changes for review'
   await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('send:true:Please review the new length');
 });
 
-test('viewer cannot propose changes and can leave', async ({ page }) => {
-  page.on('dialog', (prompt) => void prompt.accept());
+test('viewer uses the app confirmation to leave and returns to the dashboard', async ({ page }, testInfo) => {
   await page.goto(`${fixture}?mode=viewer&permission=view`);
   await expect(page.getByText('Your Access: Can view')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Propose changes' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Leave Proposal' }).click();
-  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('end:recipient-id');
+  const confirm = page.getByRole('dialog', { name: 'Leave proposal?' });
+  await expect(confirm.locator('.confirm-modal')).toBeVisible();
+  await expect(confirm.locator('.confirm-actions')).toHaveCSS('justify-content', 'flex-end');
+  await expect(confirm.getByRole('button', { name: 'Leave Proposal' })).toHaveCSS('background-color', 'rgb(12, 34, 67)');
+  await expect(confirm).toContainText('Your unfinished or pending changes will be canceled.');
+  await page.screenshot({ path: testInfo.outputPath('leave-proposal-confirmation.png') });
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(confirm).toHaveCount(0);
+  expect(await page.evaluate(() => window.collaborationAction)).toBe('');
+  await page.getByRole('button', { name: 'Leave Proposal' }).click();
+  await confirm.getByRole('button', { name: 'Leave Proposal' }).click();
+  await expect(page).toHaveURL(/mode=dashboard/);
+  await expect(page.getByRole('tab', { name: 'My Proposals (1)' })).toBeVisible();
 });
 
 test('pending contributor work is frozen and review dialog fits a narrow screen', async ({ page }) => {
@@ -318,31 +329,48 @@ test('sign-out clears account-scoped shared copies from IndexedDB', async ({ pag
 });
 
 
-test('recipient sees the owner sharing note on the summary', async ({ page }, testInfo) => {
-  await page.goto(`${fixture}?mode=recipient`);
-  const message = page.getByRole('status').filter({ hasText: 'Message from Alex Owner' });
+test('unseen sharing notes require Okay, survive an interrupted first visit, and stay dismissed on return', async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=recipient&note=1&rail=1`);
+  const message = page.getByRole('dialog', { name: 'Message from Alex Owner' });
   await expect(message).toContainText('Please review');
-  await page.screenshot({ path: testInfo.outputPath('recipient-sharing-message.png') });
+  await expect(message.getByRole('button')).toHaveCount(1);
+  await expect(message.getByRole('button', { name: 'Okay', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('fixture-event-read'))).toBeNull();
+  await page.keyboard.press('Escape');
+  await expect(message).toBeVisible();
+  await page.mouse.click(8, 8);
+  await expect(message).toBeVisible();
+  await page.reload();
+  await expect(message).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('sharing-note-greeting.png') });
+  await message.getByRole('button', { name: 'Okay', exact: true }).click();
+  await expect(message).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('fixture-event-read'))).toBe('fixture-unread');
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Collaboration' })).toBeVisible();
+  await expect(message).toHaveCount(0);
+  await page.goto(`${fixture}?mode=recipient&note=Please%20check%20the%20new%20equipment`);
+  await expect(message).toContainText('Please check the new equipment');
+  await message.getByRole('button', { name: 'Okay', exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Collaboration' })).toBeVisible();
+  await expect(message).toHaveCount(0);
 });
 
-
-test('opening a shared summary clears its new dot on subsequent dashboard visits', async ({ page }) => {
+test('opening a shared summary clears its new dot after acknowledging the sharing message', async ({ page }) => {
   await page.goto(`${fixture}?mode=dashboard`);
   await expect(page.getByRole('img', { name: 'New shared proposals', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
   await expect(page.getByRole('img', { name: 'New shared proposal', exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('fixture-event-read'))).toBeNull();
-  await page.getByRole('row', { name: 'Open shared proposal Rivera Pool' }).click();
-  await page.goto(`${fixture}?mode=recipient`);
+  await page.goto(`${fixture}?mode=recipient&note=1`);
+  await page.getByRole('dialog', { name: 'Message from Alex Owner' }).getByRole('button', { name: 'Okay' }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('fixture-event-read'))).toBe('fixture-unread');
-  await page.reload();
-  await expect(page.getByRole('status').filter({ hasText: 'Message from Alex Owner' })).toContainText('Please review');
   await page.goto(`${fixture}?mode=dashboard`);
   await expect(page.getByRole('img', { name: 'New shared proposals', exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
   await expect(page.getByRole('img', { name: 'New shared proposal', exact: true })).toHaveCount(0);
 });
-
 
 test('permission updates do not make an already-opened shared proposal new again', async ({ page }) => {
   await page.goto(`${fixture}?mode=dashboard&opened=1`);
@@ -401,4 +429,46 @@ test('changing a permission preserves the original sharing message', async ({ pa
   await permission.selectOption('contribute');
   await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('share:recipient-id:contribute:Please review');
   expect(await page.evaluate(() => (window as any).collaborationShares()[0].note)).toBe('Please review');
+});
+
+
+test('failed leave keeps the confirmation and proposal available for retry', async ({ page }) => {
+  await page.goto(`${fixture}?mode=recipient&leaveFailure=1`);
+  await page.getByRole('button', { name: 'Leave Proposal' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Leave proposal?' });
+  await confirm.getByRole('button', { name: 'Leave Proposal' }).click();
+  await expect(confirm.locator('.confirm-error')).toHaveText('Connection interrupted. Try leaving again.');
+  await expect(page).not.toHaveURL(/mode=dashboard/);
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('button', { name: 'Leave Proposal' })).toBeEnabled();
+});
+
+test('an earlier client reading the alert does not consume a sharing note greeting', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('fixture-event-read', 'fixture-unread'));
+  await page.goto(`${fixture}?mode=recipient&note=1`);
+  const message = page.getByRole('dialog', { name: 'Message from Alex Owner' });
+  await expect(message).toContainText('Please review');
+  await message.getByRole('button', { name: 'Okay' }).click();
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Collaboration' })).toBeVisible();
+  await expect(message).toHaveCount(0);
+});
+
+test('dismissed note receipts contain no note text and do not carry across accounts', async ({ page }) => {
+  await page.goto(`${fixture}?mode=recipient&note=Private%20sharing%20message`);
+  await page.getByRole('dialog', { name: 'Message from Alex Owner' }).getByRole('button', { name: 'Okay' }).click();
+  const result = await page.evaluate(async () => {
+    const { collaborationNoteReceiptKey, hasCollaborationNoteReceipt } = await import('/src/services/collaborationNoteReceipts.ts');
+    const key = await collaborationNoteReceiptKey('TEST-FIXTURE-1', 'share-1', 'Private sharing message');
+    const seen = hasCollaborationNoteReceipt(key);
+    const session = JSON.parse(localStorage.getItem('submerge-user-session')!);
+    localStorage.setItem('submerge-user-session', JSON.stringify({ ...session, userId: 'other-recipient' }));
+    const other = await collaborationNoteReceiptKey('TEST-FIXTURE-1', 'share-1', 'Private sharing message');
+    return { seen, otherSeen: hasCollaborationNoteReceipt(other), key, other,
+      receipts: Object.entries(localStorage).filter(([name]) => name.startsWith('submerge.collaborationNoteSeen')) };
+  });
+  expect(result.seen).toBe(true);
+  expect(result.otherSeen).toBe(false);
+  expect(result.key).not.toBe(result.other);
+  expect(JSON.stringify(result.receipts)).not.toContain('Private sharing message');
 });

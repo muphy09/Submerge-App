@@ -47,7 +47,7 @@ requireText(
 
 requireText(
   homePage,
-  /loadedProposals = await listDashboardProposals\(sessionFranchiseId\)[\s\S]{0,180}setProposals\(loadedProposals\)[\s\S]{0,180}setProposalLoadIssues\(getLocalProposalLoadIssues\(\)\)/,
+  /loadedProposals = await listDashboardProposals\(sessionFranchiseId\)[\s\S]{0,2400}setProposals\(loadedProposals\)[\s\S]{0,180}setProposalLoadIssues\(getLocalProposalLoadIssues\(\)\)/,
   'The designer dashboard no longer has a direct proposal-list render path.'
 );
 rejectText(

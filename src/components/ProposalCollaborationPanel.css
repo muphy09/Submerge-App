@@ -125,5 +125,5 @@
   .collaboration-review-actions button, .collaboration-send-modal footer button { flex: 1 1 100%; }
 }
 
-.collaboration-share-message { padding: 10px 12px; border-left: 3px solid #3b82f6; background: #eff6ff; border-radius: 4px; }
-.collaboration-share-message p { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.collaboration-note-dialog .confirm-body p { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 55vh; overflow-y: auto; }

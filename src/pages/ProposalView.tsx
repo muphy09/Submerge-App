@@ -5517,6 +5517,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             manageSignal={collaborationManageSignal}
             sendSignal={collaborationSendSignal}
             sendVersionId={selectedVersionIdKey}
+            onLeft={() => navigate('/', { replace: true })}
             onRequestsLoaded={setCollaborationRequests}
             onChanged={(versionId) => { if (proposalNumber) void loadProposal(proposalNumber, versionId); }}
           />}

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Proposal } from '../types/proposal-new';
 import { useToast } from '../components/Toast';
 import FeedbackReplyInboxModal from '../components/FeedbackReplyInboxModal';
-import DashboardProposalsPanel from '../components/DashboardProposalsPanel';
+import DashboardProposalsPanel, { loadDashboardPricingDirectory, type DashboardPricingDirectory } from '../components/DashboardProposalsPanel';
 import RecentActivity from '../components/RecentActivity';
 import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
 import './HomePage.css';
@@ -41,7 +41,10 @@ function HomePage({ session }: HomePageProps) {
   const [sharedOwnedProposalNumbers, setSharedOwnedProposalNumbers] = useState<string[]>([]);
   const [sharedOwnedRecipients, setSharedOwnedRecipients] = useState<Record<string, string[]>>({});
   const [collaborationUpdates, setCollaborationUpdates] = useState<CollaborationEvent[]>([]);
-  const [collaborationRollout, setCollaborationRollout] = useState(false);
+  const [collaborationRollout, setCollaborationRollout] = useState<{ key: string; enabled: boolean } | null>(null);
+  const [loadedDashboardKey, setLoadedDashboardKey] = useState('');
+  const [pricingDirectory, setPricingDirectory] = useState<DashboardPricingDirectory>({ defaultModelMap: {}, availableModelMap: {} });
+  const completedDashboardKeyRef = useRef('');
   const [proposalLoadIssues, setProposalLoadIssues] = useState<LocalProposalLoadIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingFeedbackReplies, setPendingFeedbackReplies] = useState<FeedbackEntry[]>([]);
@@ -50,11 +53,15 @@ function HomePage({ session }: HomePageProps) {
   const proposalLoadRequestRef = useRef(0);
   const { showToast } = useToast();
   const sessionFranchiseId = session?.franchiseId || getSessionFranchiseId();
-  const { enabled: collaborationCapability } = useFranchiseCapability('sharedProposals', sessionFranchiseId);
-  const collaborationAvailable = collaborationCapability && collaborationRollout;
+  const { enabled: collaborationCapability, isLoading: capabilityLoading, isRefreshing: capabilityRefreshing } = useFranchiseCapability('sharedProposals', sessionFranchiseId);
+  const dashboardContext = captureProposalContext();
+  const rolloutKey = JSON.stringify([dashboardContext, capabilityLoading || capabilityRefreshing, collaborationCapability]);
+  const rolloutReady = !capabilityLoading && !capabilityRefreshing && collaborationRollout?.key === rolloutKey;
+  const collaborationAvailable = rolloutReady && Boolean(collaborationRollout?.enabled);
+  const dashboardKey = JSON.stringify([rolloutKey, collaborationAvailable]);
   useEffect(() => {
-    setCollaborationRollout(false);
-    if (!collaborationCapability) return;
+    if (capabilityLoading || capabilityRefreshing) return;
+    if (!collaborationCapability) { setCollaborationRollout({ key: rolloutKey, enabled: false }); return; }
     let canceled = false;
     let requestId = 0;
     const context = captureProposalContext();
@@ -62,9 +69,12 @@ function HomePage({ session }: HomePageProps) {
       const currentRequest = ++requestId;
       try {
         const enabled = await isCollaborationAvailable(sessionFranchiseId, forceRefresh);
-        if (!canceled && currentRequest === requestId && context === captureProposalContext()) setCollaborationRollout(enabled);
+        if (!canceled && currentRequest === requestId && context === captureProposalContext()) setCollaborationRollout({ key: rolloutKey, enabled });
       } catch (error) {
-        if (!canceled && context === captureProposalContext()) console.warn('Unable to check proposal sharing availability.', error);
+        if (!canceled && currentRequest === requestId && context === captureProposalContext()) {
+          console.warn('Unable to check proposal sharing availability.', error);
+          setCollaborationRollout({ key: rolloutKey, enabled: false });
+        }
       }
     };
     const recoverRollout = () => void checkRollout(true);
@@ -76,12 +86,13 @@ function HomePage({ session }: HomePageProps) {
       window.removeEventListener('online', recoverRollout);
       window.removeEventListener(PROPOSAL_CLOUD_SYNC_EVENT, recoverRollout);
     };
-  }, [collaborationCapability, sessionFranchiseId, session?.userId, session?.isTestAccount, session?.testAccountId]);
+  }, [rolloutKey, capabilityLoading, capabilityRefreshing, collaborationCapability, sessionFranchiseId]);
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const proposalEditingRestrictedReason =
     'Master accounts acting as owner can view proposals but cannot create or edit them.';
 
   const loadProposals = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!rolloutReady) return;
     const requestId = ++proposalLoadRequestRef.current;
     if (!session?.userId) {
       setProposals([]);
@@ -90,44 +101,67 @@ function HomePage({ session }: HomePageProps) {
       setSharedOwnedRecipients({});
       setCollaborationUpdates([]);
       setProposalLoadIssues([]);
+      setLoadedDashboardKey(dashboardKey);
       setLoading(false);
       return;
     }
     const currentUserId = session.userId;
     if (readSession()?.userId !== currentUserId) return;
-    if (!options.silent) setLoading(true);
+    if (!options.silent && completedDashboardKeyRef.current !== dashboardKey) setLoading(true);
     try {
       // The dashboard only displays saved proposal metadata. Repricing every
       // proposal here made launch time grow with proposal history and repeated
       // the revision checks already performed when a proposal is opened.
       const loadedProposals = await listDashboardProposals(sessionFranchiseId);
       if (requestId !== proposalLoadRequestRef.current || readSession()?.userId !== currentUserId) return;
+      // Stage the entire initial view before publishing any cards or rows.
+      const directoryPromise = loadDashboardPricingDirectory(loadedProposals);
+      let shared: SharedProposal[] = [];
+      let updates: CollaborationEvent[] = [];
+      let readShares: CollaborationEvent[] = [];
+      let ownedSharedRecipients: Record<string, string[]> = {};
+      if (collaborationAvailable) {
+        try {
+          [shared, updates, readShares, ownedSharedRecipients] = await Promise.all([
+            listSharedProposals(), listCollaborationEvents(500, { unreadOnly: true }),
+            listCollaborationEvents(500, { readSharesOnly: true }),
+            listOwnedSharedProposalRecipients(loadedProposals.map((proposal) => proposal.proposalNumber)),
+          ]);
+        } catch (error) {
+          console.warn('Unable to load dashboard collaboration.', error);
+          if (completedDashboardKeyRef.current === dashboardKey) return;
+        }
+      }
+      const directory = await directoryPromise;
+      if (requestId !== proposalLoadRequestRef.current || dashboardContext !== captureProposalContext()) return;
       setProposals(loadedProposals);
       setProposalLoadIssues(getLocalProposalLoadIssues());
-      setLoading(false);
-      if (collaborationAvailable) {
-        const [shared, updates, readShares, ownedSharedRecipients] = await Promise.all([
-          listSharedProposals(), listCollaborationEvents(500, { unreadOnly: true }),
-          listCollaborationEvents(500, { readSharesOnly: true }),
-          listOwnedSharedProposalRecipients(loadedProposals.map((proposal) => proposal.proposalNumber)),
-        ]);
-        if (requestId !== proposalLoadRequestRef.current || readSession()?.userId !== currentUserId) return;
-        setSharedProposals(shared);
-        setSharedOwnedProposalNumbers(Object.keys(ownedSharedRecipients));
-        setSharedOwnedRecipients(ownedSharedRecipients);
-        setCollaborationUpdates([...updates, ...readShares]);
-      } else {
-        setSharedProposals([]);
-        setSharedOwnedProposalNumbers([]);
-        setSharedOwnedRecipients({});
-        setCollaborationUpdates([]);
-      }
+      setPricingDirectory(directory);
+      setSharedProposals(shared);
+      setSharedOwnedProposalNumbers(Object.keys(ownedSharedRecipients));
+      setSharedOwnedRecipients(ownedSharedRecipients);
+      setCollaborationUpdates([...updates, ...readShares]);
+      setLoadedDashboardKey(dashboardKey);
+      completedDashboardKeyRef.current = dashboardKey;
     } catch (error) {
-      if (readSession()?.userId === currentUserId) console.error('Failed to load proposals:', error);
+      if (requestId === proposalLoadRequestRef.current && dashboardContext === captureProposalContext()) {
+        console.error('Failed to load proposals:', error);
+        if (completedDashboardKeyRef.current !== dashboardKey) {
+          // Never reveal another account/workspace's previous view on failure.
+          setProposals([]);
+          setSharedProposals([]);
+          setSharedOwnedProposalNumbers([]);
+          setSharedOwnedRecipients({});
+          setCollaborationUpdates([]);
+          setProposalLoadIssues([]);
+          setPricingDirectory({ defaultModelMap: {}, availableModelMap: {} });
+        }
+        setLoadedDashboardKey(dashboardKey);
+      }
     } finally {
       if (requestId === proposalLoadRequestRef.current) setLoading(false);
     }
-  }, [session, sessionFranchiseId, collaborationAvailable]);
+  }, [session, sessionFranchiseId, collaborationAvailable, rolloutReady, dashboardKey, dashboardContext]);
 
   useEffect(() => {
     void loadProposals();
@@ -244,11 +278,20 @@ function HomePage({ session }: HomePageProps) {
     }
   };
 
+  const dashboardLoading = loading || !rolloutReady || loadedDashboardKey !== dashboardKey;
   return (
-    <div className="dashboard-page">
+    <div className="dashboard-page" aria-busy={dashboardLoading}>
+      {dashboardLoading ? <div className="dashboard-loading" role="status">
+        <span className="dashboard-loading-spinner" aria-hidden="true" />
+        <span>Dashboard loading...</span>
+      </div> : <>
       <RecentActivity
         proposals={[...proposals, ...sharedProposals.map((entry) => entry.proposal)]}
-        loading={loading}
+        loading={false}
+        sharedProposals={sharedProposals}
+        sharedOwnedProposalNumbers={sharedOwnedProposalNumbers}
+        sharedOwnedRecipients={sharedOwnedRecipients}
+        collaborationUpdates={collaborationUpdates}
         userId={session?.userId}
         franchiseId={sessionFranchiseId}
         onOpenProposal={handleOpenProposal}
@@ -262,7 +305,8 @@ function HomePage({ session }: HomePageProps) {
           sharedOwnedRecipients={sharedOwnedRecipients}
           collaborationEnabled={collaborationAvailable}
           collaborationUpdates={collaborationUpdates}
-          loading={loading}
+          loading={false}
+          pricingDirectory={pricingDirectory}
           onCreateProposal={handleNewProposal}
           onDeleteProposal={handleDeleteProposal}
           onOpenProposal={handleOpenProposal}
@@ -274,6 +318,7 @@ function HomePage({ session }: HomePageProps) {
           recoveryIssues={proposalLoadIssues}
         />
       </div>
+      </>}
       <FeedbackReplyInboxModal
         isOpen={feedbackInboxOpen}
         entries={pendingFeedbackReplies}

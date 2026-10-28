@@ -12,9 +12,31 @@ import type { CollaborationEvent, SharedProposal } from '../services/proposalCol
 import './DashboardProposalsPanel.css';
 import TablePagination from './TablePagination';
 import { useHorizontalWheelScroll } from '../hooks/useHorizontalWheelScroll';
-import { TooltipAnchor } from './AppTooltip';
+import ProposalSharingIndicator from './ProposalSharingIndicator';
+import { getCollaborationNotifications } from '../utils/collaborationNotifications';
+
+export type DashboardPricingDirectory = {
+  defaultModelMap: Record<string, string | null>;
+  availableModelMap: Record<string, Set<string>>;
+};
+
+export async function loadDashboardPricingDirectory(proposals: Proposal[]): Promise<DashboardPricingDirectory> {
+  const franchiseIds = Array.from(new Set(proposals.map(getPricingModelSourceFranchiseId)));
+  const entries = await Promise.all(franchiseIds.map(async franchiseId => {
+    try {
+      const rows = await listPricingModelsRemote(franchiseId);
+      return { franchiseId, defaultId: rows.find(row => row.isDefault)?.id || null, ids: new Set(rows.map(row => row.id)) };
+    } catch (error) {
+      console.warn('Unable to load pricing models for franchise', franchiseId, error);
+      return { franchiseId, defaultId: null, ids: new Set<string>() };
+    }
+  }));
+  return { defaultModelMap: Object.fromEntries(entries.map(entry => [entry.franchiseId, entry.defaultId])),
+    availableModelMap: Object.fromEntries(entries.map(entry => [entry.franchiseId, entry.ids])) };
+}
 
 type DashboardProposalsPanelProps = {
+  pricingDirectory?: DashboardPricingDirectory;
   proposals: Proposal[];
   sharedProposals?: SharedProposal[];
   sharedOwnedProposalNumbers?: string[];
@@ -257,6 +279,7 @@ function DashboardProposalsPanel({
   sharedOwnedRecipients = {},
   collaborationEnabled = false,
   collaborationUpdates = [],
+  pricingDirectory,
   loading,
   onCreateProposal,
   onDeleteProposal,
@@ -279,52 +302,14 @@ function DashboardProposalsPanel({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [proposalToDelete, setProposalToDelete] = useState<string | null>(null);
   const [deletingProposalNumber, setDeletingProposalNumber] = useState<string | null>(null);
-  const [defaultModelMap, setDefaultModelMap] = useState<Record<string, string | null>>({});
-  const [availableModelMap, setAvailableModelMap] = useState<Record<string, Set<string>>>({});
-
+  const [loadedPricingDirectory, setLoadedPricingDirectory] = useState<DashboardPricingDirectory>({ defaultModelMap: {}, availableModelMap: {} });
+  const { defaultModelMap, availableModelMap } = pricingDirectory || loadedPricingDirectory;
   useEffect(() => {
+    if (pricingDirectory) return;
     let cancelled = false;
-
-    async function loadPricingModels() {
-      const franchiseIds = Array.from(
-        new Set(proposals.map((proposal) => getPricingModelSourceFranchiseId(proposal)))
-      );
-      const directories = await Promise.all(franchiseIds.map(async (franchiseId) => {
-        try {
-          const rows = await listPricingModelsRemote(franchiseId);
-          const defaultModel = rows?.find((row: any) => row.isDefault);
-          return {
-            franchiseId,
-            defaultModelId: defaultModel?.id || null,
-            availableModelIds: new Set((rows || []).map((row: any) => row.id)),
-          };
-        } catch (error) {
-          console.warn('Unable to load pricing models for franchise', franchiseId, error);
-          return {
-            franchiseId,
-            defaultModelId: null,
-            availableModelIds: new Set<string>(),
-          };
-        }
-      }));
-
-      if (cancelled) return;
-      const nextDefaultMap: Record<string, string | null> = {};
-      const nextAvailableMap: Record<string, Set<string>> = {};
-      directories.forEach(({ franchiseId, defaultModelId, availableModelIds }) => {
-        nextDefaultMap[franchiseId] = defaultModelId;
-        nextAvailableMap[franchiseId] = availableModelIds;
-      });
-      setDefaultModelMap(nextDefaultMap);
-      setAvailableModelMap(nextAvailableMap);
-    }
-
-    void loadPricingModels();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [proposals]);
+    void loadDashboardPricingDirectory(proposals).then(directory => { if (!cancelled) setLoadedPricingDirectory(directory); });
+    return () => { cancelled = true; };
+  }, [proposals, pricingDirectory]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -374,13 +359,7 @@ function DashboardProposalsPanel({
       return 0;
     });
   const sharedOwnedNumbers = new Set(sharedOwnedProposalNumbers);
-  const openedSharedNumbers = new Set(collaborationUpdates.filter(event => event.read_at && event.event_type === 'shared')
-    .map(event => event.proposal_number));
-  const unreadSharedNumbers = new Set(collaborationUpdates.filter(event => !event.read_at && event.event_type === 'shared'
-    && !openedSharedNumbers.has(event.proposal_number))
-    .map(event => event.proposal_number));
-  const reviewNumbers = new Set(collaborationUpdates.filter(event => !event.read_at && event.event_type === 'changes_submitted')
-    .map(event => event.proposal_number));
+  const { newShares: unreadSharedNumbers, reviews: reviewNumbers } = getCollaborationNotifications(collaborationUpdates);
   const attentionDot = (label: string) => <span className="dashboard-attention-dot" role="img" aria-label={label} />;
   const filteredSharedProposals = sharedProposals.filter(({ proposal, ownerName }) => {
     const value = sharedSearchTerm.trim().toLowerCase();
@@ -749,10 +728,8 @@ function DashboardProposalsPanel({
                                   {getDisplayText(proposal.customerInfo?.customerName, 'Untitled Proposal')}
                                 </span>
                                 {reviewNumbers.has(proposal.proposalNumber) && attentionDot("Changes awaiting review")}
-                                {sharedOwnedNumbers.has(proposal.proposalNumber) && <TooltipAnchor tooltip={`Shared with ${sharedOwnedRecipients[proposal.proposalNumber]?.join(', ') || 'collaborators'}`}><svg className="dashboard-shared-icon" viewBox="0 0 24 24" role="img" aria-label="Shared with collaborators">
-                                  <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" />
-                                  <path d="M3.5 19v-1.2a5.5 5.5 0 0 1 11 0V19H3.5Zm12.4-5.4a4.6 4.6 0 0 1 4.6 4.6V19h-3.8" />
-                                </svg></TooltipAnchor>}
+                                {sharedOwnedNumbers.has(proposal.proposalNumber) && <ProposalSharingIndicator
+                                  tooltip={`Shared with ${sharedOwnedRecipients[proposal.proposalNumber]?.join(', ') || 'collaborators'}`} />}
                               </span>
                               {proposal.syncStatus === 'pending' && (
                                 <span className="dashboard-sync-note">Local changes pending sync</span>

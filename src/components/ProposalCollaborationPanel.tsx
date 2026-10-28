@@ -4,6 +4,8 @@ import { calculatePriceImpact } from '../services/priceImpact';
 import { loadPricingSnapshotForExistingProposal } from '../services/pricingDataStore';
 import { readSession } from '../services/session';
 import ProposalSummaryIcon from './ProposalSummaryIcon';
+import ConfirmDialog from './ConfirmDialog';
+import { collaborationNoteReceiptKey, hasCollaborationNoteReceipt, saveCollaborationNoteReceipt } from '../services/collaborationNoteReceipts';
 import { captureProposalContext } from '../services/proposalContext';
 import type { PreparedContribution } from '../services/collaborationPricing';
 import type { ContributionResolutions } from '../utils/contributionInputs';
@@ -46,15 +48,15 @@ function conflictLabel(path: string) {
 }
 
 // Native modal dialogs escape the side rail stacking context and make the app inert.
-function CollaborationModalOverlay({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+function CollaborationModalOverlay({ onClose, children, className = '' }: { onClose: () => void; children: ReactNode; className?: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current!;
     dialog.showModal();
     return () => dialog.close();
   }, []);
-  return <dialog ref={dialogRef} role="presentation" className="collaboration-modal-overlay no-print"
-    data-scroll-lock="true" onClick={onClose} onCancel={(event) => { event.preventDefault(); onClose(); }}>
+  return <dialog ref={dialogRef} role="presentation" className={`collaboration-modal-overlay no-print ${className}`}
+    data-scroll-lock="true" onClick={event => { if (event.target === event.currentTarget) onClose(); }} onCancel={(event) => { event.preventDefault(); onClose(); }}>
     {children}
   </dialog>;
 }
@@ -68,10 +70,11 @@ type Props = {
   sendVersionId?: string;
   onRequestsLoaded?: (requests: CollaborationRequest[]) => void;
   onChanged: (versionId?: string) => void;
+  onLeft?: () => void;
   api?: typeof collaborationPanelApi;
 };
 
-export default function ProposalCollaborationPanel({ proposal, available, offline = false, manageSignal, sendSignal, sendVersionId, onRequestsLoaded, onChanged, api = collaborationPanelApi }: Props) {
+export default function ProposalCollaborationPanel({ proposal, available, offline = false, manageSignal, sendSignal, sendVersionId, onRequestsLoaded, onChanged, onLeft, api = collaborationPanelApi }: Props) {
   const { decideChangeRequest, endProposalShare, listChangeRequests, listProposalPeople,
     listProposalShares, listRecipientOptions, shareProposal, saveWorkingCopy,
     prepareChangeRequest, applyChangeRequest } = api;
@@ -85,6 +88,10 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
   const [manageOpen, setManageOpen] = useState(false);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [pendingShareNotes, setPendingShareNotes] = useState<Array<{
+    text: string; receiptKey: string; eventIds: string[]; context: string; proposalNumber: string;
+  }>>([]);
   const [contributorNote, setContributorNote] = useState('');
   const [search, setSearch] = useState('');
   const [selectedRecipients, setSelectedRecipients] = useState<RecipientOption[]>([]);
@@ -121,11 +128,37 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
       setRequests(nextRequests);
       onRequestsLoaded?.(nextRequests);
       setPeople(nextPeople);
-      // Notification delivery must not prevent sharing or review if its request fails.
+      // Opening the summary consumes ordinary alerts, but a sharing note is
+      // consumed only after the recipient presses Okay in its message window.
+      let unread: Awaited<ReturnType<typeof api.listCollaborationEvents>> = [];
       try {
-        const unread = await api.listCollaborationEvents(500, { unreadOnly: true, proposalNumber: proposal.proposalNumber });
-        if (context !== captureProposalContext()) return;
-        await Promise.all(unread.map(event => api.markCollaborationEventRead(event.id)));
+        unread = await api.listCollaborationEvents(500, { unreadOnly: true, proposalNumber: proposal.proposalNumber });
+      } catch (caught) {
+        console.warn('Could not load proposal collaboration notifications.', caught);
+      }
+      if (context !== captureProposalContext()) return;
+      const share = nextShares.find(item => item.recipient_id === userId && !item.ended_at);
+      const notes = new Map<string, string[]>();
+      if (!isOwner && share) {
+        for (const event of [...unread].reverse()) {
+          if (event.event_type !== 'shared' || !event.note?.trim()) continue;
+          const text = event.note.trim();
+          notes.set(text, [...(notes.get(text) || []), event.id]);
+        }
+        // This also delivers notes whose old client already marked the alert
+        // read, or whose notification request is temporarily unavailable.
+        if (share.note?.trim() && !notes.has(share.note.trim())) notes.set(share.note.trim(), []);
+      }
+      const pending = [] as typeof pendingShareNotes;
+      for (const [text, eventIds] of notes) {
+        const receiptKey = await collaborationNoteReceiptKey(proposal.proposalNumber, share!.id, text);
+        if (!hasCollaborationNoteReceipt(receiptKey)) pending.push({ text, receiptKey, eventIds, context, proposalNumber: proposal.proposalNumber });
+      }
+      if (context !== captureProposalContext()) return;
+      setPendingShareNotes(pending);
+      const pendingEventIds = new Set(pending.flatMap(note => note.eventIds));
+      try {
+        await Promise.all(unread.filter(event => !pendingEventIds.has(event.id)).map(event => api.markCollaborationEventRead(event.id)));
       } catch (caught) {
         console.warn('Could not acknowledge proposal collaboration notifications.', caught);
       }
@@ -139,7 +172,7 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
     } catch (caught) {
       if (context === captureProposalContext()) setError((caught as Error).message || 'Could not load collaboration.');
     } finally { if (context === captureProposalContext()) setLoading(false); }
-  }, [api, available, isOwner, manageOpen, offline, onRequestsLoaded, proposal.collaborationEnabled, proposal.proposalNumber]);
+  }, [api, available, isOwner, manageOpen, offline, onRequestsLoaded, proposal.collaborationEnabled, proposal.proposalNumber, userId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { if (manageSignal) setManageOpen(true); }, [manageSignal]);
@@ -274,9 +307,41 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
     } finally { if (context === captureProposalContext()) setBusy(false); }
   };
 
+  const shareMessage = pendingShareNotes.find(note => note.context === captureProposalContext() && note.proposalNumber === proposal.proposalNumber);
+  const dismissShareMessage = () => {
+    if (!shareMessage || shareMessage.context !== captureProposalContext()) return;
+    saveCollaborationNoteReceipt(shareMessage.receiptKey);
+    setPendingShareNotes(current => current.filter(note => note.receiptKey !== shareMessage.receiptKey));
+    // Dismissal remains possible if the connection drops while reading.
+    void Promise.all(shareMessage.eventIds.map(id => api.markCollaborationEventRead(id)))
+      .catch(caught => console.warn('Could not acknowledge the dismissed sharing note.', caught));
+  };
+  const leaveProposal = async () => {
+    if (busy || offline || !userId || isOwner) return;
+    const context = captureProposalContext();
+    setBusy(true); setError(null);
+    try {
+      await endProposalShare(proposal.proposalNumber, userId);
+      if (context !== captureProposalContext()) return;
+      setLeaveOpen(false);
+      onLeft?.();
+    } catch (caught) {
+      if (context === captureProposalContext()) setError((caught as Error).message || 'Could not leave the proposal.');
+    } finally { if (context === captureProposalContext()) setBusy(false); }
+  };
+
   if (!available && !proposal.collaborationEnabled) return null;
 
   return <>
+    {shareMessage && !isOwner && <CollaborationModalOverlay onClose={() => {}} className="collaboration-note-dialog">
+      <ConfirmDialog open title={`Message from ${ownerName}`} message={shareMessage.text}
+        confirmLabel="Okay" hideCancel onConfirm={dismissShareMessage} onCancel={() => {}} />
+    </CollaborationModalOverlay>}
+    {leaveOpen && !isOwner && <CollaborationModalOverlay onClose={() => { if (!busy) setLeaveOpen(false); }}>
+      <ConfirmDialog open title="Leave proposal?" message="Leave this proposal? Your unfinished or pending changes will be canceled."
+        confirmLabel="Leave Proposal" isLoading={busy} confirmDisabled={offline} errorMessage={error}
+        onConfirm={() => void leaveProposal()} onCancel={() => { if (!busy) setLeaveOpen(false); }} />
+    </CollaborationModalOverlay>}
     <section className="proposal-side-card collaboration-card no-print" aria-label="Collaboration">
       <div className="proposal-side-card-header"><div className="summary-card-title">
         <span className="summary-card-icon"><ProposalSummaryIcon name="people" size={28} /></span>
@@ -295,9 +360,6 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
                 .map((person) => person.display_name || 'Franchise user').join(', ')
               : offline ? 'Reconnect to see current access' : 'None yet'}</strong></span></div>
         </div>
-        {!isOwner && myShare?.note && <div className="collaboration-share-message" role="status">
-          <strong>Message from {ownerName}</strong><p>{myShare.note}</p>
-        </div>}
         {!isOwner && <p className="collaboration-access-note">Your Access: {(myShare?.permission || proposal.sharedPermission) === 'contribute' ? 'Can propose changes' : 'Can view'}</p>}
         {isOwner && submitted.length > 0 && <div className="collaboration-review-list">
           {submitted.map((request) => <div key={request.id} className="collaboration-review-entry">
@@ -312,11 +374,8 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
         {!isOwner && <div className="collaboration-recipient-actions">
           {mySubmittedRequest && <button className="action-button collaboration-withdraw" 
           onClick={() => void act(() => decideChangeRequest(mySubmittedRequest.id, 'withdraw'))} disabled={busy || offline}>Withdraw Changes</button>}
-          <button className="action-button collaboration-leave" onClick={() => {
-          if (window.confirm('Leave this proposal? Your unfinished or pending changes will be canceled.')) {
-            void act(() => endProposalShare(proposal.proposalNumber, userId || ''));
-          }
-        }} disabled={busy || offline}>Leave Proposal</button></div>}
+          <button className="action-button collaboration-leave" onClick={() => { setError(null); setLeaveOpen(true); }}
+            disabled={busy || offline}>Leave Proposal</button></div>}
         <details className="collaboration-history"><summary><ProposalSummaryIcon name="history" size={22} /><span>Collaboration History</span><ProposalSummaryIcon name="chevron" size={20} className="collaboration-history-chevron" /></summary>
           <ul>
             {endedShares.length === 0 && history.length === 0 && <li>No collaboration history yet.</li>}

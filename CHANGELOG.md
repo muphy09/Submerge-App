@@ -1,3 +1,7 @@
+## [3.5.0] - 10/27/26
+### Proposal Sharing
+- Proposals can now be shared between members of the same franchise
+-----
 ## [3.4.7] - 10/22/26
 ### HOTFIX
 - Fixed an issue that could carry the current PAP discount values into older proposal models

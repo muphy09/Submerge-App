@@ -19,15 +19,18 @@ export function useFranchiseCapability(
     isFranchiseCapabilityEnabled(cached, capability, compatibilityDefaultValue)
   );
   const [isLoading, setIsLoading] = useState(Boolean(resolvedId) && !cached);
+  const [isRefreshing, setIsRefreshing] = useState(Boolean(resolvedId));
 
   useEffect(() => {
     if (!resolvedId) {
       setEnabled(false);
       setIsLoading(false);
+      setIsRefreshing(false);
       return;
     }
 
     let cancelled = false;
+    setIsRefreshing(true);
     const cachedNow = getCachedFranchiseConfiguration(resolvedId);
     setEnabled(isFranchiseCapabilityEnabled(cachedNow, capability, compatibilityDefaultValue));
     setIsLoading(!cachedNow);
@@ -41,7 +44,7 @@ export function useFranchiseCapability(
       .catch((error) => {
         console.warn(`Unable to load franchise capability ${String(capability)}:`, error);
         if (!cancelled) setIsLoading(false);
-      });
+      }).finally(() => { if (!cancelled) setIsRefreshing(false); });
 
     const unsubscribe = subscribeToFranchiseConfigurationUpdates(resolvedId, (record) => {
       if (cancelled) return;
@@ -55,5 +58,5 @@ export function useFranchiseCapability(
     };
   }, [capability, compatibilityDefaultValue, resolvedId]);
 
-  return { enabled, isLoading };
+  return { enabled, isLoading, isRefreshing };
 }

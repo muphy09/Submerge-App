@@ -7,6 +7,7 @@ import type { Proposal } from '../../src/types/proposal-new';
 import type { CollaborationRequest, CollaborationShare, SharedProposal } from '../../src/services/proposalCollaboration';
 import { clearSession } from '../../src/services/session';
 import '../../src/index.css';
+import '../../src/styles/sharedButtons.css';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
 import MasterPricingEngine from '../../src/services/masterPricingEngine';
 import { withAdditionalDeckingSelections } from '../../src/utils/decking';
@@ -33,7 +34,8 @@ const proposal = {
 } as Proposal;
 const share: CollaborationShare = {
   id: 'share-1', proposal_number: proposal.proposalNumber, recipient_id: 'recipient-id',
-  permission: params.get('permission') === 'view' ? 'view' : 'contribute', note: 'Please review',
+  permission: params.get('permission') === 'view' ? 'view' : 'contribute',
+  note: params.has('note') ? (params.get('note') === '1' ? 'Please review' : params.get('note')) : mode === 'owner' ? 'Please review' : null,
   created_at: '2026-09-23T12:00:00.000Z', ended_at: null,
 };
 const request: CollaborationRequest = {
@@ -137,6 +139,7 @@ const api: typeof collaborationPanelApi = {
     else store.shares.push({ ...share, id: `share-${recipient}`, recipient_id: recipient, permission, note });
   },
   endProposalShare: async (_number, recipient) => {
+    if (params.has('leaveFailure')) throw new Error('Connection interrupted. Try leaving again.');
     window.collaborationAction = `end:${recipient}`;
     store.shares = store.shares.filter((item) => item.recipient_id !== recipient);
   },
@@ -193,7 +196,7 @@ function Fixture() {
     {mode === 'recipient' && params.get('working') && <button onClick={() => setSendSignal((value) => value + 1)}>Send changes from summary</button>}
     <ProposalCollaborationPanel
     proposal={{ ...current, sharedPermission: mode === 'owner' ? undefined : share.permission }}
-    available api={api} onChanged={() => setCurrent({ ...store.proposal })}
+    available api={api} onLeft={() => { window.location.href = '?mode=dashboard'; }} onChanged={() => setCurrent({ ...store.proposal })}
     manageSignal={manageSignal} sendSignal={sendSignal} sendVersionId="original" />
   </div>;
 }

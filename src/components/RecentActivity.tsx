@@ -1,9 +1,16 @@
 import { useMemo } from 'react';
 import type { Proposal } from '../types/proposal-new';
 import { getRecentActivityProposals } from '../services/recentProposalActivity';
+import type { CollaborationEvent, SharedProposal } from '../services/proposalCollaboration';
+import { getCollaborationNotifications } from '../utils/collaborationNotifications';
+import ProposalSharingIndicator from './ProposalSharingIndicator';
 
 type RecentActivityProps = {
   proposals: Proposal[];
+  sharedProposals?: SharedProposal[];
+  sharedOwnedProposalNumbers?: string[];
+  sharedOwnedRecipients?: Record<string, string[]>;
+  collaborationUpdates?: CollaborationEvent[];
   loading: boolean;
   userId?: string | null;
   franchiseId?: string | null;
@@ -44,12 +51,16 @@ function RecentActivity({
   userId,
   franchiseId,
   onOpenProposal,
+  sharedProposals = [], sharedOwnedProposalNumbers = [], sharedOwnedRecipients = {}, collaborationUpdates = [],
 }: RecentActivityProps) {
   const recentProposals = useMemo(
     () => getRecentActivityProposals(proposals, { userId, franchiseId }, 4),
     [franchiseId, proposals, userId]
   );
 
+  const sharedByNumber = new Map(sharedProposals.map(entry => [entry.proposal.proposalNumber, entry]));
+  const ownedShared = new Set(sharedOwnedProposalNumbers);
+  const { newShares, reviews } = getCollaborationNotifications(collaborationUpdates);
   return (
     <section className="recent-activity-section" aria-labelledby="recent-activity-title">
       <h1 id="recent-activity-title">Recent Activity</h1>
@@ -81,7 +92,19 @@ function RecentActivity({
                   onClick={() => onOpenProposal(proposal.proposalNumber)}
                   aria-label={`Open ${customerName}`}
                 >
-                  <span className="recent-activity-name">{customerName}</span>
+                  <span className="recent-activity-heading">
+                    <span className="recent-activity-name">{customerName}</span>
+                    <span className="recent-activity-indicators">
+                      {sharedByNumber.has(proposal.proposalNumber) ? <ProposalSharingIndicator recipient
+                        tooltip={`Shared by ${sharedByNumber.get(proposal.proposalNumber)!.ownerName}`} />
+                        : ownedShared.has(proposal.proposalNumber) && <ProposalSharingIndicator
+                          tooltip={`Shared with ${sharedOwnedRecipients[proposal.proposalNumber]?.join(', ') || 'collaborators'}`} />}
+                      {((sharedByNumber.has(proposal.proposalNumber) && newShares.has(proposal.proposalNumber))
+                        || (ownedShared.has(proposal.proposalNumber) && reviews.has(proposal.proposalNumber))) &&
+                        <span className="dashboard-attention-dot" role="img" aria-label={sharedByNumber.has(proposal.proposalNumber)
+                          ? 'New shared proposal' : 'Changes awaiting review'} />}
+                    </span>
+                  </span>
                   <span className={`recent-activity-status is-${status.replace(/_/g, '-')}`}>
                     {formatStatusLabel(status)}
                   </span>
