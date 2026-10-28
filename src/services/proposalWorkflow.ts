@@ -554,7 +554,7 @@ function extractPoolSpecsFields(
 ): WorkflowFieldSnapshot[] {
   const specs = proposal.poolSpecs || ({} as Proposal['poolSpecs']);
   return compactSnapshots([
-    { key: 'poolType', label: 'Pool Type', value: normalizeText(specs.poolType) },
+    { key: 'poolType', label: 'Pool Type', value: normalizeText(specs.poolType).replace(/\bgunite\b/gi, 'Shotcrete') },
     { key: 'poolShape', label: 'Pool Shape', value: normalizeText(specs.poolShape) },
     { key: 'fiberglassSize', label: 'Fiberglass Size', value: normalizeText(specs.fiberglassSize) },
     { key: 'fiberglassModel', label: 'Fiberglass Model', value: normalizeText(specs.fiberglassModelName) },
@@ -568,7 +568,7 @@ function extractPoolSpecsFields(
     { key: 'stepsBench', label: 'Steps / Bench', value: formatNumber(specs.totalStepsAndBench, ' LF') },
     { key: 'tanningShelf', label: 'Tanning Shelf', value: formatBoolean(specs.hasTanningShelf) },
     { key: 'fiberglassTanningLedge', label: 'Fiberglass Tanning Ledge', value: normalizeText(specs.fiberglassTanningLedgeName) },
-    { key: 'spaType', label: 'Spa Type', value: normalizeText(specs.spaType) || 'None' },
+    { key: 'spaType', label: 'Spa Type', value: normalizeText(specs.spaType).replace(/\bgunite\b/gi, 'Shotcrete') || 'None' },
     { key: 'fiberglassSpa', label: 'Fiberglass Spa', value: normalizeText(specs.spaFiberglassModelName) },
     { key: 'spaSize', label: 'Spa Size', value: [formatNumber(specs.spaLength, ' FT'), formatNumber(specs.spaWidth, ' FT')].filter(Boolean).join(' x ') },
     { key: 'spaPerimeter', label: 'Spa Perimeter', value: formatNumber(specs.spaPerimeter, ' LF') },

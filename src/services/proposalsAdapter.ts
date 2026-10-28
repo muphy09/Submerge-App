@@ -18,9 +18,11 @@ import { sanitizeEditableProposalVersions } from '../utils/proposalSelectionSani
 import { removeHardcodedPapDiscountsFromProposal } from '../utils/papDiscounts';
 import { isCloudOnlyRenderRecoveryEnabled } from './renderRecovery';
 import { getSharedProposal, saveCollaborativeOwnerProposal } from './proposalCollaboration';
+import { assertProposalContext, captureProposalContext } from './proposalContext';
+import { loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from './pricingDataStore';
 import { logLedgerEventSafe } from './ledger';
 import { upgradeProposalContractTemplateRevision } from './contractTemplateUpgrade';
-import { countUnreadWorkflowEvents, ensureProposalWorkflow, getWorkflowStatus } from './proposalWorkflow';
+import { countUnreadWorkflowEvents, ensureProposalWorkflow, getWorkflowStatus, getVersionRecordStatus } from './proposalWorkflow';
 import {
   createUnsafeProposalOverwriteError,
   getUnsafeProposalOverwriteReason,
@@ -1341,6 +1343,7 @@ export async function getProposal(proposalNumber: string): Promise<Proposal | nu
 }
 
 export async function saveProposal(proposal: Proposal, options: SaveProposalOptions = {}): Promise<SaveResult> {
+  const context = captureProposalContext();
   if (isMasterActingAsOwnerSession()) {
     throw new Error(MASTER_INSPECTION_READ_ONLY_MESSAGE);
   }
@@ -1366,9 +1369,25 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
     ...normalized,
     versions: (normalized.versions || []).map((v) => ensureProposalWriteMetadata(v, session)),
   };
+  let sanitizedVersions = normalizedWithVersions;
+  if (normalizedWithVersions.collaborationEnabled) {
+    const sanitized: Proposal[] = [];
+    for (const version of [normalizedWithVersions, ...(normalizedWithVersions.versions || [])]) {
+      if (version.versionLocked || ['signed', 'completed'].includes(getVersionRecordStatus(version))) {
+        sanitized.push(version); continue;
+      }
+      const snapshot = await loadPricingSnapshotForExistingProposal(version.franchiseId || normalized.franchiseId,
+        version.pricingModelId, version.pricingModelFranchiseId, version.pricingTierId, version.pricingModelRevisionId);
+      assertProposalContext(context);
+      sanitized.push(withTemporaryPricingSnapshot(snapshot.pricing, () =>
+        sanitizeEditableProposalVersions({ ...version, versions: [] })));
+    }
+    sanitizedVersions = { ...sanitized[0], versions: sanitized.slice(1) };
+  } else sanitizedVersions = sanitizeEditableProposalVersions(normalizedWithVersions);
+  assertProposalContext(context);
   const persistenceReady = removeHardcodedPapDiscountsFromProposal(
     upgradeProposalContractTemplateRevision(
-      sanitizeEditableProposalVersions(normalizedWithVersions)
+      sanitizedVersions
     )
   );
   if (persistenceReady.sharedPermission) {
@@ -1394,6 +1413,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
   }
 
   const supabaseOnline = await hasSupabaseConnection(true);
+  assertProposalContext(context);
   if (!supabaseOnline) {
     if (persistenceReady.collaborationEnabled) throw new Error('Shared proposals can only be edited while connected.');
     if (options.requireOnline) {
@@ -1425,6 +1445,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
     } else {
       synced = await upsertToSupabase(persistenceReady);
     }
+    assertProposalContext(context);
     await persistLocalProposal({ ...synced, franchiseId });
     if (options.ledgerAction === 'proposal_submitted' && !isTestSession()) {
       await logLedgerEventSafe({
@@ -1442,7 +1463,7 @@ export async function saveProposal(proposal: Proposal, options: SaveProposalOpti
     }
     return { ...synced, lastModified: synced.lastModified || now };
   } catch (error) {
-    if (options.requireOnline || persistenceReady.collaborationEnabled || isUnsafeProposalOverwriteError(error)
+    if (context !== captureProposalContext() || options.requireOnline || persistenceReady.collaborationEnabled || isUnsafeProposalOverwriteError(error)
       || String((error as Error)?.message || '').includes('COLLAB_CONFLICT')
       || String((error as Error)?.message || '').includes('UPGRADE_REQUIRED')) {
       throw error;

@@ -1,4 +1,5 @@
 import pricingData from './pricingData';
+import { assertProposalContext, captureProposalContext } from './proposalContext';
 import { getSessionFranchiseCode } from './session';
 import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
 import { removeHardcodedPapDiscountsFromPricing } from '../utils/papDiscounts';
@@ -675,7 +676,25 @@ function syncBaseFromSnapshot(snapshot: PricingData) {
 }
 
 function syncBaseFromState() {
-  syncBaseFromSnapshot(pricingState);
+  syncBaseFromSnapshot(editorPricing?.snapshot || pricingState);
+}
+
+// Legacy section controls read pricingData directly. Keep their catalog bound to
+// the open editor even when background work loads a different active model.
+let editorPricing: { token: object; snapshot: PricingData } | null = null;
+export function bindPricingEditor(snapshot: PricingData) {
+  const token = {};
+  editorPricing = { token, snapshot: deepClone(snapshot) };
+  syncBaseFromState();
+  return {
+    update(next: PricingData) {
+      if (editorPricing?.token !== token) return;
+      editorPricing.snapshot = deepClone(next); syncBaseFromState();
+    },
+    release() {
+      if (editorPricing?.token === token) { editorPricing = null; syncBaseFromState(); }
+    },
+  };
 }
 
 function mergeDeep(target: any, source: any): any {
@@ -795,6 +814,9 @@ async function resolvePricingState(
     if (pricingModelId) {
       const sourceFranchiseId = pricingModelFranchiseId || franchiseId;
       const result = await loadPricingModelRemote(sourceFranchiseId, pricingModelId, pricingModelRevisionId);
+      if (result && (result.pricingModelId !== pricingModelId || result.franchiseId !== sourceFranchiseId)) {
+        throw new Error('The saved pricing model identity does not match. Reconnect before editing this proposal.');
+      }
       if (pricingModelRevisionId && result?.revisionId !== pricingModelRevisionId) {
         throw new Error('The saved pricing revision is unavailable. Reconnect before editing this proposal.');
       }
@@ -817,9 +839,10 @@ async function resolvePricingState(
           isDefault: Boolean(result.isDefault),
         };
       }
+      throw new Error('The selected pricing model is unavailable. Reconnect before editing this proposal.');
     }
   } catch (error) {
-    if (pricingModelRevisionId) throw error;
+    if (pricingModelId || pricingModelRevisionId) throw error;
     console.warn('Unable to load specific pricing model:', error);
   }
 
@@ -862,6 +885,7 @@ async function loadPricingForFranchise(
   pricingTierId?: string | null,
   pricingModelRevisionId?: string | null
 ) {
+  const context = captureProposalContext();
   const requestId = ++latestLoadRequestId;
   const resolved = await resolvePricingState(
     franchiseId,
@@ -870,6 +894,7 @@ async function loadPricingForFranchise(
     pricingTierId,
     pricingModelRevisionId
   );
+  assertProposalContext(context);
   if (requestId !== latestLoadRequestId) {
     return resolved;
   }
@@ -1066,7 +1091,7 @@ export async function savePricingModelSnapshot(options: {
 }
 
 export function getPricingDataSnapshot(): PricingData {
-  return deepClone(pricingState);
+  return deepClone(editorPricing?.snapshot || pricingState);
 }
 
 export function getNormalPricingDataSnapshot(): PricingData {

@@ -1,126 +1,62 @@
-import { Fragment, useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Proposal } from '../types/proposal-new';
 import { calculatePriceImpact } from '../services/priceImpact';
 import { loadPricingSnapshotForExistingProposal } from '../services/pricingDataStore';
 import { readSession } from '../services/session';
 import ProposalSummaryIcon from './ProposalSummaryIcon';
+import { captureProposalContext } from '../services/proposalContext';
+import type { PreparedContribution } from '../services/collaborationPricing';
+import type { ContributionResolutions } from '../utils/contributionInputs';
 import {
   decideChangeRequest,
+  prepareChangeRequest,
+  applyChangeRequest,
   endProposalShare,
   listChangeRequests,
   listProposalPeople,
   listProposalShares,
   listRecipientOptions,
   restoreAppliedChange,
+  listCollaborationEvents, markCollaborationEventRead,
   saveWorkingCopy,
   shareProposal,
   type CollaborationPermission,
   type CollaborationRequest,
   type CollaborationShare,
   type RecipientOption,
+  type ContributionDestination,
 } from '../services/proposalCollaboration';
+import { reviewRows, proposalWithReviewRow, titleCase, displayGroup, displayPath, formatMoney } from '../utils/contributionReview';
+import type { PricingData } from '../services/pricingTiers';
 import './ProposalCollaborationPanel.css';
 
 export const collaborationPanelApi = {
+  prepareChangeRequest, applyChangeRequest, listCollaborationEvents, markCollaborationEventRead,
   decideChangeRequest, endProposalShare, listChangeRequests, listProposalPeople,
   listProposalShares, listRecipientOptions, restoreAppliedChange, shareProposal,
   saveWorkingCopy,
 };
 
-const bodyFields = [
-  'customerInfo','poolSpecs','excavation','plumbing','electrical','tileCopingDecking',
-  'drainage','equipment','waterFeatures','customFeatures','masonry','interiorFinish',
-  'papDiscounts','manualAdjustments','retailAdjustments',
-  'notes','contractOverrides','warrantySections',
-];
-
-type Difference = { path: string; before: unknown; after: unknown };
-function compareValue(before: unknown, after: unknown, path: string, result: Difference[]) {
-  if (JSON.stringify(before) === JSON.stringify(after)) return;
-  if (before && after && typeof before === 'object' && typeof after === 'object'
-    && !Array.isArray(before) && !Array.isArray(after)) {
-    const oldRecord = before as Record<string, unknown>;
-    const newRecord = after as Record<string, unknown>;
-    for (const key of new Set([...Object.keys(oldRecord), ...Object.keys(newRecord)])) {
-      compareValue(oldRecord[key], newRecord[key], `${path}.${key}`, result);
-    }
-    return;
-  }
-  result.push({ path, before, after });
-}
-function requestDifferences(request: CollaborationRequest) {
-  const differences: Difference[] = [];
-  for (const field of bodyFields) {
-    compareValue((request.base_version_json as any)?.[field], (request.working_version_json as any)?.[field], field, differences);
-  }
-  return differences;
-}
-function displayValue(value: unknown, path: string): string {
-  if (value == null || value === '') return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (Array.isArray(value)) return value.length ? value.map((entry) => displayValue(entry, path)).join(', ') : 'None';
-  if (typeof value === 'object') {
-    const entry = value as Record<string, unknown>;
-    if (typeof entry.name === 'string') return entry.name || 'None';
-    if (typeof entry.label === 'string') return entry.label || 'None';
-    return Object.entries(entry).filter(([key]) => !/^(price|basePrice|addCost\d*|total|cost|id)$/i.test(key))
-      .map(([key, item]) => `${titleCase(key)}: ${displayValue(item, `${path}.${key}`)}`).join(', ') || 'Configured';
-  }
-  return String(value);
-}
-function titleCase(value: string) {
-  return value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\b\w/g, (character) => character.toUpperCase());
-}
-function displayPath(path: string) {
-  return path.split('.').slice(1).map(titleCase).join(' › ') || titleCase(path);
-}
-function displayGroup(path: string) {
-  return titleCase(path.split('.')[0]);
-}
-function formatMoney(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value.toLocaleString(undefined, { style: 'currency', currency: 'USD' }) : '—';
+function conflictLabel(path: string) {
+  if (path === 'catalog') return 'Selection changes';
+  if (path === 'baseline-pricing') return 'Saved price difference';
+  if (path.startsWith('pricing:')) return titleCase(path.slice(8)) + ' pricing';
+  if (path.startsWith('catalog:')) return titleCase(path.slice(8)) + ' selections';
+  return displayGroup(path) + ': ' + displayPath(path);
 }
 
-type ReviewRow = { key: string; category: string; label: string; before: string; after: string; paths: string[] };
-function reviewGroupKey(path: string) {
-  const segments = path.split('.');
-  const item = segments[1]?.replace(/Quantity$/, '') || segments[0];
-  return segments.length > 1 ? `${segments[0]}.${item}` : segments[0];
-}
-function getAtPath(value: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((current, key) => (current as Record<string, unknown> | null)?.[key], value);
-}
-function reviewRows(request: CollaborationRequest): ReviewRow[] {
-  const groups = new Map<string, Difference[]>();
-  for (const difference of requestDifferences(request)) {
-    const key = reviewGroupKey(difference.path);
-    groups.set(key, [...(groups.get(key) || []), difference]);
-  }
-  return [...groups].map(([key, differences]) => {
-    const beforeGroup = getAtPath(request.base_version_json, key);
-    const afterGroup = getAtPath(request.working_version_json, key);
-    const before = displayValue(beforeGroup, key);
-    const after = displayValue(afterGroup, key);
-    return {
-      key, category: displayGroup(key), label: displayPath(key),
-      before: before === after ? differences.map((item) => `${titleCase(item.path.split('.').slice(-1)[0] || '')}: ${displayValue(item.before, item.path)}`).join(', ') : before,
-      after: before === after ? differences.map((item) => `${titleCase(item.path.split('.').slice(-1)[0] || '')}: ${displayValue(item.after, item.path)}`).join(', ') : after,
-      paths: differences.map((item) => item.path),
-    };
-  });
-}
-function proposalWithReviewRow(base: Proposal, after: Proposal, row: ReviewRow): Proposal {
-  const copy = JSON.parse(JSON.stringify(base)) as Record<string, any>;
-  for (const path of row.paths) {
-    const segments = path.split('.');
-    let target: Record<string, any> = copy;
-    for (const segment of segments.slice(0, -1)) target = target[segment] ||= {};
-    const value = getAtPath(after, path);
-    if (value === undefined) delete target[segments[segments.length - 1]];
-    else target[segments[segments.length - 1]] = value;
-  }
-  return copy as Proposal;
+// Native modal dialogs escape the side rail stacking context and make the app inert.
+function CollaborationModalOverlay({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current!;
+    dialog.showModal();
+    return () => dialog.close();
+  }, []);
+  return <dialog ref={dialogRef} role="presentation" className="collaboration-modal-overlay no-print"
+    data-scroll-lock="true" onClick={onClose} onCancel={(event) => { event.preventDefault(); onClose(); }}>
+    {children}
+  </dialog>;
 }
 
 type Props = {
@@ -131,13 +67,14 @@ type Props = {
   sendSignal?: number;
   sendVersionId?: string;
   onRequestsLoaded?: (requests: CollaborationRequest[]) => void;
-  onChanged: () => void;
+  onChanged: (versionId?: string) => void;
   api?: typeof collaborationPanelApi;
 };
 
 export default function ProposalCollaborationPanel({ proposal, available, offline = false, manageSignal, sendSignal, sendVersionId, onRequestsLoaded, onChanged, api = collaborationPanelApi }: Props) {
   const { decideChangeRequest, endProposalShare, listChangeRequests, listProposalPeople,
-    listProposalShares, listRecipientOptions, restoreAppliedChange, shareProposal, saveWorkingCopy } = api;
+    listProposalShares, listRecipientOptions, shareProposal, saveWorkingCopy,
+    prepareChangeRequest, applyChangeRequest } = api;
   const userId = readSession()?.userId;
   const isOwner = Boolean(userId && (proposal.ownerAuthUserId || proposal.designerAuthUserId) === userId);
   const [shares, setShares] = useState<CollaborationShare[]>([]);
@@ -161,9 +98,15 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [reviewPricing, setReviewPricing] = useState<PricingData>();
   const [reviewPrices, setReviewPrices] = useState<Record<string, number | null>>({});
+  const [prepared, setPrepared] = useState<PreparedContribution | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [resolutions, setResolutions] = useState<ContributionResolutions>({});
+  const [destination, setDestination] = useState<ContributionDestination | null>(null);
 
   const refresh = useCallback(async () => {
+    const context = captureProposalContext();
     if (offline || (!available && !proposal.collaborationEnabled)) return;
     setLoading(true);
     try {
@@ -172,16 +115,30 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
         listChangeRequests(proposal.proposalNumber),
         proposal.collaborationEnabled ? listProposalPeople(proposal.proposalNumber) : Promise.resolve([]),
       ]);
+      if (context !== captureProposalContext()) return;
       setShares(nextShares.filter((share) => !share.ended_at));
       setEndedShares(nextShares.filter((share) => Boolean(share.ended_at)));
       setRequests(nextRequests);
       onRequestsLoaded?.(nextRequests);
       setPeople(nextPeople);
-      if (isOwner && available && manageOpen) setOptions(await listRecipientOptions(proposal.proposalNumber));
+      // Notification delivery must not prevent sharing or review if its request fails.
+      try {
+        const unread = await api.listCollaborationEvents(500, { unreadOnly: true, proposalNumber: proposal.proposalNumber });
+        if (context !== captureProposalContext()) return;
+        await Promise.all(unread.map(event => api.markCollaborationEventRead(event.id)));
+      } catch (caught) {
+        console.warn('Could not acknowledge proposal collaboration notifications.', caught);
+      }
+      if (context !== captureProposalContext()) return;
+      if (isOwner && available && manageOpen) {
+        const options = await listRecipientOptions(proposal.proposalNumber);
+        if (context !== captureProposalContext()) return;
+        setOptions(options);
+      }
       setError(null);
     } catch (caught) {
-      setError((caught as Error).message || 'Could not load collaboration.');
-    } finally { setLoading(false); }
+      if (context === captureProposalContext()) setError((caught as Error).message || 'Could not load collaboration.');
+    } finally { if (context === captureProposalContext()) setLoading(false); }
   }, [api, available, isOwner, manageOpen, offline, onRequestsLoaded, proposal.collaborationEnabled, proposal.proposalNumber]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -191,8 +148,26 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
   const myShare = shares.find((share) => share.recipient_id === userId);
   const mySubmittedRequest = requests.find((request) => request.contributor_id === userId && request.status === 'submitted');
   const submitted = requests.filter((request) => request.status === 'submitted');
-  const review = requests.find((request) => request.id === reviewId) || null;
-  const rows = useMemo(() => review ? reviewRows(review) : [], [review]);
+  const reviewRequest = requests.find((request) => request.id === reviewId) || null;
+  const review = useMemo(() => reviewRequest && prepared ? { ...reviewRequest,
+    base_version_json: prepared.before, working_version_json: prepared.after } : reviewRequest, [reviewRequest, prepared]);
+  useEffect(() => { setResolutions({}); setDestination(null); setReviewPricing(undefined); }, [reviewId]);
+  useEffect(() => {
+    if (!reviewRequest) { setPrepared(null); return; }
+    let cancelled = false;
+    const context = captureProposalContext();
+    setPreparing(true); setPrepared(null); setError(null);
+    // Destination is separate from conflict resolution. Both destinations retain
+    // the proposed comparison, including reviewed dependency normalization.
+    const reviewResolutions = { ...resolutions, catalog: 'contributor' as const,
+      'baseline-pricing': 'contributor' as const };
+    void prepareChangeRequest(reviewRequest.id, reviewResolutions).then(result => {
+      if (!cancelled && context === captureProposalContext()) setPrepared(result);
+    }).catch(caught => { if (!cancelled) setError((caught as Error).message || 'Could not prepare the current pricing comparison.'); })
+      .finally(() => { if (!cancelled) setPreparing(false); });
+    return () => { cancelled = true; };
+  }, [reviewId, reviewRequest?.updated_at, proposal.contentRevision, resolutions]);
+  const rows = useMemo(() => review ? reviewRows(review, reviewPricing) : [], [review, reviewPricing]);
   useEffect(() => {
     if (!review) return;
     let cancelled = false;
@@ -202,33 +177,39 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
         const difference = Number(review.working_version_json.totalCost) - Number(review.base_version_json.totalCost);
         if (Number.isFinite(difference)) {
           if (!cancelled) setReviewPrices({ [rows[0].key]: difference });
-          return;
         }
       }
       try {
         const base = review.base_version_json;
         const snapshot = await loadPricingSnapshotForExistingProposal(base.franchiseId,
           base.pricingModelId, base.pricingModelFranchiseId, base.pricingTierId, base.pricingModelRevisionId);
+        if (!cancelled) setReviewPricing(snapshot.pricing);
+        if (rows.length === 1) return;
         const changes: Record<string, number | null> = {};
+        let previous = base;
         for (const row of rows) {
+          // Attribute interactions once, to the later displayed change. Comparing
+          // every row to the original separately can double-count dependent costs.
+          const current = proposalWithReviewRow(previous, review.working_version_json, row);
           const result = calculatePriceImpact({
-            currentProposal: proposalWithReviewRow(base, review.working_version_json, row),
-            comparisonProposal: base, controlLabel: row.label, comparisonLabel: row.before,
+            currentProposal: current,
+            comparisonProposal: previous, controlLabel: row.label, comparisonLabel: row.before,
             directSections: new Set<string>(), pricingSnapshot: snapshot.pricing,
           });
           changes[row.key] = result.status === 'available' ? result.customerPriceChange : null;
+          previous = current;
         }
         if (!cancelled) setReviewPrices(changes);
       } catch (caught) {
         console.warn('Could not calculate item price changes for collaboration review.', caught);
-        if (!cancelled) setReviewPrices(Object.fromEntries(rows.map((row) => [row.key, null])));
+        if (!cancelled && rows.length !== 1) setReviewPrices(Object.fromEntries(rows.map((row) => [row.key, null])));
       }
     };
     void calculate();
     return () => { cancelled = true; };
-  }, [reviewId, review?.updated_at]);
+  }, [reviewId, review?.updated_at, prepared]);
   const sendRequest = requests.find((request) => request.contributor_id === userId
-    && request.target_version_id === sendVersionId && ['working', 'revision_requested'].includes(request.status));
+    && request.target_version_id === sendVersionId && ['working', 'revision_requested', 'stale', 'withdrawn'].includes(request.status));
   const names = new Map(people.map((person) => [person.user_id, person.display_name || person.email]));
   const ownerName = names.get(proposal.ownerAuthUserId || '') || proposal.currentOwnerName || proposal.designerName || 'Proposal owner';
   const targetVersionLabel = (versionId: string) => {
@@ -244,7 +225,7 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
       action: 'Submitted Changes', at: request.submitted_at || request.created_at, note: request.contributor_note,
     });
     const decisions: Record<string, string> = {
-      applied: 'Approved Changes', declined: 'Declined Changes', revision_requested: 'Sent Back Changes',
+      applied: request.application_mode === 'new-draft' ? 'Created Draft with Changes' : 'Approved Changes', declined: 'Declined Changes', revision_requested: 'Sent Back Changes',
       withdrawn: 'Withdrew Changes', stale: 'Changes Became Outdated', superseded: 'Changes Superseded',
       access_ended: 'Access Ended',
     };
@@ -256,7 +237,10 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
     if (request.restored_at) entries.push({ key: `${request.id}-restored`, actor: ownerName,
       action: 'Restored Previous Draft', at: request.restored_at });
     return entries;
-  }).sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  }).concat(endedShares.map((share) => ({
+    key: 'share-' + share.id, actor: names.get(share.recipient_id) || 'Franchise user',
+    action: 'Left Proposal', at: share.ended_at || share.created_at,
+  }))).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
   const historyDate = (value: string) => new Date(value).toLocaleString(undefined, {
     year: '2-digit', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
   }).replace(',', '').replace(/\s?AM$/i, 'am').replace(/\s?PM$/i, 'pm');
@@ -276,16 +260,18 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
   };
 
   const act = async (action: () => Promise<unknown>, closeReview = false) => {
+    const context = captureProposalContext();
     setBusy(true);
     setError(null);
     try {
-      await action();
+      const result = await action();
+      if (context !== captureProposalContext()) return;
       if (closeReview) { setReviewId(null); setDecisionNote(''); }
       await refresh();
-      onChanged();
+      onChanged(closeReview && result && typeof result === 'object' && 'versionId' in result ? String(result.versionId) : undefined);
     } catch (caught) {
-      setError((caught as Error).message || 'Action could not be completed.');
-    } finally { setBusy(false); }
+      if (context === captureProposalContext()) setError((caught as Error).message || 'Action could not be completed.');
+    } finally { if (context === captureProposalContext()) setBusy(false); }
   };
 
   if (!available && !proposal.collaborationEnabled) return null;
@@ -309,6 +295,9 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
                 .map((person) => person.display_name || 'Franchise user').join(', ')
               : offline ? 'Reconnect to see current access' : 'None yet'}</strong></span></div>
         </div>
+        {!isOwner && myShare?.note && <div className="collaboration-share-message" role="status">
+          <strong>Message from {ownerName}</strong><p>{myShare.note}</p>
+        </div>}
         {!isOwner && <p className="collaboration-access-note">Your Access: {(myShare?.permission || proposal.sharedPermission) === 'contribute' ? 'Can propose changes' : 'Can view'}</p>}
         {isOwner && submitted.length > 0 && <div className="collaboration-review-list">
           {submitted.map((request) => <div key={request.id} className="collaboration-review-entry">
@@ -333,15 +322,13 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
             {endedShares.length === 0 && history.length === 0 && <li>No collaboration history yet.</li>}
             {history.map((entry) => <li key={entry.key}><strong>{entry.actor === (names.get(userId || '') || '') ? 'You' : entry.actor}:</strong> {entry.action} <span>| {historyDate(entry.at)}</span>
               {entry.note && <small>{entry.note}</small>}</li>)}
-            {endedShares.map((share) => <li key={share.id}>
-              {names.get(share.recipient_id) || 'Franchise user'}: Left Proposal | {historyDate(share.ended_at || share.created_at)}
-            </li>)}
+
           </ul>
         </details>
       </div>
     </section>
 
-    {manageOpen && isOwner && <div className="collaboration-modal-overlay no-print" data-scroll-lock="true" onClick={() => setManageOpen(false)}>
+    {manageOpen && isOwner && <CollaborationModalOverlay onClose={() => setManageOpen(false)}>
       <div className="collaboration-modal" role="dialog" aria-modal="true" aria-label="Share and manage access" onClick={(event) => event.stopPropagation()}>
         <header><h2>Share / Manage Access</h2><button aria-label="Close" onClick={() => setManageOpen(false)}>×</button></header>
         <p>Only active users in this franchise can be added. They receive access immediately. Removing access cannot erase a copy on a disconnected device until it reconnects.</p>
@@ -417,7 +404,7 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
         {shares.map((share) => <div key={share.id} className="collaboration-share-row">
           <span>{names.get(share.recipient_id) || share.recipient_id}</span>
           <select value={share.permission} aria-label={`Permission for ${names.get(share.recipient_id) || 'recipient'}`} disabled={busy}
-            onChange={(event) => void act(() => shareProposal(proposal.proposalNumber, share.recipient_id, event.target.value as CollaborationPermission))}>
+            onChange={(event) => void act(() => shareProposal(proposal.proposalNumber, share.recipient_id, event.target.value as CollaborationPermission, share.note || ''))}>
             <option value="view">Can view</option><option value="contribute">Can propose changes</option>
           </select>
           <button className="collaboration-remove-access" disabled={busy} onClick={() => {
@@ -426,9 +413,9 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
           }}>Remove</button>
         </div>)}
       </div>
-    </div>}
+    </CollaborationModalOverlay>}
 
-    {sendOpen && !isOwner && <div className="collaboration-modal-overlay no-print" data-scroll-lock="true" onClick={() => setSendOpen(false)}>
+    {sendOpen && !isOwner && <CollaborationModalOverlay onClose={() => setSendOpen(false)}>
       <div className="collaboration-modal collaboration-send-modal" role="dialog" aria-modal="true" aria-label="Send changes to owner" onClick={(event) => event.stopPropagation()}>
         <header><div><p className="collaboration-modal-kicker">Shared proposal</p><h2>Send changes to {ownerName}</h2></div>
           <button type="button" aria-label="Close" onClick={() => setSendOpen(false)}>×</button></header>
@@ -437,29 +424,49 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
         {mySubmittedRequest && <p role="alert" className="collaboration-error">You already have changes awaiting review. Withdraw them before sending another proposal.</p>}
         {!sendRequest && <p role="alert" className="collaboration-error">There is no saved working copy for this version. Open the proposal and propose changes first.</p>}
         {sendRequest && sendRequest.base_revision !== proposal.contentRevision &&
-          <p role="alert" className="collaboration-error">The owner draft has changed. Reopen the latest draft before sending changes.</p>}
+          <p role="status">The owner draft changed. Your proposed edits are preserved; the owner will review them against the current draft and pricing.</p>}
         <label htmlFor="collaboration-contributor-note">Note for {ownerName} (optional)
           <textarea id="collaboration-contributor-note" value={contributorNote} onChange={(event) => setContributorNote(event.target.value)}
             placeholder="Summarize your changes or add context for the owner" />
         </label>
         <footer><button type="button" className="action-button" onClick={() => setSendOpen(false)}>Cancel</button>
-          <button type="button" className="action-button primary" disabled={busy || offline || Boolean(mySubmittedRequest) || !sendRequest || sendRequest.base_revision !== proposal.contentRevision}
+          <button type="button" className="action-button primary" disabled={busy || offline || Boolean(mySubmittedRequest) || !sendRequest}
             onClick={() => void act(async () => {
               if (!sendRequest) return;
-              await saveWorkingCopy(proposal.proposalNumber, sendRequest.target_version_id, sendRequest.working_version_json, true, contributorNote);
+              await saveWorkingCopy(proposal.proposalNumber, sendRequest.target_version_id, sendRequest.working_version_json, true, contributorNote, sendRequest);
               setSendOpen(false); setContributorNote('');
             })}>Send changes</button></footer>
       </div>
-    </div>}
+    </CollaborationModalOverlay>}
 
-    {review && isOwner && <div className="collaboration-modal-overlay no-print" data-scroll-lock="true" onClick={() => setReviewId(null)}>
+    {review && isOwner && <CollaborationModalOverlay onClose={() => setReviewId(null)}>
       <div className="collaboration-modal collaboration-review" role="dialog" aria-modal="true" aria-label="Review proposed changes" onClick={(event) => event.stopPropagation()}>
         <header><div><p className="collaboration-modal-kicker">Owner review</p><h2>Review proposed changes</h2>
           <p>From {names.get(review.contributor_id) || 'Contributor'} · {targetVersionLabel(review.target_version_id)}</p></div>
           <button aria-label="Close" onClick={() => setReviewId(null)}>×</button></header>
         <div className="collaboration-review-body">
           {review.contributor_note && <p className="collaboration-review-note"><strong>Contributor note</strong><span>{review.contributor_note}</span></p>}
-          {review.base_revision !== proposal.contentRevision && <p role="alert" className="collaboration-error">The owner draft changed. This request needs a contributor refresh.</p>}
+          {preparing && <p role="status">Preparing a comparison using the owner’s current pricing…</p>}
+          {review.base_revision !== proposal.contentRevision && <p role="status">The owner draft changed. Proposed edits are being compared with the current draft; unrelated owner changes are retained.</p>}
+          <fieldset className="collaboration-application-choice">
+            <legend>Review changes</legend>
+            <p>Review the changes made by {names.get(review.contributor_id) || 'Contributor'} and decide how to proceed.</p>
+            <label><input type="radio" name="contribution-destination" checked={destination === 'new-draft'}
+              onChange={() => setDestination('new-draft')} /><span>Create a new draft with these changes</span></label>
+            <label><input type="radio" name="contribution-destination" checked={destination === 'overwrite'}
+              onChange={() => setDestination('overwrite')} /><span>Overwrite current version with these changes</span></label>
+          </fieldset>
+          {prepared?.conflicts.filter(conflict => !['catalog','baseline-pricing'].includes(conflict.path)).map(conflict => <fieldset key={conflict.path} className="collaboration-conflict">
+            <legend>{conflictLabel(conflict.path)}</legend>
+            <p>{conflict.message}</p>
+            <label><input type="radio" name={`resolve-${conflict.path}`} checked={resolutions[conflict.path] === 'owner'}
+              onChange={() => setResolutions(previous => ({ ...previous, [conflict.path]: 'owner' }))} />
+              Keep owner’s value</label>
+            <label><input type="radio" name={`resolve-${conflict.path}`} disabled={conflict.allowed && !conflict.allowed.includes('contributor')} checked={resolutions[conflict.path] === 'contributor'}
+              onChange={() => setResolutions(previous => ({ ...previous, [conflict.path]: 'contributor' }))} />Use proposed changes with current pricing</label>
+          </fieldset>)}
+          {prepared?.conflicts.some(conflict => conflict.path === 'baseline-pricing') &&
+            <p role="status">The current calculation differs from the owner’s saved price. Review the full price difference below before applying changes.</p>}
           <div className="collaboration-totals" aria-label="Financial totals">
             <div className="collaboration-total"><strong>Subtotal</strong><span>{formatMoney(review.base_version_json.subtotal)} <b aria-label="changes to">→</b> {formatMoney(review.working_version_json.subtotal)}</span></div>
             <div className="collaboration-total"><strong>Gross Profit %</strong><span>{typeof review.base_version_json.pricing?.grossProfitMargin === 'number' ? `${review.base_version_json.pricing.grossProfitMargin.toFixed(1)}%` : '—'} <b aria-label="changes to">→</b> {typeof review.working_version_json.pricing?.grossProfitMargin === 'number' ? `${review.working_version_json.pricing.grossProfitMargin.toFixed(1)}%` : '—'}</span></div>
@@ -482,21 +489,14 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
           <label>Note for contributor<textarea value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} /></label>
         </div>
         <footer className="collaboration-review-actions">
-          <button disabled={busy || review.base_revision !== proposal.contentRevision} className="action-button primary"
-            onClick={() => void act(() => decideChangeRequest(review.id, 'apply'), true)}>Apply changes to draft</button>
+          <button disabled={busy || offline || preparing || !destination || !prepared || prepared.conflicts.some(conflict => !prepared.resolutions[conflict.path]
+            || (conflict.allowed && !conflict.allowed.includes(prepared.resolutions[conflict.path])))} className="action-button primary"
+            onClick={() => prepared && destination && void act(() => applyChangeRequest(review.id, prepared, destination), true)}>Apply Changes</button>
           <button disabled={busy || !decisionNote.trim()} onClick={() => void act(() => decideChangeRequest(review.id, 'revisions', decisionNote), true)}>Request revisions</button>
           <button disabled={busy} onClick={() => void act(() => decideChangeRequest(review.id, 'decline', decisionNote), true)}>Decline</button>
         </footer>
       </div>
-    </div>}
+    </CollaborationModalOverlay>}
 
-    {isOwner && requests.filter((request) => request.status === 'applied' && !request.restored_at
-      && request.applied_revision === proposal.contentRevision).map((request) =>
-      <div className="collaboration-restore no-print" key={request.id}>
-        <span>Changes from {names.get(request.contributor_id) || 'contributor'} were applied.</span>
-        <button disabled={busy} onClick={() => {
-          if (window.confirm('Restore the draft as it was before these changes?')) void act(() => restoreAppliedChange(request.id));
-        }}>Restore previous draft</button>
-      </div>)}
   </>;
 }

@@ -528,7 +528,8 @@ test('shared recipient keeps owner correction controls locked and cached pricing
     sharedPermission: 'contribute',
     pricing: { ...original.pricing, offContractTotal: 5_000 },
   };
-  const cacheKey = `submerge.sharedProposalCache.v1.test.${testSession.userId}.${proposalNumber}`;
+  // --mode test has no backend; its cache environment is deliberately local.
+  const cacheKey = `submerge.sharedProposalCache.v1.local.test.${testSession.userId}.${proposalNumber}`;
   let electronApp: ElectronApplication | null = null;
 
   try {
@@ -553,7 +554,9 @@ test('shared recipient keeps owner correction controls locked and cached pricing
     await window.getByRole('button', { name: 'View Proposal', exact: true }).click();
     await expect(window.getByPlaceholder('Enter customer name')).toHaveValue(shared.customerInfo.customerName);
     const customerName = window.getByPlaceholder('Enter customer name');
-    await expect(customerName).toHaveCSS('pointer-events', 'none');
+    // Hover must reach the input for its view-only tooltip; capture handlers
+    // still block edits, as verified with real keyboard input below.
+    await customerName.hover();
     await customerName.focus();
     await customerName.press('End');
     await customerName.press('X');

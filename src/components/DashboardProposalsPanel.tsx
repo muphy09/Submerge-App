@@ -21,8 +21,6 @@ type DashboardProposalsPanelProps = {
   sharedOwnedRecipients?: Record<string, string[]>;
   collaborationEnabled?: boolean;
   collaborationUpdates?: CollaborationEvent[];
-  collaborationAttention?: number;
-  onOpenUpdate?: (update: CollaborationEvent) => void;
   loading: boolean;
   onCreateProposal: () => void;
   onDeleteProposal: (proposalNumber: string) => Promise<void> | void;
@@ -259,8 +257,6 @@ function DashboardProposalsPanel({
   sharedOwnedRecipients = {},
   collaborationEnabled = false,
   collaborationUpdates = [],
-  collaborationAttention = 0,
-  onOpenUpdate,
   loading,
   onCreateProposal,
   onDeleteProposal,
@@ -378,10 +374,14 @@ function DashboardProposalsPanel({
       return 0;
     });
   const sharedOwnedNumbers = new Set(sharedOwnedProposalNumbers);
-  const allProposalNames = new Map([...proposals, ...sharedProposals.map((entry) => entry.proposal)]
-    .map((proposal) => [proposal.proposalNumber,
-      getDisplayText(proposal.customerInfo?.customerName, proposal.proposalNumber)]));
-  const sharedByNumber = new Map(sharedProposals.map((entry) => [entry.proposal.proposalNumber, entry]));
+  const openedSharedNumbers = new Set(collaborationUpdates.filter(event => event.read_at && event.event_type === 'shared')
+    .map(event => event.proposal_number));
+  const unreadSharedNumbers = new Set(collaborationUpdates.filter(event => !event.read_at && event.event_type === 'shared'
+    && !openedSharedNumbers.has(event.proposal_number))
+    .map(event => event.proposal_number));
+  const reviewNumbers = new Set(collaborationUpdates.filter(event => !event.read_at && event.event_type === 'changes_submitted')
+    .map(event => event.proposal_number));
+  const attentionDot = (label: string) => <span className="dashboard-attention-dot" role="img" aria-label={label} />;
   const filteredSharedProposals = sharedProposals.filter(({ proposal, ownerName }) => {
     const value = sharedSearchTerm.trim().toLowerCase();
     return !value || `${proposal.customerInfo?.customerName || ''} ${ownerName}`.toLowerCase().includes(value);
@@ -517,21 +517,8 @@ function DashboardProposalsPanel({
 
       {collaborationEnabled && <>
         <div className="dashboard-collaboration-tabs" role="tablist" aria-label="Proposal ownership">
-          <button type="button" role="tab" aria-selected={activeTab === 'mine'} onClick={() => setActiveTab('mine')}>My Proposals ({proposals.length})</button>
-          <button type="button" role="tab" aria-selected={activeTab === 'shared'} onClick={() => setActiveTab('shared')}>Shared with Me ({sharedProposals.length})</button>
-        </div>
-        <div className="dashboard-collaboration-updates">
-          <div><strong>{collaborationAttention > 0 ? `${collaborationAttention} collaboration item${collaborationAttention === 1 ? '' : 's'} need attention` : 'Collaboration is up to date'}</strong>
-            <span> · Updates</span></div>
-          {collaborationUpdates.length > 0 && <ul>{collaborationUpdates.slice(0, 3).map((update) => <li key={update.id}>
-            <button onClick={() => onOpenUpdate?.(update)}>
-              {!update.read_at && <span className="dashboard-update-dot" aria-label="Unread" />}
-              {update.event_type === 'shared' && sharedByNumber.get(update.proposal_number)?.ownerName
-                ? `${sharedByNumber.get(update.proposal_number)?.ownerName} ` : ''}
-              {formatStatusLabel(update.event_type)} · {allProposalNames.get(update.proposal_number) || update.proposal_number}
-              <small>{new Date(update.created_at).toLocaleDateString()}</small>
-            </button>
-          </li>)}</ul>}
+          <button type="button" role="tab" aria-selected={activeTab === 'mine'} onClick={() => setActiveTab('mine')}>My Proposals ({proposals.length}){proposals.some(proposal => reviewNumbers.has(proposal.proposalNumber)) && attentionDot("Changes awaiting review")}</button>
+          <button type="button" role="tab" aria-selected={activeTab === 'shared'} onClick={() => setActiveTab('shared')}>Shared with Me ({sharedProposals.length}){activeTab !== 'shared' && sharedProposals.some(({ proposal }) => unreadSharedNumbers.has(proposal.proposalNumber)) && attentionDot("New shared proposals")}</button>
         </div>
       </>}
 
@@ -578,9 +565,9 @@ function DashboardProposalsPanel({
             onClick={() => onOpenProposal(proposal.proposalNumber)} onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenProposal(proposal.proposalNumber); }
             }}>
-            <td><div className="dashboard-customer-cell"><span className="dashboard-customer-name">
+            <td><div className="dashboard-customer-cell"><span className="dashboard-customer-primary has-share"><span className="dashboard-customer-name">
               {getDisplayText(proposal.customerInfo?.customerName, 'Untitled Proposal')}
-            </span></div></td>
+            </span>{unreadSharedNumbers.has(proposal.proposalNumber) && attentionDot("New shared proposal")}</span></div></td>
             <td>{ownerName}</td>
             <td>{share.permission === 'contribute' ? 'Can propose changes' : 'Can view'}</td>
             <td><span className={getStatusBadgeClass(getDashboardStatus(proposal))}>{formatStatusLabel(getDashboardStatus(proposal))}</span></td>
@@ -761,6 +748,7 @@ function DashboardProposalsPanel({
                               <span className={`dashboard-customer-primary${sharedOwnedNumbers.has(proposal.proposalNumber) ? ' has-share' : ''}`}><span className="dashboard-customer-name">
                                   {getDisplayText(proposal.customerInfo?.customerName, 'Untitled Proposal')}
                                 </span>
+                                {reviewNumbers.has(proposal.proposalNumber) && attentionDot("Changes awaiting review")}
                                 {sharedOwnedNumbers.has(proposal.proposalNumber) && <TooltipAnchor tooltip={`Shared with ${sharedOwnedRecipients[proposal.proposalNumber]?.join(', ') || 'collaborators'}`}><svg className="dashboard-shared-icon" viewBox="0 0 24 24" role="img" aria-label="Shared with collaborators">
                                   <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" />
                                   <path d="M3.5 19v-1.2a5.5 5.5 0 0 1 11 0V19H3.5Zm12.4-5.4a4.6 4.6 0 0 1 4.6 4.6V19h-3.8" />

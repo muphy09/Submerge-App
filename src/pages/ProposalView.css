@@ -3567,6 +3567,17 @@
 .proposal-summary-header .page-title { margin: 0; color: #101b39; font-size: clamp(1.45rem, 2.2vw, 2.1rem); }
 .summary-selected-version { color: #5a6f91; font-size: .92rem; }
 .summary-selected-version strong { color: #16213e; margin-left: .3rem; }
+.proposal-view .action-bar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.summary-toolbar-title { margin: 0; color: #101b39; font-size: clamp(1.2rem, 1.8vw, 1.8rem); text-align: center; white-space: nowrap; }
+.proposal-view .action-bar-center { flex-direction: column; }
+.action-bar-right .proposal-summary-toggle-card { padding: .45rem .7rem; gap: .7rem; }
+.hero-header > .summary-selected-version { margin-left: auto; text-align: right; flex-shrink: 0; }
+@media (max-width: 1100px) {
+  .proposal-view .action-bar { grid-template-columns: 1fr; }
+  .proposal-view .action-bar-center { grid-row: 1; }
+  .proposal-view .action-bar-left, .proposal-view .action-bar-right { justify-content: center; }
+  .hero-header > .summary-selected-version { flex-shrink: 1; }
+}
 .proposal-summary-toggle-card { border-radius: 14px; box-shadow: none; }
 .summary-share-button { border-color: #bfd2ef; color: #253d62; }
 .hero-card { padding: clamp(1.2rem, 2.2vw, 2.1rem); border: 1px solid #4b8bff; border-radius: 20px; background: #fff; box-shadow: 0 10px 24px rgba(47,84,140,.09); }

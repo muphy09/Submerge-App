@@ -1232,7 +1232,7 @@
 .proposal-builder-readonly-shell select,
 .proposal-builder-readonly-shell textarea,
 .proposal-builder-readonly-shell button:not(.price-impact-trigger):not(.price-impact-close) {
-  pointer-events: none;
+  pointer-events: auto;
 }
 .proposal-builder-readonly-shell .price-impact-trigger,
 .proposal-builder-readonly-shell .price-impact-close { pointer-events: auto; }

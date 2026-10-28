@@ -17,9 +17,10 @@ import {
 import { isCloudOnlyRenderRecoveryEnabled } from '../services/renderRecovery';
 import { getSessionFranchiseId, isMasterActingAsOwnerSession, readSession, type UserSession } from '../services/session';
 import { recordRecentProposalOpen } from '../services/recentProposalActivity';
+import { captureProposalContext } from '../services/proposalContext';
 import {
-  getCollaborationAttentionCount, isCollaborationAvailable, listCollaborationEvents,
-  listOwnedSharedProposalRecipients, listSharedProposals, markCollaborationEventRead,
+  isCollaborationAvailable, listCollaborationEvents,
+  listOwnedSharedProposalRecipients, listSharedProposals,
   type CollaborationEvent, type SharedProposal,
 } from '../services/proposalCollaboration';
 import {
@@ -40,7 +41,6 @@ function HomePage({ session }: HomePageProps) {
   const [sharedOwnedProposalNumbers, setSharedOwnedProposalNumbers] = useState<string[]>([]);
   const [sharedOwnedRecipients, setSharedOwnedRecipients] = useState<Record<string, string[]>>({});
   const [collaborationUpdates, setCollaborationUpdates] = useState<CollaborationEvent[]>([]);
-  const [collaborationAttention, setCollaborationAttention] = useState(0);
   const [collaborationRollout, setCollaborationRollout] = useState(false);
   const [proposalLoadIssues, setProposalLoadIssues] = useState<LocalProposalLoadIssue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,28 +53,46 @@ function HomePage({ session }: HomePageProps) {
   const { enabled: collaborationCapability } = useFranchiseCapability('sharedProposals', sessionFranchiseId);
   const collaborationAvailable = collaborationCapability && collaborationRollout;
   useEffect(() => {
-    if (!collaborationCapability) { setCollaborationRollout(false); return; }
+    setCollaborationRollout(false);
+    if (!collaborationCapability) return;
     let canceled = false;
-    void isCollaborationAvailable(sessionFranchiseId).then((enabled) => { if (!canceled) setCollaborationRollout(enabled); });
-    return () => { canceled = true; };
-  }, [collaborationCapability, sessionFranchiseId]);
+    let requestId = 0;
+    const context = captureProposalContext();
+    const checkRollout = async (forceRefresh = false) => {
+      const currentRequest = ++requestId;
+      try {
+        const enabled = await isCollaborationAvailable(sessionFranchiseId, forceRefresh);
+        if (!canceled && currentRequest === requestId && context === captureProposalContext()) setCollaborationRollout(enabled);
+      } catch (error) {
+        if (!canceled && context === captureProposalContext()) console.warn('Unable to check proposal sharing availability.', error);
+      }
+    };
+    const recoverRollout = () => void checkRollout(true);
+    void checkRollout();
+    window.addEventListener('online', recoverRollout);
+    window.addEventListener(PROPOSAL_CLOUD_SYNC_EVENT, recoverRollout);
+    return () => {
+      canceled = true;
+      window.removeEventListener('online', recoverRollout);
+      window.removeEventListener(PROPOSAL_CLOUD_SYNC_EVENT, recoverRollout);
+    };
+  }, [collaborationCapability, sessionFranchiseId, session?.userId, session?.isTestAccount, session?.testAccountId]);
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const proposalEditingRestrictedReason =
     'Master accounts acting as owner can view proposals but cannot create or edit them.';
 
   const loadProposals = useCallback(async (options: { silent?: boolean } = {}) => {
+    const requestId = ++proposalLoadRequestRef.current;
     if (!session?.userId) {
       setProposals([]);
       setSharedProposals([]);
       setSharedOwnedProposalNumbers([]);
       setSharedOwnedRecipients({});
       setCollaborationUpdates([]);
-      setCollaborationAttention(0);
       setProposalLoadIssues([]);
       setLoading(false);
       return;
     }
-    const requestId = ++proposalLoadRequestRef.current;
     const currentUserId = session.userId;
     if (readSession()?.userId !== currentUserId) return;
     if (!options.silent) setLoading(true);
@@ -85,34 +103,35 @@ function HomePage({ session }: HomePageProps) {
       const loadedProposals = await listDashboardProposals(sessionFranchiseId);
       if (requestId !== proposalLoadRequestRef.current || readSession()?.userId !== currentUserId) return;
       setProposals(loadedProposals);
+      setProposalLoadIssues(getLocalProposalLoadIssues());
+      setLoading(false);
       if (collaborationAvailable) {
-        const [shared, updates, attention, ownedSharedRecipients] = await Promise.all([
-          listSharedProposals(), listCollaborationEvents(), getCollaborationAttentionCount(),
+        const [shared, updates, readShares, ownedSharedRecipients] = await Promise.all([
+          listSharedProposals(), listCollaborationEvents(500, { unreadOnly: true }),
+          listCollaborationEvents(500, { readSharesOnly: true }),
           listOwnedSharedProposalRecipients(loadedProposals.map((proposal) => proposal.proposalNumber)),
         ]);
         if (requestId !== proposalLoadRequestRef.current || readSession()?.userId !== currentUserId) return;
         setSharedProposals(shared);
         setSharedOwnedProposalNumbers(Object.keys(ownedSharedRecipients));
         setSharedOwnedRecipients(ownedSharedRecipients);
-        setCollaborationUpdates(updates);
-        setCollaborationAttention(attention);
+        setCollaborationUpdates([...updates, ...readShares]);
       } else {
         setSharedProposals([]);
         setSharedOwnedProposalNumbers([]);
         setSharedOwnedRecipients({});
         setCollaborationUpdates([]);
-        setCollaborationAttention(0);
       }
-      setProposalLoadIssues(getLocalProposalLoadIssues());
     } catch (error) {
       if (readSession()?.userId === currentUserId) console.error('Failed to load proposals:', error);
     } finally {
-      if (!options.silent && requestId === proposalLoadRequestRef.current) setLoading(false);
+      if (requestId === proposalLoadRequestRef.current) setLoading(false);
     }
-  }, [session?.userId, sessionFranchiseId, collaborationAvailable]);
+  }, [session, sessionFranchiseId, collaborationAvailable]);
 
   useEffect(() => {
     void loadProposals();
+    return () => { proposalLoadRequestRef.current++; };
   }, [loadProposals]);
 
   useEffect(() => {
@@ -243,15 +262,6 @@ function HomePage({ session }: HomePageProps) {
           sharedOwnedRecipients={sharedOwnedRecipients}
           collaborationEnabled={collaborationAvailable}
           collaborationUpdates={collaborationUpdates}
-          collaborationAttention={collaborationAttention}
-          onOpenUpdate={(update) => {
-            void markCollaborationEventRead(update.id).then(() => void loadProposals({ silent: true }));
-            if (update.event_type === 'access_ended') {
-              showToast({ type: 'warning', message: 'Access to this shared proposal has ended.' });
-            } else {
-              handleOpenProposal(update.proposal_number);
-            }
-          }}
           loading={loading}
           onCreateProposal={handleNewProposal}
           onDeleteProposal={handleDeleteProposal}

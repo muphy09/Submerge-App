@@ -27,6 +27,7 @@ import './ProposalView.css';
 import { useFranchiseSignedWorkflowDisabled } from '../hooks/useFranchiseSignedWorkflowDisabled';
 import { useFranchiseCapability } from '../hooks/useFranchiseCapability';
 import ProposalCollaborationPanel from '../components/ProposalCollaborationPanel';
+import SharedPricingRevisionNotice from '../components/SharedPricingRevisionNotice';
 import ProposalSummaryIcon from '../components/ProposalSummaryIcon';
 import { hasEndedSharedAccess, isCollaborationAvailable, type CollaborationRequest } from '../services/proposalCollaboration';
 import { isPpasEastFranchiseCode } from '../utils/franchiseScope';
@@ -1241,7 +1242,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     if (cogsBreakdownVersionId) setCogsBreakdownVersionId(null);
   }, [canViewCogsBreakdown, cogsBreakdownVersionId]);
 
-  const loadProposal = async (num: string) => {
+  const loadProposal = async (num: string, preferredVersionId?: string) => {
     const requestId = ++loadRequestRef.current;
     try {
       const data = await getProposalRemote(num);
@@ -1342,6 +1343,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         activeApplied.versionId ||
         'original';
       const initialSelectedVersionId =
+        (preferredVersionId && !isReadOnlyReviewerView && allVersions.some(v => v.versionId === preferredVersionId) ? preferredVersionId : undefined) ||
         requestedVisibleVersionId ||
         reviewerPrimaryVersionId ||
         activeId;
@@ -2016,7 +2018,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const targetVersionId = version?.versionId || proposal?.versionId || 'original';
     const sharedRequest = proposal?.sharedPermission === 'contribute' ? collaborationRequests.find((request) =>
       request.contributor_id === readSession()?.userId && request.target_version_id === targetVersionId
-      && ['working', 'revision_requested'].includes(request.status)) : undefined;
+      && ['working', 'revision_requested', 'stale', 'withdrawn'].includes(request.status)) : undefined;
     const submissionPending = collaborationRequests.some((request) =>
       request.contributor_id === readSession()?.userId && request.status === 'submitted');
     navigate(`/proposal/edit/${proposalNumber}`, {
@@ -2026,6 +2028,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         versionSnapshot: { ...(sharedRequest?.working_version_json || version), versions: [] },
         readOnlyVersion: options?.readOnly === true,
         sharedWorkingCopy: proposal?.sharedPermission === 'contribute',
+        sharedRequest,
         sharedStartEditing: Boolean(sharedRequest) && !submissionPending,
         sharedSubmissionPending: submissionPending,
         sharedPermission: proposal?.sharedPermission,
@@ -4785,6 +4788,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 {shouldShowVersionStatus && <span className="version-status-pill">{versionStatusLabel}</span>}
               </h2>
             </div>
+            <span className="summary-selected-version">Version: <strong>{getDisplayVersionLabel(vm.proposal)}</strong></span>
           </div>
 
           <div className="hero-grid">
@@ -4857,7 +4861,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
     const isSharedRecipient = Boolean(proposal?.sharedPermission);
     const myWorkingRequest = isSharedRecipient ? collaborationRequests.find((request) =>
       request.contributor_id === readSession()?.userId && request.target_version_id === versionId
-      && ['working', 'revision_requested'].includes(request.status)) : undefined;
+      && ['working', 'revision_requested', 'stale', 'withdrawn'].includes(request.status)) : undefined;
     const isOriginal = vm.proposal.isOriginalVersion ?? versionId === 'original';
     const isArchived = isArchivedVersion(vm.proposal);
     const isLivePublishedVersion = Boolean(livePublishedVersionId) && versionId === livePublishedVersionId;
@@ -5329,20 +5333,26 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             </button>
           </div>
           <div className="action-bar-center">
+            <h1 className="page-title summary-toolbar-title">Proposal Summary</h1>
             {isOffline && <CloudConnectionNotice reason={cloudIssue} placement="inline" />}
           </div>
           <div className="action-bar-right">
-            {isCurrentProposalOwner && collaborationAvailable && <button className="action-button summary-share-button" onClick={() => setCollaborationManageSignal((value) => value + 1)}>
-              <ProposalSummaryIcon name="share" size={19} />Share / Manage Access
-            </button>}
-            {!isReadOnlyReviewerView && !proposal?.sharedPermission && (
-              <TooltipAnchor tooltip={completeActionDisabledReason}>
+            {renderCogsToggle()}
+            {((isCurrentProposalOwner && collaborationAvailable) || proposal?.sharedPermission) && (
+              <TooltipAnchor tooltip={proposal?.sharedPermission ? 'Owner action' : undefined}>
+                <button className="action-button summary-share-button" disabled={Boolean(proposal?.sharedPermission)} onClick={() => setCollaborationManageSignal((value) => value + 1)}>
+                  <ProposalSummaryIcon name="share" size={19} />Share / Manage Access
+                </button>
+              </TooltipAnchor>
+            )}
+            {!isReadOnlyReviewerView && (
+              <TooltipAnchor tooltip={proposal?.sharedPermission ? 'Owner action' : completeActionDisabledReason}>
                 <button
                   className="action-button primary workflow-summary-submit-button"
                   onClick={() => {
                     setShowCompleteConfirm(true);
                   }}
-                  disabled={!activeVersionCanComplete || reviewerActionSaving || loading || isOffline}
+                  disabled={Boolean(proposal?.sharedPermission) || !activeVersionCanComplete || reviewerActionSaving || loading || isOffline}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 8l3 3 7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -5492,20 +5502,11 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
         </aside>
 
         <div ref={proposalRef} className="proposal-summary-page">
-          <div className="proposal-summary-header">
-            <div className="proposal-summary-heading">
-              <span className="summary-heading-icon"><ProposalSummaryIcon name="summary" size={28} /></span>
-              <span className="summary-heading-copy">
-                <h1 className="page-title">Proposal Summary</h1>
-                <span className="summary-selected-version">Version: <strong>{getDisplayVersionLabel(selectedViewModel.proposal)}</strong></span>
-              </span>
-            </div>
-            {renderCogsToggle()}
-          </div>
           {renderSelectedVersionSection(selectedViewModel)}
         </div>
 
         <aside className="proposal-column proposal-column--side no-print">
+          {proposal?.sharedPermission && <SharedPricingRevisionNotice proposal={activeEditableVersion || proposal} />}
           {renderVersionActionsCard(selectedViewModel)}
           {renderProposalActionsCard()}
           {proposal?.workflow && renderWorkflowSummaryCard()}
@@ -5517,14 +5518,14 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             sendSignal={collaborationSendSignal}
             sendVersionId={selectedVersionIdKey}
             onRequestsLoaded={setCollaborationRequests}
-            onChanged={() => { if (proposalNumber) void loadProposal(proposalNumber); }}
+            onChanged={(versionId) => { if (proposalNumber) void loadProposal(proposalNumber, versionId); }}
           />}
           {proposal?.workflow && renderWorkflowActivityCard()}
         </aside>
       </div>
       {proposal?.sharedPermission && <div className="shared-proposal-view-pill no-print" role="status">
         {collaborationRequests.some((request) => request.contributor_id === readSession()?.userId
-          && ['working', 'revision_requested'].includes(request.status)) ? 'Editing' : 'Viewing'}{' '}
+          && ['working', 'revision_requested', 'stale', 'withdrawn'].includes(request.status)) ? 'Editing' : 'Viewing'}{' '}
         {(proposal.currentOwnerName || proposal.designerName || 'Owner').replace(/\s*\([^)]*\)\s*$/, '')}'s Proposal
       </div>}
       {versionContextMenu && (

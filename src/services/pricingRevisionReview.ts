@@ -11,6 +11,7 @@ import {
 import { getWorkflowStatus, isVersionPermanentlyLocked } from './proposalWorkflow';
 import { normalizePricingTierId } from './pricingTiers';
 import type { CostBreakdown, CostLineItem, Proposal, ProposalWorkflowActor } from '../types/proposal-new';
+import { normalizePapDiscounts } from '../utils/papDiscounts';
 
 export type PricingRevisionComparisonRow = {
   key: string;
@@ -152,7 +153,7 @@ function hydrateCatalogSelection<T>(selection: T, catalog: unknown): T {
   return hydrated as T;
 }
 
-function hydrateProposalEquipmentFromRevision(proposal: Proposal, pricing: any): Proposal {
+export function hydrateProposalEquipmentFromRevision(proposal: Proposal, pricing: any): Proposal {
   if (!proposal.equipment || !pricing?.equipment) return cloneValue(proposal);
   const next = cloneValue(proposal);
   const equipment = next.equipment;
@@ -794,6 +795,7 @@ export async function upgradeProposalPricingRevision(
     // Persist the catalog-backed selections from the accepted revision. This
     // prevents a later recalculation from reviving stale snapshotted item costs.
     equipment: recalculated.proposal.equipment,
+    papDiscounts: normalizePapDiscounts(recalculated.pricing.papDiscountRates),
     pricingModelRevisionId: latest.revisionId,
     pricingModelRevisionNumber: latest.revisionNumber || undefined,
     pricingRevisionReview: {

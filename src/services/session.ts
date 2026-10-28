@@ -35,6 +35,7 @@ export const DEFAULT_FRANCHISE_ID = 'default';
 export const MASTER_IMPERSONATION_UPDATED_EVENT = 'submerge-master-impersonation-updated';
 export const TEST_MODE_LIVE_SETTINGS_READ_ONLY_MESSAGE =
   'Test Mode uses live franchise settings as read-only data. This change was not applied.';
+export let sessionContextGeneration = 0;
 
 function emitMasterImpersonationUpdate(impersonation: MasterImpersonation | null) {
   if (typeof window === 'undefined' || !window.dispatchEvent) return;
@@ -55,11 +56,19 @@ export function readSession(): UserSession | null {
 }
 
 export function saveSession(session: UserSession) {
+  // Authentication restores and profile refreshes routinely rewrite the same
+  // session. Only a change of authority invalidates in-flight proposal work.
+  const identity = (value: UserSession | null) => JSON.stringify([
+    value?.userId, value?.userEmail, value?.appSessionId, value?.role,
+    value?.franchiseId, value?.isTestAccount === true, value?.testAccountId,
+  ]);
+  if (identity(readSession()) !== identity(session)) sessionContextGeneration++;
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
 export function clearSession() {
+  sessionContextGeneration++;
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(SESSION_STORAGE_KEY);
   // Shared proposal snapshots may contain internal costs. They are scoped to

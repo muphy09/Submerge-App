@@ -2,6 +2,35 @@ import { expect, test } from '@playwright/test';
 
 const fixture = 'http://127.0.0.1:5173/tests/fixtures/shared-proposals.html';
 
+test('collaboration history combines access and request events newest first', async ({ page }) => {
+  await page.goto(`${fixture}?mode=owner&history=1`);
+  await page.getByText('Collaboration History', { exact: true }).click();
+  const entries = page.locator('.collaboration-history li');
+  await expect(entries).toHaveCount(3);
+  await expect(entries.nth(0)).toContainText('Left Proposal');
+  await expect(entries.nth(1)).toContainText('Declined Changes');
+  await expect(entries.nth(2)).toContainText('Submitted Changes');
+});
+
+test('review is modal above the sticky toolbar and restores interaction on close', async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=owner&rail=1`);
+  const toolbarButton = page.getByRole('button', { name: 'Share / Manage Access' });
+  const toolbarBounds = await toolbarButton.boundingBox();
+  await page.getByRole('button', { name: 'Review Changes' }).click();
+  const review = page.getByRole('dialog', { name: 'Review proposed changes' });
+  await expect(review).toBeVisible();
+  await expect(page.locator('dialog:modal')).toHaveCount(1);
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('.view-actions') !== null,
+    { x: toolbarBounds!.x + 5, y: toolbarBounds!.y + 5 })).toBe(false);
+  await toolbarButton.evaluate((element: HTMLButtonElement) => element.focus());
+  expect(await toolbarButton.evaluate((element) => document.activeElement === element)).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('review-above-toolbar.png') });
+  await page.keyboard.press('Escape');
+  await expect(review).toHaveCount(0);
+  await toolbarButton.click();
+  await expect(page.getByRole('dialog', { name: 'Share and manage access' })).toBeVisible();
+});
+
 test('collaboration card fits the summary right rail', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${fixture}?mode=owner&rail=1`);
@@ -12,11 +41,12 @@ test('collaboration card fits the summary right rail', async ({ page }) => {
   await expect(card.getByRole('button', { name: 'Review Changes' })).toBeVisible();
 });
 
-test('dashboard separates owned and shared proposals and surfaces updates', async ({ page }) => {
+test('dashboard shows proposal attention dots without an updates feed', async ({ page }, testInfo) => {
   await page.goto(`${fixture}?mode=dashboard`);
   await expect(page.getByRole('tab', { name: 'My Proposals (1)' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('2 collaboration items need attention')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Alex Owner Shared · Rivera Pool/ })).toBeVisible();
+  await expect(page.locator('.dashboard-collaboration-updates')).toHaveCount(0);
+  await expect(page.getByRole('img', { name: 'New shared proposals', exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Changes awaiting review', exact: true })).toHaveCount(2);
   await expect(page.getByRole('img', { name: 'Shared with collaborators' })).toBeVisible();
   await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
   await expect(page.getByRole('heading', { name: 'Shared with Me' })).toBeVisible();
@@ -25,15 +55,22 @@ test('dashboard separates owned and shared proposals and surfaces updates', asyn
   await expect(page.getByRole('cell', { name: 'Can propose changes' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Submitted' })).toBeVisible();
   await expect(page.getByRole('table')).toHaveClass(/dashboard-proposals-table/);
-  await page.getByRole('button', { name: /Changes Submitted/ }).click();
-  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('open-update');
+  await expect(page.getByRole('img', { name: 'New shared proposals', exact: true })).toHaveCount(0);
+  const dot = page.getByRole('img', { name: 'New shared proposal', exact: true });
+  await expect(dot).toBeVisible();
+  const dotBounds = await dot.boundingBox();
+  const titleBounds = await page.locator('.dashboard-shared-table .dashboard-customer-name').boundingBox();
+  expect(Math.abs(dotBounds!.y + dotBounds!.height / 2 - titleBounds!.y - titleBounds!.height / 2)).toBeLessThan(2);
+  await page.screenshot({ path: testInfo.outputPath('dashboard-shared-attention.png') });
+  await page.getByRole('row', { name: 'Open shared proposal Rivera Pool' }).press('Enter');
+  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('open-proposal');
 });
 
 test('shared list paginates and owner icon keeps its space beside a long name', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 700 });
   await page.goto(`${fixture}?mode=dashboard&many=1&long=1`);
   const icon = page.getByRole('img', { name: 'Shared with collaborators' });
-  const name = page.locator('.dashboard-customer-primary .dashboard-customer-name').first();
+  const name = page.locator('.dashboard-proposals-body .dashboard-customer-primary .dashboard-customer-name').first();
   expect(await name.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   const nameBounds = await name.boundingBox();
   const iconBounds = await icon.boundingBox();
@@ -96,11 +133,11 @@ test('owner can share with several named recipients and review all changed field
   await expect(review.getByRole('columnheader', { name: 'After' })).toBeVisible();
   await expect(review.locator('.collaboration-totals')).toContainText('$108,000.00');
   await expect(review.locator('.collaboration-totals')).toContainText('$129,600.00');
-  await review.getByRole('button', { name: 'Apply changes to draft' }).click();
+  await review.getByRole('radio', { name: 'Overwrite current version with these changes' }).check();
+  await review.getByRole('button', { name: 'Apply Changes' }).click();
   await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('apply:request-1:');
-  page.on('dialog', (prompt) => void prompt.accept());
-  await page.getByRole('button', { name: 'Restore previous draft' }).click();
-  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('restore:request-1');
+  await expect(page.getByRole('button', { name: 'Restore previous draft' })).toHaveCount(0);
+  await expect(page.locator('.collaboration-restore')).toHaveCount(0);
 });
 
 test('review condenses automation pricing fields into one named item', async ({ page }) => {
@@ -109,7 +146,10 @@ test('review condenses automation pricing fields into one named item', async ({ 
   const review = page.getByRole('dialog', { name: 'Review proposed changes' });
   await expect(review.getByText('Gross Profit %')).toBeVisible();
   await expect(review.getByRole('heading', { name: 'Changed Fields 1' })).toBeVisible();
-  await expect(review.getByRole('row', { name: /Automation No Automation AQRS Omni - 25k with Salt and Heat \+\$5,000.00/ })).toBeVisible();
+  const automation = review.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Automation', exact: true }) });
+  await expect(automation).toContainText('No Automation');
+  await expect(automation).toContainText('AQRS Omni - 25k with Salt and Heat');
+  await expect(automation).toContainText('+$5,000.00');
   await expect(review.getByRole('columnheader', { name: 'Price Change' })).toBeVisible();
   await page.goto(`${fixture}?mode=owner&diff=salt`);
   await page.getByRole('button', { name: 'Review Changes' }).click();
@@ -158,7 +198,7 @@ test('viewer cannot propose changes and can leave', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('end:recipient-id');
 });
 
-test('stale contributor work is visibly blocked and review dialog fits a narrow screen', async ({ page }) => {
+test('pending contributor work is frozen and review dialog fits a narrow screen', async ({ page }) => {
   await page.goto(`${fixture}?mode=recipient&stale=1`);
   await expect(page.getByRole('button', { name: 'Withdraw Changes' })).toBeVisible();
 
@@ -169,6 +209,86 @@ test('stale contributor work is visibly blocked and review dialog fits a narrow 
   expect(bounds).not.toBeNull();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+});
+
+test('owner must resolve overlapping changes before applying the current comparison', async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=owner&conflict=1`);
+  await page.getByRole('button', { name: 'Review Changes' }).click();
+  const review = page.getByRole('dialog', { name: 'Review proposed changes' });
+  await expect(review.getByText('The owner also changed this field.')).toBeVisible();
+  await expect(review.getByRole('button', { name: 'Apply Changes' })).toBeDisabled();
+  await review.getByRole('radio', { name: 'Overwrite current version with these changes' }).check();
+  await review.getByRole('radio', { name: 'Use proposed changes with current pricing' }).check();
+  await expect(review.getByRole('button', { name: 'Apply Changes' })).toBeEnabled();
+  await review.screenshot({ path: testInfo.outputPath('owner-conflict-review.png') });
+  await review.getByRole('button', { name: 'Apply Changes' }).click();
+  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('apply:request-1:');
+});
+
+test('the real apply service sends the selected destination without changing the reviewed version identity', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__APP_ENV__ = { VITE_SUPABASE_URL: 'https://submerge-playwright.invalid', VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder' };
+  });
+  const calls: any[] = [];
+  await page.route('https://submerge-playwright.invalid/**', async route => {
+    if (new URL(route.request().url()).pathname.endsWith('/collab_apply_review_v3')) {
+      const args = route.request().postDataJSON(); calls.push(args);
+      return route.fulfill({ json: { destination: args.p_destination, versionId: args.p_destination === 'new-draft' ? 'server-created' : 'original' } });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto(`${fixture}?mode=owner`);
+  const results = await page.evaluate(async () => {
+    const { applyChangeRequest } = await import('/src/services/proposalCollaboration.ts');
+    const prepared: any = { before: { versionId: 'original' }, after: { versionId: 'original' },
+      expectedRevision: 8, requestUpdatedAt: '2026-10-27T21:00:00Z', conflicts: [], resolutions: {} };
+    return [await applyChangeRequest('request', prepared, 'new-draft'), await applyChangeRequest('request', prepared, 'overwrite')];
+  });
+  expect(calls.map(call => call.p_destination)).toEqual(['new-draft','overwrite']);
+  for (const call of calls) expect(call).toMatchObject({ p_result: { versionId: 'original' }, p_expected: 8 });
+  expect(results.map(value => value.versionId)).toEqual(['server-created','original']);
+});
+
+test('review uses Shotcrete for stored construction type values', async ({ page }) => {
+  await page.goto(`${fixture}?mode=owner&diff=spa`);
+  await page.getByRole('button', { name: 'Review Changes' }).click();
+  const review = page.getByRole('dialog', { name: 'Review proposed changes' });
+  await expect(review.locator('tbody')).toContainText('Shotcrete');
+  await expect(review).not.toContainText(/gunite/i);
+});
+
+for (const destination of ['new-draft','overwrite']) {
+test(`review keeps the comparison visible and sends the ${destination} destination`, async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=owner&diff=equipment`);
+  await page.getByRole('button', { name: 'Review Changes' }).click();
+  const review = page.getByRole('dialog', { name: 'Review proposed changes' });
+  await expect(review.getByText('Review the changes made by Jordan Designer and decide how to proceed.')).toBeVisible();
+  await expect(review.getByText('Original, current, and proposed values')).toHaveCount(0);
+  await expect(review.getByText('Keep the owner’s saved draft')).toHaveCount(0);
+  await expect(review.getByRole('button', { name: 'Apply Changes' })).toBeDisabled();
+  const rows = await review.locator('tbody').innerText();
+  for (const label of ['Create a new draft with these changes','Overwrite current version with these changes']) {
+    await review.getByRole('radio', { name: label }).check();
+    expect(await review.locator('tbody').innerText()).toBe(rows);
+    const radio = await review.getByRole('radio', { name: label }).boundingBox();
+    const text = await review.getByText(label, { exact: true }).boundingBox();
+    expect(Math.abs((radio!.y + radio!.height / 2) - (text!.y + text!.height / 2))).toBeLessThan(4);
+  }
+  await review.getByRole('radio', { name: destination === 'new-draft' ? 'Create a new draft with these changes' : 'Overwrite current version with these changes' }).check();
+  await review.screenshot({ path: testInfo.outputPath('application-choice.png') });
+  await review.getByRole('button', { name: 'Apply Changes' }).click();
+  expect(await page.evaluate(() => (window as any).collaborationDestination)).toBe(destination);
+});
+}
+
+test('saved contributor work remains sendable after the owner changes pricing', async ({ page }) => {
+  await page.goto(`${fixture}?mode=recipient&working=1&stale=1`);
+  await page.getByRole('button', { name: 'Send changes from summary' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Send changes to owner' });
+  await expect(dialog.getByText(/Your proposed edits are preserved/)).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Send changes', exact: true })).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Send changes', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('send:true:');
 });
 
 test('sign-out clears account-scoped shared copies from IndexedDB', async ({ page }) => {
@@ -195,4 +315,90 @@ test('sign-out clears account-scoped shared copies from IndexedDB', async ({ pag
   await expect.poll(() => page.evaluate(async () =>
     !(await indexedDB.databases()).some((database) => database.name === 'submerge-shared-proposals-v1'))).toBe(true);
   await expect.poll(() => page.evaluate(() => localStorage.getItem('submerge-user-session'))).toBeNull();
+});
+
+
+test('recipient sees the owner sharing note on the summary', async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=recipient`);
+  const message = page.getByRole('status').filter({ hasText: 'Message from Alex Owner' });
+  await expect(message).toContainText('Please review');
+  await page.screenshot({ path: testInfo.outputPath('recipient-sharing-message.png') });
+});
+
+
+test('opening a shared summary clears its new dot on subsequent dashboard visits', async ({ page }) => {
+  await page.goto(`${fixture}?mode=dashboard`);
+  await expect(page.getByRole('img', { name: 'New shared proposals', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
+  await expect(page.getByRole('img', { name: 'New shared proposal', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('fixture-event-read'))).toBeNull();
+  await page.getByRole('row', { name: 'Open shared proposal Rivera Pool' }).click();
+  await page.goto(`${fixture}?mode=recipient`);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('fixture-event-read'))).toBe('fixture-unread');
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: 'Message from Alex Owner' })).toContainText('Please review');
+  await page.goto(`${fixture}?mode=dashboard`);
+  await expect(page.getByRole('img', { name: 'New shared proposals', exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
+  await expect(page.getByRole('img', { name: 'New shared proposal', exact: true })).toHaveCount(0);
+});
+
+
+test('permission updates do not make an already-opened shared proposal new again', async ({ page }) => {
+  await page.goto(`${fixture}?mode=dashboard&opened=1`);
+  await expect(page.getByRole('img', { name: 'New shared proposals', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('img', { name: 'Changes awaiting review', exact: true })).toHaveCount(2);
+  await page.getByRole('tab', { name: 'Shared with Me (1)' }).click();
+  await expect(page.getByRole('img', { name: 'New shared proposal', exact: true })).toHaveCount(0);
+});
+
+test('notification queries retain recipient and mode guards and page beyond the recent feed limit', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__APP_ENV__ = { VITE_SUPABASE_URL: 'https://submerge-playwright.invalid', VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder' };
+  });
+  const queries: string[] = [];
+  await page.route('https://submerge-playwright.invalid/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/proposal_collaboration_events')) {
+      queries.push(url.search);
+      const offset = Number(url.searchParams.get('offset') || 0);
+      const read = url.searchParams.get('read_at') === 'not.is.null';
+      const rows = read ? [{ id: 'old', proposal_number: 'PROP-OPENED', event_type: 'shared', read_at: '2026-10-27T12:00:00Z' }]
+        : offset === 0 ? [{ id: 'one' }, { id: 'two' }] : [{ id: 'three' }];
+      return route.fulfill({ json: rows });
+    }
+    return route.fulfill({ json: {} });
+  });
+  await page.goto(`${fixture}?mode=recipient`);
+  const result = await page.evaluate(async () => {
+    const { listCollaborationEvents } = await import('/src/services/proposalCollaboration.ts');
+    return { unread: await listCollaborationEvents(2, { unreadOnly: true, proposalNumber: 'PROP-OPENED' }),
+      read: await listCollaborationEvents(2, { readSharesOnly: true }) };
+  });
+  expect(result.unread.map(event => event.id)).toEqual(['one', 'two', 'three']);
+  expect(result.read.map(event => event.id)).toEqual(['old']);
+  expect(queries).toHaveLength(3);
+  for (const query of queries) {
+    const params = new URLSearchParams(query);
+    expect(params.get('recipient_id')).toBe('eq.recipient-id');
+    expect(params.get('is_test')).toBe('eq.false');
+  }
+  expect(new URLSearchParams(queries[0]).get('proposal_number')).toBe('eq.PROP-OPENED');
+  expect(new URLSearchParams(queries[0]).get('read_at')).toBe('is.null');
+  expect(new URLSearchParams(queries[2]).get('event_type')).toBe('eq.shared');
+});
+
+
+test('changing a permission preserves the original sharing message', async ({ page }) => {
+  await page.goto(`${fixture}?mode=owner`);
+  await page.getByRole('button', { name: 'Share / Manage Access' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Share and manage access' });
+  const permission = dialog.getByRole('combobox', { name: 'Permission for Jordan Designer' });
+  await permission.selectOption('view');
+  await expect(permission).toHaveValue('view');
+  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('share:recipient-id:view:Please review');
+  expect(await page.evaluate(() => (window as any).collaborationShares()[0].note)).toBe('Please review');
+  await permission.selectOption('contribute');
+  await expect.poll(() => page.evaluate(() => window.collaborationAction)).toBe('share:recipient-id:contribute:Please review');
+  expect(await page.evaluate(() => (window as any).collaborationShares()[0].note)).toBe('Please review');
 });

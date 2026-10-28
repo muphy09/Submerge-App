@@ -785,11 +785,6 @@
 .dashboard-collaboration-tabs { display: flex; gap: .4rem; padding: .35rem 1rem 0; }
 .dashboard-collaboration-tabs button { border: 0; border-bottom: 3px solid transparent; background: transparent; padding: .45rem .75rem; color: #334155; font: inherit; font-weight: 700; cursor: pointer; }
 .dashboard-collaboration-tabs button[aria-selected="true"] { color: #0c607d; border-color: #0c607d; }
-.dashboard-collaboration-updates { padding: .35rem 1.35rem; font-size: .83rem; color: #334155; }
-.dashboard-collaboration-updates ul { display: flex; gap: .5rem; list-style: none; padding: 0; margin: .35rem 0 0; overflow: auto; }
-.dashboard-collaboration-updates li button { display: flex; gap: .35rem; align-items: center; white-space: nowrap; border: 1px solid #cbd5e1; border-radius: .5rem; background: #fff; padding: .3rem .45rem; cursor: pointer; }
-.dashboard-collaboration-updates small { color: #64748b; }
-.dashboard-update-dot { width: .4rem; height: .4rem; border-radius: 50%; background: #0284c7; }
 .dashboard-shared-table-shell { display: flex; flex: 1; min-height: 0; flex-direction: column; padding: .4rem 1rem 1rem; }
 .dashboard-shared-table-shell .dashboard-proposals-table-shell { flex: 1; }
 .dashboard-shared-toolbar { flex: 0 0 auto; }
@@ -797,4 +792,20 @@
 .dashboard-shared-table thead th { padding: .78rem .9rem; color: #f8fbff; font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-align: left; text-transform: uppercase; }
 .dashboard-shared-request-pill { display: inline-flex; padding: .3rem .6rem; border: 1px solid #a9c7da; border-radius: 999px; background: #e9f4fa; color: #175173; font-size: .76rem; font-weight: 800; white-space: nowrap; }
 .dashboard-shared-icon { width: 18px; height: 18px; flex: 0 0 auto; margin-left: .4rem; fill: none; stroke: #1e6b8c; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
-@media (max-width: 700px) { .dashboard-collaboration-updates ul { display: none; } .dashboard-collaboration-tabs { overflow-x: auto; } }
+@media (max-width: 700px) { .dashboard-collaboration-tabs { overflow-x: auto; } }
+
+.dashboard-collaboration-tabs button { position: relative; }
+.dashboard-attention-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  min-width: 9px;
+  flex-shrink: 0;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: #dc2626;
+  animation: dashboard-attention-pulse 1.2s ease-in-out infinite;
+}
+.dashboard-collaboration-tabs .dashboard-attention-dot { position: absolute; right: 3px; top: 3px; }
+@keyframes dashboard-attention-pulse { 50% { opacity: .3; box-shadow: 0 0 0 3px #dc262633; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-attention-dot { animation: none; } }

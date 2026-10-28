@@ -1,4 +1,7 @@
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
+import { saveCollaborativeOwnerProposal } from '../../src/services/proposalCollaboration';
+import { applyActiveVersion, listAllVersions } from '../../src/utils/proposalVersions';
+import { reconcileWorkflowVersionStates, collapseApprovedProposalVersions } from '../../src/services/proposalWorkflow';
 import {
   getProposal,
   listProposals,
@@ -74,6 +77,29 @@ function setLocal(value: any, cachedByAdmin = false) {
 }
 
 (window as any).proposalSyncFixture = {
+  sharedAlternateAccess: () => {
+    const original = proposal(designerId, 'draft');
+    const shared = { ...original, ownerAuthUserId: designerId, contentRevision: 7,
+      collaborationEnabled: true, sharedPermission: 'contribute' as const,
+      activeVersionId: 'alternate', versions: [{ ...original, versionId: 'alternate',
+        ownerAuthUserId: 'stale-owner', contentRevision: 1, collaborationEnabled: false }] };
+    return {
+      active: applyActiveVersion(shared as any),
+      normalized: collapseApprovedProposalVersions(reconcileWorkflowVersionStates(shared as any)),
+      versions: listAllVersions(shared as any),
+    };
+  },
+  ownerSavesAlternateVersion: async () => {
+    setSession('designer');
+    const original = { ...proposal(designerId, 'draft'), totalCost: 83360,
+      pricingModelId: 'summer-model', pricingModelRevisionId: 'summer-pin' };
+    const alternate = { ...original, versionId: 'alternate', versionName: 'Alternate',
+      createdDate: '2026-10-27T19:00:00.000Z', totalCost: 92000,
+      pricingModelId: 'june-model', pricingModelRevisionId: 'june-pin' };
+    return saveCollaborativeOwnerProposal({ ...alternate, versions: [original],
+      ownerAuthUserId: designerId, contentRevision: 7, collaborationEnabled: true,
+      activeVersionId: 'alternate' } as any);
+  },
   proposalNumber,
   cloudRow: (status: string = 'needs_approval') => {
     const value = proposal(designerId, status);
@@ -114,6 +140,11 @@ function setLocal(value: any, cachedByAdmin = false) {
     setSession('admin');
     setLocal(proposal(adminId, 'draft'));
     return saveProposal(proposal(adminId, 'draft') as any, { requireOnline: true });
+  },
+  ownerSavesDraftWithLocalFallback: async () => {
+    setSession('admin');
+    setLocal(proposal(adminId, 'draft'));
+    return saveProposal(proposal(adminId, 'draft') as any);
   },
   designerSavesDraft: async () => {
     setSession('designer');

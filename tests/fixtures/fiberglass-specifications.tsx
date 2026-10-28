@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { proposalCacheEnvironment } from '../../src/services/proposalContext';
 import ReactDOM from 'react-dom/client';
 import '../../src/index.css';
 import pricingData from '../../src/services/pricingData';
@@ -80,7 +81,7 @@ if (franchiseId === 'new-franchise' && !copy) {
     isDefault: true, version: 'test', revisionId: id, revisionNumber: id.charCodeAt(0) - 64, pricing,
   });
   for (const entry of [revision('A', withoutSpecs), revision('B', priced), revision('C', pricedWithSpecs)]) {
-    localStorage.setItem(`submerge.pricingModelSnapshot.review-franchise.review-model.${entry.revisionId}`, JSON.stringify(entry));
+    localStorage.setItem(`submerge.pricingModelSnapshot.${proposalCacheEnvironment()}.review-franchise.review-model.${entry.revisionId}`, JSON.stringify(entry));
   }
   const proposal = {
     ...getDefaultProposal(), franchiseId: 'review-franchise', pricingModelId: 'review-model',

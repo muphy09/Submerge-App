@@ -7,6 +7,9 @@ import type { Proposal } from '../../src/types/proposal-new';
 import type { CollaborationRequest, CollaborationShare, SharedProposal } from '../../src/services/proposalCollaboration';
 import { clearSession } from '../../src/services/session';
 import '../../src/index.css';
+import { getDefaultProposal } from '../../src/utils/proposalDefaults';
+import MasterPricingEngine from '../../src/services/masterPricingEngine';
+import { withAdditionalDeckingSelections } from '../../src/utils/decking';
 
 const params = new URLSearchParams(location.search);
 const mode = params.get('mode') || 'dashboard';
@@ -57,13 +60,63 @@ if (params.get('diff') === 'salt') {
   request.working_version_json = { ...base, equipment: { saltSystem: { name: 'AQRS Salt System', model: 'AQRS', price: 1000 } },
     totalCost: 109000 } as Proposal;
 }
+if (params.get('diff') === 'spa') {
+  request.base_version_json = { ...proposal, poolSpecs: { ...proposal.poolSpecs, spaType: 'none' } } as Proposal;
+  request.working_version_json = { ...request.base_version_json,
+    poolSpecs: { ...proposal.poolSpecs, spaType: 'gunite' } } as Proposal;
+}
 if (params.get('diff') === 'longreview') {
   const additions = Object.fromEntries(Array.from({ length: 18 }, (_, index) => [`fixtureOption${index + 1}`, index + 1]));
   request.working_version_json = { ...proposal, poolSpecs: { ...proposal.poolSpecs, ...additions },
     totalCost: 128000 } as Proposal;
 }
+if (params.get('diff') === 'materials') {
+  const base = { ...getDefaultProposal(), ...proposal } as Proposal;
+  base.poolSpecs = { ...getDefaultProposal().poolSpecs, perimeter: 100, surfaceArea: 500, deckingArea: 400 };
+  base.tileCopingDecking = { ...getDefaultProposal().tileCopingDecking, deckingArea: 400,
+    tileLevel: 1, tileOptionId: 'level1', copingType: 'travertine-level1', copingSize: '12x12', deckingType: 'concrete' };
+  Object.assign(base, MasterPricingEngine.calculateCompleteProposal(base));
+  const work = structuredClone(base);
+  work.tileCopingDecking = withAdditionalDeckingSelections({ ...work.tileCopingDecking,
+    tileLevel: 3, tileOptionId: 'level3', copingType: 'travertine-level2', copingSize: '12x24',
+    trimTileOptionId: 'default-trim-tile', hasTrimTileOnSteps: true,
+    deckingType: 'paver', isDeckingOffContract: true }, [{ deckingType: 'concrete', area: 100, isOffContract: false }]);
+  Object.assign(work, MasterPricingEngine.calculateCompleteProposal(work));
+  const tileOnly = structuredClone(base);
+  tileOnly.tileCopingDecking.tileLevel = 3;
+  tileOnly.tileCopingDecking.tileOptionId = 'level3';
+  (window as any).reviewExpected = {
+    tilePrice: MasterPricingEngine.calculateCompleteProposal(tileOnly).pricing.retailPrice - base.pricing.retailPrice,
+    totalPrice: work.pricing.retailPrice - base.pricing.retailPrice,
+  };
+  request.base_version_json = base;
+  request.working_version_json = work;
+}
 const store = { proposal: { ...proposal }, shares: [share], requests: [request] };
+if (params.has('history')) {
+  store.shares.push({ ...share, id: 'ended-share', recipient_id: 'second-id', ended_at: '2026-09-24T12:00:00Z' });
+  request.status = 'declined';
+  request.decided_at = '2026-09-23T12:00:00Z';
+  request.decided_by = 'owner-id';
+}
+(window as any).collaborationShares = () => structuredClone(store.shares);
 const api: typeof collaborationPanelApi = {
+  listCollaborationEvents: async () => localStorage.getItem('fixture-event-read') ? [] : [{
+    id: 'fixture-unread', proposal_number: proposal.proposalNumber, event_type: 'shared',
+    actor_id: 'owner-id', request_id: null, note: share.note, created_at: share.created_at, read_at: null }],
+  markCollaborationEventRead: async (id) => { localStorage.setItem('fixture-event-read', id); },
+  prepareChangeRequest: async (id, resolutions = {}) => {
+    const target = store.requests.find(item => item.id === id)!;
+    const conflicts = params.get('conflict') ? [{ path: 'poolSpecs.poolLength', before: 28, owner: 30, proposed: 32,
+      message: 'The owner also changed this field.' }] : [];
+    return { before: target.base_version_json, after: target.working_version_json, conflicts,
+      expectedRevision: Number(store.proposal.contentRevision), requestUpdatedAt: target.updated_at, resolutions };
+  },
+  applyChangeRequest: async (id, _prepared, destination) => {
+    (window as any).collaborationDestination = destination;
+    await api.decideChangeRequest(id, 'apply');
+    return { versionId: destination === 'new-draft' ? 'new-version' : 'original', destination };
+  },
   listProposalShares: async () => store.shares,
   listChangeRequests: async () => store.requests,
   listProposalPeople: async () => [
@@ -80,7 +133,7 @@ const api: typeof collaborationPanelApi = {
   shareProposal: async (_number, recipient, permission, note) => {
     window.collaborationAction = `share:${recipient}:${permission}:${note}`;
     const existing = store.shares.find((item) => item.recipient_id === recipient);
-    if (existing) existing.permission = permission;
+    if (existing) { existing.permission = permission; existing.note = note?.trim() || null; }
     else store.shares.push({ ...share, id: `share-${recipient}`, recipient_id: recipient, permission, note });
   },
   endProposalShare: async (_number, recipient) => {
@@ -123,19 +176,20 @@ function Fixture() {
     return <DashboardProposalsPanel proposals={owned} sharedProposals={sharedRows} collaborationEnabled
       sharedOwnedProposalNumbers={[current.proposalNumber]}
       sharedOwnedRecipients={{ [current.proposalNumber]: ['Jordan Designer', 'Taylor Admin'] }}
-      collaborationAttention={2} collaborationUpdates={[{ id: 'event-0', proposal_number: current.proposalNumber,
+      collaborationUpdates={[...(params.has('opened') ? [{ id: 'old-read-share', proposal_number: current.proposalNumber,
         event_type: 'shared', actor_id: 'owner-id', request_id: null, note: null,
-        created_at: '2026-09-23T12:00:00.000Z', read_at: null },
+        created_at: '2026-09-22T12:00:00Z', read_at: '2026-09-22T13:00:00Z' }] : []), { id: 'event-0', proposal_number: current.proposalNumber,
+        event_type: 'shared', actor_id: 'owner-id', request_id: null, note: null,
+        created_at: '2026-09-23T12:00:00.000Z', read_at: localStorage.getItem('fixture-event-read') ? '2026-10-27T12:00:00Z' : null },
       { id: 'event-1', proposal_number: current.proposalNumber,
         event_type: 'changes_submitted', actor_id: 'recipient-id', request_id: 'request-1', note: null,
         created_at: '2026-09-23T12:00:00.000Z', read_at: null }]}
-      onOpenUpdate={() => { window.collaborationAction = 'open-update'; }}
       loading={false} onCreateProposal={() => undefined} onDeleteProposal={() => undefined}
       onOpenProposal={() => { window.collaborationAction = 'open-proposal'; }} />;
   }
   return <div className={params.get('rail') === '1' ? 'proposal-column proposal-column--side' : undefined}
-    style={{ maxWidth: params.get('rail') === '1' ? 340 : mode === 'owner' ? 740 : 440, margin: '2rem auto' }}>
-    {mode === 'owner' && <button onClick={() => setManageSignal((value) => value + 1)}>Share / Manage Access</button>}
+    style={{ maxWidth: params.get('rail') === '1' ? 340 : mode === 'owner' ? 740 : 440, margin: '2rem auto', isolation: 'isolate' }}>
+    {mode === 'owner' && <div className="view-actions"><button onClick={() => setManageSignal((value) => value + 1)}>Share / Manage Access</button></div>}
     {mode === 'recipient' && params.get('working') && <button onClick={() => setSendSignal((value) => value + 1)}>Send changes from summary</button>}
     <ProposalCollaborationPanel
     proposal={{ ...current, sharedPermission: mode === 'owner' ? undefined : share.permission }}

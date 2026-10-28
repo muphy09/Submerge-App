@@ -94,11 +94,15 @@ const useFloatingTooltip = <T extends HTMLElement>(tooltip?: string | null) => {
 
     const frame = window.requestAnimationFrame(updatePosition);
     const handleWindowChange = () => updatePosition();
+    const observer = new ResizeObserver(handleWindowChange);
+    if (tooltipRef.current) observer.observe(tooltipRef.current);
+    if (anchorRef.current) observer.observe(anchorRef.current);
     window.addEventListener('resize', handleWindowChange);
     window.addEventListener('scroll', handleWindowChange, true);
 
     return () => {
       window.cancelAnimationFrame(frame);
+      observer.disconnect();
       window.removeEventListener('resize', handleWindowChange);
       window.removeEventListener('scroll', handleWindowChange, true);
     };
@@ -111,10 +115,12 @@ const useFloatingTooltip = <T extends HTMLElement>(tooltip?: string | null) => {
     }
   }, [normalizedTooltip, isVisible]);
 
-  const showTooltip = () => {
+  const showTooltip = (target?: HTMLElement) => {
+    if (target) anchorRef.current = target as T;
     if (!normalizedTooltip) return;
     setPosition((current) => ({ ...current, ready: false }));
     setIsVisible(true);
+    window.requestAnimationFrame(updatePosition);
   };
 
   const hideTooltip = () => {
@@ -229,10 +235,11 @@ type TooltipAnchorProps = {
   tooltip?: string | null;
   className?: string;
   as?: 'span' | 'div';
+  followTarget?: boolean;
   children: ReactNode;
 };
 
-export const TooltipAnchor = ({ tooltip, className, as = 'span', children }: TooltipAnchorProps) => {
+export const TooltipAnchor = ({ tooltip, className, as = 'span', children, followTarget = false }: TooltipAnchorProps) => {
   const { anchorRef, showTooltip, hideTooltip, tooltipPortal } = useFloatingTooltip<
     HTMLSpanElement | HTMLDivElement
   >(tooltip);
@@ -241,13 +248,19 @@ export const TooltipAnchor = ({ tooltip, className, as = 'span', children }: Too
   return (
     <>
       <Component
-        ref={anchorRef as any}
+        ref={followTarget ? undefined : anchorRef as any}
         className={['app-tooltip-anchor', as === 'div' ? 'app-tooltip-anchor--block' : '', className]
           .filter(Boolean)
           .join(' ')}
-        onMouseEnter={showTooltip}
+        onMouseEnter={followTarget ? undefined : () => showTooltip()}
+        onMouseOver={followTarget ? event => {
+          if ((event.target as HTMLElement).closest('.price-impact-trigger-wrap')) { hideTooltip(); return; }
+          const target = (event.target as HTMLElement).closest<HTMLElement>('input, select, textarea, button, [role="checkbox"], label');
+          if (target && event.currentTarget.contains(target)) showTooltip(target);
+          else hideTooltip();
+        } : undefined}
         onMouseLeave={hideTooltip}
-        onFocusCapture={showTooltip}
+        onFocusCapture={event => showTooltip(followTarget ? event.target as HTMLElement : undefined)}
         onBlurCapture={hideTooltip}
       >
         {children}

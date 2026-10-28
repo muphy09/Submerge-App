@@ -65,6 +65,7 @@ import { normalizeEquipmentLighting } from '../utils/lighting';
 import { getTileSelectionId } from '../utils/tileCopingCatalogs';
 import {
   getActivePricingModelMeta,
+  bindPricingEditor,
   initPricingDataStore,
   getPricingDataSnapshot,
   loadPricingSnapshotForExistingProposal,
@@ -90,7 +91,9 @@ import { getAdditionalPumpSelections, getBasePumpQuantity } from '../utils/pumpS
 import { listAllFranchises, listAllPricingModels } from '../services/masterAdminAdapter';
 import { listPricingModels as listPricingModelsRemote } from '../services/pricingModelsAdapter';
 import { getProposal as getProposalRemote, saveProposal as saveProposalRemote, isOwnProposal } from '../services/proposalsAdapter';
-import { listChangeRequests, saveWorkingCopy } from '../services/proposalCollaboration';
+import { beginWorkingCopy, listChangeRequests, saveWorkingCopy, type CollaborationRequest } from '../services/proposalCollaboration';
+import { captureProposalContext, assertProposalContext } from '../services/proposalContext';
+import SharedPricingRevisionNotice from '../components/SharedPricingRevisionNotice';
 import { needsOffContractSeparation } from '../utils/offContractSeparation';
 import CloudConnectionNotice, { type CloudConnectionIssue } from '../components/CloudConnectionNotice';
 import {
@@ -463,9 +466,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const isMasterUser = isMasterSession();
   const isProposalEditingRestricted = isMasterActingAsOwnerSession();
   const isSharedWorkingCopy = Boolean((location.state as any)?.sharedWorkingCopy);
+  const sharedRequestRef = useRef<CollaborationRequest | undefined>((location.state as any)?.sharedRequest);
+  const loadedContextRef = useRef(captureProposalContext());
   const [sharedAccess, setSharedAccess] = useState<'view' | 'contribute' | null>(
     (location.state as any)?.sharedPermission || null);
   const [sharedEditing, setSharedEditing] = useState(Boolean((location.state as any)?.sharedStartEditing));
+  const [sharedStarting, setSharedStarting] = useState(false);
+  const sharedStartingRef = useRef(false);
   const [sharedSubmissionPending, setSharedSubmissionPending] = useState(Boolean((location.state as any)?.sharedSubmissionPending));
   const modelDirectoryLoadKeyRef = useRef<string | null>(null);
   const isExplicitReadOnlyVersionView = Boolean((location.state as any)?.readOnlyVersion);
@@ -527,6 +534,16 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   const loadedProposalIdentityRef = useRef<LoadedProposalIdentity | null>(null);
   const loadedProposalBaselineRef = useRef<Proposal | null>(null);
   const proposalPricingSnapshotsRef = useRef(new Map<string, PricingData>());
+  const pricingEditorRef = useRef<ReturnType<typeof bindPricingEditor> | null>(null);
+  const pricingSelectionRequestRef = useRef(0);
+  useEffect(() => () => {
+    pricingSelectionRequestRef.current++;
+    pricingEditorRef.current?.release(); pricingEditorRef.current = null;
+  }, []);
+  const bindEditorSnapshot = (snapshot: PricingData) => {
+    if (pricingEditorRef.current) pricingEditorRef.current.update(snapshot);
+    else pricingEditorRef.current = bindPricingEditor(snapshot);
+  };
   const pricingSnapshotKey = (input: Partial<Proposal>) => [
     input.franchiseId || getSessionFranchiseId(),
     input.pricingModelFranchiseId || input.franchiseId || getSessionFranchiseId(),
@@ -605,8 +622,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     ...input,
     pricing: {
       ...(input.pricing || {}),
-      digCommissionRate: sessionCommissionRates.digCommissionRate,
-      closeoutCommissionRate: sessionCommissionRates.closeoutCommissionRate,
+      digCommissionRate: sharedAccess || input.collaborationEnabled
+        ? input.pricing?.digCommissionRate : sessionCommissionRates.digCommissionRate,
+      closeoutCommissionRate: sharedAccess || input.collaborationEnabled
+        ? input.pricing?.closeoutCommissionRate : sessionCommissionRates.closeoutCommissionRate,
     } as Proposal['pricing'],
   });
 
@@ -664,11 +683,25 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     markDirty?: boolean,
     modelFranchiseId?: string | null
   ) => {
+    const selectionRequest = ++pricingSelectionRequestRef.current;
+    const context = captureProposalContext();
     const activeTierId = normalizePricingTierId(latestProposalRef.current.pricingTierId || selectedPricingTierId);
+    let selectedSnapshot: Awaited<ReturnType<typeof loadPricingSnapshotForExistingProposal>> | null = null;
     if (modelId && !skipRemote) {
       await setActivePricingModel(modelId, modelFranchiseId || undefined, activeTierId);
+      assertProposalContext(context);
+      if (selectionRequest !== pricingSelectionRequestRef.current) return;
+      const meta = getActivePricingModelMeta();
+      selectedSnapshot = await loadPricingSnapshotForExistingProposal(latestProposalRef.current.franchiseId || getSessionFranchiseId(),
+        modelId, modelFranchiseId || meta.pricingModelFranchiseId || undefined, activeTierId, meta.pricingModelRevisionId);
+      assertProposalContext(context);
+      if (selectionRequest !== pricingSelectionRequestRef.current) return;
+      bindEditorSnapshot(selectedSnapshot.pricing);
+      proposalPricingSnapshotsRef.current.set(pricingSnapshotKey({ ...latestProposalRef.current,
+        pricingModelId: modelId, pricingModelFranchiseId: selectedSnapshot.pricingModelFranchiseId || undefined,
+        pricingModelRevisionId: selectedSnapshot.pricingModelRevisionId || undefined }), selectedSnapshot.pricing);
     }
-    const activeModelMeta = getActivePricingModelMeta();
+    const activeModelMeta = selectedSnapshot || getActivePricingModelMeta();
     syncPapDiscountsFromModel();
 
     const nextModelAdjustments = readManualAdjustmentsFromModel();
@@ -716,6 +749,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
     desiredModelId?: string | null,
     desiredModelFranchiseId?: string | null
   ) => {
+    const context = captureProposalContext();
+    const directoryKeyAtStart = modelDirectoryLoadKeyRef.current;
     try {
       let models: PricingModelOption[] = [];
       const franchiseNameLookup = new Map<string, string>();
@@ -752,6 +787,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         }));
       }
 
+      assertProposalContext(context);
+      if (directoryKeyAtStart !== modelDirectoryLoadKeyRef.current) return;
       const visibleModels = models.filter((model) => !model.isHiddenFromView);
       const visibleCurrentFranchiseModels = visibleModels.filter((model) => (model.franchiseId || franchiseId) === franchiseId);
       const defaultModel = visibleCurrentFranchiseModels.find((model) => model.isDefault) || visibleCurrentFranchiseModels[0];
@@ -930,6 +967,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       poolSpecs: { ...base.poolSpecs!, fiberglassSpecAutofillEnabled: true },
       franchiseId,
       designerName,
+      designerAuthUserId: readSession()?.userId,
       designerRole,
       designerCode,
       interiorFinish: base.interiorFinish as Proposal['interiorFinish'],
@@ -1552,8 +1590,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
   }, [hasEdits, isReadOnlyBuilderView]);
 
   const loadProposal = async (num: string, requestId: number) => {
+    const context = captureProposalContext();
     try {
       const data = await getProposalRemote(num);
+      assertProposalContext(context);
       if (!data) {
         showToast({
           type: 'error',
@@ -1639,14 +1679,21 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       ) as Proposal[];
       const desiredVersionId =
         versionIdFromState || versioned.activeVersionId || versioned.versionId || 'original';
-      const stateVersionSnapshot = versionSnapshotFromState
+      let effectiveStateSnapshot = versionSnapshotFromState;
+      if (sourceProposal.sharedPermission === 'contribute' && isSharedWorkingCopy && sharedRequestRef.current) {
+        const resumed = await beginWorkingCopy(num, desiredVersionId, Number(sourceProposal.contentRevision));
+        assertProposalContext(context);
+        sharedRequestRef.current = resumed;
+        effectiveStateSnapshot = resumed.working_version_json;
+      }
+      const stateVersionSnapshot = effectiveStateSnapshot
         ? ({
-            ...(markPersistedPackageSelectionTouched(versionSnapshotFromState as Proposal) as Proposal),
-            waterFeatures: normalizeWaterFeatures((versionSnapshotFromState as Proposal).waterFeatures),
-            versionId: versionSnapshotFromState.versionId || 'original',
+            ...(markPersistedPackageSelectionTouched(effectiveStateSnapshot as Proposal) as Proposal),
+            waterFeatures: normalizeWaterFeatures((effectiveStateSnapshot as Proposal).waterFeatures),
+            versionId: effectiveStateSnapshot.versionId || 'original',
             versionName:
-              versionSnapshotFromState.versionName ||
-              (versionSnapshotFromState.isOriginalVersion ? 'Original Version' : 'Version'),
+              effectiveStateSnapshot.versionName ||
+              (effectiveStateSnapshot.isOriginalVersion ? 'Original Version' : 'Version'),
             versions: [],
             workflow: sourceProposal.workflow,
           } as Proposal)
@@ -1727,7 +1774,13 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         sanitizedTarget.pricingModelRevisionId || undefined
       );
       if (loadRequestRef.current !== requestId) return;
-      const loadedPricingMeta = getActivePricingModelMeta();
+      const targetSnapshot = await loadPricingSnapshotForExistingProposal(sanitizedTarget.franchiseId,
+        sanitizedTarget.pricingModelId, sanitizedTarget.pricingModelFranchiseId, targetTierId, sanitizedTarget.pricingModelRevisionId);
+      if (loadRequestRef.current !== requestId) return;
+      assertProposalContext(context);
+      bindEditorSnapshot(targetSnapshot.pricing);
+      proposalPricingSnapshotsRef.current.set(pricingSnapshotKey(sanitizedTarget), targetSnapshot.pricing);
+      const loadedPricingMeta = targetSnapshot;
       if (
         sanitizedTarget.pricingModelId &&
         (loadedPricingMeta.pricingModelId !== sanitizedTarget.pricingModelId ||
@@ -1743,10 +1796,10 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         ...sanitizedTarget,
         historicalPricingAdjustment: 0,
       };
-      const currentCalculation = MasterPricingEngine.calculateCompleteProposal(
+      const currentCalculation = withTemporaryPricingSnapshot(targetSnapshot.pricing, () => MasterPricingEngine.calculateCompleteProposal(
         unprotectedTarget,
-        readPapDiscountsFromModel()
-      );
+        normalizePapDiscounts(targetSnapshot.pricing.papDiscountRates)
+      ));
       const nextHistoricalPricingReview = buildHistoricalPricingReview(
         unprotectedTarget,
         currentCalculation
@@ -1757,6 +1810,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       ) as Proposal;
 
       if (loadRequestRef.current === requestId) {
+        assertProposalContext(context);
+        loadedContextRef.current = context;
         loadedProposalNumberRef.current = num;
         loadedProposalIdentityRef.current = buildLoadedProposalIdentity(sanitizedTarget);
         loadedProposalBaselineRef.current = cloneProposalData(sourceProposal);
@@ -1790,7 +1845,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         setExistingProposalLoadError(null);
       }
     } catch (error) {
-      if (loadRequestRef.current !== requestId) return;
+      if (loadRequestRef.current !== requestId || context !== captureProposalContext()) return;
       console.error('Failed to load proposal:', error);
       if (loadRequestRef.current === requestId) {
         loadedProposalNumberRef.current = null;
@@ -1899,8 +1954,19 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   const applyPricingTierSelection = async (tierValue: string, markDirty = true) => {
     if (isReadOnlyBuilderView) return;
+    // Model and tier selections share one sequence: neither may restore a
+    // snapshot captured before a newer selection or navigation.
+    const selectionRequest = ++pricingSelectionRequestRef.current;
+    const loadToken = loadRequestRef.current;
     const pricingTierId = normalizePricingTierId(tierValue);
-    await setActivePricingTier(pricingTierId);
+    const context = captureProposalContext();
+    const current = latestProposalRef.current;
+    const tierSnapshot = await loadPricingSnapshotForExistingProposal(current.franchiseId, current.pricingModelId,
+      current.pricingModelFranchiseId, pricingTierId, current.pricingModelRevisionId);
+    assertProposalContext(context);
+    if (selectionRequest !== pricingSelectionRequestRef.current || loadToken !== loadRequestRef.current) return;
+    bindEditorSnapshot(tierSnapshot.pricing);
+    proposalPricingSnapshotsRef.current.set(pricingSnapshotKey({ ...current, pricingTierId }), tierSnapshot.pricing);
     setSelectedPricingTierId(pricingTierId);
     setProposal((prev) => {
       const nextProposal: Partial<Proposal> = {
@@ -2070,7 +2136,9 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
 
   const calculateTotals = (input: Partial<Proposal> = proposal): Proposal => {
     const normalized = mergeWithDefaults(applySessionCommissionRates(input));
-    const modelPapDiscounts = readPapDiscountsFromModel();
+    // A pinned save may temporarily replace pricingData while the global store
+    // still describes another version's model. Persist the rates used by the engine.
+    const modelPapDiscounts = normalizePapDiscounts(pricingData.papDiscountRates);
     const result = MasterPricingEngine.calculateCompleteProposal(normalized, modelPapDiscounts);
     const versionId = input.versionId || editingVersionId || 'original';
     const versionName =
@@ -2237,6 +2305,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         normalizePricingTierId(proposalToSave.pricingTierId || proposalToSave.pricingTierName),
         proposalToSave.pricingModelRevisionId
       );
+      assertProposalContext(loadedContextRef.current);
       proposalToSave = withTemporaryPricingSnapshot(savePricingSnapshot.pricing, () => {
         const normalized = sanitizeCurrentProposalState(proposalToSave as Proposal);
         return !proposalNumber && !normalized.equipment?.hasBeenEdited
@@ -2328,7 +2397,8 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           : normalizedContainerToSave;
 
       if (sharedAccess === 'contribute' && isSharedWorkingCopy) {
-        await saveWorkingCopy(finalProposal.proposalNumber, currentVersionId, finalProposal);
+        assertProposalContext(loadedContextRef.current);
+        await saveWorkingCopy(finalProposal.proposalNumber, currentVersionId, finalProposal, false, '', sharedRequestRef.current);
         setHasEdits(false);
         setHasUserEdits(false);
         if (!options?.silent) showToast({ type: 'success', message: 'Working copy saved. The owner draft has not changed.' });
@@ -2350,6 +2420,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         }
       }
 
+      assertProposalContext(loadedContextRef.current);
       const saved = await saveProposalRemote(
         {
           ...workflowReady,
@@ -2365,6 +2436,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           : undefined
       );
 
+      assertProposalContext(loadedContextRef.current);
       const savedActive = ensureProposalWorkflow(applyActiveVersion(saved as Proposal));
       const savedVersions = listAllVersions(saved as Proposal).map((entry) => cloneProposalData(entry));
       const savedRequestedVersion =
@@ -2591,6 +2663,12 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         normalizePricingTierId(upgraded.pricingTierId || selectedPricingTierId),
         upgraded.pricingModelRevisionId
       );
+      assertProposalContext(loadedContextRef.current);
+      const snapshot = await loadPricingSnapshotForExistingProposal(upgraded.franchiseId, upgraded.pricingModelId,
+        upgraded.pricingModelFranchiseId, upgraded.pricingTierId, upgraded.pricingModelRevisionId);
+      assertProposalContext(loadedContextRef.current);
+      bindEditorSnapshot(snapshot.pricing);
+      proposalPricingSnapshotsRef.current.set(pricingSnapshotKey(upgraded), snapshot.pricing);
       setProposal(upgraded);
       setSelectedPricingModelId(upgraded.pricingModelId || null);
       setSelectedPricingModelName(upgraded.pricingModelName || null);
@@ -3216,7 +3294,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       data-tooltip={
         isFeenstraMay2026Pricing
           ? 'This proposal is locked to the May 11, 2026 calculation engine and pricing revision.'
-          : isReadOnlyBuilderView
+          : isReadOnlyBuilderView && !sharedAccess
           ? readOnlyBuilderMessage
           : !canChooseProposalRevisions
           ? 'Pricing selections are controlled by the proposal owner.'
@@ -3225,7 +3303,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       aria-label={
         isFeenstraMay2026Pricing
           ? `Current pricing model: ${pricingModelDisplayName}. Locked to May 11, 2026 pricing.`
-          : isReadOnlyBuilderView
+          : isReadOnlyBuilderView && !sharedAccess
           ? `Current pricing model: ${pricingModelDisplayName}. ${readOnlyBuilderMessage}`
           : !canChooseProposalRevisions
           ? `Current pricing model: ${pricingModelDisplayName}. Pricing selections are controlled by the proposal owner.`
@@ -3317,7 +3395,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       data-tooltip={
         isFeenstraMay2026Pricing
           ? 'The pricing tier is locked for the May 11, 2026 calculation profile.'
-          : isReadOnlyBuilderView
+          : isReadOnlyBuilderView && !sharedAccess
           ? readOnlyBuilderMessage
           : !canChooseProposalRevisions
           ? 'Pricing selections are controlled by the proposal owner.'
@@ -3326,7 +3404,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
       aria-label={
         isFeenstraMay2026Pricing
           ? `Current pricing tier: ${pricingTierDisplayName}. Locked to May 11, 2026 pricing.`
-          : isReadOnlyBuilderView
+          : isReadOnlyBuilderView && !sharedAccess
           ? `Current pricing tier: ${pricingTierDisplayName}. ${readOnlyBuilderMessage}`
           : !canChooseProposalRevisions
           ? `Current pricing tier: ${pricingTierDisplayName}. Pricing selections are controlled by the proposal owner.`
@@ -3381,6 +3459,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
           ? `Shared Proposal · Editing ${proposal?.versionName || versionNameFromState || 'Original Version'} Copy`
           : 'Shared Proposal · View Only'}
       </div>}
+      {sharedAccess && <SharedPricingRevisionNotice proposal={proposal} />}
 
       <div
         className={`form-layout ${isCompactLayout ? 'is-compact' : ''} ${isMobileLayout ? 'is-mobile' : ''} ${!showCostSidebar ? 'no-cost' : ''} ${!showLeftNav ? 'no-nav' : ''}`}
@@ -3486,7 +3565,36 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
                   {sharedAccess === 'contribute' && isSharedWorkingCopy && !sharedEditing && !sharedSubmissionPending
                     && !isExplicitReadOnlyVersionView && getVersionRecordStatus(proposal) === 'draft'
                     && !proposal.versionLocked && !isOffline &&
-                    <button className="btn btn-primary" onClick={() => setSharedEditing(true)} disabled={isSaving}>Propose Changes</button>}
+                    <button className="btn btn-primary" onClick={() => void (async () => {
+                      if (sharedStartingRef.current) return;
+                      sharedStartingRef.current = true;
+                      setSharedStarting(true);
+                      const loadToken = loadRequestRef.current;
+                      try {
+                        assertProposalContext(loadedContextRef.current);
+                        const request = await beginWorkingCopy(proposalNumber!, editingVersionId || 'original', Number(proposal.contentRevision));
+                        const work = request.working_version_json;
+                        const snapshot = await loadPricingSnapshotForExistingProposal(work.franchiseId, work.pricingModelId,
+                          work.pricingModelFranchiseId, work.pricingTierId, work.pricingModelRevisionId);
+                        assertProposalContext(loadedContextRef.current);
+                        if (loadToken !== loadRequestRef.current) return;
+                        bindEditorSnapshot(snapshot.pricing);
+                        proposalPricingSnapshotsRef.current.set(pricingSnapshotKey(work), snapshot.pricing);
+                        sharedRequestRef.current = request;
+                        previousSpaTypeRef.current = work.poolSpecs?.spaType ?? 'none';
+                        previousHasPoolRef.current = hasPoolDefinition(work.poolSpecs);
+                        setSelectedPricingModelId(work.pricingModelId || null);
+                        setSelectedPricingModelName(work.pricingModelName || null);
+                        setSelectedPricingTierId(normalizePricingTierId(work.pricingTierId));
+                        setManualAdjustments(work.manualAdjustments || getDefaultManualAdjustments());
+                        manualAdjustmentsSourceRef.current = 'proposal';
+                        setProposal({ ...work, sharedPermission: 'contribute',
+                          contentRevision: proposal.contentRevision, ownerAuthUserId: proposal.ownerAuthUserId,
+                          collaborationEnabled: true });
+                        setSharedEditing(true);
+                      } catch (error) { showToast({ type: 'error', message: (error as Error).message }); }
+                      finally { sharedStartingRef.current = false; setSharedStarting(false); }
+                    })()} disabled={isSaving || sharedStarting}>{sharedStarting ? 'Preparing editing copy…' : 'Propose Changes'}</button>}
                   <TooltipAnchor tooltip={proposalSummaryTooltip}>
                     <button
                       className="btn btn-success"
@@ -3506,11 +3614,11 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
               </div>
             )}
             {isReadOnlyBuilderView ? (
-              <TooltipAnchor as="div" tooltip={sharedAccess === 'contribute'
+              <TooltipAnchor as="div" followTarget tooltip={sharedAccess === 'contribute'
                 ? sharedSubmissionPending
                   ? 'VIEW ONLY. Withdraw Changes before proposing more changes'
                   : 'VIEW ONLY. To modify, click Propose Changes at the top'
-                : undefined}>
+                : sharedAccess ? 'VIEW ONLY. The proposal owner has granted viewing access.' : undefined}>
                 <fieldset className="proposal-builder-readonly-shell" disabled={!sharedAccess} aria-label="Read-only proposal builder"
                   onMouseDownCapture={blockReadOnlyBuilderInteraction}
                   onClickCapture={blockReadOnlyBuilderInteraction}

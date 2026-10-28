@@ -9,6 +9,7 @@ import PricingRevisionComparisonModal from '../../src/components/PricingRevision
 import { getPricingDataSnapshot, loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from '../../src/services/pricingDataStore';
 import { buildPricingRevisionComparison, markPricingRevisionDeclined, upgradeProposalPricingRevision } from '../../src/services/pricingRevisionReview';
 import MasterPricingEngine from '../../src/services/masterPricingEngine';
+import { proposalCacheEnvironment } from '../../src/services/proposalContext';
 
 Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
 const franchiseId = new URLSearchParams(location.search).get('franchise') || '5555';
@@ -20,9 +21,9 @@ const model = {
   franchiseId, pricingModelId: 'waste-model', pricingModelName: 'Decking Pricing',
   isDefault: true, version: 'test', revisionId: 'new', revisionNumber: 2, pricing: clone(pricingData),
 };
-localStorage.setItem(`submerge.pricingModelSnapshot.${franchiseId}.waste-model.old`, JSON.stringify({ ...model, revisionId: 'old', revisionNumber: 1, pricing: oldPricing }));
-localStorage.setItem(`submerge.pricingModelSnapshot.${franchiseId}.waste-model.new`, JSON.stringify(model));
-localStorage.setItem(`submerge.pricingModelSnapshot.${franchiseId}.waste-model.current`, JSON.stringify(model));
+localStorage.setItem(`submerge.pricingModelSnapshot.${proposalCacheEnvironment()}.${franchiseId}.waste-model.old`, JSON.stringify({ ...model, revisionId: 'old', revisionNumber: 1, pricing: oldPricing }));
+localStorage.setItem(`submerge.pricingModelSnapshot.${proposalCacheEnvironment()}.${franchiseId}.waste-model.new`, JSON.stringify(model));
+localStorage.setItem(`submerge.pricingModelSnapshot.${proposalCacheEnvironment()}.${franchiseId}.waste-model.current`, JSON.stringify(model));
 (window as any).electron = { listPricingModels: async () => [], loadPricingModel: async () => model };
 (window as any).getWastePricing = getPricingDataSnapshot;
 

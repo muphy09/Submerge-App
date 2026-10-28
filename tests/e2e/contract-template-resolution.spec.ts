@@ -192,7 +192,8 @@ test('builder saves with its pinned model when another model replaces the shared
   await expect(page.getByPlaceholder('Enter customer name')).toBeVisible();
   const expected = await page.evaluate(() => {
     const result = (window as any).contractFixture.expectedRetailDraft(0);
-    return { retail: result.pricing.retailPrice, cogs: result.pricing.totalCOGS };
+    return { retail: result.pricing.retailPrice, cogs: result.pricing.totalCOGS,
+      pap: (window as any).contractFixture.proposal.papDiscounts };
   });
   await page.route('**/rest/v1/franchise_pricing_models*', async route => {
     if (!route.request().url().includes('other-model')) return route.fallback();
@@ -201,7 +202,8 @@ test('builder saves with its pinned model when another model replaces the shared
   await page.route('**/rest/v1/franchise_pricing_model_revisions*', async route => {
     if (!route.request().url().includes('other-r1')) return route.fallback();
     await route.fulfill({ json: { id: 'other-r1', pricing_model_id: 'other-model', franchise_id: west, revision_number: 1,
-      pricing_json: { overheadMultiplier: 1.5, categoryAdjustments: [{ id: 'other-waterproofing', mode: 'static', basis: 'cogs', title: 'Waterproofing', amount: 800, category: 'tile' }] } } });
+      pricing_json: { overheadMultiplier: 1.5, papDiscountRates: { excavation: 0.13, steel: 0.19 },
+        categoryAdjustments: [{ id: 'other-waterproofing', mode: 'static', basis: 'cogs', title: 'Waterproofing', amount: 800, category: 'tile' }] } } });
   });
   await page.evaluate(() => (window as any).contractFixture.activateOtherPricing('other-model', 'other-r1'));
   await page.getByPlaceholder('Enter customer name').fill('Pinned model save regression');
@@ -217,6 +219,7 @@ test('builder saves with its pinned model when another model replaces the shared
   expect(saved.pricingModelRevisionId).toBe(revision);
   expect(saved.pricing.retailPrice).toBe(expected.retail);
   expect(saved.pricing.totalCOGS).toBe(expected.cogs);
+  expect(saved.papDiscounts).toEqual(expected.pap);
   expect(saved.costBreakdown.tileLabor.some((line: any) => line.description === 'Waterproofing')).toBe(false);
 });
 

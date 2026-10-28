@@ -61,6 +61,12 @@ const inheritSharedVersionMetadata = (container: Proposal, version: Proposal): P
 
   return {
     ...version,
+    // Access and concurrency belong to the whole proposal, never a version snapshot.
+    ownerAuthUserId: container.ownerAuthUserId,
+    contentRevision: container.contentRevision,
+    collaborationEnabled: container.collaborationEnabled,
+    sharedPermission: container.sharedPermission,
+    currentOwnerName: container.currentOwnerName,
     proposalNumber: version.proposalNumber || container.proposalNumber,
     franchiseId: resolvedFranchiseId,
     westConstructionTimingVersion: container.westConstructionTimingVersion,

@@ -44,6 +44,8 @@
 .collaboration-work-list small { flex-basis: 100%; color: #9a3412; }
 .collaboration-error { color: #991b1b; background: #fef2f2; border-radius: .5rem; padding: .6rem; }
 .collaboration-modal-overlay { position: fixed; z-index: 3000; inset: 0; background: rgba(15,23,42,.62); display: grid; place-items: center; padding: 1rem; }
+.collaboration-modal-overlay { box-sizing: border-box; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; color: inherit; }
+.collaboration-modal-overlay::backdrop { background: transparent; }
 .collaboration-modal { background: #fff; color: #172033; border-radius: 1rem; width: min(42rem,100%); max-height: min(90vh,900px); overflow: auto; padding: 1.25rem; box-shadow: 0 20px 55px rgba(0,0,0,.28); display: grid; gap: .85rem; }
 .collaboration-modal header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .collaboration-modal header h2, .collaboration-modal h3, .collaboration-modal p { margin: 0; }
@@ -106,6 +108,11 @@
 .collaboration-diff-table td.price-increase { color: #b4232c; background: #fff3f3; }
 .collaboration-diff-table td.price-decrease { color: #177245; background: #edfbf3; }
 .collaboration-review-body > label { display: grid; gap: .4rem; }
+.collaboration-application-choice, .collaboration-conflict { margin: 0; padding: .9rem; border: 1px solid #cbd5e1; border-radius: .6rem; }
+.collaboration-application-choice legend, .collaboration-conflict legend { padding: 0 .3rem; font-weight: 700; }
+.collaboration-application-choice p, .collaboration-conflict p { margin: 0 0 .7rem; }
+.collaboration-modal .collaboration-application-choice label, .collaboration-modal .collaboration-conflict label { display: flex; align-items: center; gap: .6rem; margin: .55rem 0; cursor: pointer; }
+.collaboration-modal input[type="radio"] { width: 1.1rem; height: 1.1rem; flex: 0 0 1.1rem; margin: 0; padding: 0; accent-color: #1765d6; }
 .collaboration-review-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; padding: 1rem 1.45rem; border-top: 1px solid #dfe5ec; background: #fff; }
 .collaboration-review-actions button:not(.primary) { border: 1px solid #cbd5e1; border-radius: .5rem; background: #fff; padding: .55rem .8rem; color: #31465b; font: inherit; font-weight: 700; cursor: pointer; }
 .collaboration-restore { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; padding: .6rem; border: 1px solid #cbd5e1; border-radius: .5rem; }
@@ -117,3 +124,6 @@
   .collaboration-diff-table { min-width: 560px; }
   .collaboration-review-actions button, .collaboration-send-modal footer button { flex: 1 1 100%; }
 }
+
+.collaboration-share-message { padding: 10px 12px; border-left: 3px solid #3b82f6; background: #eff6ff; border-radius: 4px; }
+.collaboration-share-message p { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }

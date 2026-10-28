@@ -81,6 +81,36 @@ test('the proposal owner still saves a draft through the normal insert path', as
   expect(writes).toEqual(['POST']);
 });
 
+test('an account change during an owner save cannot turn its result into another account local pending copy', async ({ page }) => {
+  let reached!: () => void;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { reached = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('https://submerge-playwright.invalid/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/auth/v1/health') return route.fulfill({ json: {} });
+    if (url.pathname === '/rest/v1/franchise_proposals' && route.request().method() === 'POST') {
+      reached(); await gate;
+      const body = route.request().postDataJSON();
+      return route.fulfill({ json: Array.isArray(body) ? body[0] : body });
+    }
+    return route.fulfill({ json: route.request().headers().accept?.includes('object') ? null : [] });
+  });
+  await page.evaluate(() => {
+    (window as any).savePending = (window as any).proposalSyncFixture.ownerSavesDraftWithLocalFallback()
+      .then(() => ({ error: '' }), (error: Error) => ({ error: error.message }));
+  });
+  await pending;
+  await page.evaluate(() => localStorage.setItem('submerge-user-session',JSON.stringify({
+    userId: 'different-user', role: 'designer', franchiseId: 'playwright-franchise' })));
+  release();
+  const result = await page.evaluate(async () => ({ result: await (window as any).savePending,
+    disk: await (window as any).electron.getAllProposals() }));
+  expect(result.result.error).toContain('signed-in account');
+  expect(result.disk).toHaveLength(1);
+  expect(result.disk[0].syncStatus).toBe('synced');
+});
+
 test('a designer can save an owned draft', async ({ page }) => {
   const row = await page.evaluate(() => (window as any).proposalSyncFixture.cloudRow('draft'));
   const { writes, writeBodies } = await mockCloud(page, { row });

@@ -2,6 +2,7 @@ import { getSupabaseClient, hasSupabaseConnection, isSupabaseEnabled } from './s
 import { isEnvFlagTrue } from './env';
 import { logLedgerEventSafe } from './ledger';
 import { assertLiveFranchiseMutationAllowed, readSession } from './session';
+import { assertProposalContext, captureProposalContext, proposalCacheEnvironment } from './proposalContext';
 
 export type PricingModelSummary = {
   id: string;
@@ -54,7 +55,7 @@ function withFallback<T>(supabaseFn: () => Promise<T>, fallbackFn: () => Promise
 }
 
 function getPricingModelListCacheKey(franchiseId: string) {
-  return `${PRICING_MODEL_LIST_CACHE_PREFIX}.${franchiseId || DEFAULT_FRANCHISE_ID}`;
+  return `${PRICING_MODEL_LIST_CACHE_PREFIX}.${proposalCacheEnvironment()}.${franchiseId || DEFAULT_FRANCHISE_ID}`;
 }
 
 function getPricingModelSnapshotCacheKey(
@@ -62,7 +63,7 @@ function getPricingModelSnapshotCacheKey(
   pricingModelId?: string | null,
   revisionId?: string | null
 ) {
-  return `${PRICING_MODEL_SNAPSHOT_CACHE_PREFIX}.${franchiseId || DEFAULT_FRANCHISE_ID}.${pricingModelId || 'default'}.${revisionId || 'current'}`;
+  return `${PRICING_MODEL_SNAPSHOT_CACHE_PREFIX}.${proposalCacheEnvironment()}.${franchiseId || DEFAULT_FRANCHISE_ID}.${pricingModelId || 'default'}.${revisionId || 'current'}`;
 }
 
 function readCachedJson<T>(key: string): T | null {
@@ -113,9 +114,13 @@ function readPricingModelSnapshotCache(
   pricingModelId?: string | null,
   revisionId?: string | null
 ): LoadedPricingModel | null {
-  return readCachedJson<LoadedPricingModel>(
+  const cached = readCachedJson<LoadedPricingModel>(
     getPricingModelSnapshotCacheKey(franchiseId, pricingModelId, revisionId)
   );
+  if (!cached || cached.franchiseId !== (franchiseId || DEFAULT_FRANCHISE_ID)
+    || (pricingModelId && cached.pricingModelId !== pricingModelId)
+    || (revisionId && cached.revisionId !== revisionId)) return null;
+  return cached;
 }
 
 function isRevisionFoundationUnavailable(error: any) {
@@ -163,7 +168,8 @@ async function loadRemotePricingRevision(options: {
 }
 
 export async function listPricingModels(franchiseId: string): Promise<PricingModelSummary[]> {
-  return withFallback<PricingModelSummary[]>(async () => {
+  const context = captureProposalContext();
+  const result = await withFallback<PricingModelSummary[]>(async () => {
     try {
       if (!(await hasSupabaseConnection())) {
         const cached = readPricingModelListCache(franchiseId);
@@ -214,6 +220,7 @@ export async function listPricingModels(franchiseId: string): Promise<PricingMod
           }
         }
       }
+      assertProposalContext(context);
       persistPricingModelListCache(franchiseId, rows);
       return rows;
     } catch (error) {
@@ -225,6 +232,8 @@ export async function listPricingModels(franchiseId: string): Promise<PricingMod
     const rows = await window.electron.listPricingModels(franchiseId);
     return rows;
   });
+  assertProposalContext(context);
+  return result;
 }
 
 export async function loadPricingModel(
@@ -232,7 +241,8 @@ export async function loadPricingModel(
   pricingModelId?: string | null,
   revisionId?: string | null
 ): Promise<LoadedPricingModel | null> {
-  return withFallback<LoadedPricingModel | null>(async () => {
+  const context = captureProposalContext();
+  const result = await withFallback<LoadedPricingModel | null>(async () => {
     try {
       if (!(await hasSupabaseConnection())) {
         const cached = readPricingModelSnapshotCache(franchiseId, pricingModelId, revisionId);
@@ -291,6 +301,7 @@ export async function loadPricingModel(
         updatedAt: revision?.published_at || data.updated_at,
         updatedBy: revision?.published_by ?? data.updated_by,
       };
+      assertProposalContext(context);
       persistPricingModelSnapshotCache(loaded);
       return loaded;
     } catch (error) {
@@ -313,6 +324,13 @@ export async function loadPricingModel(
       pricingModelId: pricingModelId || undefined,
     });
   });
+  assertProposalContext(context);
+  if (result && (result.franchiseId !== (franchiseId || DEFAULT_FRANCHISE_ID)
+    || (pricingModelId && result.pricingModelId !== pricingModelId)
+    || (revisionId && result.revisionId !== revisionId))) {
+    throw new Error('The pricing model identity does not match the requested snapshot.');
+  }
+  return result;
 }
 
 export async function loadInitialPricingModelRevisionId(
