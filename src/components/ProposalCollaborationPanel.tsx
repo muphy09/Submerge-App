@@ -34,6 +34,7 @@ import type { PricingData } from '../services/pricingTiers';
 import './ProposalCollaborationPanel.css';
 
 export const collaborationPanelApi = {
+  loadPricingSnapshotForExistingProposal,
   prepareChangeRequest, applyChangeRequest, listCollaborationEvents, markCollaborationEventRead,
   decideChangeRequest, endProposalShare, listChangeRequests, listProposalPeople,
   listProposalShares, listRecipientOptions, restoreAppliedChange, shareProposal,
@@ -112,6 +113,7 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
   const [reviewPrices, setReviewPrices] = useState<Record<string, number | null>>({});
   const [prepared, setPrepared] = useState<PreparedContribution | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [readyReviewKey, setReadyReviewKey] = useState<string | null>(null);
   const [resolutions, setResolutions] = useState<ContributionResolutions>({});
   const [destination, setDestination] = useState<ContributionDestination | null>(null);
 
@@ -185,70 +187,69 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
   const mySubmittedRequest = requests.find((request) => request.contributor_id === userId && request.status === 'submitted');
   const submitted = requests.filter((request) => request.status === 'submitted');
   const reviewRequest = requests.find((request) => request.id === reviewId) || null;
-  const review = useMemo(() => reviewRequest && prepared ? { ...reviewRequest,
-    base_version_json: prepared.before, working_version_json: prepared.after } : reviewRequest, [reviewRequest, prepared]);
+  const reviewKey = JSON.stringify([reviewId, reviewRequest?.updated_at, proposal.contentRevision, resolutions]);
+  const comparisonReady = Boolean(prepared && readyReviewKey === reviewKey);
+  const review = useMemo(() => reviewRequest && prepared && comparisonReady ? { ...reviewRequest,
+    base_version_json: prepared.before, working_version_json: prepared.after } : reviewRequest, [reviewRequest, prepared, comparisonReady]);
   useEffect(() => { setResolutions({}); setDestination(null); setReviewPricing(undefined); }, [reviewId]);
   useEffect(() => {
     if (!reviewRequest) { setPrepared(null); return; }
     let cancelled = false;
     const context = captureProposalContext();
-    setPreparing(true); setPrepared(null); setError(null);
+    setPreparing(true); setPrepared(null); setReadyReviewKey(null); setError(null);
     // Destination is separate from conflict resolution. Both destinations retain
     // the proposed comparison, including reviewed dependency normalization.
     const reviewResolutions = { ...resolutions, catalog: 'contributor' as const,
       'baseline-pricing': 'contributor' as const };
-    void prepareChangeRequest(reviewRequest.id, reviewResolutions).then(result => {
-      if (!cancelled && context === captureProposalContext()) setPrepared(result);
-    }).catch(caught => { if (!cancelled) setError((caught as Error).message || 'Could not prepare the current pricing comparison.'); })
-      .finally(() => { if (!cancelled) setPreparing(false); });
-    return () => { cancelled = true; };
-  }, [reviewId, reviewRequest?.updated_at, proposal.contentRevision, resolutions]);
-  const rows = useMemo(() => review ? reviewRows(review, reviewPricing) : [], [review, reviewPricing]);
-  useEffect(() => {
-    if (!review) return;
-    let cancelled = false;
-    setReviewPrices({});
-    setPriceExplanation(null);
-    const calculate = async () => {
+    const prepare = async () => {
+      const result = await prepareChangeRequest(reviewRequest.id, reviewResolutions);
+      if (cancelled || context !== captureProposalContext()) return;
+      const finalReview = { ...reviewRequest, base_version_json: result.before, working_version_json: result.after };
+      let pricing: PricingData | undefined;
+      let changes: Record<string, number | null> = {};
+      let explanation: string | null = null;
       try {
-        const base = review.base_version_json;
-        const snapshot = await loadPricingSnapshotForExistingProposal(base.franchiseId,
+        const base = result.before;
+        const snapshot = await api.loadPricingSnapshotForExistingProposal(base.franchiseId,
           base.pricingModelId, base.pricingModelFranchiseId, base.pricingTierId, base.pricingModelRevisionId);
-        if (!cancelled) setReviewPricing(snapshot.pricing);
-
-        const changes: Record<string, number | null> = {};
+        if (cancelled || context !== captureProposalContext()) return;
+        pricing = snapshot.pricing;
+        const finalRows = reviewRows(finalReview, pricing);
         let previous = base;
-        for (const row of rows) {
+        for (const row of finalRows) {
           // Attribute interactions once, to the later displayed change. Comparing
           // every row to the original separately can double-count dependent costs.
-          const current = proposalWithReviewRow(previous, review.working_version_json, row);
-          const result = calculatePriceImpact({
+          const current = proposalWithReviewRow(previous, result.after, row);
+          const impact = calculatePriceImpact({
             currentProposal: current,
             comparisonProposal: previous, controlLabel: row.label, comparisonLabel: row.before,
             directSections: new Set<string>(), pricingSnapshot: snapshot.pricing,
           });
-          changes[row.key] = result.status === 'available' ? result.customerPriceChange : null;
+          changes[row.key] = impact.status === 'available' ? impact.customerPriceChange : null;
           previous = current;
         }
         const sum = Object.values(changes).reduce<number>((total, value) => total + (value || 0), 0);
-        const expected = Number(review.working_version_json.totalCost) - Number(base.totalCost);
+        const expected = Number(result.after.totalCost) - Number(base.totalCost);
         if (Object.values(changes).some(value => value === null) || !Number.isFinite(expected) || Math.abs(sum - expected) > 0.02) {
-          if (!cancelled) {
-            setReviewPrices(Object.fromEntries(rows.map(row => [row.key, null])));
-            setPriceExplanation('Item price changes could not be reconciled with the total difference. Review the saved totals above.');
-          }
-        } else if (!cancelled) setReviewPrices(changes);
+          changes = Object.fromEntries(finalRows.map(row => [row.key, null]));
+          explanation = 'Item price changes could not be reconciled with the total difference. Review the saved totals above.';
+        }
       } catch (caught) {
         console.warn('Could not calculate item price changes for collaboration review.', caught);
-        if (!cancelled) {
-          setReviewPrices(Object.fromEntries(rows.map((row) => [row.key, null])));
-          setPriceExplanation('Item price changes could not be reconciled with the total difference. Review the saved totals above.');
-        }
+        changes = {};
+        explanation = 'Item price changes could not be reconciled with the total difference. Review the saved totals above.';
       }
+      if (cancelled || context !== captureProposalContext()) return;
+      // Commit the prepared documents, catalog labels, and prices in one render.
+      setPrepared(result); setReviewPricing(pricing); setReviewPrices(changes);
+      setPriceExplanation(explanation); setReadyReviewKey(reviewKey);
     };
-    void calculate();
+    void prepare().catch(caught => {
+      if (!cancelled && context === captureProposalContext()) setError((caught as Error).message || 'Could not prepare the current pricing comparison.');
+    }).finally(() => { if (!cancelled && context === captureProposalContext()) setPreparing(false); });
     return () => { cancelled = true; };
-  }, [reviewId, review?.updated_at, prepared]);
+  }, [reviewKey]);
+  const rows = useMemo(() => review && comparisonReady ? reviewRows(review, reviewPricing) : [], [review, reviewPricing, comparisonReady]);
   const sendRequest = requests.find((request) => request.contributor_id === userId
     && request.target_version_id === sendVersionId && ['working', 'revision_requested', 'stale', 'withdrawn'].includes(request.status));
   const names = new Map(people.map((person) => [person.user_id, person.display_name || person.email]));
@@ -370,8 +371,13 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
               ? people.filter((person) => person.user_id !== proposal.ownerAuthUserId)
                 .map((person) => <span className="collaboration-contributor-row" key={person.user_id}>
                   <strong>{person.display_name || 'Franchise user'}</strong>
-                  {!isOwner && person.user_id === userId && <button className="action-button collaboration-leave" onClick={() => { setError(null); setLeaveOpen(true); }}
-                    disabled={busy || offline}>Leave Proposal</button>}
+                  {!isOwner && person.user_id === userId && <span className="collaboration-contributor-actions">
+                    {mySubmittedRequest && <button className="action-button collaboration-withdraw"
+                      onClick={() => void act(() => decideChangeRequest(mySubmittedRequest.id, 'withdraw'))}
+                      disabled={busy || offline}>Withdraw Changes</button>}
+                    <button className="action-button collaboration-leave" onClick={() => { setError(null); setLeaveOpen(true); }}
+                      disabled={busy || offline}>Leave Proposal</button>
+                  </span>}
                 </span>)
               : <strong>{offline ? 'Reconnect to see current access' : 'None yet'}</strong>}</span></div>
         </div>
@@ -385,9 +391,6 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
             </button>
           </div>)}
         </div>}
-        {!isOwner && mySubmittedRequest && <div className="collaboration-recipient-actions">
-          <button className="action-button collaboration-withdraw"
-          onClick={() => void act(() => decideChangeRequest(mySubmittedRequest.id, 'withdraw'))} disabled={busy || offline}>Withdraw Changes</button></div>}
         <details className="collaboration-history"><summary><ProposalSummaryIcon name="history" size={22} /><span>Collaboration History</span><ProposalSummaryIcon name="chevron" size={20} className="collaboration-history-chevron" /></summary>
           <ul>
             {endedShares.length === 0 && history.length === 0 && <li>No collaboration history yet.</li>}
@@ -402,7 +405,7 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
     {manageOpen && isOwner && <CollaborationModalOverlay onClose={() => setManageOpen(false)}>
       <div className="collaboration-modal" role="dialog" aria-modal="true" aria-label="Share and manage access" onClick={(event) => event.stopPropagation()}>
         <header><h2>Share / Manage Access</h2><button aria-label="Close" onClick={() => setManageOpen(false)}>×</button></header>
-        <p>Only active users in this franchise can be added. They receive access immediately. Removing access cannot erase a copy on a disconnected device until it reconnects.</p>
+        <p>Select members in your franchise to add to this proposal. They receive access immediately. You can remove their access at any time</p>
         {sharingBlockedReason && <p role="status">{sharingBlockedReason}</p>}
         {error && <p role="alert" className="collaboration-error">{error}</p>}
         <div className="collaboration-recipient-picker"><label htmlFor={recipientInputId}>Share with</label>
@@ -516,9 +519,12 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
         <header><div><p className="collaboration-modal-kicker">Owner review</p><h2>Review proposed changes</h2>
           <p>From {names.get(review.contributor_id) || 'Contributor'} · {targetVersionLabel(review.target_version_id)}</p></div>
           <button aria-label="Close" onClick={() => setReviewId(null)}>×</button></header>
-        <div className="collaboration-review-body">
+        <div className="collaboration-review-body" aria-busy={!comparisonReady && !error}>
+          {!comparisonReady ? error
+            ? <p role="alert" className="collaboration-error">{error}</p>
+            : <p role="status">Preparing a comparison using the owner’s current pricing…</p>
+            : <>
           {review.contributor_note && <p className="collaboration-review-note"><strong>Contributor note</strong><span>{review.contributor_note}</span></p>}
-          {preparing && <p role="status">Preparing a comparison using the owner’s current pricing…</p>}
           {review.base_revision !== proposal.contentRevision && <p role="status">The owner draft changed. Proposed edits are being compared with the current draft; unrelated owner changes are retained.</p>}
           <fieldset className="collaboration-application-choice">
             <legend>Review changes</legend>
@@ -540,9 +546,9 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
           {prepared?.conflicts.some(conflict => conflict.path === 'baseline-pricing') &&
             <p role="status">The current calculation differs from the owner’s saved price. Review the full price difference below before applying changes.</p>}
           <div className="collaboration-totals" aria-label="Financial totals">
-            <div className="collaboration-total"><strong>Subtotal</strong><span>{formatMoney(review.base_version_json.subtotal)} <b aria-label="changes to">→</b> {formatMoney(review.working_version_json.subtotal)}</span></div>
+            <div className="collaboration-total"><strong>COGS</strong><span>{formatMoney(review.base_version_json.pricing?.totalCOGS)} <b aria-label="changes to">→</b> {formatMoney(review.working_version_json.pricing?.totalCOGS)}</span></div>
             <div className="collaboration-total"><strong>Gross Profit %</strong><span>{typeof review.base_version_json.pricing?.grossProfitMargin === 'number' ? `${review.base_version_json.pricing.grossProfitMargin.toFixed(1)}%` : '—'} <b aria-label="changes to">→</b> {typeof review.working_version_json.pricing?.grossProfitMargin === 'number' ? `${review.working_version_json.pricing.grossProfitMargin.toFixed(1)}%` : '—'}</span></div>
-            <div className="collaboration-total"><strong>Total</strong><span>{formatMoney(review.base_version_json.totalCost)} <b aria-label="changes to">→</b> {formatMoney(review.working_version_json.totalCost)}</span></div>
+            <div className="collaboration-total"><strong>Retail Total</strong><span>{formatMoney(review.base_version_json.totalCost)} <b aria-label="changes to">→</b> {formatMoney(review.working_version_json.totalCost)}</span></div>
           </div>
           {prepared?.warnings?.map(warning => <p key={warning.path + warning.message} role="status"><span aria-label="Warning">⚠</span> {warning.message}</p>)}
           {priceExplanation && <p role="status">{priceExplanation}</p>}
@@ -554,16 +560,18 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
                   <tr className="collaboration-diff-group"><th colSpan={4} scope="rowgroup">{row.category}</th></tr>}
                 <tr><th scope="row">{row.label}{prepared?.warnings?.some(warning => row.paths.includes(warning.path)) && <span title="Saved selection unavailable in this pricing revision" aria-label="Unavailable saved selection"> ⚠</span>}</th><td>{row.before}</td><td>{row.after}</td>
                   <td className={typeof reviewPrices[row.key] === 'number' ? reviewPrices[row.key]! > 0 ? 'price-increase' : reviewPrices[row.key]! < 0 ? 'price-decrease' : '' : ''}>
-                    {typeof reviewPrices[row.key] === 'number' ? `${reviewPrices[row.key]! > 0 ? '+' : ''}${formatMoney(reviewPrices[row.key])}` : '—'}
+                    {typeof reviewPrices[row.key] === 'number' ? `${reviewPrices[row.key]! > 0 ? '+' : ''}${formatMoney(reviewPrices[row.key])}`
+                      : <span title="Multiple items impact this price">—</span>}
                   </td></tr>
               </Fragment>)}</tbody>
             </table></div> : <p>No changed fields found.</p>}
           </div>
           {error && <p role="alert" className="collaboration-error">{error}</p>}
           <label>Note for contributor<textarea value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} /></label>
+          </>}
         </div>
         <footer className="collaboration-review-actions">
-          <button disabled={busy || offline || preparing || !destination || !prepared || prepared.conflicts.some(conflict => !prepared.resolutions[conflict.path]
+          <button disabled={busy || offline || preparing || !comparisonReady || !destination || !prepared || prepared.conflicts.some(conflict => !prepared.resolutions[conflict.path]
             || (conflict.allowed && !conflict.allowed.includes(prepared.resolutions[conflict.path])))} className="action-button primary"
             onClick={() => prepared && destination && void act(() => applyChangeRequest(review.id, prepared, destination), true)}>Apply Changes</button>
           <button disabled={busy || !decisionNote.trim()} onClick={() => void act(() => decideChangeRequest(review.id, 'revisions', decisionNote), true)}>Request revisions</button>

@@ -1,3 +1,6 @@
+import ProposalVersionsHeader from '../components/ProposalVersionsHeader';
+import VersionComparisonModal from '../components/VersionComparisonModal';
+import { selectComparisonVersions, versionKey } from '../utils/versionComparison';
 import {
   useState,
   useEffect,
@@ -886,7 +889,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
   const [collaborationManageSignal, setCollaborationManageSignal] = useState(0);
   const [collaborationSendSignal, setCollaborationSendSignal] = useState(0);
   const [collaborationRequests, setCollaborationRequests] = useState<CollaborationRequest[]>([]);
-  const [versions, setVersions] = useState<Proposal[]>([]);
+  const [versions, setVersionState] = useState<Proposal[]>([]);
+  const [comparisonVersions, setComparisonVersions] = useState<Proposal[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const setVersions = (next: Proposal[]) => {
+    setVersionState(next);
+    setComparisonVersions(next);
+  };
   const [activeVersionId, setActiveVersionId] = useState<string>('original');
   const [selectedVersionId, setSelectedVersionId] = useState<string>('original');
   const [loading, setLoading] = useState(true);
@@ -1365,6 +1374,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       if (requestId !== loadRequestRef.current) return;
 
       setVersions(allVersions);
+      setComparisonVersions([sourceProposal, ...(sourceProposal.versions || [])].map(v => ({ ...v, versions: [] })));
       setActiveVersionId(activeId);
       setSelectedVersionId(initialSelectedVersionId);
       setVersionSyncMeta(initialVersionSyncMeta);
@@ -3968,6 +3978,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
 
   const navigationVersions = [...versionsForRender].sort(sortVersionsByCreatedDateDesc);
   const viewModels = navigationVersions.map((v) => buildViewModel(v));
+  const comparableVersionIds = new Set(versionsForRender.filter(v => !isArchivedVersion(v)).map(versionKey));
+  const comparableVersions = selectComparisonVersions(comparisonVersions, comparableVersionIds);
   const activeNavigationViewModels = viewModels.filter((vm) => !isArchivedVersion(vm.proposal));
   const archivedNavigationViewModels = viewModels.filter((vm) => isArchivedVersion(vm.proposal));
   const versionMap = new Map<string, ReturnType<typeof buildViewModel>>();
@@ -4705,6 +4717,13 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           </div>
           <div className="tile-content-box">
             <div className="tile-metrics">
+              {showCogsBreakdown && <>
+                <div className="metric-row">
+                  <OverflowTooltipText as="p" className="metric-label">COGS Price:</OverflowTooltipText>
+                  <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.totalCOGS)}</OverflowTooltipText>
+                </div>
+                <div className="metric-divider"></div>
+              </>}
               <div className="metric-row">
                 <OverflowTooltipText as="p" className="metric-label">Retail Price:</OverflowTooltipText>
                 <OverflowTooltipText as="p" className="metric-value">{formatCurrency(vm.pricing?.retailPrice ?? vm.retailPriceBeforeDiscounts)}</OverflowTooltipText>
@@ -5370,14 +5389,10 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       <div className="proposal-view-shell">
         <aside className="proposal-column proposal-column--nav no-print">
           <div className="proposal-side-card proposal-nav-card">
-            <div className={`proposal-side-card-header proposal-nav-card-header${isReadOnlyReviewerView || proposal?.sharedPermission ? ' is-without-build' : ''}`}>
-              <div className="summary-card-title">
-                <span className="summary-card-icon"><ProposalSummaryIcon name="versions" size={28} /></span>
-                <span className="proposal-nav-heading-copy"><h2>Versions &amp; Addendums</h2>
-                  <span className="version-count-pill">{viewModels.length} Available</span></span>
-              </div>
-              {!isReadOnlyReviewerView && !proposal?.sharedPermission && (
-                <TooltipAnchor tooltip={buildVersionDisabledReason} className="proposal-nav-build-action">
+            <ProposalVersionsHeader count={viewModels.length} canCompare={comparableVersions.length >= 2}
+              onCompare={() => setCompareOpen(true)}
+              buildAction={!isReadOnlyReviewerView && !proposal?.sharedPermission ? (
+                <TooltipAnchor tooltip={buildVersionDisabledReason || 'Create a new version inside this proposal tree'} className="proposal-nav-build-action">
                   <button
                     type="button"
                     className="action-button action-button-version proposal-nav-build-button"
@@ -5387,8 +5402,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                     {versionActionLabel}
                   </button>
                 </TooltipAnchor>
-              )}
-            </div>
+              ) : undefined} />
             <div className="proposal-side-card-body proposal-nav-list">
               {activeNavigationViewModels.map((vm) => {
                 const versionId = vm.proposal.versionId || 'original';
@@ -6228,6 +6242,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
           setContractRevisionError(null);
         }}
       />
+      {compareOpen && <VersionComparisonModal versions={comparableVersions} initialBaselineId={resolvedSelectedVersionId}
+        showCogs={showCogsBreakdown} onShowCogsChange={setShowCogsBreakdown} onClose={() => setCompareOpen(false)} />}
       <AddendumPricingChoiceModal
         isOpen={Boolean(addendumPricingComparison)}
         comparison={addendumPricingComparison}

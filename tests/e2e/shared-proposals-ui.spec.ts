@@ -66,7 +66,12 @@ test('collaboration access sits under the title and leave stays beside the curre
         expect(buttonBounds.x).toBeGreaterThanOrEqual(nameBounds.x + nameBounds.width);
         expect(buttonBounds.y).toBeLessThan(nameBounds.y + nameBounds.height);
         expect(buttonBounds.y + buttonBounds.height).toBeGreaterThan(nameBounds.y);
-        expect(buttonBounds.width).toBeLessThan(120);
+        expect(buttonBounds.width).toBeLessThan(140);
+        const withdrawBounds = (await card.getByRole('button', { name: 'Withdraw Changes', exact: true }).boundingBox())!;
+        expect(withdrawBounds.x).toBe(buttonBounds.x);
+        expect(withdrawBounds.width).toBe(buttonBounds.width);
+        expect(withdrawBounds.height).toBe(buttonBounds.height);
+        expect(withdrawBounds.y + withdrawBounds.height).toBeLessThan(buttonBounds.y);
         expect(nameBounds.height).toBeLessThan(50);
         expect(await card.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
       }
@@ -202,6 +207,80 @@ test('owner can share with several named recipients and review all changed field
   await expect(page.locator('.collaboration-restore')).toHaveCount(0);
 });
 
+test('review waits for preparation and pricing before revealing a complete comparison', async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=owner&diff=equipment&slowReview=1`);
+  await page.getByRole('button', { name: 'Review Changes', exact: true }).click();
+  const review = page.getByRole('dialog', { name: 'Review proposed changes' });
+  const loading = review.getByRole('status');
+  await expect(loading).toHaveText('Preparing a comparison using the owner’s current pricing…');
+  await expect(review.locator('.collaboration-totals')).toHaveCount(0);
+  await expect(review.getByRole('table')).toHaveCount(0);
+  await expect(review.getByRole('button', { name: 'Apply Changes' })).toBeDisabled();
+  await review.screenshot({ path: testInfo.outputPath('comparison-loading.png') });
+  await page.waitForFunction(() => typeof (window as any).finishReviewPreparation === 'function');
+  await page.evaluate(() => (window as any).finishReviewPreparation());
+  await page.waitForFunction(() => typeof (window as any).finishReviewPricing === 'function');
+  await expect(loading).toBeVisible();
+  await expect(review.locator('.collaboration-totals')).toHaveCount(0);
+  await expect(review.getByRole('table')).toHaveCount(0);
+  await page.evaluate(() => (window as any).finishReviewPricing());
+  await expect(review.locator('.collaboration-review-body')).toHaveAttribute('aria-busy', 'false');
+  await expect(review.getByRole('table')).toBeVisible();
+  await expect(review.locator('.collaboration-totals')).toContainText('$106,050.00');
+  const content = await review.locator('.collaboration-review-body').textContent();
+  const bounds = await review.boundingBox();
+  await page.getByRole('radio', { name: 'Create a new draft with these changes' }).check();
+  await page.getByRole('radio', { name: 'Overwrite current version with these changes' }).check();
+  await expect(review.locator('.collaboration-review-body')).toHaveAttribute('aria-busy', 'false');
+  expect(await review.locator('.collaboration-review-body').textContent()).toBe(content);
+  expect(await review.boundingBox()).toEqual(bounds);
+  await review.screenshot({ path: testInfo.outputPath('comparison-ready.png') });
+});
+
+test('closing a loading comparison ignores its late result when another review opens', async ({ page }) => {
+  await page.goto(`${fixture}?mode=owner&slowReview=1`);
+  await page.getByRole('button', { name: 'Review Changes', exact: true }).click();
+  const review = page.getByRole('dialog', { name: 'Review proposed changes' });
+  await page.waitForFunction(() => typeof (window as any).finishReviewPreparation === 'function');
+  await page.evaluate(() => { (window as any).previousPreparation = (window as any).finishReviewPreparation; });
+  await review.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Review Changes', exact: true }).click();
+  await page.waitForFunction(() => (window as any).finishReviewPreparation !== (window as any).previousPreparation);
+  await page.evaluate(() => (window as any).previousPreparation());
+  await expect(review.getByRole('status')).toBeVisible();
+  await expect(review.getByRole('table')).toHaveCount(0);
+  await page.evaluate(() => (window as any).finishReviewPreparation());
+  await page.waitForFunction(() => typeof (window as any).finishReviewPricing === 'function');
+  await page.evaluate(() => (window as any).finishReviewPricing());
+  await expect(review.getByRole('table')).toBeVisible();
+});
+
+test('failed comparison preparation shows an error without exposing an unprepared review', async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=owner&reviewFailure=1`);
+  await page.getByRole('button', { name: 'Review Changes', exact: true }).click();
+  const review = page.getByRole('dialog', { name: 'Review proposed changes' });
+  await expect(review.getByRole('alert')).toHaveText('The comparison could not be prepared. Reopen it to try again.');
+  await expect(review.getByRole('table')).toHaveCount(0);
+  await expect(review.locator('.collaboration-totals')).toHaveCount(0);
+  await expect(review.getByRole('button', { name: 'Apply Changes' })).toBeDisabled();
+  await review.screenshot({ path: testInfo.outputPath('comparison-load-error.png') });
+  await review.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(review).toHaveCount(0);
+});
+
+test('review shows COGS including overhead and labels the retail total', async ({ page }, testInfo) => {
+  await page.goto(`${fixture}?mode=owner&diff=equipment`);
+  await page.getByRole('button', { name: 'Review Changes', exact: true }).click();
+  const totals = page.getByRole('dialog', { name: 'Review proposed changes' }).locator('.collaboration-totals');
+  const cogs = totals.locator('.collaboration-total').filter({ has: page.getByText('COGS', { exact: true }) });
+  await expect(cogs).toHaveText('COGS$101,000.00 → $106,050.00');
+  const retail = totals.locator('.collaboration-total').filter({ has: page.getByText('Retail Total', { exact: true }) });
+  await expect(retail).toHaveText('Retail Total$108,000.00 → $113,000.00');
+  await expect(totals.getByText('Subtotal', { exact: true })).toHaveCount(0);
+  await expect(totals.getByText('Gross Profit %', { exact: true })).toBeVisible();
+  await totals.screenshot({ path: testInfo.outputPath('review-cogs-retail-totals.png') });
+});
+
 test('review condenses automation pricing fields into one named item', async ({ page }) => {
   await page.goto(`${fixture}?mode=owner&diff=equipment`);
   await page.getByRole('button', { name: 'Review Changes' }).click();
@@ -213,6 +292,10 @@ test('review condenses automation pricing fields into one named item', async ({ 
   await expect(automation).toContainText('AQRS Omni - 25k with Salt and Heat');
   await expect(review.getByText('Item price changes could not be reconciled with the total difference. Review the saved totals above.')).toBeVisible();
   await expect(automation.getByRole('cell').last()).toHaveText('—');
+  const dash = automation.getByRole('cell').last().getByTitle('Multiple items impact this price', { exact: true });
+  await expect(dash).toHaveText('—');
+  await dash.hover();
+  await expect(dash).toHaveAttribute('title', 'Multiple items impact this price');
   await expect(review.getByRole('columnheader', { name: 'Price Change' })).toBeVisible();
   await page.goto(`${fixture}?mode=owner&diff=salt`);
   await page.getByRole('button', { name: 'Review Changes' }).click();

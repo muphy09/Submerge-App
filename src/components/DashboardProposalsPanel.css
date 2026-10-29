@@ -807,4 +807,12 @@
 }
 .dashboard-collaboration-tabs .dashboard-attention-dot { position: absolute; right: 3px; top: 3px; }
 @keyframes dashboard-attention-pulse { 50% { opacity: .3; box-shadow: 0 0 0 3px #dc262633; } }
-@media (prefers-reduced-motion: reduce) { .dashboard-attention-dot { animation: none; } }
+.dashboard-proposals-body:not([hidden]),
+.dashboard-shared-table-shell:not([hidden]) {
+  animation: submerge-panel-enter 0.3s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-attention-dot,
+  .dashboard-proposals-body:not([hidden]),
+  .dashboard-shared-table-shell:not([hidden]) { animation: none; }
+}

@@ -149,7 +149,9 @@ const useFloatingTooltip = <T extends HTMLElement>(tooltip?: string | null) => {
               style={{ left: `${position.arrowLeft}px` }}
             />
           </div>,
-          document.body
+          // Native modal dialogs live above the document in the browser's top
+          // layer. Keep their tooltips inside that layer as well.
+          anchorRef.current?.closest('dialog[open]') || document.body
         )
       : null;
 

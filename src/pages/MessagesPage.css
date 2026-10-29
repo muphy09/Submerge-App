@@ -1,10 +1,15 @@
 .messages-page {
+  animation: submerge-panel-enter 0.3s ease-out;
   min-height: 100%;
   padding: 30px clamp(18px, 3.4vw, 48px) 52px;
   color: #172f4b;
   background:
     radial-gradient(circle at 95% 4%, rgba(70, 187, 203, 0.12), transparent 25%),
     #f1f5f8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .messages-page { animation: none; }
 }
 
 .messages-shell { width: min(1280px, 100%); margin: 0 auto; }

@@ -76,12 +76,16 @@ test('Electron does not repeat a failed restart and only retries when requested'
         this.emit('update-available', updateInfo);
         return { isUpdateAvailable: true, updateInfo };
       },
-      async downloadUpdate() { this.downloads++; this.emit('update-downloaded', { version: '${target}' }); },
+      async downloadUpdate() { this.downloads++; },
       quitAndInstall() { this.installs++; },
     });
     global.__updateTestFake = fake;
     const original = Module._load;
     Module._load = function(name, ...args) {
+      if (name === './update-recovery') {
+        const recovery = original.call(this, name, ...args);
+        return { ...recovery, handOffUpdateInstall: async () => { fake.installs++; } };
+      }
       return name === 'electron-updater' ? { autoUpdater: fake } : original.call(this, name, ...args);
     };
   `);
@@ -92,9 +96,22 @@ test('Electron does not repeat a failed restart and only retries when requested'
     expect(await app.evaluate(() => (globalThis as any).__updateTestFake.autoInstallOnAppQuit)).toBe(false);
     const result = await page.evaluate(() => window.electron.checkForUpdates({ channel: 'franchise-5555' }));
     expect(result.available).toBe(true);
-    await expect(page.getByText('Update downloaded. Install when you are ready; you can keep working.')).toBeVisible();
-    await page.getByRole('button', { name: 'Install Update' }).click();
-    expect(await app.evaluate(() => (globalThis as any).__updateTestFake.installs)).toBe(1);
+    const notice = page.getByRole('complementary', { name: 'App update' });
+    await expect(notice.getByRole('heading', { name: 'Update available', exact: true })).toBeVisible();
+    await notice.screenshot({ path: testInfo.outputPath('01-update-available.png') });
+    await app.evaluate(() => (globalThis as any).__updateTestFake.emit('download-progress', { percent: 62 }));
+    await expect(notice.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '62');
+    await notice.screenshot({ path: testInfo.outputPath('02-update-downloading.png') });
+    await app.evaluate((_, version) => (globalThis as any).__updateTestFake.emit('update-downloaded', { version }), target);
+    await expect(notice.getByRole('heading', { name: 'Ready to restart' })).toBeVisible();
+    await expect(notice.getByRole('progressbar')).toHaveCount(0);
+    await notice.screenshot({ path: testInfo.outputPath('03-update-ready.png') });
+    // A late download event must not return the ready card to downloading.
+    await app.evaluate(() => (globalThis as any).__updateTestFake.emit('download-progress', { percent: 100 }));
+    await expect(notice.getByRole('heading', { name: 'Ready to restart' })).toBeVisible();
+    await notice.getByRole('button', { name: 'Restart & update' }).click();
+    await expect(notice.getByRole('heading', { name: 'Starting update' })).toBeVisible();
+    await expect.poll(() => app!.evaluate(() => (globalThis as any).__updateTestFake.installs)).toBe(1);
     await app.close();
     app = await launch(appData, bootstrap);
     page = await app.firstWindow();

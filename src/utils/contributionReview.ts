@@ -171,10 +171,11 @@ const selectionGroups: SelectionGroup[] = [
   fieldGroup('equipment.poolLights', 'Pool Lights', ['equipment.poolLights', 'equipment.includePoolLights',
     'equipment.applyCustomPackageDefaultPoolLights', 'equipment.numberOfLights'], p =>
     p.equipment?.includePoolLights === false ? 'None' : p.equipment?.poolLights?.length
-      ? displayValue(p.equipment.poolLights, 'equipment.poolLights') : `Legacy additional lights: ${p.equipment?.numberOfLights ?? 0}`),
+      ? displayValue(p.equipment.poolLights, 'equipment.poolLights') : p.equipment?.numberOfLights
+        ? `Additional lights (Qty: ${p.equipment.numberOfLights})` : 'None'),
   fieldGroup('equipment.spaLights', 'Spa Lights', ['equipment.spaLights', 'equipment.includeSpaLights', 'equipment.hasSpaLight'], p =>
     p.equipment?.includeSpaLights === false ? 'None' : p.equipment?.spaLights?.length
-      ? displayValue(p.equipment.spaLights, 'equipment.spaLights') : `Legacy spa light: ${p.equipment?.hasSpaLight ? 'Yes' : 'No'}`),
+      ? displayValue(p.equipment.spaLights, 'equipment.spaLights') : p.equipment?.hasSpaLight ? 'Spa light (Qty: 1)' : 'None'),
   fieldGroup('equipment.auxiliaryPumps', 'Blowers', ['equipment.auxiliaryPump', 'equipment.auxiliaryPumps'], p =>
     displayValue(p.equipment?.auxiliaryPumps?.length ? p.equipment.auxiliaryPumps : p.equipment?.auxiliaryPump, 'equipment.auxiliaryPumps')),
   fieldGroup('equipment.package', 'Equipment Package', ['equipment.packageSelectionId', 'equipment.packageSelectionTouched'], (p, pricing) => {
@@ -248,5 +249,89 @@ export function reviewRows(request: CollaborationRequest, pricing?: PricingData)
     return { key, category: displayGroup(key), label: definition?.label || displayPath(key), before, after,
       paths: definition?.paths || differences.map(item => item.path) };
   }).sort((a, b) => bodyFields.indexOf(a.key.split('.')[0]) - bodyFields.indexOf(b.key.split('.')[0]));
+}
+
+/** Enumerate readable choices without treating an entire missing section as one change. */
+export function proposalSelectionRows(proposal: Proposal, pricing?: PricingData): ReviewRow[] {
+  const shape = (value: unknown): unknown => {
+    if (Array.isArray(value)) return [];
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, shape(item)]));
+    return undefined;
+  };
+  const empty = Object.fromEntries(bodyFields.map(field => [field, shape((proposal as any)[field])]));
+  const rows = reviewRows({ base_version_json: empty, working_version_json: proposal } as unknown as CollaborationRequest, pricing);
+  const optionalChoices = new Set(['poolSpecs.tanningShelf', 'poolSpecs.automaticCover', 'tileCopingDecking.additionalDecking',
+    'equipment.heaterChiller', 'equipment.sanitationAccessory', 'equipment.autoFillSystem', 'equipment.saltSystem',
+    'equipment.poolLights', 'equipment.spaLights', 'equipment.auxiliaryPumps']);
+  for (const group of selectionGroups) {
+    if (optionalChoices.has(group.key) && !rows.some(row => row.key === group.key)) {
+      rows.push({ key: group.key, label: group.label, category: displayGroup(group.key), paths: group.paths, before: '', after: '' });
+    }
+  }
+  rows.sort((a, b) => bodyFields.indexOf(a.key.split('.')[0]) - bodyFields.indexOf(b.key.split('.')[0]));
+  // A version is a saved state, not a change request. Describe its choices directly:
+  // the request formatter's equal-value fallback exposes internal fields for empty choices.
+  const cranePaths = ['poolSpecs.needsFiberglassCrane', 'poolSpecs.needsFiberglassSpaCrane', 'poolSpecs.fiberglassCraneOption'];
+  let craneShown = false;
+  return rows.flatMap(row => {
+    if (cranePaths.includes(row.key)) {
+      if (craneShown) return [];
+      craneShown = true;
+      const specs = proposal.poolSpecs;
+      const needed = specs.needsFiberglassCrane || specs.needsFiberglassSpaCrane
+        || (specs.fiberglassCraneOption && specs.fiberglassCraneOption !== 'no-crane');
+      return [{ ...row, key: 'poolSpecs.fiberglassCrane', label: 'Fiberglass Crane', paths: cranePaths, after: needed ? 'Yes' : 'None' }];
+    }
+    const definition = selectionGroups.find(group => group.key === row.key);
+    let after = definition ? definition.describe(proposal, pricing) : displayValue(getAtPath(proposal, row.key), row.key);
+    if (['poolSpecs.poolShape', 'poolSpecs.spaShape', 'poolSpecs.raisedSpaFacing', 'masonry.columns.facing'].includes(row.key)
+      || /(?:Facing|\.facing)$/.test(row.key)) after = words(getAtPath(proposal, row.key));
+    if (row.key === 'poolSpecs.automaticCover') after = proposal.poolSpecs.hasAutomaticCover ? 'Yes' : 'None';
+    if (row.key.startsWith('equipment.') && row.key !== 'equipment.package') {
+      const field = row.key.slice('equipment.'.length);
+      const equipment = proposal.equipment;
+      if (['poolLights', 'spaLights'].includes(field)) {
+        const enabled = field === 'poolLights' ? equipment.includePoolLights : equipment.includeSpaLights;
+        const lights = field === 'poolLights' ? equipment.poolLights : equipment.spaLights;
+        after = enabled === false ? 'None' : lights?.length ? comparisonEquipmentList(lights)
+          : field === 'spaLights' && equipment.hasSpaLight ? 'Spa light (Qty: 1)'
+          : field === 'poolLights' && equipment.numberOfLights > 0 ? `Additional lights (Qty: ${equipment.numberOfLights})` : 'None';
+      } else if (field === 'auxiliaryPumps') {
+        after = comparisonEquipmentList(equipment.auxiliaryPumps ?? (equipment.auxiliaryPump ? [equipment.auxiliaryPump] : []));
+      } else {
+        const selection = getAtPath(equipment, field);
+        if (Array.isArray(selection)) after = comparisonEquipmentList(selection);
+        else if (selection && typeof selection === 'object' && 'name' in selection) {
+          after = comparisonEquipment(selection, getAtPath(equipment, `${field}Quantity`));
+        } else if (['heaterChiller', 'sanitationAccessory', 'autoFillSystem', 'saltSystem'].includes(field)) after = 'None';
+      }
+    }
+    // Off-contract is an exception worth calling out; the usual contract state is implicit.
+    after = after.replace(/; On Contract\b/g, '').replace(/;\s*$/g, '');
+    const selection = getAtPath(proposal, row.key) as { isOffContract?: boolean } | undefined;
+    if (selection?.isOffContract && !after.includes('Off-Contract')) after += '; Off-Contract';
+    return [{ ...row, after }];
+  });
+}
+
+function comparisonEquipment(selection: unknown, count?: unknown): string {
+  const item = selection as { name?: string; model?: string; quantity?: number; isOffContract?: boolean } | undefined;
+  const name = item?.name?.trim();
+  const qty = Number(count ?? item?.quantity ?? 1);
+  if (!name || /^(none|no\b)/i.test(name) || qty <= 0) return 'None';
+  const model = item?.model?.trim();
+  return `${name} (Qty: ${qty})${model && !/^(none|no\b)/i.test(model) && !name.includes(model) ? `; ${model}` : ''}${item?.isOffContract ? '; Off-Contract' : ''}`;
+}
+
+function comparisonEquipmentList(selections: unknown[]): string {
+  const groups = new Map<string, { selection: unknown; quantity: number }>();
+  for (const selection of selections) {
+    const item = selection as { name?: string; model?: string; quantity?: number; isOffContract?: boolean };
+    if (comparisonEquipment(item) === 'None') continue;
+    const key = JSON.stringify([item.name, item.model, item.isOffContract]);
+    const group = groups.get(key);
+    groups.set(key, { selection, quantity: (group?.quantity || 0) + (item.quantity ?? 1) });
+  }
+  return [...groups.values()].map(group => comparisonEquipment(group.selection, group.quantity)).join(' | ') || 'None';
 }
 

@@ -63,6 +63,13 @@ test('dashboard reveals cards and table together after configuration, sharing an
   await page.goto('http://127.0.0.1:5173/tests/fixtures/dashboard-sign-in.html');
   await expect.poll(() => Boolean(pending.configuration)).toBe(true);
   await assertOnlyLoading();
+  const spinner = page.locator('.dashboard-loading-spinner');
+  const rotation = await spinner.evaluate(element => getComputedStyle(element).transform);
+  await expect.poll(() => spinner.evaluate(element => getComputedStyle(element).transform)).not.toBe(rotation);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(spinner).toHaveCSS('animation-duration', '2s');
+  await expect(spinner).toHaveCSS('animation-name', 'dashboard-loading-spin');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await pending.configuration();
   await expect.poll(() => Boolean(pending.rollout)).toBe(true);
   await assertOnlyLoading();

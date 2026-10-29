@@ -149,11 +149,11 @@
 }
 
 .app-feedback-anchor.has-update {
-  bottom: 106px;
+  bottom: 300px;
 }
 
 .app-feedback-anchor.has-update.has-session-meta {
-  bottom: 132px;
+  bottom: 300px;
 }
 
 * {

@@ -1,111 +1,44 @@
 .update-notification {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 24px;
+  right: 24px;
   z-index: 10000;
-  animation: slideIn 0.3s ease-out;
-  max-width: calc(100vw - 40px);
-  width: min(520px, calc(100vw - 40px));
+  width: min(380px, calc(100vw - 32px));
+  animation: update-notice-enter .3s ease-out;
 }
-
-@keyframes slideIn {
-  from {
-    transform: translateX(400px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
 .update-notification-message {
   box-sizing: border-box;
-  background: linear-gradient(135deg, #0c2243 0%, #1d4ed8 100%);
-  border: 1px solid rgba(191, 219, 254, 0.32);
-  color: white;
-  padding: 16px 24px;
-  border-radius: 12px;
-  box-shadow: 0 12px 30px rgba(12, 34, 67, 0.28);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-  min-width: 320px;
-  max-width: 100%;
+  padding: 22px;
+  border: 1px solid #d6e2e9;
+  border-top: 3px solid #238596;
+  border-radius: 16px;
+  color: #17324f;
+  background: #fff;
+  box-shadow: 0 16px 48px rgba(16, 47, 80, .18);
 }
-
-.update-notification-message > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 480px) {
-  .update-notification {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
-    max-width: none;
-  }
-
-  .update-notification-message {
-    min-width: 0;
-    padding: 13px 14px;
-    flex-wrap: wrap;
-  }
-
-  .update-notification-install-button {
-    width: 100%;
-    margin-left: 0;
-  }
-}
-
-.update-notification-message--ready {
-  background: linear-gradient(135deg, #0f274d 0%, #1d4ed8 55%, #2563eb 100%);
-  border-color: rgba(191, 219, 254, 0.42);
-}
-
-.update-notification-message--error {
-  background: linear-gradient(135deg, #082556 0%, #1e40af 100%);
-  border-color: rgba(148, 163, 184, 0.45);
-}
-
-.update-notification-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.update-notification-install-button {
-  background: rgba(255, 255, 255, 0.96);
-  color: #15346a;
-  border: 1px solid rgba(219, 234, 254, 0.78);
-  padding: 7px 13px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-left: auto;
-  box-shadow: 0 6px 16px rgba(8, 37, 86, 0.18);
-}
-
-.update-notification-install-button:hover {
-  background: #ffffff;
-  border-color: rgba(255, 255, 255, 0.96);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(8, 37, 86, 0.24);
-}
-
-.update-notification-install-button:active {
-  transform: translateY(0);
+.update-notification-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.update-notification-icon { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: 10px; background: #eaf5f6; color: #238596; font-weight: 800; }
+.update-notification-icon svg { width: 22px; height: 22px; }
+.update-notification-eyebrow { color: #567386; font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.update-notification-message h2 { margin: 0 0 7px; color: #102f50; font-size: 20px; font-weight: 750; letter-spacing: -.025em; line-height: 1.25; }
+.update-notification-message p { margin: 0; color: #617587; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.update-notification-spinner { box-sizing: border-box; display: block; width: 17px; height: 17px; border: 2px solid #bedde0; border-top-color: #238596; border-radius: 50%; animation: update-notice-spin .85s linear infinite; }
+.update-notification-download { margin-top: 19px; }
+.update-notification-progress-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #617587; font-size: 11px; }
+.update-notification-progress-label strong { color: #17324f; font-variant-numeric: tabular-nums; }
+.update-notification-track { height: 5px; overflow: hidden; border-radius: 8px; background: #e8eff3; }
+.update-notification-track > span { display: block; height: 100%; border-radius: inherit; background: #238596; transition: width .3s ease; }
+.update-notification-track.is-indeterminate > span { width: 35%; animation: update-notice-progress 1.5s ease-in-out infinite; }
+.update-notification-install-button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: 19px; padding: 11px 14px; border: 1px solid transparent; border-radius: 9px; color: #fff; background: #173d60; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: background .2s ease; }
+.update-notification-install-button:hover { background: #225273; }
+.update-notification-install-button:focus-visible { outline: 3px solid #238596; outline-offset: 3px; }
+@keyframes update-notice-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes update-notice-spin { to { transform: rotate(360deg); } }
+@keyframes update-notice-progress { from { transform: translateX(-100%); } to { transform: translateX(390%); } }
+@media (max-width: 480px) { .update-notification { right: 16px; bottom: 16px; } }
+@media (prefers-reduced-motion: reduce) {
+  .update-notification { animation: none; }
+  .update-notification-track > span { transition: none; }
+  .update-notification-spinner { animation-duration: 2s; }
+  .update-notification-track.is-indeterminate > span { animation: none; width: 100%; opacity: .5; }
 }

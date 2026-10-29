@@ -13,6 +13,7 @@ import '../../src/styles/sharedButtons.css';
 import { CURRENT_PRICING_ENGINE_VERSION } from '../../src/utils/pricingEngineCompatibility';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
 import MasterPricingEngine from '../../src/services/masterPricingEngine';
+import { loadPricingSnapshotForExistingProposal } from '../../src/services/pricingDataStore';
 import { withAdditionalDeckingSelections } from '../../src/utils/decking';
 
 const params = new URLSearchParams(location.search);
@@ -58,10 +59,10 @@ const request: CollaborationRequest = {
 };
 if (params.get('diff') === 'equipment') {
   const base = { ...proposal, equipment: { automation: { name: 'No Automation', price: 0 } },
-    pricing: { grossProfitMargin: 25 } } as Proposal;
+    pricing: { grossProfitMargin: 25, totalCostsBeforeOverhead: 100000, overheadMultiplier: 1.01, totalCOGS: 101000 } } as Proposal;
   request.base_version_json = base;
   request.working_version_json = { ...base, equipment: { automation: { name: 'AQRS Omni - 25k with Salt and Heat', price: 4200, addCost1: 350 } },
-    pricing: { grossProfitMargin: 28 }, totalCost: 113000 } as Proposal;
+    pricing: { grossProfitMargin: 28, totalCostsBeforeOverhead: 105000, overheadMultiplier: 1.01, totalCOGS: 106050 }, subtotal: 105000, totalCost: 113000 } as Proposal;
 }
 if (params.get('diff') === 'salt') {
   const base = { ...proposal, equipment: { saltSystem: { name: 'No Salt System', price: 0 } } } as Proposal;
@@ -110,11 +111,17 @@ if (params.has('history')) {
 }
 (window as any).collaborationShares = () => structuredClone(store.shares);
 const api: typeof collaborationPanelApi = {
+  loadPricingSnapshotForExistingProposal: async (...args) => {
+    if (params.has('slowReview')) await new Promise<void>(resolve => { (window as any).finishReviewPricing = resolve; });
+    return loadPricingSnapshotForExistingProposal(...args);
+  },
   listCollaborationEvents: async () => localStorage.getItem('fixture-event-read') ? [] : [{
     id: 'fixture-unread', proposal_number: proposal.proposalNumber, event_type: 'shared',
     actor_id: 'owner-id', request_id: null, note: share.note, created_at: share.created_at, read_at: null }],
   markCollaborationEventRead: async (id) => { localStorage.setItem('fixture-event-read', id); },
   prepareChangeRequest: async (id, resolutions = {}) => {
+    if (params.has('slowReview')) await new Promise<void>(resolve => { (window as any).finishReviewPreparation = resolve; });
+    if (params.has('reviewFailure')) throw new Error('The comparison could not be prepared. Reopen it to try again.');
     const target = store.requests.find(item => item.id === id)!;
     const conflicts = params.get('conflict') ? [{ path: 'poolSpecs.poolLength', before: 28, owner: 30, proposed: 32,
       message: 'The owner also changed this field.' }] : [];

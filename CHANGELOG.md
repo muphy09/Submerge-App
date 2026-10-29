@@ -1,6 +1,74 @@
 ## [3.5.0] - 10/27/26
 ### Proposal Sharing
 - Proposals can now be shared between members of the same franchise
+    - Share with one or more users from 'Share / Manage Access' in the Proposal Summary
+    - Choose 'Can view' or 'Can propose changes' for each user
+    - Access applies to the whole proposal, including its versions and addendums
+    - An optional note can be included when sharing; the recipient sees it when opening the proposal
+- Users with 'Can propose changes' work in their own saved copy before sending changes to the owner
+    - *Saving a shared copy does not change the owner's proposal!*
+    - Include a note when sending changes for review
+    - 'Withdraw Changes' allows users to take back a pending request before the owner applies it
+        - Only one request per contributor can await review for a proposal at a time
+- Owners can review proposed changes before applying them
+    - Changes are grouped by category with Before / After selections and price changes where available
+    - COGS, Gross Profit %, and Retail Total are shown before and after the proposed changes
+    - Apply changes to a new draft or overwrite the current editable version
+    - Request revisions with a note or decline the changes
+    - Overlapping edits require the owner to choose which values to keep
+- The owner retains control of sharing, pricing revision decisions, and final proposal actions
+    - Contributors cannot submit, approve, sign, complete, or delete the owner's proposal
+    - *Signed and completed versions remain locked; further changes require an editable version or addendum*
+- Owners can change permissions or remove access from 'Share / Manage Access'
+    - Recipients can use 'Leave Proposal' to remove their access
+        - Leaving cancels their unfinished or pending changes
+- Collaboration History shows submitted changes, decisions, notes, and ended access with names and timestamps
+- Sharing and proposed edits require a Cloud connection
+    - Previously opened shared proposals can be viewed from a saved copy while offline
+    - Older legacy proposal versions are not supported for sharing
+### Proposal Version Comparison
+- Introduced 'Compare' inside of the Versions & Addendums block
+    - Choose a Baseline and compare one or more saved versions against it
+    - 'Changes' shows selection differences grouped by category
+    - 'Item Prices' compares saved line item amounts in Retail or COGS
+    - Search for a specific item or use 'Show All Items' to include unchanged items
+- Comparison includes saved proposal totals, Contract Price, Off-Contract amounts, and optional COGS / Gross Profit details
+    - Each version retains its own saved pricing, even when comparing different pricing models or revisions
+    - *Comparing versions does not recalculate or change the saved proposals*
+    - Archived, hidden, and unsupported legacy versions are excluded
+### Dashboard Interface
+- Added 'My Proposals' / 'Shared with Me' tabs
+    - Shared proposals show the owner, permission, proposal status, and change request status
+    - Search shared proposals by customer or owner name
+    - Shared proposals are also included in Recent Activity
+- Sharing icons show who a proposal is shared with or who shared it with you
+- Attention indicators highlight newly shared proposals and changes awaiting owner review
+    - The Dashboard navigation tab also shows an attention count
+- Improved initial loading to prevent incomplete proposal tables and incorrect pricing model labels from flashing on screen
+- Updated transitions between proposal tabs and the Messages / Settings pages
+### Proposal Summary
+- Updated the toolbar, icons, and layout for more consistent spacing and clearer actions
+- Workflow details can now be expanded / collapsed
+- Updated the Versions & Addendums block with clearer version details and pending review indicators
+- Added a Collaboration block for access details, change requests, and history
+    - Owner-only actions remain visible to collaborators with an 'Owner action' tooltip
+### Admin Panel
+- Added 'Proposal Ownership' to recover proposals with an unresolved, inactive, or departed owner
+    - Admins can transfer these proposals to an active user in the same franchise
+    - Proposal numbers, historical designer attribution, and pending change requests are preserved
+### App Updates
+- Redesigned update notifications with download progress and clearer status messages
+    - 'Restart & update' appears when the update is ready to install
+    - Improved feedback while starting the installer and after a failed installation attempt
+### Bug Fixes
+- Improved protection against stale proposal loads and saves when signing out or switching accounts / workspaces
+- Fixed an issue where a routine session refresh could interrupt proposal creation or saving
+- Improved shared proposal pricing to use the owner's selected pricing model and revision when applying changes
+    - Existing contributor work is preserved when the owner changes pricing; conflicting selections require review
+    - Unchanged proposal information is retained when applying contributor edits
+- Fixed equipment included in a selected package incorrectly appearing as unavailable
+    - Unavailable saved equipment now keeps its name and is clearly marked in the selection list
+- Fixed PAP discount values not updating with an accepted pricing revision
 -----
 ## [3.4.7] - 10/22/26
 ### HOTFIX

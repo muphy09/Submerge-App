@@ -343,4 +343,5 @@
 .recent-activity-heading .recent-activity-name { flex: 1; width: auto; }
 .recent-activity-indicators { display: inline-flex; align-items: center; flex: 0 0 auto; }
 .recent-activity-indicators .dashboard-shared-icon { margin-left: 0; }
-@media (prefers-reduced-motion: reduce) { .dashboard-loading-spinner { animation: none; } }
+/* Essential progress remains visible when decorative transitions are reduced. */
+@media (prefers-reduced-motion: reduce) { .dashboard-loading-spinner { animation-duration: 2s; } }

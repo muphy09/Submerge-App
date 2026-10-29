@@ -74,6 +74,19 @@ test('the real summary greets its recipient and navigates to the dashboard after
     expect(title!.width).toBeCloseTo(copy!.width, 0);
     await header.screenshot({ path: testInfo.outputPath(`shared-summary-header-${width}.png`) });
   }
+  const contract = page.locator('.summary-tile.contract-tile');
+  await expect(contract.getByText('COGS Price:', { exact: true })).toHaveCount(0);
+  const cogsToggle = page.getByRole('switch');
+  await cogsToggle.click();
+  await expect(cogsToggle).toHaveAttribute('aria-checked', 'true');
+  await expect(contract.locator('.metric-row').first().locator('.metric-label')).toHaveText('COGS Price:');
+  const cogsPrice = await contract.locator('.metric-row').first().locator('.metric-value').textContent();
+  await page.locator('.summary-tile.cogs-tile').click();
+  await expect(page.locator('.cogs-breakdown-modal .cogs-report-total strong').first()).toHaveText(cogsPrice!);
+  await page.getByRole('button', { name: 'Close COGS breakdown', exact: true }).click();
+  await contract.screenshot({ path: testInfo.outputPath('contract-cogs-price.png') });
+  await cogsToggle.click();
+  await expect(contract.getByText('COGS Price:', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Leave Proposal', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: 'Leave proposal?' });
   await expect(confirm.locator('.confirm-modal')).toBeVisible();

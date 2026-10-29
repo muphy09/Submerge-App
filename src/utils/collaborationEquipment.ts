@@ -1,5 +1,6 @@
 import type { Proposal } from '../types/proposal-new';
 import { contributionEqual, contributionValue } from './contributionInputs';
+import { isPackageIncludedSelection } from './equipmentPackageSelections';
 
 const catalogs: Record<string, string> = {
   pump: 'pumps', additionalPumps: 'pumps', auxiliaryPump: 'auxiliaryPumps', auxiliaryPumps: 'auxiliaryPumps',
@@ -12,7 +13,8 @@ export function unavailableEquipment(proposal: Proposal, pricing: any) {
     const catalog = path.split('.').reduce((value, key) => value?.[key], pricing.equipment) || [];
     const value = (proposal.equipment as any)?.[field];
     return (Array.isArray(value) ? value : value ? [value] : []).flatMap((item: any, index: number) =>
-      item?.name && !/^(none|no\b)/i.test(item.name) && !catalog.some((entry: any) => item.id
+      item?.name && !/^(none|no\b)/i.test(item.name)
+      && !isPackageIncludedSelection(proposal.equipment, field, item, pricing, index) && !catalog.some((entry: any) => item.id
         ? entry.id === item.id : entry.name?.trim().toLowerCase() === item.name.trim().toLowerCase())
         ? [{ field, index, item, array: Array.isArray(value) }] : []);
   });

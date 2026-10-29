@@ -1,6 +1,7 @@
 import pricingData from '../services/pricingData';
 import { Equipment } from '../types/proposal-new';
 import { isIncludedSaltCellSelection } from './saltCellCompatibility';
+import { isPackageIncludedSelection } from './equipmentPackageSelections';
 
 type NamedItem = { name?: string | null };
 
@@ -88,7 +89,8 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
   );
   const autoFillSelected = hasRealSelection(equipment.autoFillSystem?.name, 'no auto');
 
-  const pump = pumpSelected && isRetiredName(equipment.pump?.name, pricingData.equipment.pumps);
+  const pump = pumpSelected && !isPackageIncludedSelection(equipment, 'pump', equipment.pump, pricingData)
+    && isRetiredName(equipment.pump?.name, pricingData.equipment.pumps);
   const additionalPumpSelections = equipment.additionalPumps ?? [];
   const additionalPumps = additionalPumpSelections.map((item) =>
     isRetiredName(item?.name, pricingData.equipment.pumps)
@@ -103,12 +105,15 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
   const auxiliaryPumps = auxiliarySelections.map((item) =>
     isRetiredName(item?.name, auxiliaryCatalog)
   );
-  const filter = filterSelected && isRetiredName(equipment.filter?.name, pricingData.equipment.filters);
+  const filter = filterSelected && !isPackageIncludedSelection(equipment, 'filter', equipment.filter, pricingData)
+    && isRetiredName(equipment.filter?.name, pricingData.equipment.filters);
   const additionalFilters = (equipment.additionalFilters ?? []).map((item) =>
     isRetiredName(item?.name, pricingData.equipment.filters)
   );
-  const cleaner = cleanerSelected && isRetiredName(equipment.cleaner?.name, pricingData.equipment.cleaners);
-  const heater = heaterSelected && isRetiredName(equipment.heater?.name, pricingData.equipment.heaters);
+  const cleaner = cleanerSelected && !isPackageIncludedSelection(equipment, 'cleaner', equipment.cleaner, pricingData)
+    && isRetiredName(equipment.cleaner?.name, pricingData.equipment.cleaners);
+  const heater = heaterSelected && !isPackageIncludedSelection(equipment, 'heater', equipment.heater, pricingData)
+    && isRetiredName(equipment.heater?.name, pricingData.equipment.heaters);
   const additionalHeaters = (equipment.additionalHeaters ?? []).map((item) =>
     isRetiredName(item?.name, pricingData.equipment.heaters)
   );
@@ -118,13 +123,16 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
       equipment.heaterChiller?.name,
       ((pricingData as any).equipment?.heaterChillers || []) as NamedItem[]
     );
-  const automation = automationSelected && isRetiredName(equipment.automation?.name, pricingData.equipment.automation);
+  const automation = automationSelected && !isPackageIncludedSelection(equipment, 'automation', equipment.automation, pricingData)
+    && isRetiredName(equipment.automation?.name, pricingData.equipment.automation);
   const saltSystem =
     saltSelected &&
+    !isPackageIncludedSelection(equipment, 'saltSystem', equipment.saltSystem!, pricingData) &&
     !isIncludedSaltCellSelection(equipment.saltSystem) &&
     isRetiredName(equipment.saltSystem?.name, pricingData.equipment.saltSystem);
   const sanitationAccessory =
     sanitationAccessorySelected &&
+    !isPackageIncludedSelection(equipment, 'sanitationAccessory', { name: additionalSanitationSelectionName }, pricingData) &&
     isRetiredName(
       additionalSanitationSelectionName,
       [
@@ -135,12 +143,13 @@ export const getRetiredEquipmentFlags = (equipment?: Equipment): RetiredEquipmen
       ]
     );
   const autoFillSystem =
-    autoFillSelected && isRetiredName(equipment.autoFillSystem?.name, pricingData.equipment.autoFillSystem);
-  const poolLights = (equipment.poolLights ?? []).map((light) =>
-    isRetiredName(light?.name, pricingData.equipment.lights.poolLights)
+    autoFillSelected && !isPackageIncludedSelection(equipment, 'autoFillSystem', equipment.autoFillSystem!, pricingData)
+    && isRetiredName(equipment.autoFillSystem?.name, pricingData.equipment.autoFillSystem);
+  const poolLights = (equipment.poolLights ?? []).map((light, index) =>
+    !isPackageIncludedSelection(equipment, 'poolLights', light, pricingData, index) && isRetiredName(light?.name, pricingData.equipment.lights.poolLights)
   );
-  const spaLights = (equipment.spaLights ?? []).map((light) =>
-    isRetiredName(light?.name, pricingData.equipment.lights.spaLights)
+  const spaLights = (equipment.spaLights ?? []).map((light, index) =>
+    !isPackageIncludedSelection(equipment, 'spaLights', light, pricingData, index) && isRetiredName(light?.name, pricingData.equipment.lights.spaLights)
   );
 
   const any =

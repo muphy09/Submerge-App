@@ -17,7 +17,8 @@
 .collaboration-contributors { flex: 1; }
 .collaboration-contributor-row { display: flex; align-items: center; gap: .5rem; min-width: 0; }
 .collaboration-contributor-row strong { flex: 1; min-width: 0; }
-.collaboration-card .collaboration-contributor-row .collaboration-leave { flex: 0 0 auto; width: auto; margin: 0; min-height: 1.9rem; padding: .35rem .5rem; border-radius: .5rem; font-size: .68rem; line-height: 1.2; font-weight: 800; white-space: nowrap; }
+.collaboration-contributor-actions { display: grid; flex: 0 0 auto; gap: .3rem; }
+.collaboration-card .collaboration-contributor-actions .action-button { width: 100%; margin: 0; min-height: 1.9rem; padding: .35rem .5rem; border-radius: .5rem; font-size: .68rem; line-height: 1.2; font-weight: 800; white-space: nowrap; }
 .collaboration-review-alert { display: flex; align-items: center; gap: 1.1rem; padding: 1rem 1.2rem; border: 1px solid #f4cb85; border-radius: 15px; background: #fffaf2; }
 .collaboration-review-alert strong { color: #14203c; font-size: 1.15rem; }
 .collaboration-review-alert small { color: #5c7090; font-size: .86rem; }

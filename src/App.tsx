@@ -10,7 +10,7 @@ import {
 } from 'react';
 import HomePage from './pages/HomePage';
 import NavigationBar from './components/NavigationBar';
-import UpdateNotification from './components/UpdateNotification';
+import UpdateNotification, { type UpdateStatus } from './components/UpdateNotification';
 import ChangelogModal from './components/ChangelogModal';
 import MessageDetailModal from './components/MessageDetailModal';
 import UserProfileModal from './components/UserProfileModal';
@@ -142,7 +142,8 @@ function AppContent() {
   const { showToast } = useToast();
   useKeyboardNavigation();
   useGlobalModalScrollLock();
-  const [updateStatus, setUpdateStatus] = useState<'downloading' | 'ready' | 'error' | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(null);
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
   const [updateError, setUpdateError] = useState<string>('');
   const [session, setSession] = useState<UserSession | null>(null);
   const [showLogin, setShowLogin] = useState(false);
@@ -459,7 +460,14 @@ function AppContent() {
     // Listen for update events
     if (window.electron) {
       window.electron.onUpdateAvailable(() => {
-        setUpdateStatus('downloading');
+        setUpdateStatus('available');
+        setUpdateProgress(null);
+        setUpdateError('');
+      });
+
+      window.electron.onDownloadProgress?.((progress: { percent?: number }) => {
+        setUpdateStatus((current) => current === 'available' || current === 'downloading' ? 'downloading' : current);
+        setUpdateProgress(typeof progress.percent === 'number' ? progress.percent : null);
       });
 
       window.electron.onUpdateDownloaded(() => {
@@ -470,8 +478,8 @@ function AppContent() {
         console.error('Auto-update error:', error);
         setUpdateStatus('error');
         setUpdateError(error || 'The update could not be completed. You can keep using the current app.');
-        // Clear error after 10 seconds
-        setTimeout(() => setUpdateStatus(null), 10000);
+        // An older error timeout must not dismiss a newer download or restart prompt.
+        setTimeout(() => setUpdateStatus(current => current === 'error' ? null : current), 10000);
       });
     }
     return () => {
@@ -756,7 +764,8 @@ function AppContent() {
   }, [resetSignedOutUiState, session?.appSessionId, session?.appSessionLeaseToken, showLogin]);
 
   const handleInstallUpdate = () => {
-    if (window.electron) {
+    if (window.electron && updateStatus === 'ready') {
+      setUpdateStatus('installing');
       void window.electron.installUpdate().catch(() => {
         setUpdateStatus('error');
         setUpdateError('The installer could not start. You can keep using the current app.');
@@ -1321,6 +1330,7 @@ function AppContent() {
       {!isContractPrintPreviewRoute && (
         <UpdateNotification
           status={updateStatus}
+          progress={updateProgress}
           onInstall={handleInstallUpdate}
           errorMessage={updateError}
         />
