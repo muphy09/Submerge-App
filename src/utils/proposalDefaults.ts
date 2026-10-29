@@ -1,3 +1,4 @@
+import { defaultAddOns } from './addOns';
 // ============================================================================
 // PROPOSAL DEFAULTS - Initial values for new proposals
 // ============================================================================
@@ -208,7 +209,7 @@ export function getDefaultDrainage(): Drainage {
   };
 }
 
-export function getDefaultEquipment(): Equipment {
+export function getDefaultEquipment(includeAddOnDefaults = false): Equipment {
   const pumpOverhead = (pricingData as any).equipment?.pumpOverheadMultiplier ?? 1;
   const pickDefault = <T extends { name: string }>(list: T[], multiplier: number = 1) =>
     list.find(item => getEquipmentItemCost(item as any, multiplier) === 0) || list[0];
@@ -286,6 +287,7 @@ export function getDefaultEquipment(): Equipment {
     hasAutoFill: false,
     hasHandrail: false,
     hasStartupChemicals: false,
+    ...(includeAddOnDefaults ? { addOns: defaultAddOns('equipment') } : {}),
     packageSelectionId: undefined,
     packageSelectionTouched: undefined,
     customOptions: [],
@@ -318,9 +320,10 @@ export function getDefaultMasonry(): Masonry {
   };
 }
 
-export function getDefaultInteriorFinish(): InteriorFinish {
+export function getDefaultInteriorFinish(includeAddOnDefaults = false): InteriorFinish {
   const defaultFinishId = pricingData.interiorFinish.finishes?.[0]?.id || 'pebble-tec-l1';
   return {
+    ...(includeAddOnDefaults ? { addOns: defaultAddOns('interiorFinish') } : {}),
     finishType: defaultFinishId,
     color: '',
     surfaceArea: 0,
@@ -438,7 +441,7 @@ export function mergeRetailAdjustments(input?: RetailAdjustment[]): RetailAdjust
   });
 }
 
-export function getDefaultProposal(): Partial<Proposal> {
+export function getDefaultProposal(includeAddOnDefaults = true): Partial<Proposal> {
   return {
     proposalNumber: `PROP-${Date.now()}`,
     createdDate: new Date().toISOString(),
@@ -464,11 +467,11 @@ export function getDefaultProposal(): Partial<Proposal> {
     electrical: getDefaultElectrical(),
     tileCopingDecking: getDefaultTileCopingDecking(),
     drainage: getDefaultDrainage(),
-    equipment: getDefaultEquipment(),
+    equipment: getDefaultEquipment(includeAddOnDefaults),
     waterFeatures: getDefaultWaterFeatures(),
     customFeatures: getDefaultCustomFeatures(),
     masonry: getDefaultMasonry(),
-    interiorFinish: getDefaultInteriorFinish(),
+    interiorFinish: getDefaultInteriorFinish(includeAddOnDefaults),
     manualAdjustments: getDefaultManualAdjustments(),
     retailAdjustments: getDefaultRetailAdjustments(),
     papDiscounts: normalizePapDiscounts(pricingData.papDiscountRates || getDefaultPAPDiscounts()),

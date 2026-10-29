@@ -147,6 +147,7 @@ const mergeDefaultPackageOption = (option: EquipmentPackageOption): EquipmentPac
     defaultPackageOptions.find((candidate) => candidate.id === option.id) ||
     (option.mode === 'custom' ? defaultPackageOptions.find((candidate) => candidate.id === CUSTOM_PACKAGE_ID) : null);
   return normalizeLegacyPackageOption({
+    allowAddOns: true,
     ...(fallback || {}),
     ...option,
     id: option.id || fallback?.id || CUSTOM_PACKAGE_ID,

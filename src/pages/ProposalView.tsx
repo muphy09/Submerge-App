@@ -3809,7 +3809,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
             items: costBreakdownForDisplay.waterFeatures,
             subcategories: buildLineItemSubcategories(costBreakdownForDisplay.waterFeatures),
           },
-          { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered },
+          { name: 'Equipment Ordered', items: costBreakdownForDisplay.equipmentOrdered,
+            subcategories: buildLineItemSubcategories(costBreakdownForDisplay.equipmentOrdered) },
           {
             name: 'Equipment Set',
             items: costBreakdownForDisplay.equipmentSet,

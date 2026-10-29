@@ -94,6 +94,7 @@ const equipmentFields = ['pump', 'filter', 'heater', 'cleaner', 'heaterChiller',
 /** Associate only separately identifiable saved charges. Shared tax, discounts and
  * installation charges remain in Item Prices rather than being assigned twice. */
 function savedSelectionKey(p: Proposal, section: string, item: CostLineItem): string | undefined {
+  if (item.details?.addOnId) return `${section === 'equipmentOrdered' ? 'equipment' : 'interiorFinish'}.addOns`;
   if (section === 'equipmentOrdered') {
     const description = item.description.replace(/ \(upgrade\)$/i, '');
     if (description.startsWith('Pool Light - ')) return 'equipment.poolLights';
@@ -116,6 +117,10 @@ export function savedSelectionAmount(p: Proposal, rows: SavedPriceRow[], key: st
   if (matches.length) {
     const values = matches.map(row => cogs ? row.cogs : row.price);
     return values.some(value => value === null) ? null : cents(values.reduce<number>((sum, value) => sum + cents(value!), 0));
+  }
+  if (key === 'equipment.addOns' || key === 'interiorFinish.addOns') {
+    const category = key.startsWith('equipment.') ? 'equipment' : 'interiorFinish';
+    return p[category]?.addOns?.length ? null : 0;
   }
   if (key.startsWith('equipment.')) {
     const field = key.slice(10);

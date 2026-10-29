@@ -1,3 +1,11 @@
+## [3.5.1] - 10/29/26
+### Pricing Model Update
+- Introduced a new subcategory inside Equipment and Interior Finish: Add-ons
+- Admins can configure items to be included inside of the Pricing Model Editor
+    - *Currently, there are 2 fixed cost columns, this can be expanded in a future update*
+- Equipment add-ons can be activated per equipment package
+- Contracts will automatically include any add-ons
+-----
 ## [3.5.0] - 10/29/26
 ### Proposal Sharing | *Beta*
 - Proposals can now be shared between members of the same franchise

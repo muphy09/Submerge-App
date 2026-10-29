@@ -1,3 +1,4 @@
+import { equipmentAllowsAddOns } from './addOns';
 import pricingData from '../services/pricingData';
 import { getVersionRecordStatus } from '../services/proposalWorkflow';
 import { HeaterSelection, Proposal, PumpSelection, WaterFeatureSelection } from '../types/proposal-new';
@@ -547,6 +548,8 @@ export function sanitizeProposalSelectionState(
       }
     )
   );
+
+  if (!equipmentAllowsAddOns(nextEquipment)) nextEquipment.addOns = [];
 
   const nextProposal = {
     ...proposal,

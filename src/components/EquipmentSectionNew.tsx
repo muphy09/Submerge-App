@@ -1,3 +1,5 @@
+import AddOnsSection from './AddOnsSection';
+import { equipmentAllowsAddOns } from '../utils/addOns';
 import {
   Children,
   useCallback,
@@ -733,6 +735,7 @@ function EquipmentSectionNew({
     hasStartupChemicals: data?.hasStartupChemicals ?? false,
     packageSelectionId: data?.packageSelectionId,
     packageSelectionTouched: data?.packageSelectionTouched,
+    addOns: data?.addOns,
     customOptions: data?.customOptions ?? [],
     totalCost: data?.totalCost ?? 0,
     hasBeenEdited: data?.hasBeenEdited ?? false,
@@ -2746,7 +2749,7 @@ function EquipmentSectionNew({
     controlLabel: string
   ) => {
     if (!getEquipmentPriceImpact) return null;
-    const targetKey = `${target.kind}${'index' in target ? `:${target.index}` : ''}`;
+    const targetKey = `${target.kind}${'index' in target ? `:${target.index}` : 'id' in target ? `:${target.id}` : ''}`;
     return (
       <PriceImpactPopover
         controlLabel={controlLabel}
@@ -4368,6 +4371,11 @@ function EquipmentSectionNew({
         )}
       </div>
 
+      {(pricingData.equipment.addOns?.length ?? 0) > 0 && <AddOnsSection category="equipment" selections={safeData.addOns || []}
+        allowed={equipmentAllowsAddOns(safeData)}
+        onChange={(addOns) => updateData({ addOns })}
+        noteOverrides={noteOverrides}
+        renderPriceImpact={(id, name) => renderPriceImpact({ kind: 'addOn', id }, name)} />}
       <CustomOptionsSection
         data={safeData.customOptions || []}
         onChange={(customOptions) => updateData({ customOptions })}

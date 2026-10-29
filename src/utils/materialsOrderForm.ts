@@ -356,5 +356,12 @@ export const buildMaterialsOrderForm = (
   });
   if (waterItems.length) groups.push({ title: 'Water & Fire Features', items: waterItems });
   groups.push(...equipmentGroups(proposal, pkg, packageName).filter((group) => group.items.length > 0));
+  for (const category of ['equipment', 'interiorFinish'] as const) {
+    const source = category === 'equipment' ? costBreakdown.equipmentOrdered : costBreakdown.interiorFinish;
+    const items = (source || []).filter(item => item.details?.addOnId).map(item => ({
+      name: item.description, measures: countMeasure(item.quantity),
+    }));
+    if (items.length) groups.push({ title: category === 'equipment' ? 'Equipment Add-ons' : 'Interior Finish Add-ons', items });
+  }
   return { groups, packageName, packageNote };
 };

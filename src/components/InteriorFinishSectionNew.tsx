@@ -1,3 +1,4 @@
+import AddOnsSection from './AddOnsSection';
 import { useEffect, useState, type ReactNode } from 'react';
 import { InteriorFinish, InteriorFinishType } from '../types/proposal-new';
 import pricingData from '../services/pricingData';
@@ -284,6 +285,10 @@ function InteriorFinishSectionNew({
         </div>
       )}
 
+      <AddOnsSection category="interiorFinish" selections={data.addOns || []}
+        onChange={(addOns) => onChange({ ...data, addOns })}
+        noteOverrides={noteOverrides}
+        renderPriceImpact={(id, name) => renderPriceImpact({ kind: 'addOn', id }, name)} />
       {!isFiberglass && (
         <CustomOptionsSection
           data={data.customOptions || []}

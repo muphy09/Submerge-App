@@ -380,6 +380,7 @@ export interface EquipmentAccessorySelection {
 export type EquipmentPackageMode = 'fixed' | 'custom';
 
 export interface EquipmentPackageOption {
+  allowAddOns?: boolean;
   id: string;
   name: string;
   mode: EquipmentPackageMode;
@@ -429,7 +430,19 @@ export interface EquipmentPackageOption {
   defaultSanitationAccessoryQuantity?: number;
 }
 
+export interface AddOnSelection {
+  id: string;
+  name: string;
+}
+
+export interface PricingAddOn extends AddOnSelection {
+  cost1: number;
+  cost2: number;
+  includeByDefault: boolean;
+}
+
 export interface Equipment {
+  addOns?: AddOnSelection[];
   // Main equipment
   pump: PumpSelection;
   pumpQuantity?: number;
@@ -603,6 +616,7 @@ export interface Masonry {
 export type InteriorFinishType = string;
 
 export interface InteriorFinish {
+  addOns?: AddOnSelection[];
   finishType: InteriorFinishType;
   color: string;
   surfaceArea: number; // Auto-calculated from pool specs

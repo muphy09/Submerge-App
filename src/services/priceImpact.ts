@@ -42,6 +42,7 @@ export type PriceImpactEffect = 'direct' | 'automatic';
 export type PriceImpactDisplayBasis = 'retail' | 'cogs';
 
 export type EquipmentPriceImpactTarget =
+  | { kind: 'addOn'; id: string }
   | { kind: 'mainPump' }
   | { kind: 'additionalPump'; index: number }
   | { kind: 'blower'; index: number }
@@ -277,6 +278,7 @@ export interface WaterFeaturePriceImpactOptions {
 }
 
 export type InteriorFinishPriceImpactTarget =
+  | { kind: 'addOn'; id: string }
   | { kind: 'finishType' }
   | { kind: 'waterproofing' }
   | { kind: 'customOption'; index: number };
@@ -676,7 +678,7 @@ const getIncludedPackageSelection = (
 
 export const getEquipmentPriceImpactTargetKey = (
   target: EquipmentPriceImpactTarget
-): string => `${target.kind}${'index' in target ? `:${target.index}` : ''}`;
+): string => `${target.kind}${'index' in target ? `:${target.index}` : 'id' in target ? `:${target.id}` : ''}`;
 
 const withPricingSnapshot = <T,>(snapshot: PricingData | undefined, callback: () => T): T =>
   snapshot ? withTemporaryPricingSnapshot(snapshot, callback) : callback();
@@ -987,6 +989,13 @@ const buildEquipmentComparison = (
       nextEquipment.autoFillSystemQuantity = 0;
       nextEquipment.hasAutoFill = false;
       return finish(controlLabel, comparisonLabel);
+    }
+    case 'addOn': {
+      const selected = equipment.addOns?.find(item => item.id === target.id);
+      const label = selected?.name || 'Add-on';
+      if (!selected) return noComparison(label, 'Compared with add-on disabled', 'This add-on is not selected.');
+      nextEquipment.addOns = (nextEquipment.addOns || []).filter(item => item.id !== target.id);
+      return finish(label, 'Compared with add-on disabled', { sanitize: false });
     }
     case 'customOption': {
       const selected = equipment.customOptions?.[target.index];
@@ -3123,7 +3132,7 @@ type InteriorFinishComparisonBuild = {
 
 export const getInteriorFinishPriceImpactTargetKey = (
   target: InteriorFinishPriceImpactTarget
-): string => target.kind === 'customOption' ? `${target.kind}:${target.index}` : target.kind;
+): string => target.kind === 'addOn' ? `addOn:${target.id}` : target.kind === 'customOption' ? `${target.kind}:${target.index}` : target.kind;
 
 const getInteriorFinishCatalog = (snapshot?: PricingData) =>
   (snapshot || pricingData).interiorFinish?.finishes || [];
@@ -3156,6 +3165,14 @@ const buildInteriorFinishComparison = (
     comparisonProposal: null,
     message,
   });
+
+  if (target.kind === 'addOn') {
+    const selected = current.addOns?.find(item => item.id === target.id);
+    const label = selected?.name || 'Add-on';
+    if (!selected) return noComparison(label, 'Compared with add-on disabled', 'This add-on is not selected.');
+    next.addOns = (next.addOns || []).filter(item => item.id !== target.id);
+    return { controlLabel: label, comparisonLabel: 'Compared with add-on disabled', comparisonProposal: comparison };
+  }
 
   if (target.kind === 'customOption') {
     const selected = current.customOptions?.[target.index];

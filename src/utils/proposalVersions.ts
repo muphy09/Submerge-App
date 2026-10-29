@@ -229,7 +229,7 @@ const buildVersionDraftSeed = (
   source: Proposal,
   creationSource: ProposalVersionCreationSource
 ): Proposal => {
-  const defaults = cloneProposalVersionData(getDefaultProposal() as Proposal);
+  const defaults = cloneProposalVersionData(getDefaultProposal(false) as Proposal);
   const sourceSnapshot = cloneProposalVersionData(source);
   const calculationProfile =
     sourceSnapshot.calculationProfile || container.calculationProfile;

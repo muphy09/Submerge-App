@@ -113,6 +113,7 @@ export const PROPOSAL_NOTE_CATEGORIES: ProposalNoteCategory[] = [
     title: 'Equipment',
     shortTitle: 'Equipment',
     subcategories: [
+      { id: 'addOns', title: 'Add-ons', defaultNote: '' },
       { id: 'packageOptions', title: 'Package Options', defaultNote: '' },
       { id: 'pump', title: 'Pump', defaultNote: 'Add a primary pump and any additional pumps to the project.' },
       { id: 'blowers', title: 'Blowers', defaultNote: 'Add a blower to the project.' },
@@ -145,6 +146,7 @@ export const PROPOSAL_NOTE_CATEGORIES: ProposalNoteCategory[] = [
     title: 'Interior Finish',
     shortTitle: 'Interior',
     subcategories: [
+      { id: 'addOns', title: 'Add-ons', defaultNote: '' },
       { id: 'finishType', title: 'Finish Type', defaultNote: 'Select interior finish and color / style.' },
       { id: 'additionalOptions', title: 'Additional Options', defaultNote: '' },
       customOptionsNote,

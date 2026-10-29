@@ -115,6 +115,20 @@ type ListConfig = {
   canRemove?: (entry: any, index: number) => boolean;
 };
 
+const addOnList = (category: 'equipment' | 'interiorFinish'): ListConfig => ({
+  title: 'Add-ons',
+  path: [category, 'addOns'],
+  variant: 'table',
+  addLabel: 'Add add-on',
+  defaultItem: () => ({ id: crypto.randomUUID(), name: '', cost1: 0, cost2: 0, includeByDefault: false }),
+  fields: [
+    { key: 'name', label: 'Add-On Name', type: 'text' },
+    { key: 'cost1', label: 'Cost 1', type: 'number', prefix: '$' },
+    { key: 'cost2', label: 'Cost 2', type: 'number', prefix: '$' },
+    { key: 'includeByDefault', label: 'Include by Default', type: 'boolean' },
+  ],
+});
+
 type Group = {
   title: string;
   scalars?: ScalarField[];
@@ -1501,6 +1515,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       allowAutoFillUpgrade: false,
       allowPoolLightUpgrade: false,
       allowSpaLightUpgrade: false,
+      allowAddOns: true,
       allowWaterFeatureUpgrade: false,
       allowSanitationAccessoryUpgrade: false,
       includedWaterFeaturesBeforeExtraPump: 0,
@@ -1753,6 +1768,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
                       {renderPackageCheckbox(pkg, index, 'allowPoolLightUpgrade', 'Pool Lights')}
                       {renderPackageCheckbox(pkg, index, 'allowSpaLightUpgrade', 'Spa Lights')}
                       {renderPackageCheckbox(pkg, index, 'allowWaterFeatureUpgrade', 'Water Features')}
+                      {renderPackageCheckbox(pkg, index, 'allowAddOns', 'Add-ons')}
                       {renderPackageCheckbox(pkg, index, 'allowSanitationAccessoryUpgrade', 'Sanitation Accessories')}
                     </div>
                     <label className="pricing-input-block pricing-package-water-feature-limit">
@@ -2999,6 +3015,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       {
         title: 'Equipment',
         groups: [
+          { title: 'Add-ons', lists: [addOnList('equipment')] },
           {
             title: 'Bundle Pricing',
             scalars: [
@@ -3212,6 +3229,7 @@ const PricingDataModal: React.FC<PricingDataModalProps> = ({ onClose, franchiseI
       {
         title: 'Interior Finish',
         groups: [
+          { title: 'Add-ons', lists: [addOnList('interiorFinish')] },
           {
             title: 'Prep & extras',
             scalars: [

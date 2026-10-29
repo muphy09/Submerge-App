@@ -1,3 +1,4 @@
+import { defaultAddOns, equipmentAllowsAddOns } from '../utils/addOns';
 import { useState, useEffect, useRef, type SyntheticEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -888,16 +889,21 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         : null;
 
     if (selectedPackage && hasPool) {
-      return createFreshEquipmentForPackage(selectedPackage, { hasPool, hasSpa });
+      const next = createFreshEquipmentForPackage(selectedPackage, { hasPool, hasSpa });
+      next.addOns = equipmentAllowsAddOns(next) ? (currentEquipment?.addOns ?? defaultAddOns('equipment')) : [];
+      return next;
     }
 
     if (onlyAvailablePackage && hasPool) {
-      return createFreshEquipmentForPackage(onlyAvailablePackage, { hasPool, hasSpa });
+      const next = createFreshEquipmentForPackage(onlyAvailablePackage, { hasPool, hasSpa });
+      next.addOns = equipmentAllowsAddOns(next) ? (currentEquipment?.addOns ?? defaultAddOns('equipment')) : [];
+      return next;
     }
 
     return normalizeEquipmentLighting(
       {
         ...getDefaultEquipment(),
+        addOns: currentEquipment?.addOns ?? defaultAddOns('equipment'),
         packageSelectionId: undefined,
         packageSelectionTouched: false,
       } as Proposal['equipment'],
@@ -2023,6 +2029,7 @@ function ProposalForm({ cloudIssue, showFeedbackButton = false, onOpenFeedback }
         hasPool,
         hasSpa,
       });
+      nextEquipment.addOns = equipmentAllowsAddOns(nextEquipment) ? (prev.equipment?.addOns || []) : [];
       if (!proposalNumber && hasSpa && packageSupportsSpa(nextPackage) && (nextEquipment.spaLights?.length ?? 0) === 0) {
         nextEquipment = normalizeEquipmentLighting(
           {

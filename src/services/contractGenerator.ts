@@ -1,3 +1,4 @@
+import { equipmentAllowsAddOns, selectedAddOns } from '../utils/addOns';
 import { Proposal, PumpSelection, WaterFeatureSelection } from '../types/proposal-new';
 import MasterPricingEngine from './masterPricingEngine';
 import pricingData from './pricingData';
@@ -51,6 +52,8 @@ export type ContractFieldRender = {
   autoValue: string;
   isAutoFilled: boolean;
   isOverridden: boolean;
+  continuationPage?: number;
+  continuationHeader?: string;
 };
 
 type ProposalWithPricing = Proposal & {
@@ -525,10 +528,16 @@ function buildCustomAdditionalSpecificationLines(proposal: ProposalWithPricing):
     });
 }
 
-function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
-  const customLines = buildCustomAdditionalSpecificationLines(proposal);
+export function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): string[] {
+  const addOnLines = [
+    ...(equipmentAllowsAddOns(proposal.equipment) ? selectedAddOns('equipment', proposal.equipment.addOns) : [])
+      .map(item => `Equipment Add-on: ${item.name}`),
+    ...selectedAddOns('interiorFinish', proposal.interiorFinish.addOns)
+      .map(item => `Interior Finish Add-on: ${item.name}`),
+  ];
+  const customLines = [...buildCustomAdditionalSpecificationLines(proposal), ...addOnLines];
   if (isPpasEastFranchiseId(proposal.franchiseId)) {
-    return customLines.slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);
+    return customLines;
   }
   const lines = shouldIncludeEquipmentWarrantyLine(proposal)
     ? [
@@ -541,7 +550,32 @@ function buildAdditionalSpecificationLines(proposal: ProposalWithPricing): strin
     ? ['', ...customLines]
     : customLines;
 
-  return lines.slice(0, ADDITIONAL_SPEC_FIELD_IDS.length);
+  return lines;
+}
+
+export function buildContractSpecificationPlan(proposal: Proposal): { inline: string[]; continuation: string[] } {
+  const lines = buildAdditionalSpecificationLines(proposal);
+  // Existing proposals without catalog add-ons retain their established template layout.
+  const hasAddOns = Boolean(proposal.equipment?.addOns?.length || proposal.interiorFinish?.addOns?.length);
+  if (!hasAddOns) return { inline: lines.slice(0, ADDITIONAL_SPEC_FIELD_IDS.length), continuation: [] };
+  // These template fields are narrow. Put long entries on full-width continuation rows.
+  const firstLongLine = lines.findIndex(line => line.length > 48);
+  const needsContinuation = lines.length > ADDITIONAL_SPEC_FIELD_IDS.length || firstLongLine >= 0;
+  if (!needsContinuation) return { inline: lines, continuation: [] };
+  const split = Math.min(ADDITIONAL_SPEC_FIELD_IDS.length - 1, firstLongLine < 0 ? lines.length : firstLongLine);
+  const continuation = lines.slice(split).flatMap(line => {
+    const rows: string[] = [];
+    let remaining = line;
+    while (remaining.length > 90) {
+      const space = remaining.lastIndexOf(' ', 90);
+      const end = space > 30 ? space : 90;
+      rows.push(remaining.slice(0, end));
+      remaining = remaining.slice(end).trimStart();
+    }
+    rows.push(remaining);
+    return rows;
+  });
+  return { inline: [...lines.slice(0, split), 'Additional Specifications continued on attached page(s).'], continuation };
 }
 
 function parseZipFromAddress(address?: string | null): string {
@@ -659,7 +693,7 @@ function computeAutoValue(field: ContractFieldRender, proposal: ProposalWithPric
   const specs = proposal.poolSpecs || ({} as Proposal['poolSpecs']);
   const pricing = getContractCashPrice(proposal);
   const waterFeatures = pickWaterFeatures(proposal.waterFeatures?.selections);
-  const additionalSpecificationLines = buildAdditionalSpecificationLines(proposal);
+  const additionalSpecificationLines = buildContractSpecificationPlan(proposal).inline;
   const bubblerSummary = getContractWaterFeatureSummary(waterFeatures.bubbler);
   const bowlSummary = getContractWaterFeatureSummary(waterFeatures.bowl, 'NONE');
 
@@ -1125,6 +1159,22 @@ export async function getEditableContractFields(
         isOverridden: hasOverride,
       };
     });
+
+  const continuation = buildContractSpecificationPlan(normalized).continuation;
+  const lastTemplatePage = Math.max(1, ...template.fields.map(field => field.page));
+  continuation.forEach((autoValue, index) => {
+    const id = `additional_spec_continuation_${index}`;
+    const hasOverride = Object.prototype.hasOwnProperty.call(overrides || {}, id);
+    const value = hasOverride ? String(overrides?.[id] ?? '') : autoValue;
+    fields.push({
+      id, page: lastTemplatePage + 1 + Math.floor(index / 30),
+      x: 48, y: 110 + (index % 30) * 20, width: 516, height: 18,
+      label: 'Additional Specification (continued)', color: 'blue',
+      value, autoValue, isAutoFilled: !hasOverride, isOverridden: hasOverride,
+      continuationPage: Math.floor(index / 30),
+      continuationHeader: [normalized.proposalNumber, normalized.customerInfo?.customerName].filter(Boolean).join(' - '),
+    });
+  });
 
   return fields;
 }

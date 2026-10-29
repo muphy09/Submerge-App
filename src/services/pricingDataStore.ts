@@ -1,3 +1,4 @@
+import { validateAddOnCatalogs } from '../utils/addOnValidation';
 import pricingData from './pricingData';
 import { assertProposalContext, captureProposalContext } from './proposalContext';
 import { getSessionFranchiseCode } from './session';
@@ -1074,6 +1075,8 @@ export async function savePricingModelSnapshot(options: {
   syncInteriorFinishColorOptions(basePricingState);
   for (const tier of [NORMAL_PRICING_TIER_ID, BRONZE_PRICING_TIER_ID]) {
     const effective = resolvePricingForTier(basePricingState, tier, getTierResolutionOptions());
+    const addOnError = validateAddOnCatalogs(effective);
+    if (addOnError) throw new Error(`${getPricingTierName(tier)} pricing: ${addOnError}`);
     const adjustmentError = validateCategoryAdjustments(effective.categoryAdjustments, effective);
     if (adjustmentError) throw new Error(`${getPricingTierName(tier)} pricing: ${adjustmentError}`);
   }

@@ -204,6 +204,9 @@ const selectionGroups: SelectionGroup[] = [
     const columns = p.excavation?.columns;
     return !columns?.count ? 'None' : `Qty: ${columns.count}; ${columns.width} × ${columns.depth} × ${columns.height} ft; ${words(columns.facing)}`;
   }),
+  ...(['equipment', 'interiorFinish'] as const).map(category =>
+    fieldGroup(`${category}.addOns`, 'Add-ons', [`${category}.addOns`], (p, pricing) =>
+      p[category]?.addOns?.map(item => pricing?.[category]?.addOns?.find(option => option.id === item.id)?.name || item.name).join(' | ') || 'None')),
   fieldGroup('interiorFinish.finish', 'Interior Finish', ['interiorFinish.finishType', 'interiorFinish.color'], (p, pricing) =>
     [pricing?.interiorFinish?.finishes?.find(finish => finish.id === p.interiorFinish?.finishType)?.name
       || words(p.interiorFinish?.finishType), p.interiorFinish?.color].filter(Boolean).join(' — ')),
@@ -287,7 +290,7 @@ export function proposalSelectionRows(proposal: Proposal, pricing?: PricingData)
     if (['poolSpecs.poolShape', 'poolSpecs.spaShape', 'poolSpecs.raisedSpaFacing', 'masonry.columns.facing'].includes(row.key)
       || /(?:Facing|\.facing)$/.test(row.key)) after = words(getAtPath(proposal, row.key));
     if (row.key === 'poolSpecs.automaticCover') after = proposal.poolSpecs.hasAutomaticCover ? 'Yes' : 'None';
-    if (row.key.startsWith('equipment.') && row.key !== 'equipment.package') {
+    if (row.key.startsWith('equipment.') && row.key !== 'equipment.package' && row.key !== 'equipment.addOns') {
       const field = row.key.slice('equipment.'.length);
       const equipment = proposal.equipment;
       if (['poolLights', 'spaLights'].includes(field)) {

@@ -176,6 +176,19 @@ export async function buildContractPdf(
     }
   }
 
+  const templatePageCount = pdf.getPageCount();
+  const continuationFields = fields.filter(field => field.continuationPage !== undefined);
+  const continuationCount = continuationFields.length
+    ? Math.max(...continuationFields.map(field => field.continuationPage!)) + 1 : 0;
+  for (let index = 0; index < continuationCount; index += 1) {
+    const page = pdf.addPage([612, 792]);
+    page.drawText('Additional Specifications - Continued', { x: 48, y: 746, size: 16, font: boldFont });
+    const header = sanitizePdfText(continuationFields.find(field => field.continuationPage === index)?.continuationHeader || '', font);
+    const headerSize = Math.min(10, 516 / Math.max(1, font.widthOfTextAtSize(header, 1)));
+    page.drawText(header, { x: 48, y: 724, size: headerSize, font });
+    page.drawText(`Continuation ${index + 1} of ${continuationCount}`, { x: 48, y: 36, size: 9, font });
+  }
+
   const pageSizes: { width: number; height: number }[] = pdf.getPages().map((p) => ({
     width: p.getWidth(),
     height: p.getHeight(),
@@ -219,7 +232,9 @@ export async function buildContractPdf(
 
     try {
       const value = sanitizePdfText(field.value || '', font);
-      const pageIndex = Math.max(0, Math.min(pdf.getPageCount() - 1, field.page - 1));
+      const pageIndex = field.continuationPage === undefined
+        ? Math.max(0, Math.min(templatePageCount - 1, field.page - 1))
+        : templatePageCount + field.continuationPage;
       const page = pdf.getPage(pageIndex);
       const pageHeight = page.getHeight();
       const width = field.width;

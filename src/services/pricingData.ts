@@ -3,6 +3,7 @@
 // ============================================================================
 
 import type { MasonryFacingOption } from '../utils/masonryFacing';
+import type { PricingAddOn } from '../types/proposal-new';
 import type { CategoryAdjustment } from '../types/categoryAdjustments';
 
 const defaultRbbFacingOptions: MasonryFacingOption[] = [
@@ -448,6 +449,7 @@ const pricingData = {
     ],
   },
   equipment: {
+    addOns: [] as PricingAddOn[],
     pumpOverheadMultiplier: 1.1, // Legacy fallback when a pump entry has no overhead multiplier
     pumps: [
       { name: 'No Pump (Select pump)', basePrice: 0, addCost1: 0, addCost2: 0, overheadMultiplier: 1.1 },
@@ -533,6 +535,7 @@ const pricingData = {
     ],
   },
   interiorFinish: {
+    addOns: [] as PricingAddOn[],
     minimumChargeSqft: 850,
     finishes: [
       {

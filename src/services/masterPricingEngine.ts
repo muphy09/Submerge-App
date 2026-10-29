@@ -4,6 +4,7 @@
 
 import { Proposal, CostBreakdown, CostLineItem, PAPDiscounts, CustomOption } from '../types/proposal-new';
 import pricingData from './pricingData';
+import { buildAddOnItems, equipmentAllowsAddOns } from '../utils/addOns';
 import { getPricingTaxRate } from './taxRate';
 import { CalculationModules } from './pricingEngineComplete';
 import { isBronzePricingTier } from './pricingTiers';
@@ -70,7 +71,7 @@ const roundCurrency = (value: number): number => Math.round(value * 100) / 100;
 
 function rebuildEquipmentTax(equipmentItems: CostLineItem[]): CostLineItem[] {
   const taxRate = getPricingTaxRate(pricingData);
-  const withoutTax = equipmentItems.filter((item) => !item.description.toLowerCase().includes('tax'));
+  const withoutTax = equipmentItems.filter((item) => (Boolean(item.details?.addOnId) || !item.description.toLowerCase().includes('tax')));
   const subtotal = withoutTax.reduce((sum, item) => sum + (item.total ?? 0), 0);
   if (subtotal > 0 && taxRate > 0) {
     const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
@@ -274,7 +275,9 @@ export class MasterPricingEngine {
             : `${item.description} (upgrade)`
           : item.description,
     }));
-    equipmentItems = rebuildEquipmentTax([...equipmentItems, ...waterFeaturesAsEquipment]);
+    equipmentItems = rebuildEquipmentTax([...equipmentItems, ...waterFeaturesAsEquipment,
+      ...(equipmentAllowsAddOns(equipment) ? buildAddOnItems('equipment', equipment.addOns) : []),
+    ]);
     const interiorForPricing = isPpasEast
       ? { ...interiorFinish, hasWaterproofing: false }
       : interiorFinish;
@@ -283,7 +286,8 @@ export class MasterPricingEngine {
       interiorForPricing,
       equipment
     );
-    const interiorFinishItems = [...interior.labor, ...interior.material]
+    const interiorAddOnItems = buildAddOnItems('interiorFinish', interiorFinish.addOns);
+    const interiorFinishItems = [...interior.labor, ...interior.material, ...interiorAddOnItems]
       .concat(buildCustomOptionItems(interiorFinish.customOptions, 'Interior Finish'));
     const cleanupItems = CalculationModules.Cleanup.calculateCleanupCost(poolSpecs, normalizedExcavation, tileCopingDecking);
     const fiberglassItems = CalculationModules.Fiberglass.calculateFiberglassCost(
@@ -427,12 +431,12 @@ export class MasterPricingEngine {
       // Equipment
       if (appliedPapDiscounts.equipment > 0) {
         const subtotalBeforeTax = equipmentItems
-          .filter(item => !item.description.includes('Tax'))
+          .filter(item => item.details?.addOnId || !item.description.includes('Tax'))
           .reduce((sum, i) => sum + i.total, 0);
         if (subtotalBeforeTax > 0) {
           const discountAmount = subtotalBeforeTax * appliedPapDiscounts.equipment;
           // Insert before tax
-          const taxIndex = equipmentItems.findIndex(item => item.description.includes('Tax'));
+          const taxIndex = equipmentItems.findIndex(item => !item.details?.addOnId && item.description.includes('Tax'));
           const discountItem: CostLineItem = {
             category: 'Equipment',
             description: 'PAP Discount',
@@ -473,6 +477,17 @@ export class MasterPricingEngine {
           unitPrice: -(laborSubtotal * appliedPapDiscounts.interiorFinish),
           quantity: 1,
           total: -(laborSubtotal * appliedPapDiscounts.interiorFinish),
+        });
+      }
+
+      // Add-ons follow Interior Finish PAP rules. Keep the established base
+      // breakdown intact so adding this catalog does not reprice older work.
+      if (appliedPapDiscounts.interiorFinish > 0 && interiorAddOnItems.length) {
+        const amount = -this.sumItems(interiorAddOnItems) * appliedPapDiscounts.interiorFinish;
+        interiorFinishItems.push({
+          category: 'Interior Finish', description: 'Add-ons PAP Discount',
+          unitPrice: amount, quantity: 1, total: amount,
+          details: { subcategory: 'Add-ons', addOnDiscount: true },
         });
       }
 
