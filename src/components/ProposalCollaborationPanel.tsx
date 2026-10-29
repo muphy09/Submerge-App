@@ -1,3 +1,4 @@
+import { collaborationSharingBlockedReason } from '../utils/collaborationSafety';
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Proposal } from '../types/proposal-new';
 import { calculatePriceImpact } from '../services/priceImpact';
@@ -106,6 +107,8 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [reviewPricing, setReviewPricing] = useState<PricingData>();
+  const sharingBlockedReason = collaborationSharingBlockedReason(proposal);
+  const [priceExplanation, setPriceExplanation] = useState<string | null>(null);
   const [reviewPrices, setReviewPrices] = useState<Record<string, number | null>>({});
   const [prepared, setPrepared] = useState<PreparedContribution | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -205,19 +208,14 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
     if (!review) return;
     let cancelled = false;
     setReviewPrices({});
+    setPriceExplanation(null);
     const calculate = async () => {
-      if (rows.length === 1) {
-        const difference = Number(review.working_version_json.totalCost) - Number(review.base_version_json.totalCost);
-        if (Number.isFinite(difference)) {
-          if (!cancelled) setReviewPrices({ [rows[0].key]: difference });
-        }
-      }
       try {
         const base = review.base_version_json;
         const snapshot = await loadPricingSnapshotForExistingProposal(base.franchiseId,
           base.pricingModelId, base.pricingModelFranchiseId, base.pricingTierId, base.pricingModelRevisionId);
         if (!cancelled) setReviewPricing(snapshot.pricing);
-        if (rows.length === 1) return;
+
         const changes: Record<string, number | null> = {};
         let previous = base;
         for (const row of rows) {
@@ -232,10 +230,20 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
           changes[row.key] = result.status === 'available' ? result.customerPriceChange : null;
           previous = current;
         }
-        if (!cancelled) setReviewPrices(changes);
+        const sum = Object.values(changes).reduce<number>((total, value) => total + (value || 0), 0);
+        const expected = Number(review.working_version_json.totalCost) - Number(base.totalCost);
+        if (Object.values(changes).some(value => value === null) || !Number.isFinite(expected) || Math.abs(sum - expected) > 0.02) {
+          if (!cancelled) {
+            setReviewPrices(Object.fromEntries(rows.map(row => [row.key, null])));
+            setPriceExplanation('Item price changes could not be reconciled with the total difference. Review the saved totals above.');
+          }
+        } else if (!cancelled) setReviewPrices(changes);
       } catch (caught) {
         console.warn('Could not calculate item price changes for collaboration review.', caught);
-        if (!cancelled && rows.length !== 1) setReviewPrices(Object.fromEntries(rows.map((row) => [row.key, null])));
+        if (!cancelled) {
+          setReviewPrices(Object.fromEntries(rows.map((row) => [row.key, null])));
+          setPriceExplanation('Item price changes could not be reconciled with the total difference. Review the saved totals above.');
+        }
       }
     };
     void calculate();
@@ -345,7 +353,10 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
     <section className="proposal-side-card collaboration-card no-print" aria-label="Collaboration">
       <div className="proposal-side-card-header"><div className="summary-card-title">
         <span className="summary-card-icon"><ProposalSummaryIcon name="people" size={28} /></span>
-        <h2>Collaboration</h2>
+        <div className="collaboration-title-copy">
+          <h2>Collaboration</h2>
+          <p className="collaboration-access-note">Your Access: {isOwner ? 'Owner' : (myShare?.permission || proposal.sharedPermission) === 'contribute' ? 'Can propose changes' : 'Can view'}</p>
+        </div>
       </div></div>
       <div className="proposal-side-card-body collaboration-card-body">
         {loading && <p>Loading collaborators…</p>}
@@ -355,12 +366,15 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
           <div className="collaboration-person"><span className="collaboration-person-icon owner"><ProposalSummaryIcon name="owner" size={25} /></span>
             <span><small>Owner</small><strong>{ownerName}</strong></span></div>
           <div className="collaboration-person"><span className="collaboration-person-icon contributors"><ProposalSummaryIcon name="people" size={25} /></span>
-            <span><small>Collaborators</small><strong>{people.filter((person) => person.user_id !== proposal.ownerAuthUserId).length
+            <span className="collaboration-contributors"><small>Collaborators</small>{people.filter((person) => person.user_id !== proposal.ownerAuthUserId).length
               ? people.filter((person) => person.user_id !== proposal.ownerAuthUserId)
-                .map((person) => person.display_name || 'Franchise user').join(', ')
-              : offline ? 'Reconnect to see current access' : 'None yet'}</strong></span></div>
+                .map((person) => <span className="collaboration-contributor-row" key={person.user_id}>
+                  <strong>{person.display_name || 'Franchise user'}</strong>
+                  {!isOwner && person.user_id === userId && <button className="action-button collaboration-leave" onClick={() => { setError(null); setLeaveOpen(true); }}
+                    disabled={busy || offline}>Leave Proposal</button>}
+                </span>)
+              : <strong>{offline ? 'Reconnect to see current access' : 'None yet'}</strong>}</span></div>
         </div>
-        {!isOwner && <p className="collaboration-access-note">Your Access: {(myShare?.permission || proposal.sharedPermission) === 'contribute' ? 'Can propose changes' : 'Can view'}</p>}
         {isOwner && submitted.length > 0 && <div className="collaboration-review-list">
           {submitted.map((request) => <div key={request.id} className="collaboration-review-entry">
             <div className="collaboration-review-alert"><span className="collaboration-person-icon alert"><ProposalSummaryIcon name="request" size={27} /></span>
@@ -371,11 +385,9 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
             </button>
           </div>)}
         </div>}
-        {!isOwner && <div className="collaboration-recipient-actions">
-          {mySubmittedRequest && <button className="action-button collaboration-withdraw" 
-          onClick={() => void act(() => decideChangeRequest(mySubmittedRequest.id, 'withdraw'))} disabled={busy || offline}>Withdraw Changes</button>}
-          <button className="action-button collaboration-leave" onClick={() => { setError(null); setLeaveOpen(true); }}
-            disabled={busy || offline}>Leave Proposal</button></div>}
+        {!isOwner && mySubmittedRequest && <div className="collaboration-recipient-actions">
+          <button className="action-button collaboration-withdraw"
+          onClick={() => void act(() => decideChangeRequest(mySubmittedRequest.id, 'withdraw'))} disabled={busy || offline}>Withdraw Changes</button></div>}
         <details className="collaboration-history"><summary><ProposalSummaryIcon name="history" size={22} /><span>Collaboration History</span><ProposalSummaryIcon name="chevron" size={20} className="collaboration-history-chevron" /></summary>
           <ul>
             {endedShares.length === 0 && history.length === 0 && <li>No collaboration history yet.</li>}
@@ -391,6 +403,7 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
       <div className="collaboration-modal" role="dialog" aria-modal="true" aria-label="Share and manage access" onClick={(event) => event.stopPropagation()}>
         <header><h2>Share / Manage Access</h2><button aria-label="Close" onClick={() => setManageOpen(false)}>×</button></header>
         <p>Only active users in this franchise can be added. They receive access immediately. Removing access cannot erase a copy on a disconnected device until it reconnects.</p>
+        {sharingBlockedReason && <p role="status">{sharingBlockedReason}</p>}
         {error && <p role="alert" className="collaboration-error">{error}</p>}
         <div className="collaboration-recipient-picker"><label htmlFor={recipientInputId}>Share with</label>
           {selectedRecipients.length > 0 && <span className="collaboration-recipient-chips">
@@ -446,7 +459,7 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
           </div>}
         </div>
         <label>Note (optional)<textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>
-        <button className="action-button primary" disabled={!selectedRecipients.length || busy} onClick={() => void act(async () => {
+        <button className="action-button primary" disabled={!selectedRecipients.length || busy || Boolean(sharingBlockedReason)} onClick={() => void act(async () => {
           const recipients = [...selectedRecipients];
           const outcomes = await Promise.allSettled(recipients.map((person) =>
             shareProposal(proposal.proposalNumber, person.user_id, selectedPermissions[person.user_id] || 'view', note)));
@@ -531,13 +544,15 @@ export default function ProposalCollaborationPanel({ proposal, available, offlin
             <div className="collaboration-total"><strong>Gross Profit %</strong><span>{typeof review.base_version_json.pricing?.grossProfitMargin === 'number' ? `${review.base_version_json.pricing.grossProfitMargin.toFixed(1)}%` : '—'} <b aria-label="changes to">→</b> {typeof review.working_version_json.pricing?.grossProfitMargin === 'number' ? `${review.working_version_json.pricing.grossProfitMargin.toFixed(1)}%` : '—'}</span></div>
             <div className="collaboration-total"><strong>Total</strong><span>{formatMoney(review.base_version_json.totalCost)} <b aria-label="changes to">→</b> {formatMoney(review.working_version_json.totalCost)}</span></div>
           </div>
+          {prepared?.warnings?.map(warning => <p key={warning.path + warning.message} role="status"><span aria-label="Warning">⚠</span> {warning.message}</p>)}
+          {priceExplanation && <p role="status">{priceExplanation}</p>}
           <div className="collaboration-diff"><h3>Changed Fields <span>{rows.length}</span></h3>
             {rows.length ? <div className="collaboration-diff-table-wrap"><table className="collaboration-diff-table">
               <thead><tr><th scope="col">Changed Item</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Price Change</th></tr></thead>
               <tbody>{rows.map((row, index) => <Fragment key={row.key}>
                 {(index === 0 || rows[index - 1].category !== row.category) &&
                   <tr className="collaboration-diff-group"><th colSpan={4} scope="rowgroup">{row.category}</th></tr>}
-                <tr><th scope="row">{row.label}</th><td>{row.before}</td><td>{row.after}</td>
+                <tr><th scope="row">{row.label}{prepared?.warnings?.some(warning => row.paths.includes(warning.path)) && <span title="Saved selection unavailable in this pricing revision" aria-label="Unavailable saved selection"> ⚠</span>}</th><td>{row.before}</td><td>{row.after}</td>
                   <td className={typeof reviewPrices[row.key] === 'number' ? reviewPrices[row.key]! > 0 ? 'price-increase' : reviewPrices[row.key]! < 0 ? 'price-decrease' : '' : ''}>
                     {typeof reviewPrices[row.key] === 'number' ? `${reviewPrices[row.key]! > 0 ? '+' : ''}${formatMoney(reviewPrices[row.key])}` : '—'}
                   </td></tr>

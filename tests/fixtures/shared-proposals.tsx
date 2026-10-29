@@ -1,3 +1,5 @@
+import { getPricingDataSnapshot } from '../../src/services/pricingDataStore';
+import { proposalCacheEnvironment } from '../../src/services/proposalContext';
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import DashboardProposalsPanel from '../../src/components/DashboardProposalsPanel';
@@ -8,6 +10,7 @@ import type { CollaborationRequest, CollaborationShare, SharedProposal } from '.
 import { clearSession } from '../../src/services/session';
 import '../../src/index.css';
 import '../../src/styles/sharedButtons.css';
+import { CURRENT_PRICING_ENGINE_VERSION } from '../../src/utils/pricingEngineCompatibility';
 import { getDefaultProposal } from '../../src/utils/proposalDefaults';
 import MasterPricingEngine from '../../src/services/masterPricingEngine';
 import { withAdditionalDeckingSelections } from '../../src/utils/decking';
@@ -23,6 +26,8 @@ window.collaborationAction = '';
 (window as any).electron = { listPricingModels: async () => [] };
 
 const proposal = {
+  pricingEngineVersion: params.has('legacy') ? undefined : CURRENT_PRICING_ENGINE_VERSION,
+  pricingModelId: 'fixture-model', pricingModelRevisionId: 'fixture-revision',
   proposalNumber: 'TEST-FIXTURE-1', franchiseId: 'fixture-franchise',
   ownerAuthUserId: 'owner-id', designerAuthUserId: 'owner-id', designerName: 'Original Designer',
   contentRevision: params.get('stale') ? 2 : 1, collaborationEnabled: true,
@@ -32,6 +37,8 @@ const proposal = {
   subtotal: 100000, taxAmount: 8000, totalCost: 108000,
   poolSpecs: { poolType: 'shotcrete' }, versions: [],
 } as Proposal;
+localStorage.setItem(`submerge.pricingModelSnapshot.${proposalCacheEnvironment()}.fixture-franchise.fixture-model.fixture-revision`,
+  JSON.stringify({ franchiseId: 'fixture-franchise', pricingModelId: 'fixture-model', revisionId: 'fixture-revision', version: 'v1', pricing: getPricingDataSnapshot() }));
 const share: CollaborationShare = {
   id: 'share-1', proposal_number: proposal.proposalNumber, recipient_id: 'recipient-id',
   permission: params.get('permission') === 'view' ? 'view' : 'contribute',
@@ -112,7 +119,8 @@ const api: typeof collaborationPanelApi = {
     const conflicts = params.get('conflict') ? [{ path: 'poolSpecs.poolLength', before: 28, owner: 30, proposed: 32,
       message: 'The owner also changed this field.' }] : [];
     return { before: target.base_version_json, after: target.working_version_json, conflicts,
-      expectedRevision: Number(store.proposal.contentRevision), requestUpdatedAt: target.updated_at, resolutions };
+      expectedRevision: Number(store.proposal.contentRevision), requestUpdatedAt: target.updated_at, resolutions,
+      warnings: params.has('unavailable') ? [{ path: 'equipment.pump', message: 'Saved pump: unavailable in this pricing revision. The saved selection and pricing are retained.' }] : [] };
   },
   applyChangeRequest: async (id, _prepared, destination) => {
     (window as any).collaborationDestination = destination;

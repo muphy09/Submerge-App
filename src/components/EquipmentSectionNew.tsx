@@ -799,7 +799,7 @@ function EquipmentSectionNew({
   const renderRetiredOption = (name?: string) =>
     name ? (
       <option key={`retired-${name}`} value={name}>
-        Removed - Please Select Another
+        {name} (unavailable; saved selection)
       </option>
     ) : null;
 

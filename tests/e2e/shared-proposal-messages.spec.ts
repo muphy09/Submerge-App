@@ -57,6 +57,23 @@ test('the real summary greets its recipient and navigates to the dashboard after
   await message.getByRole('button', { name: 'Okay' }).click();
   await expect(message).toHaveCount(0);
   await expect.poll(() => acknowledged).toBe(true);
+  const viewProposal = page.getByRole('button', { name: 'View Proposal', exact: true });
+  await viewProposal.hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Open the proposal in the builder.');
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const header = page.locator('.proposal-nav-card-header');
+    await expect(header).toHaveClass(/is-without-build/);
+    await expect(header.locator('.proposal-nav-build-action')).toHaveCount(0);
+    const heading = header.getByRole('heading', { name: 'Versions & Addendums', exact: true });
+    await expect(heading).toHaveCSS('font-size', '20px');
+    expect(await heading.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(await header.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    const copy = await header.locator('.proposal-nav-heading-copy').boundingBox();
+    const title = await heading.boundingBox();
+    expect(title!.width).toBeCloseTo(copy!.width, 0);
+    await header.screenshot({ path: testInfo.outputPath(`shared-summary-header-${width}.png`) });
+  }
   await page.getByRole('button', { name: 'Leave Proposal', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: 'Leave proposal?' });
   await expect(confirm.locator('.confirm-modal')).toBeVisible();

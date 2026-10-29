@@ -3599,6 +3599,8 @@
 .proposal-nav-card-header .summary-card-icon { width: 2.6rem; height: 2.6rem; }
 .proposal-nav-heading-copy { display: grid; justify-items: start; gap: .5rem; min-width: 0; }
 .proposal-nav-card-header h2 { display: block; white-space: nowrap; font-size: 1.05rem; line-height: 1.3; }
+.proposal-nav-card-header.is-without-build .proposal-nav-heading-copy { flex: 1; }
+.proposal-nav-card-header.is-without-build h2 { width: 100%; white-space: normal; font-size: 1.25rem; line-height: 1.25; }
 .version-count-pill { padding: .3rem .7rem; border-radius: 999px; background: #e8f2ff; color: #245388; font-size: .75rem; letter-spacing: 0; white-space: nowrap; }
 .proposal-nav-build-action { flex: 0 0 7.9rem; width: 7.9rem; }
 .proposal-nav-build-button { max-width: none; min-height: 2.8rem; border-color: #edc05b; background: #fff9e7; color: #654709; font-size: .72rem; font-weight: 700; }

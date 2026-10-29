@@ -5,7 +5,7 @@ import { isIncludedSaltCellSelection } from './saltCellCompatibility';
 type NamedItem = { name?: string | null };
 
 export const RETIRED_EQUIPMENT_TOOLTIP =
-  'Equipment you have selected has been modified in the Pricing Model and requires you to make a change';
+  'This equipment is unavailable in this pricing revision. The saved selection is retained. Choose an available replacement to change it.';
 
 const normalizeName = (value?: string | null) => (value ?? '').trim().toLowerCase();
 

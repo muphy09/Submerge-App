@@ -1,3 +1,4 @@
+import { assertCollaborativeVersion, collaborationSharingBlockedReason } from '../utils/collaborationSafety';
 import type { Proposal } from '../types/proposal-new';
 import { getSupabaseClient, hasSupabaseConnection } from './supabaseClient';
 import { getSessionFranchiseId, isTestSession, readSession } from './session';
@@ -213,8 +214,25 @@ export async function listProposalShares(proposalNumber: string): Promise<Collab
   return (data || []) as CollaborationShare[];
 }
 
+async function assertStoredCollaborationSafety(number: string, versionId?: string) {
+  const context = captureProposalContext();
+  const { data, error } = await client().from(table()).select('proposal_json').eq('proposal_number', number).single();
+  assertProposalContext(context);
+  if (error) throw error;
+  const proposal = data.proposal_json as Proposal;
+  if (versionId) {
+    const version = [proposal, ...(proposal.versions || [])].find(v => (v.versionId || 'original') === versionId);
+    if (!version) throw new Error('The selected version is no longer available.');
+    assertCollaborativeVersion(version);
+  } else {
+    const reason = collaborationSharingBlockedReason(proposal);
+    if (reason) throw new Error(reason);
+  }
+}
+
 export async function shareProposal(number: string, recipientId: string, permission: CollaborationPermission, note = '') {
   const context = await online();
+  await assertStoredCollaborationSafety(number);
   const { error } = await client().rpc('collab_manage_share', {
     p_number: number, p_test: mode(), p_recipient: recipientId, p_permission: permission, p_note: note,
   });
@@ -401,6 +419,7 @@ export async function listChangeRequests(number: string): Promise<CollaborationR
 
 export async function beginWorkingCopy(number: string, versionId: string, expected: number): Promise<CollaborationRequest> {
   const context = await online();
+  await assertStoredCollaborationSafety(number, versionId);
   const { data, error } = await client().rpc('collab_begin_work', {
     p_number: number, p_test: mode(), p_version: versionId, p_expected: expected,
   });
@@ -415,6 +434,8 @@ export async function saveWorkingCopy(number: string, versionId: string, work: P
   if (!request || request.proposal_number !== number || request.target_version_id !== versionId) {
     throw new Error('Reopen the working copy to capture its original baseline. Your edits have not been saved.');
   }
+  await assertStoredCollaborationSafety(number, versionId);
+  assertCollaborativeVersion(work);
   const { data, error } = await client().rpc('collab_save_work_v2', {
     p_request: request.id, p_test: mode(), p_work: work, p_updated: request.updated_at, p_submit: submit, p_note: note,
   });
@@ -443,6 +464,11 @@ export type ContributionDestination = 'new-draft' | 'overwrite';
 
 export async function applyChangeRequest(id: string, prepared: PreparedContribution, destination: ContributionDestination) {
   const context = await online();
+  // Re-prepare against fresh owner data before submitting a preview.
+  const fresh = await prepareChangeRequest(id, prepared.resolutions);
+  if (fresh.expectedRevision !== prepared.expectedRevision || fresh.requestUpdatedAt !== prepared.requestUpdatedAt
+    || JSON.stringify(fresh.after) !== JSON.stringify(prepared.after)) throw new Error('The comparison changed. Reopen the review before applying changes.');
+  prepared = fresh;
   if (!['new-draft', 'overwrite'].includes(destination)) throw new Error('Choose how to apply these changes.');
   if (prepared.conflicts.some(conflict => !prepared.resolutions[conflict.path]
     || (conflict.allowed && !conflict.allowed.includes(prepared.resolutions[conflict.path])))) throw new Error('Resolve every conflict before applying changes.');
@@ -540,6 +566,8 @@ export async function saveCollaborativeOwnerProposal(proposal: Proposal, submitC
   if (Number(stored.content_revision) !== proposal.contentRevision) {
     throw new Error('COLLAB_CONFLICT: This proposal changed on another device. Reopen the latest draft.');
   }
+  const blocked = collaborationSharingBlockedReason(proposal);
+  if (blocked) throw new Error(blocked);
   const payload = alignCollaborativeProposalRoot(proposal, stored.proposal_json.versionId || 'original');
   const { data, error } = await client().rpc('collab_owner_save', {
     p_number: proposal.proposalNumber,

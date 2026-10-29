@@ -41,6 +41,41 @@ test('collaboration card fits the summary right rail', async ({ page }) => {
   await expect(card.getByRole('button', { name: 'Review Changes' })).toBeVisible();
 });
 
+test('collaboration access sits under the title and leave stays beside the current collaborator', async ({ page }, testInfo) => {
+  for (const [mode, permission, access] of [['owner', 'contribute', 'Owner'], ['recipient', 'contribute', 'Can propose changes'], ['recipient', 'view', 'Can view']]) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${fixture}?mode=${mode}&permission=${permission}&rail=1`);
+    const card = page.getByRole('region', { name: 'Collaboration' });
+    const title = card.getByRole('heading', { name: 'Collaboration', exact: true });
+    const accessNote = card.locator('.proposal-side-card-header').getByText(`Your Access: ${access}`, { exact: true });
+    await expect(accessNote).toBeVisible();
+    const titleBounds = (await title.boundingBox())!;
+    const accessBounds = (await accessNote.boundingBox())!;
+    expect(accessBounds.y).toBeGreaterThanOrEqual(titleBounds.y + titleBounds.height);
+    expect(accessBounds.x).toBe(titleBounds.x);
+    const leave = card.getByRole('button', { name: 'Leave Proposal', exact: true });
+    if (mode === 'owner') {
+      await expect(leave).toHaveCount(0);
+    } else {
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        const row = card.locator('.collaboration-contributor-row').filter({ hasText: 'Jordan Designer' });
+        await expect(row.getByRole('button', { name: 'Leave Proposal' })).toBeVisible();
+        const nameBounds = (await row.locator('strong').boundingBox())!;
+        const buttonBounds = (await leave.boundingBox())!;
+        expect(buttonBounds.x).toBeGreaterThanOrEqual(nameBounds.x + nameBounds.width);
+        expect(buttonBounds.y).toBeLessThan(nameBounds.y + nameBounds.height);
+        expect(buttonBounds.y + buttonBounds.height).toBeGreaterThan(nameBounds.y);
+        expect(buttonBounds.width).toBeLessThan(120);
+        expect(nameBounds.height).toBeLessThan(50);
+        expect(await card.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      }
+      await expect(card.locator('.collaboration-contributor-row').filter({ hasText: 'Taylor Admin' }).getByRole('button')).toHaveCount(0);
+    }
+    await card.screenshot({ path: testInfo.outputPath(`collaboration-access-${mode}-${permission}.png`) });
+  }
+});
+
 test('dashboard shows proposal attention dots without an updates feed', async ({ page }, testInfo) => {
   await page.goto(`${fixture}?mode=dashboard`);
   await expect(page.getByRole('tab', { name: 'My Proposals (1)' })).toHaveAttribute('aria-selected', 'true');
@@ -176,7 +211,8 @@ test('review condenses automation pricing fields into one named item', async ({ 
   const automation = review.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Automation', exact: true }) });
   await expect(automation).toContainText('No Automation');
   await expect(automation).toContainText('AQRS Omni - 25k with Salt and Heat');
-  await expect(automation).toContainText('+$5,000.00');
+  await expect(review.getByText('Item price changes could not be reconciled with the total difference. Review the saved totals above.')).toBeVisible();
+  await expect(automation.getByRole('cell').last()).toHaveText('—');
   await expect(review.getByRole('columnheader', { name: 'Price Change' })).toBeVisible();
   await page.goto(`${fixture}?mode=owner&diff=salt`);
   await page.getByRole('button', { name: 'Review Changes' }).click();
@@ -198,7 +234,7 @@ test('owner can scroll through a long change review', async ({ page }) => {
 test('recipient can withdraw from the summary and send saved changes for review', async ({ page }) => {
   await page.goto(`${fixture}?mode=recipient`);
   await expect(page.getByText('Your Access: Can propose changes')).toBeVisible();
-  await expect(page.getByText('Jordan Designer, Taylor Admin')).toBeVisible();
+  await expect(page.locator('.collaboration-contributor-row strong')).toHaveText(['Jordan Designer', 'Taylor Admin', 'Casey Editor']);
   await expect(page.getByText('Your latest request:')).toHaveCount(0);
   const history = page.locator('.collaboration-history');
   await expect(history).not.toHaveAttribute('open');
@@ -267,24 +303,42 @@ test('the real apply service sends the selected destination without changing the
   await page.addInitScript(() => {
     window.__APP_ENV__ = { VITE_SUPABASE_URL: 'https://submerge-playwright.invalid', VITE_SUPABASE_ANON_KEY: 'playwright-public-placeholder' };
   });
+  let safetyFixture: any;
   const calls: any[] = [];
   await page.route('https://submerge-playwright.invalid/**', async route => {
     if (new URL(route.request().url()).pathname.endsWith('/collab_apply_review_v3')) {
       const args = route.request().postDataJSON(); calls.push(args);
       return route.fulfill({ json: { destination: args.p_destination, versionId: args.p_destination === 'new-draft' ? 'server-created' : 'original' } });
     }
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/proposal_collaboration_requests')) return route.fulfill({ json: safetyFixture.request });
+    if (path.endsWith('/franchise_proposals')) return route.fulfill({ json: { proposal_json: safetyFixture.base, content_revision: 8, owner_auth_user_id: 'owner-id' } });
     return route.fulfill({ json: {} });
   });
   await page.goto(`${fixture}?mode=owner`);
-  const results = await page.evaluate(async () => {
-    const { applyChangeRequest } = await import('/src/services/proposalCollaboration.ts');
-    const prepared: any = { before: { versionId: 'original' }, after: { versionId: 'original' },
-      expectedRevision: 8, requestUpdatedAt: '2026-10-27T21:00:00Z', conflicts: [], resolutions: {} };
-    return [await applyChangeRequest('request', prepared, 'new-draft'), await applyChangeRequest('request', prepared, 'overwrite')];
+  safetyFixture = await page.evaluate(async () => {
+    const { getDefaultProposal } = await import('/src/utils/proposalDefaults.ts');
+    const { calculateCollaborativeVersion, prepareContribution } = await import('/src/services/collaborationPricing.ts');
+    const base: any = await calculateCollaborativeVersion({ ...getDefaultProposal(), versionId: 'original', proposalNumber: 'TEST-FIXTURE-1',
+      franchiseId: 'fixture-franchise', pricingModelId: 'fixture-model', pricingModelRevisionId: 'fixture-revision', contentRevision: 8 });
+    const work = structuredClone(base); work.customerInfo.phone = '555-0100';
+    const request: any = { id: 'request', proposal_number: base.proposalNumber, target_version_id: 'original', base_version_json: base,
+      working_version_json: work, updated_at: '2026-10-27T21:00:00Z' };
+    return { base, request, prepared: await prepareContribution(request, base) };
   });
+  const results = await page.evaluate(async prepared => {
+    const { applyChangeRequest } = await import('/src/services/proposalCollaboration.ts');
+    return [await applyChangeRequest('request', prepared, 'new-draft'), await applyChangeRequest('request', prepared, 'overwrite')];
+  }, safetyFixture.prepared);
   expect(calls.map(call => call.p_destination)).toEqual(['new-draft','overwrite']);
   for (const call of calls) expect(call).toMatchObject({ p_result: { versionId: 'original' }, p_expected: 8 });
   expect(results.map(value => value.versionId)).toEqual(['server-created','original']);
+  safetyFixture.base.totalCost -= 2000;
+  await expect(page.evaluate(async prepared => {
+    const { applyChangeRequest } = await import('/src/services/proposalCollaboration.ts');
+    return applyChangeRequest('request', prepared, 'overwrite');
+  }, safetyFixture.prepared)).rejects.toThrow('saved total');
+  expect(calls).toHaveLength(2);
 });
 
 test('review uses Shotcrete for stored construction type values', async ({ page }) => {

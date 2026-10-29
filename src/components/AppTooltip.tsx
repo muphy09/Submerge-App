@@ -255,7 +255,7 @@ export const TooltipAnchor = ({ tooltip, className, as = 'span', children, follo
         onMouseEnter={followTarget ? undefined : () => showTooltip()}
         onMouseOver={followTarget ? event => {
           if ((event.target as HTMLElement).closest('.price-impact-trigger-wrap')) { hideTooltip(); return; }
-          const target = (event.target as HTMLElement).closest<HTMLElement>('input, select, textarea, button, [role="checkbox"], label');
+          const target = (event.target as HTMLElement).closest<HTMLElement>('input, select, textarea, button, [role="checkbox"]');
           if (target && event.currentTarget.contains(target)) showTooltip(target);
           else hideTooltip();
         } : undefined}

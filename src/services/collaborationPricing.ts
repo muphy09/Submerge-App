@@ -1,3 +1,5 @@
+import { assertCollaborativeVersion } from '../utils/collaborationSafety';
+import { unavailableEquipment, isRetainedEquipment, hasSavedEquipmentPrice, retainUnavailableEquipment } from '../utils/collaborationEquipment';
 import type { Proposal } from '../types/proposal-new';
 import type { CollaborationRequest } from './proposalCollaboration';
 import { loadPricingSnapshotForExistingProposal, withTemporaryPricingSnapshot } from './pricingDataStore';
@@ -39,8 +41,8 @@ export async function calculateCollaborativeVersion(input: Proposal, baseline?: 
         'equipment','waterFeatures','customFeatures','masonry','interiorFinish'] as const) {
         (complete as any)[key] = { ...(defaults as any)[key], ...(source as any)[key] };
       }
-      return sanitizeProposalSelectionState(hydrateGroupedFeatures(
-        hydrateProposalEquipmentFromRevision(complete, snapshot.pricing), snapshot.pricing));
+      return retainUnavailableEquipment(sanitizeProposalSelectionState(hydrateGroupedFeatures(
+        hydrateProposalEquipmentFromRevision(complete, snapshot.pricing), snapshot.pricing)), source, snapshot.pricing);
     };
     const normalized = normalize(input);
     // Catalog hydration/defaults are a calculation view, not permission to rewrite
@@ -61,21 +63,27 @@ export async function calculateCollaborativeVersion(input: Proposal, baseline?: 
 }
 
 export type PreparedContribution = { before: Proposal; after: Proposal; conflicts: ContributionConflict[];
-  expectedRevision: number; requestUpdatedAt: string; resolutions: ContributionResolutions };
+  expectedRevision: number; requestUpdatedAt: string; resolutions: ContributionResolutions; warnings?: Array<{ path: string; message: string }> };
 
 export async function prepareContribution(request: CollaborationRequest, container: Proposal,
   resolutions: ContributionResolutions = {}): Promise<PreparedContribution> {
   const current = [container, ...(container.versions || [])].find(v => (v.versionId || 'original') === request.target_version_id);
   if (!current) throw new Error('The target version was removed. Your proposed changes are retained in history.');
+  assertCollaborativeVersion(current);
   const merged = mergeContribution(request.base_version_json, request.working_version_json, current, resolutions);
+  const ownerSnapshot = await loadPricingSnapshotForExistingProposal(current.franchiseId, current.pricingModelId,
+    current.pricingModelFranchiseId, current.pricingTierId, current.pricingModelRevisionId);
+  if (unavailableEquipment(current, ownerSnapshot.pricing).some(({ item }) => !hasSavedEquipmentPrice(item))) {
+    throw new Error('An unavailable saved selection has incomplete pricing. The owner must resolve it before applying shared changes.');
+  }
   const canonicalBefore = await calculateCollaborativeVersion(current);
   // The review must show the persisted owner price, including any historical
   // protection. Showing only a recalculated baseline could hide an unrelated delta.
   const before = JSON.parse(JSON.stringify(current)) as Proposal;
   const conflicts = [...merged.conflicts];
-  if (Math.abs(Number(canonicalBefore.totalCost) - Number(current.totalCost)) > 0.01) {
-    conflicts.push({ path: 'baseline-pricing', before: current.totalCost, owner: current.totalCost,
-      proposed: canonicalBefore.totalCost, message: 'The current calculation differs from the owner’s saved total. Explicitly review this price difference before applying any contribution.' });
+  if (![current.totalCost, canonicalBefore.totalCost].every(value => typeof value === 'number' && Number.isFinite(value))
+    || Math.abs(canonicalBefore.totalCost - current.totalCost) > 0.01) {
+    throw new Error('The owner’s saved total does not match its unchanged calculation. Changes cannot be applied until the owner resolves this pricing difference.');
   }
   // A changed pin can reprice or remove a selected item. Require explicit owner review
   // of the affected edited section, even if the selected item's name stayed the same.
@@ -95,28 +103,17 @@ export async function prepareContribution(request: CollaborationRequest, contain
   }
   const snapshot = await loadPricingSnapshotForExistingProposal(current.franchiseId, current.pricingModelId,
     current.pricingModelFranchiseId, current.pricingTierId, current.pricingModelRevisionId);
-  const catalogs = snapshot.pricing.equipment as any;
-  const equipmentCatalogs: Record<string, any[]> = {
-    pump: catalogs?.pumps, additionalPumps: catalogs?.pumps, auxiliaryPump: catalogs?.auxiliaryPumps,
-    auxiliaryPumps: catalogs?.auxiliaryPumps, filter: catalogs?.filters, additionalFilters: catalogs?.filters,
-    cleaner: catalogs?.cleaners, heater: catalogs?.heaters, additionalHeaters: catalogs?.heaters,
-    heaterChiller: catalogs?.heaterChillers, automation: catalogs?.automation, saltSystem: catalogs?.saltSystem,
-    additionalSaltSystem: catalogs?.saltSystem, autoFillSystem: catalogs?.autoFillSystem,
-    sanitationAccessory: catalogs?.sanitationAccessories, poolLights: catalogs?.lights?.poolLights,
-    spaLights: catalogs?.lights?.spaLights,
-  };
-  const missing = Object.entries(equipmentCatalogs).flatMap(([key, catalog]) => {
-    const value = (merged.proposal.equipment as any)?.[key];
-    return (Array.isArray(value) ? value : value ? [value] : []).filter(item => item?.name && !/^(none|no\b)/i.test(item.name)
-      && !(catalog || []).some(entry => item.id ? entry.id === item.id : entry.name?.trim().toLowerCase() === item.name?.trim().toLowerCase()))
-      .map(item => `${key.replace(/([a-z])([A-Z])/g, '$1 $2')}: ${item.name}`);
-  });
-  if (missing.length) {
-    conflicts.push({ path: 'catalog:equipment', before: request.base_version_json.equipment,
-      owner: current.equipment, proposed: request.working_version_json.equipment, allowed: ['owner'],
-      message: `These equipment selections are unavailable in the current revision: ${missing.join(', ')}. Keep the owner’s equipment or request revised selections; the original proposal is retained.` });
-    // Never calculate or persist an unavailable item using old embedded prices.
-    merged.proposal.equipment = current.equipment;
+  const warnings: Array<{ path: string; message: string }> = [];
+  for (const { field, item } of unavailableEquipment(merged.proposal, snapshot.pricing)) {
+    if (isRetainedEquipment(item, current, field) && hasSavedEquipmentPrice(item)) {
+      warnings.push({ path: 'equipment.' + field, message: item.name + ': unavailable in this pricing revision. The saved selection and pricing are retained.' });
+      continue;
+    }
+    if (conflicts.some(conflict => conflict.path === 'catalog:equipment.' + field)) continue;
+    conflicts.push({ path: 'catalog:equipment.' + field, before: (request.base_version_json.equipment as any)?.[field],
+      owner: (current.equipment as any)?.[field], proposed: item, allowed: ['owner'],
+      message: item.name + ': unavailable or missing saved pricing. Keep the owner’s selection or choose an available replacement.' });
+    (merged.proposal.equipment as any)[field] = structuredClone((current.equipment as any)[field]);
   }
   const unavailable = (section: keyof Proposal, labels: string[]) => {
     if (!labels.length) return;
@@ -157,5 +154,5 @@ export async function prepareContribution(request: CollaborationRequest, contain
   if (resolutions.catalog === 'owner') after = before;
   if (resolutions['baseline-pricing'] === 'owner') after = before;
   return { before, after, conflicts, expectedRevision: Number(container.contentRevision),
-    requestUpdatedAt: request.updated_at, resolutions };
+    requestUpdatedAt: request.updated_at, resolutions, warnings };
 }

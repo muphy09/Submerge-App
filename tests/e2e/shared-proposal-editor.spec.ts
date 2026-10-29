@@ -111,8 +111,11 @@ test(resumeExisting ? 'a late-discovered working copy keeps its older pricing pi
   await expect(page.getByRole('button', { name: 'Propose Changes', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Compare Difference' })).toHaveCount(0);
   const customerInput = page.getByPlaceholder('Enter customer name');
-  await customerInput.hover();
   const viewOnlyTip = page.getByRole('tooltip').filter({ hasText: 'VIEW ONLY' });
+  const customerLabel = page.locator('.spec-label').filter({ hasText: /^Customer Name$/ });
+  await customerLabel.hover();
+  await expect(viewOnlyTip).toHaveCount(0);
+  await customerInput.hover();
   await expect(viewOnlyTip).toBeVisible();
   await expect.poll(async () => {
     const input = await customerInput.boundingBox();
@@ -124,6 +127,10 @@ test(resumeExisting ? 'a late-discovered working copy keeps its older pricing pi
     const tip = await viewOnlyTip.boundingBox();
     return input!.y - tip!.y - tip!.height;
   }).toBeLessThan(24);
+  await customerLabel.hover();
+  await expect(viewOnlyTip).toHaveCount(0);
+  await page.getByRole('heading', { name: 'Customer Information', exact: true }).hover();
+  await expect(viewOnlyTip).toHaveCount(0);
   const cityInput = page.getByPlaceholder('Enter city');
   await cityInput.hover();
   await expect.poll(async () => {

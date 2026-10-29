@@ -46,6 +46,9 @@ function displayValue(value: unknown, path: string): string {
     if (typeof entry.name === 'string') {
       const details: string[] = [];
       if (typeof entry.quantity === 'number') details.push(`Qty: ${entry.quantity}`);
+      for (const field of ['model', 'zones', 'sqft', 'btu', 'includesSaltCell']) {
+        if (entry[field] != null) details.push(`${titleCase(field)}: ${displayValue(entry[field], path)}`);
+      }
       if (/customOptions|customFeatures/.test(path)) {
         if (entry.description) details.push(String(entry.description));
         if (entry.groupedSqft != null) details.push(`${entry.groupedSqft} sq ft`);
@@ -79,6 +82,13 @@ export function formatMoney(value: unknown) {
 }
 
 export type ReviewRow = { key: string; category: string; label: string; before: string; after: string; paths: string[] };
+function changedDetail(value: unknown, path: string): string {
+  if (Array.isArray(value)) return value.length ? value.map(item => changedDetail(item, path)).join(' | ') : 'None';
+  if (value && typeof value === 'object') {
+    return Object.entries(value).map(([key, item]) => `${titleCase(key)}: ${changedDetail(item, `${path}.${key}`)}`).join('; ');
+  }
+  return displayValue(value, path);
+}
 function getAtPath(value: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((current, key) => (current as Record<string, unknown> | null)?.[key], value);
 }
@@ -160,9 +170,11 @@ const selectionGroups: SelectionGroup[] = [
     p => equipmentValue(p, 'autoFillSystem')),
   fieldGroup('equipment.poolLights', 'Pool Lights', ['equipment.poolLights', 'equipment.includePoolLights',
     'equipment.applyCustomPackageDefaultPoolLights', 'equipment.numberOfLights'], p =>
-    p.equipment?.includePoolLights === false ? 'None' : displayValue(p.equipment?.poolLights, 'equipment.poolLights')),
+    p.equipment?.includePoolLights === false ? 'None' : p.equipment?.poolLights?.length
+      ? displayValue(p.equipment.poolLights, 'equipment.poolLights') : `Legacy additional lights: ${p.equipment?.numberOfLights ?? 0}`),
   fieldGroup('equipment.spaLights', 'Spa Lights', ['equipment.spaLights', 'equipment.includeSpaLights', 'equipment.hasSpaLight'], p =>
-    p.equipment?.includeSpaLights === false ? 'None' : displayValue(p.equipment?.spaLights, 'equipment.spaLights')),
+    p.equipment?.includeSpaLights === false ? 'None' : p.equipment?.spaLights?.length
+      ? displayValue(p.equipment.spaLights, 'equipment.spaLights') : `Legacy spa light: ${p.equipment?.hasSpaLight ? 'Yes' : 'No'}`),
   fieldGroup('equipment.auxiliaryPumps', 'Blowers', ['equipment.auxiliaryPump', 'equipment.auxiliaryPumps'], p =>
     displayValue(p.equipment?.auxiliaryPumps?.length ? p.equipment.auxiliaryPumps : p.equipment?.auxiliaryPump, 'equipment.auxiliaryPumps')),
   fieldGroup('equipment.package', 'Equipment Package', ['equipment.packageSelectionId', 'equipment.packageSelectionTouched'], (p, pricing) => {
@@ -227,9 +239,9 @@ export function reviewRows(request: CollaborationRequest, pricing?: PricingData)
     const describe = (p: Proposal) => definition ? definition.describe(p, pricing) : displayValue(getAtPath(p, key), key);
     let before = describe(request.base_version_json);
     let after = describe(request.working_version_json);
-    if (before === after && !definition) {
+    if (before === after) {
       const details = (side: 'before' | 'after') => differences.filter(item => !/\.(id|featureId)$/.test(item.path))
-        .map(item => `${titleCase(item.path.split('.').slice(-1)[0])}: ${displayValue(item[side], item.path)}`).join(', ');
+        .map(item => `${titleCase(item.path.split('.').slice(-1)[0])}: ${changedDetail(item[side], item.path)}`).join(', ');
       before = details('before') || before;
       after = details('after') || after;
     }

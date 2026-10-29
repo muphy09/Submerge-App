@@ -5006,7 +5006,8 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
                 </button>
               </TooltipAnchor>
             )}
-            <TooltipAnchor tooltip={editVersionDisabledReason}>
+            <TooltipAnchor tooltip={isSharedRecipient && !myWorkingRequest && canOpenVersionInBuilder
+              ? 'Open the proposal in the builder.' : editVersionDisabledReason}>
               <button
                 className="action-button side-action-button"
                 onClick={() => handleEdit(vm.proposal, { readOnly: openBuilderReadOnly })}
@@ -5369,7 +5370,7 @@ function ProposalView({ cloudIssue }: ProposalViewProps) {
       <div className="proposal-view-shell">
         <aside className="proposal-column proposal-column--nav no-print">
           <div className="proposal-side-card proposal-nav-card">
-            <div className="proposal-side-card-header proposal-nav-card-header">
+            <div className={`proposal-side-card-header proposal-nav-card-header${isReadOnlyReviewerView || proposal?.sharedPermission ? ' is-without-build' : ''}`}>
               <div className="summary-card-title">
                 <span className="summary-card-icon"><ProposalSummaryIcon name="versions" size={28} /></span>
                 <span className="proposal-nav-heading-copy"><h2>Versions &amp; Addendums</h2>
